@@ -1,5 +1,5 @@
 // ============================================
-// NODEFLOW AI — Inline Node Help Panel
+// Nova — Inline Node Help Panel
 // SVG chevron opens help. SVG diagram for examples.
 // Right-click on node body → context menu.
 // ============================================

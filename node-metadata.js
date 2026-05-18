@@ -1,5 +1,5 @@
 // ============================================
-// NODEFLOW AI — Node Metadata Registry
+// Nova — Node Metadata Registry
 // Single source of truth for all node descriptions,
 // usage patterns, and examples.
 // Used by: AI system prompt, parser logging, UI tooltips

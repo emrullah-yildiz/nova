@@ -1,5 +1,5 @@
 // ============================================
-// NODEFLOW AI — Canvas Node Search Popup
+// Nova — Canvas Node Search Popup
 // Replaces right-click context menu with a search bar.
 // Shows recently used nodes (max 5) when search is empty.
 // Runs on DOMContentLoaded + delay to override engine.js.

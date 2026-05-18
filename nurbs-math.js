@@ -1,5 +1,5 @@
 // ============================================
-// NODEFLOW AI — NURBS & Advanced Mathematics
+// Nova — NURBS & Advanced Mathematics
 // Full NURBS curves/surfaces + noise + attractors
 // + Voronoi + exotic parametric surfaces
 // Inspired by Maya, Rhino/Grasshopper, Houdini

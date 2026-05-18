@@ -1,5 +1,5 @@
 // ============================================
-// NODEFLOW AI — Geometry Selector & Visibility System
+// Nova — Geometry Selector & Visibility System
 //
 // Features:
 // 1. Each node output → separate Three.js group with metadata

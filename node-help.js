@@ -1,5 +1,5 @@
 // ============================================
-// NODEFLOW AI — Node Help Data
+// Nova — Node Help Data
 // ============================================
 window.NODE_HELP = {};
 

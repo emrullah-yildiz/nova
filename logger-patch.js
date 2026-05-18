@@ -1,5 +1,5 @@
 // ============================================
-// NODEFLOW AI — Logger Patch
+// Nova — Logger Patch
 // Monkey-patches key app methods to add logging
 // Must load AFTER app.js
 // ============================================

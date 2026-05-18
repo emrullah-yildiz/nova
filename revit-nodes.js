@@ -1,5 +1,5 @@
 // ============================================
-// NODEFLOW AI — Revit Integration Bridge (Runtime)
+// Nova — Revit Integration Bridge (Runtime)
 // RevitElement data type + RevitBridge utility object
 // ============================================
 

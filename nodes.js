@@ -1,5 +1,5 @@
 // ============================================
-// NODEFLOW AI — NODE REGISTRY (Single Source of Truth)
+// Nova — NODE REGISTRY (Single Source of Truth)
 // ALL categories and node definitions live here.
 // No other file should touch NODE_LIBRARY.categories.
 // Categories: A→Z. Nodes within each: A→Z.

@@ -1,5 +1,5 @@
 // ============================================
-// NODEFLOW AI — Runtime Behaviors
+// Nova — Runtime Behaviors
 // Node definitions are in nodes.js (single source of truth)
 // This file provides: UI handlers, inspectors, port suggestions,
 // codegen overrides, test templates, keyboard shortcuts,

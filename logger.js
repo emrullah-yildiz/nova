@@ -1,5 +1,5 @@
 // ============================================
-// NODEFLOW AI — Operation Logger
+// Nova — Operation Logger
 // Captures all operations, errors, AI interactions,
 // and graph events for debugging
 // ============================================
