@@ -9,6 +9,7 @@ function createConnectHub(options = {}) {
   const port = options.port ?? 8765;
   const host = options.host ?? '127.0.0.1';
   const pairingToken = options.pairingToken ?? createId('pair');
+  const pairingTokenRequired = options.pairingToken !== undefined && options.pairingToken !== '';
   const defaultSessionId = options.defaultSessionId || 'local-revit-session';
   const sessions = new Map();
   const clients = new Map();
@@ -77,7 +78,9 @@ function createConnectHub(options = {}) {
     if (envelope.type !== 'hello') return;
 
     const payload = envelope.payload || {};
-    if (payload.pairingToken && payload.pairingToken !== pairingToken) {
+    // If a pairing token was configured on the hub, reject connections
+    // that don't match. When no token was configured, accept any.
+    if (pairingTokenRequired && payload.pairingToken !== pairingToken) {
       sendError(socket, envelope, 'Invalid pairing token', 'INVALID_PAIRING_TOKEN');
       return;
     }
