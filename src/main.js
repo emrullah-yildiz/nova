@@ -32,6 +32,7 @@ import {
   ApsDerivativeAdapter,
   ApsDocsAdapter
 } from './integrations/connect/aps-adapters.js';
+import { installNovaConnectPanel } from './integrations/connect/connect-panel.js';
 import { installGeoSelector } from './viewer/geo-selector.js';
 
 const NovaConnect = createNovaConnectClient();
@@ -68,6 +69,7 @@ const NodeFlow = {
   installPortHandler,
   installNodeHelp,
   installNodeHelpPanel,
+  installNovaConnectPanel,
   installRevitNodes,
   installGeoSelector,
   get RevitBridge() {
@@ -129,6 +131,7 @@ function installAfterAppInit() {
   installPortHandler(app);
   installNodeHelp(app);
   installNodeHelpPanel(app);
+  installNovaConnectPanel(app);
   installGeoSelector(app);
 }
 

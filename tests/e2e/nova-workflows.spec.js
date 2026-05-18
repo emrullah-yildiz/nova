@@ -30,6 +30,17 @@ test.describe('Nova browser workflows', () => {
     );
   });
 
+  test('opens the Nova Connect panel from the top menu', async ({ page }) => {
+    await waitForApp(page);
+
+    await expect(page.locator('#menu-connect')).toBeVisible();
+    await page.locator('#menu-connect').click();
+
+    await expect(page.locator('#nova-connect-panel')).toHaveClass(/visible/);
+    await expect(page.locator('#nova-connect-url')).toHaveValue('ws://127.0.0.1:8765');
+    await expect(page.getByRole('button', { name: 'Query Walls' })).toBeVisible();
+  });
+
   test('creates, runs, saves, and reloads a basic graph', async ({ page }) => {
     await waitForApp(page);
 
