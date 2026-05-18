@@ -1,32 +1,31 @@
 # Recommended Folder Structure
 
-This section records the active source layout after the module migration cleanup.
+This section documents the current module layout after the Phase 3 migration.
 
-## Proposed layout
+## Current Layout
 
 - `src/`
-  - `src/main.js` - Vite/module bootstrap entrypoint
-  - `src/app/` - application shell and shared app state setup
-  - `src/core/` - graph engine, node registry, compute helpers, and renderer bridges
-  - `src/runtime/` - parser, port handling, and Python runner integration
-  - `src/ai/` - AI client/runtime integration and provider helpers
+  - `src/app/` - application shell, persistence, and app-level patches
+  - `src/ui/` - UI components and DOM-related code
+  - `src/core/` - engine, graph compute logic, node metadata, and logging
+  - `src/ai/` - GPT client, AI assistant runtime, and integration glue
   - `src/geometry/` - geometry kernel and math utilities
-  - `src/ui/` - node editor UI, panels, persistence flows, and Revit/geometry selector modules
-  - `src/viewer/` - 3D viewport and rendering helpers
-- `tests/` - automated unit tests
-- `e2e/` - browser workflow tests
+  - `src/runtime/` - parser and Python runner modules
+  - `src/viewer/` - 3D viewport, rendering helpers, and geometry selector
+  - `src/integrations/` - external integration bridges such as Revit
+- `tests/` - automated unit and browser workflow tests
 - `docs/` - process, architecture, and onboarding documentation
-- `assets/` - static assets, images, and external resources
+- root legacy files - historical/no-build fallback files; keep source-of-truth changes in `src/`
 
-## Migration guidance
+## Migration Guidance
 
-1. Put new runtime code under `src/` and import it from `src/main.js` or the owning module.
-2. Keep compatibility globals only where inline handlers or integrations still require them.
-3. Do not reintroduce root runtime scripts or a file-protocol fallback loader.
-4. Use `tests/` and `e2e/` to validate behavior after each compatibility bridge is removed.
+1. Treat `src/main.js` as the application bootstrap and `src/` as the source of truth.
+2. Keep compatibility globals only where current browser markup or integrations still require them.
+3. Do not add new root-level runtime scripts, `?raw` runtime imports, or raw-loader shims.
+4. Use unit tests and Playwright workflows to validate behavior after module changes.
 
 ## Benefits
 
 - Easier code ownership and separation of concerns
 - More predictable test coverage boundaries
-- Clearer path to a build system and enterprise packaging
+- Clearer path to production hardening and enterprise packaging
