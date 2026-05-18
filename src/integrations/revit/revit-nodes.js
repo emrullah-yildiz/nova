@@ -125,9 +125,7 @@ RevitBridge = {
   getData() {
     var client = getConnectClient();
     if (client && client.snapshot) return client.snapshot;
-    if (typeof REVIT_DATA !== 'undefined') return REVIT_DATA;
-    if (typeof window.REVIT_DATA !== 'undefined') return window.REVIT_DATA;
-    return { categories: {}, levels: [], sheets: [], types: {}, selection: [], activeView: '', projectName: 'No Project' };
+    throw new Error('Revit connection required: No active Revit session. Start the Connect Hub and pair with Revit.');
   },
 
   // Wrap a raw element dict into a typed RevitElement
@@ -181,34 +179,18 @@ RevitBridge = {
 
   getElements(category) {
     var liveRaw = getCachedElements(category);
-    if (liveRaw) {
-      var liveResult = [];
-      for (var li = 0; li < liveRaw.length; li++) {
-        var liveWrapped = this.wrapElement(liveRaw[li]);
-        if (liveWrapped) liveResult.push(liveWrapped);
-      }
-      return liveResult;
+    if (!liveRaw) throw new Error('Revit connection required: No elements cached for category "' + category + '". Ensure Revit is connected via Connect Hub.');
+    var liveResult = [];
+    for (var li = 0; li < liveRaw.length; li++) {
+      var liveWrapped = this.wrapElement(liveRaw[li]);
+      if (liveWrapped) liveResult.push(liveWrapped);
     }
-    var d = this.getData();
-    var raw = [];
-    if (category === 'Sheets') raw = d.sheets || [];
-    else if (category === 'Levels') raw = d.levels || [];
-    else {
-      var cat = d.categories ? d.categories[category] : null;
-      raw = cat ? (cat.elements || cat || []) : [];
-      if (!Array.isArray(raw)) raw = [];
-    }
-    var result = [];
-    for (var i = 0; i < raw.length; i++) {
-      var wrapped = this.wrapElement(raw[i]);
-      if (wrapped) result.push(wrapped);
-    }
-    return result;
+    return liveResult;
   },
 
   async queryElements(category, options) {
     var client = getConnectClient();
-    if (!client || client.status !== 'connected') return this.getElements(category);
+    if (!client || client.status !== 'connected') throw new Error('Revit connection required: Cannot query elements without active Revit session.');
     var raw = await client.queryElements(category, options || {});
     var result = [];
     for (var i = 0; i < raw.length; i++) {

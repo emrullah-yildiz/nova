@@ -1,0 +1,13 @@
+C:\Users\y-emr\Documents\GitHub\nova\integrations\revit-addin\bin\Debug\net10.0-windows\Nova.RevitAddin.deps.json
+C:\Users\y-emr\Documents\GitHub\nova\integrations\revit-addin\bin\Debug\net10.0-windows\Nova.RevitAddin.dll
+C:\Users\y-emr\Documents\GitHub\nova\integrations\revit-addin\bin\Debug\net10.0-windows\Nova.RevitAddin.pdb
+C:\Users\y-emr\Documents\GitHub\nova\integrations\revit-addin\obj\Debug\net10.0-windows\Nova.RevitAddin.csproj.AssemblyReference.cache
+C:\Users\y-emr\Documents\GitHub\nova\integrations\revit-addin\obj\Debug\net10.0-windows\Nova.RevitAddin.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\y-emr\Documents\GitHub\nova\integrations\revit-addin\obj\Debug\net10.0-windows\Nova.RevitAddin.AssemblyInfoInputs.cache
+C:\Users\y-emr\Documents\GitHub\nova\integrations\revit-addin\obj\Debug\net10.0-windows\Nova.RevitAddin.AssemblyInfo.cs
+C:\Users\y-emr\Documents\GitHub\nova\integrations\revit-addin\obj\Debug\net10.0-windows\Nova.RevitAddin.csproj.CoreCompileInputs.cache
+C:\Users\y-emr\Documents\GitHub\nova\integrations\revit-addin\obj\Debug\net10.0-windows\Nova.RevitAddin.sourcelink.json
+C:\Users\y-emr\Documents\GitHub\nova\integrations\revit-addin\obj\Debug\net10.0-windows\Nova.RevitAddin.dll
+C:\Users\y-emr\Documents\GitHub\nova\integrations\revit-addin\obj\Debug\net10.0-windows\refint\Nova.RevitAddin.dll
+C:\Users\y-emr\Documents\GitHub\nova\integrations\revit-addin\obj\Debug\net10.0-windows\Nova.RevitAddin.pdb
+C:\Users\y-emr\Documents\GitHub\nova\integrations\revit-addin\obj\Debug\net10.0-windows\ref\Nova.RevitAddin.dll
