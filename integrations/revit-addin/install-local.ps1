@@ -1,5 +1,5 @@
 param(
-  [string]$RevitVersion = "2025",
+  [string]$RevitVersion = "2027",
   [string]$Configuration = "Debug"
 )
 
@@ -10,7 +10,7 @@ $ProjectPath = Join-Path $ProjectDir "Nova.RevitAddin.csproj"
 
 dotnet build $ProjectPath -p:RevitVersion=$RevitVersion -c $Configuration
 
-$AssemblyPath = Join-Path $ProjectDir "bin\$Configuration\net48\Nova.RevitAddin.dll"
+$AssemblyPath = Join-Path $ProjectDir "bin\$Configuration\net10.0-windows\Nova.RevitAddin.dll"
 if (!(Test-Path -LiteralPath $AssemblyPath)) {
   throw "Build output not found: $AssemblyPath"
 }

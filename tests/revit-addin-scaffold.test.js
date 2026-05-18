@@ -24,12 +24,16 @@ describe('Revit add-in launcher scaffold', () => {
   });
 
   it('includes a Revit add-in manifest template and local install script', () => {
+    const project = readFileSync(join(addinDir, 'Nova.RevitAddin.csproj'), 'utf8');
     const manifest = readFileSync(join(addinDir, 'Nova.addin.template'), 'utf8');
     const installScript = readFileSync(join(addinDir, 'install-local.ps1'), 'utf8');
 
+    expect(project).toContain('<TargetFramework>net10.0-windows</TargetFramework>');
+    expect(project).toContain('<RevitVersion Condition="\'$(RevitVersion)\' == \'\'">2027</RevitVersion>');
     expect(manifest).toContain('<FullClassName>Nova.RevitAddin.App</FullClassName>');
     expect(manifest).toContain('{{ASSEMBLY_PATH}}');
     expect(installScript).toContain('dotnet build');
     expect(installScript).toContain('Autodesk\\Revit\\Addins');
+    expect(installScript).toContain('net10.0-windows');
   });
 });

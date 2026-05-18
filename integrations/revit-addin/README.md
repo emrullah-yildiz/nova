@@ -17,13 +17,13 @@ This branch does not yet implement the persistent Revit WebSocket host or native
 From this folder:
 
 ```powershell
-dotnet build .\Nova.RevitAddin.csproj -p:RevitVersion=2025
+dotnet build .\Nova.RevitAddin.csproj -p:RevitVersion=2027
 ```
 
 If Revit is installed somewhere else:
 
 ```powershell
-dotnet build .\Nova.RevitAddin.csproj -p:RevitInstallDir="C:\Program Files\Autodesk\Revit 2025"
+dotnet build .\Nova.RevitAddin.csproj -p:RevitInstallDir="C:\Program Files\Autodesk\Revit 2027"
 ```
 
 ## Local Install
@@ -32,13 +32,13 @@ dotnet build .\Nova.RevitAddin.csproj -p:RevitInstallDir="C:\Program Files\Autod
 2. Copy `Nova.addin.template` to:
 
 ```text
-%APPDATA%\Autodesk\Revit\Addins\2025\Nova.addin
+%APPDATA%\Autodesk\Revit\Addins\2027\Nova.addin
 ```
 
 3. Replace `{{ASSEMBLY_PATH}}` with the full path to:
 
 ```text
-integrations\revit-addin\bin\Debug\net48\Nova.RevitAddin.dll
+integrations\revit-addin\bin\Debug\net10.0-windows\Nova.RevitAddin.dll
 ```
 
 4. Start Revit.
