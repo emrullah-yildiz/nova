@@ -4,8 +4,10 @@ import { NFLogger } from './core/logger.js';
 import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/node-metadata.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
 import { GPTClient, SettingsDialog } from './ai/gpt-client.js';
+import { Geo } from './geometry/index.js';
 import { Viewer3D } from './viewer/viewer3d.js';
 import { installEngine } from './core/engine.js';
+import app, { initializeApp } from './app/app.js';
 import './ai/gpt-integration.js';
 import './legacy-loader.js';
 import { createComputeContext, computeNodeValue } from './core/compute-engine.js';
@@ -26,6 +28,8 @@ const NodeFlow = {
   GPTClient,
   SettingsDialog,
   Viewer3D,
+  app,
+  initializeApp,
   installEngine,
   createComputeContext,
   computeNodeValue,
@@ -48,6 +52,23 @@ if (typeof window !== 'undefined') {
   window.GPTClient = GPTClient;
   window.SettingsDialog = SettingsDialog;
   window.Viewer3D = Viewer3D;
+}
+
+function startAppShell() {
+  try {
+    initializeApp();
+  } catch (error) {
+    console.error('Error initializing app:', error);
+    setTimeout(startAppShell, 100);
+  }
+}
+
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(startAppShell, 0);
+  } else {
+    document.addEventListener('DOMContentLoaded', startAppShell);
+  }
 }
 
 export default NodeFlow;

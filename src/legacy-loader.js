@@ -4,12 +4,11 @@ import { NFLogger } from './core/logger.js';
 import './core/engine.js';
 import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/node-metadata.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
-import { Geo } from './geometry/index.js';
+import './geometry/index.js';
 import { Viewer3D } from './viewer/viewer3d.js';
 import lineRenderPatchSource from '../line-render-patch.js?raw';
 import revitNodesSource from '../revit-nodes.js?raw';
 import parserSource from '../parser.js?raw';
-import appSource from '../app.js?raw';
 import nodeRendererSource from '../node-renderer.js?raw';
 import pyRunnerSource from '../pyrunner.js?raw';
 import geoSelectorSource from '../geo-selector.js?raw';
@@ -41,7 +40,6 @@ const legacyScripts = [
   { name: 'line-render-patch.js', source: lineRenderPatchSource },
   { name: 'revit-nodes.js', source: revitNodesSource },
   { name: 'parser.js', source: parserSource },
-  { name: 'app.js', source: appSource },
   { name: 'node-renderer.js', source: nodeRendererSource },
   { name: 'pyrunner.js', source: pyRunnerSource },
   { name: 'geo-selector.js', source: geoSelectorSource },
@@ -66,34 +64,3 @@ function injectLegacyScript({ name, source }) {
 
 // Inject all scripts synchronously
 legacyScripts.forEach(injectLegacyScript);
-
-// Ensure app.init() is called after all legacy scripts are loaded
-function initializeApp() {
-  if (typeof app === 'undefined') {
-    // App not yet defined, try again after a short delay
-    setTimeout(initializeApp, 10);
-    return;
-  }
-  
-  if (app.initialized) {
-    return; // Already initialized
-  }
-  
-  // Call init immediately
-  try {
-    app.init();
-  } catch (e) {
-    console.error('Error initializing app:', e);
-    // Try again after a delay
-    setTimeout(initializeApp, 100);
-  }
-}
-
-// If DOM is already ready, initialize now
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  // Small delay to ensure all synchronous scripts have executed
-  setTimeout(initializeApp, 0);
-} else {
-  // Wait for DOM to be ready
-  document.addEventListener('DOMContentLoaded', initializeApp);
-}
