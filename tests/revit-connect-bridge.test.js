@@ -145,6 +145,36 @@ describe('RevitBridge Nova Connect integration', () => {
     expect(geometries[0].color).toBe(0xf9e2af);
   });
 
+  it('batches live geometry requests using string source ids', async () => {
+    const getGeometry = vi.fn(async ids => ids.map(id => createGeometryEnvelope(
+      new Geo.Mesh3([
+        new Geo.Point3(0, 0, 0),
+        new Geo.Point3(1, 0, 0),
+        new Geo.Point3(0, 1, 0)
+      ], [[0, 1, 2]]),
+      { source: 'revit-local', sourceId: id }
+    )));
+    const runtime = createRuntime({
+      status: 'connected',
+      elementsByCategory: {},
+      geometryById: {},
+      getGeometry
+    });
+    const bridge = installRevitNodes(runtime);
+    const elements = Array.from({ length: 3 }, (_, index) => bridge.wrapElement({
+      id: 9000 + index,
+      category: 'Generic Models',
+      identity: { source: 'revit-local', sourceId: String(9000 + index) }
+    }));
+
+    const geometries = await bridge.getLiveGeometries(elements, { batchSize: 2 });
+
+    expect(getGeometry).toHaveBeenCalledTimes(2);
+    expect(getGeometry.mock.calls[0][0]).toEqual(['9000', '9001']);
+    expect(getGeometry.mock.calls[1][0]).toEqual(['9002']);
+    expect(geometries).toHaveLength(3);
+  });
+
   it('sends geometry through the live Nova Connect client', async () => {
     const sendGeometry = vi.fn(async () => ({ ok: true, data: { elementId: 9001 } }));
     const runtime = createRuntime({

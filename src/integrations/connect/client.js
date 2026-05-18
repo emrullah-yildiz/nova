@@ -101,8 +101,17 @@ export class NovaConnectClient {
   }
 
   async getGeometry(elementIds, options = {}) {
+    console.info('[NovaConnect] geometry.get request', {
+      count: elementIds.length,
+      sampleIds: elementIds.slice(0, 5),
+      detail: options.detail || 'mesh'
+    });
     const response = await this.request('geometry.get', { elementIds, detail: options.detail || 'mesh' }, { target: 'host' });
     const geometries = response.payload.geometries || [];
+    console.info('[NovaConnect] geometry.get response', {
+      requested: elementIds.length,
+      geometries: geometries.length
+    });
     geometries.forEach(item => {
       if (item.identity && item.identity.sourceId) this.geometryById[item.identity.sourceId] = item;
     });
