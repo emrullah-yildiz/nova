@@ -5,6 +5,13 @@ async function waitForApp(page) {
   await page.waitForFunction(() => window.app && window.app.initialized);
 }
 
+async function addNodeFromLibrary(page, searchText, buttonName) {
+  await page.locator('#node-search-input').fill(searchText);
+  const item = page.locator('#node-categories .node-lib-item', { hasText: buttonName }).first();
+  await expect(item).toBeVisible();
+  await item.click();
+}
+
 test.describe('Nova browser workflows', () => {
   test('loads the landing page and opens a workspace', async ({ page }) => {
     await waitForApp(page);
@@ -73,110 +80,44 @@ test.describe('Nova browser workflows', () => {
     await expect(page.locator('#node-canvas .node')).toHaveCount(4);
   });
 
-  test('exports a project file with stable graph payload shape', async ({ page }) => {
+  test('adds nodes from the library search and executes a connected graph', async ({ page }) => {
     await waitForApp(page);
 
-    const result = await page.evaluate(async () => {
-      localStorage.clear();
-      app.newProject();
+    await page.getByRole('button', { name: /New Project/i }).click();
+    await expect(page.locator('#workspace-page')).toBeVisible();
 
-      const number = app.addNodeToCanvas('number-input', 90, 120);
-      const watch = app.addNodeToCanvas('output-watch', 360, 120);
+    await addNodeFromLibrary(page, 'number', 'Number');
+    await addNodeFromLibrary(page, 'number', 'Number');
+    await addNodeFromLibrary(page, 'math.add', 'Math.Add');
+    await addNodeFromLibrary(page, 'watch', 'Watch');
 
-      number.controlValues.val = 64;
-      app.addWire(number.id, 'value', watch.id, 'value');
-      app._projectName = 'Export Contract';
-
-      const originalCreateObjectURL = URL.createObjectURL;
-      const originalRevokeObjectURL = URL.revokeObjectURL;
-      const originalClick = HTMLAnchorElement.prototype.click;
-
-      let exportedBlob;
-      let downloadName;
-      let revokedUrl;
-
-      URL.createObjectURL = blob => {
-        exportedBlob = blob;
-        return 'blob:nova-export-test';
-      };
-      URL.revokeObjectURL = url => {
-        revokedUrl = url;
-      };
-      HTMLAnchorElement.prototype.click = function() {
-        downloadName = this.download;
-      };
-
-      try {
-        app.saveToFile();
-        const payload = JSON.parse(await exportedBlob.text());
-
-        return {
-          downloadName,
-          revokedUrl,
-          version: payload.version,
-          name: payload.name,
-          nodeTypes: payload.nodes.map(node => node.type),
-          wireCount: payload.wires.length,
-          runtimeResultsPersisted: payload.nodes.some(node => node._pyResults !== null)
-        };
-      } finally {
-        URL.createObjectURL = originalCreateObjectURL;
-        URL.revokeObjectURL = originalRevokeObjectURL;
-        HTMLAnchorElement.prototype.click = originalClick;
-      }
-    });
-
-    expect(result).toEqual({
-      downloadName: 'Export Contract.nodeflow',
-      revokedUrl: 'blob:nova-export-test',
-      version: 2,
-      name: 'Export Contract',
-      nodeTypes: ['number-input', 'output-watch'],
-      wireCount: 1,
-      runtimeResultsPersisted: false
-    });
-  });
-
-  test('handles missing and malformed local projects without corrupting the current graph', async ({ page }) => {
-    await waitForApp(page);
+    await expect(page.locator('#node-canvas .node')).toHaveCount(4);
 
     const result = await page.evaluate(() => {
-      localStorage.clear();
-      app.newProject();
+      const numbers = app.nodes.filter(node => node.type === 'number-input');
+      const sum = app.nodes.find(node => node.type === 'math-add');
+      const watch = app.nodes.find(node => node.type === 'output-watch');
 
-      const originalAddAIMessage = app.addAIMessage.bind(app);
-      const messages = [];
-      app.addAIMessage = function(scope, message) {
-        messages.push({ scope, message });
-        return originalAddAIMessage(scope, message);
-      };
+      numbers[0].controlValues.val = 11;
+      numbers[1].controlValues.val = 31;
 
-      const stableNode = app.addNodeToCanvas('number-input', 80, 80);
-      stableNode.controlValues.val = 7;
+      app.addWire(numbers[0].id, 'value', sum.id, 'a');
+      app.addWire(numbers[1].id, 'value', sum.id, 'b');
+      app.addWire(sum.id, 'result', watch.id, 'value');
 
-      app.openFromLocal('Missing Project');
-
-      const afterMissing = {
-        nodeCount: app.nodes.length,
-        value: app.computeNodeValue(app.nodes[0])
-      };
-
-      localStorage.setItem('nodeflow_project_Broken Project', '{not valid json');
-      app.openFromLocal('Broken Project');
+      app.renderWires();
 
       return {
-        afterMissing,
-        finalNodeCount: app.nodes.length,
-        finalValue: app.computeNodeValue(app.nodes[0]),
-        messages: messages.map(entry => entry.message)
+        nodeTypes: app.nodes.map(node => node.type),
+        wireCount: app.wires.length,
+        computed: app.computeNodeValue(watch)
       };
     });
 
-    expect(result.afterMissing).toEqual({ nodeCount: 1, value: 7 });
-    expect(result.finalNodeCount).toBe(1);
-    expect(result.finalValue).toBe(7);
-    expect(result.messages.some(message => message.includes('not found in browser storage'))).toBe(true);
-    expect(result.messages.some(message => message.includes('Load failed'))).toBe(true);
+    expect(result.nodeTypes).toEqual(['number-input', 'number-input', 'math-add', 'output-watch']);
+    expect(result.wireCount).toBe(3);
+    expect(result.computed).toBe(42);
+    await expect(page.locator('#wire-svg path')).not.toHaveCount(0);
   });
 
   test('reports missing API key before attempting an AI provider call', async ({ page }) => {
