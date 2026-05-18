@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>Nova</Name>
+    <Assembly>{{ASSEMBLY_PATH}}</Assembly>
+    <AddInId>8F6C0A50-D626-4B8A-A0D1-0C821F9F1F90</AddInId>
+    <FullClassName>Nova.RevitAddin.App</FullClassName>
+    <VendorId>NOVA</VendorId>
+    <VendorDescription>Nova visual scripting Revit connector</VendorDescription>
+  </AddIn>
+</RevitAddIns>

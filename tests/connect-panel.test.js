@@ -127,4 +127,34 @@ describe('Nova Connect panel', () => {
     });
     expect(approvalCheckbox.checked).toBe(false);
   });
+
+  it('opens prefilled from Revit launcher URL parameters', () => {
+    const document = createDocumentStub();
+    const app = {};
+    const runtime = {
+      document,
+      location: {
+        search: '?novaConnectOpen=1&novaConnectUrl=ws%3A%2F%2F127.0.0.1%3A8765&novaConnectToken=token-123&novaConnectProject=Sample'
+      },
+      localStorage: {
+        getItem: () => null,
+        setItem: () => {}
+      },
+      NodeFlow: {
+        NovaConnect: { status: 'disconnected' },
+        RevitBridge: {},
+        Geo
+      }
+    };
+
+    installNovaConnectPanel(app, runtime);
+
+    expect(app.novaConnectPanelOpen).toBe(true);
+    expect(app._readNovaConnectSettings()).toMatchObject({
+      url: 'ws://127.0.0.1:8765',
+      token: 'token-123',
+      projectId: 'Sample'
+    });
+    expect(app.novaConnectLastResult.message).toBe('Opened from Revit. Start the hub, then click Connect.');
+  });
 });

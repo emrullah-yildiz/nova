@@ -17,6 +17,7 @@ export function installNovaConnectPanel(targetApp = getRuntimeGlobal().app, runt
   injectStyles(document);
   installAppMethods(targetApp, runtimeGlobal);
   installMenuButton(document, targetApp);
+  applyLaunchParameters(targetApp, runtimeGlobal);
   targetApp._renderNovaConnectPanel();
   return targetApp;
 }
@@ -45,10 +46,11 @@ function installAppMethods(app, runtimeGlobal) {
 
   app._readNovaConnectSettings = function() {
     const stored = readJson(runtimeGlobal.localStorage && runtimeGlobal.localStorage.getItem(STORAGE_KEY));
+    const launch = readLaunchParameters(runtimeGlobal);
     return {
-      url: stored.url || 'ws://127.0.0.1:8765',
-      token: stored.token || '',
-      projectId: stored.projectId || ''
+      url: launch.url || stored.url || 'ws://127.0.0.1:8765',
+      token: launch.token || stored.token || '',
+      projectId: launch.projectId || stored.projectId || ''
     };
   };
 
@@ -221,6 +223,36 @@ function installMenuButton(document, app) {
   button.textContent = 'Connect';
   button.onclick = () => app.toggleNovaConnectPanel();
   menuRight.insertBefore(button, menuRight.firstChild);
+}
+
+function applyLaunchParameters(app, runtimeGlobal) {
+  const launch = readLaunchParameters(runtimeGlobal);
+  if (!launch.openPanel) return;
+  app.novaConnectPanelOpen = true;
+  if (runtimeGlobal.localStorage) {
+    const current = app._readNovaConnectSettings();
+    app._writeNovaConnectSettings({
+      url: launch.url || current.url,
+      token: launch.token || current.token,
+      projectId: launch.projectId || current.projectId
+    });
+  }
+  app.novaConnectLastResult = {
+    ok: true,
+    message: 'Opened from Revit. Start the hub, then click Connect.'
+  };
+}
+
+function readLaunchParameters(runtimeGlobal) {
+  const location = runtimeGlobal.location;
+  if (!location || !location.search || typeof URLSearchParams === 'undefined') return {};
+  const params = new URLSearchParams(location.search);
+  return {
+    url: params.get('novaConnectUrl') || '',
+    token: params.get('novaConnectToken') || '',
+    projectId: params.get('novaConnectProject') || '',
+    openPanel: params.get('novaConnectOpen') === '1'
+  };
 }
 
 function injectStyles(document) {

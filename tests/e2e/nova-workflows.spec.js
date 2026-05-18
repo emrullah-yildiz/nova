@@ -41,6 +41,16 @@ test.describe('Nova browser workflows', () => {
     await expect(page.getByRole('button', { name: 'Query Walls' })).toBeVisible();
   });
 
+  test('opens Nova Connect prefilled from Revit launcher parameters', async ({ page }) => {
+    await page.goto('/?novaConnectOpen=1&novaConnectUrl=ws%3A%2F%2F127.0.0.1%3A8765&novaConnectToken=e2e-token&novaConnectProject=RevitModel');
+    await page.waitForFunction(() => window.app && window.app.initialized);
+
+    await expect(page.locator('#nova-connect-panel')).toHaveClass(/visible/);
+    await expect(page.locator('#nova-connect-token')).toHaveValue('e2e-token');
+    await expect(page.locator('#nova-connect-project')).toHaveValue('RevitModel');
+    await expect(page.locator('#nova-connect-panel')).toContainText('Opened from Revit');
+  });
+
   test('creates, runs, saves, and reloads a basic graph', async ({ page }) => {
     await waitForApp(page);
 
