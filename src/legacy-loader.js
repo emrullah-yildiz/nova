@@ -19,7 +19,6 @@ import { installNodeHelpPanel } from './ui/node-help-panel.js';
 import lineRenderPatchSource from '../line-render-patch.js?raw';
 import revitNodesSource from '../revit-nodes.js?raw';
 import parserSource from '../parser.js?raw';
-import appSource from '../app.js?raw';
 import pyRunnerSource from '../pyrunner.js?raw';
 import geoSelectorSource from '../geo-selector.js?raw';
 import loggerPatchSource from '../logger-patch.js?raw';
@@ -40,10 +39,7 @@ if (typeof window !== 'undefined') {
 }
 
 const legacyScripts = [
-  { name: 'line-render-patch.js', source: lineRenderPatchSource },
-  { name: 'revit-nodes.js', source: revitNodesSource },
   { name: 'parser.js', source: parserSource },
-  { name: 'app.js', source: appSource },
   { name: 'pyrunner.js', source: pyRunnerSource },
   { name: 'geo-selector.js', source: geoSelectorSource },
   { name: 'logger-patch.js', source: loggerPatchSource }
@@ -102,11 +98,9 @@ function initializeApp() {
 
 // If DOM is already ready, initialize now
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  // Small delay to ensure all synchronous scripts have executed
   installMigratedNodeEditorModules();
-  setTimeout(initializeApp, 0);
+  installMigratedGeoRevitModules();
 } else {
-  // Wait for DOM to be ready
   document.addEventListener('DOMContentLoaded', installMigratedNodeEditorModules);
-  document.addEventListener('DOMContentLoaded', initializeApp);
+  document.addEventListener('DOMContentLoaded', installMigratedGeoRevitModules);
 }
