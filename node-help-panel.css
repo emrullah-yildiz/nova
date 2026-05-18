@@ -1,0 +1,108 @@
+/* ============================================
+   Inline Node Help Panel — slides from node right side
+   ============================================ */
+
+/* Help arrow button (replaces ⋮) */
+.node-help-arrow {
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 5px; color: rgba(205,214,244,0.4);
+  background: transparent;
+  cursor: pointer; border: none; padding: 0;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.node-help-arrow svg { display: block; }
+.node:hover .node-help-arrow { color: rgba(205,214,244,0.7); }
+.node-help-arrow:hover { background: rgba(137,180,250,0.12); color: var(--accent-blue); }
+
+/* Help panel container */
+.nhp-panel {
+  width: 260px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 0 1px rgba(137,180,250,0.15);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  animation: nhpSlideIn 0.2s ease;
+}
+@keyframes nhpSlideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Header */
+.nhp-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+.nhp-title {
+  font-size: 13px; font-weight: 700; color: var(--text-primary);
+}
+.nhp-close {
+  width: 22px; height: 22px; border-radius: 4px;
+  background: transparent; border: none; color: var(--text-muted);
+  cursor: pointer; font-size: 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+.nhp-close:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
+
+/* Description */
+.nhp-desc {
+  padding: 10px 12px;
+  font-size: 11px; line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* Section titles */
+.nhp-section-title {
+  padding: 6px 12px 4px;
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.8px; color: var(--text-muted);
+  border-top: 1px solid var(--border-color);
+}
+
+/* Input/Output table */
+.nhp-table {
+  width: 100%; border-collapse: collapse;
+  padding: 0 8px;
+}
+.nhp-table tr { border-bottom: 1px solid rgba(49,50,68,0.3); }
+.nhp-table tr:last-child { border-bottom: none; }
+.nhp-td-name {
+  padding: 4px 8px 4px 12px;
+  font-size: 11px; font-weight: 600; color: var(--accent-blue);
+  white-space: nowrap; vertical-align: top;
+  width: 1%;
+}
+.nhp-td-desc {
+  padding: 4px 12px 4px 4px;
+  font-size: 10px; color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* SVG example diagram */
+.nhp-example-svg {
+  padding: 8px 12px;
+  display: flex; justify-content: center;
+}
+
+/* Add to Canvas button */
+.nhp-add-btn {
+  display: block; width: calc(100% - 24px);
+  margin: 8px 12px 12px;
+  padding: 7px 12px;
+  background: rgba(166,227,161,0.1);
+  border: 1px solid rgba(166,227,161,0.25);
+  border-radius: var(--radius-sm);
+  color: var(--accent-green);
+  font-size: 11px; font-weight: 600;
+  cursor: pointer; text-align: center;
+  font-family: var(--font-sans);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.nhp-add-btn:hover {
+  background: rgba(166,227,161,0.2);
+  border-color: rgba(166,227,161,0.4);
+}

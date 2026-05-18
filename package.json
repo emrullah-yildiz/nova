@@ -1,0 +1,42 @@
+{
+  "name": "nodeflow-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser-based visual scripting and parametric design prototype with AI-assisted node workflows.",
+  "main": "index.html",
+  "scripts": {
+    "start": "vite --host 127.0.0.1",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint tests/ --ext .js --ignore-path .gitignore",
+    "lint:app": "eslint app.js node-library.js node-renderer.js ui-enhancements.js node-help.js node-help-panel.js port-handler.js gpt-integration.js gpt-client.js engine.js --ignore-path .gitignore",
+    "lint:tests": "eslint tests/ --ext .js --ignore-path .gitignore",
+    "lint:src": "eslint src/ --ext .js --ignore-path .gitignore",
+    "lint:formula": "eslint formula-eval.js --ext .js --ignore-path .gitignore",
+    "lint:legacy": "eslint app.js node-library.js node-renderer.js ui-enhancements.js node-help.js node-help-panel.js port-handler.js gpt-integration.js gpt-client.js engine.js --ignore-path .gitignore",
+    "lint:all": "eslint . --ext .js --ignore-path .gitignore",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:e2e": "node scripts/run-e2e.cjs"
+  },
+  "keywords": [
+    "visual-scripting",
+    "parametric-design",
+    "ai",
+    "3d",
+    "geometry",
+    "node-editor"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@vitest/coverage-v8": "^4.1.6",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.0.0",
+    "prettier": "^3.0.0",
+    "vite": "^8.0.13",
+    "vitest": "^4.1.6"
+  }
+}

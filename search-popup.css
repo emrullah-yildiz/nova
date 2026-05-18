@@ -1,0 +1,81 @@
+/* ============================================
+   Node Search Popup — right-click canvas search
+   ============================================ */
+
+.nsp-container {
+  position: fixed; z-index: 9000;
+  width: 280px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 1px rgba(137,180,250,0.2);
+  overflow: hidden;
+  animation: nspIn 0.12s ease;
+}
+@keyframes nspIn { from { opacity: 0; transform: scale(0.96) translateY(-4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+
+.nsp-search-wrap {
+  position: relative;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+.nsp-search-icon {
+  position: absolute; left: 18px; top: 50%; transform: translateY(-50%);
+  width: 14px; height: 14px; color: var(--text-muted); pointer-events: none;
+}
+.nsp-search-input {
+  width: 100%; padding: 7px 10px 7px 30px;
+  font-size: 13px; font-family: var(--font-sans);
+  background: var(--bg-surface); color: var(--text-primary);
+  border: 1px solid var(--border-color); border-radius: var(--radius-sm);
+  outline: none;
+}
+.nsp-search-input:focus { border-color: var(--accent-blue); }
+.nsp-search-input::placeholder { color: var(--text-muted); }
+
+.nsp-results {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.nsp-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: var(--radius-sm);
+  cursor: pointer; background: transparent; border: none;
+  width: 100%; text-align: left; font-family: var(--font-sans);
+  transition: background 0.08s ease;
+}
+.nsp-item:hover, .nsp-item-active {
+  background: var(--bg-surface-hover);
+}
+.nsp-item-active {
+  outline: 1px solid rgba(137,180,250,0.3);
+}
+.nsp-item-icon {
+  width: 20px; height: 20px; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; flex-shrink: 0;
+  background: rgba(255,255,255,0.04);
+}
+.nsp-item-name {
+  font-size: 12px; font-weight: 500; color: var(--text-primary);
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.nsp-item-cat {
+  font-size: 9px; color: var(--text-muted);
+  white-space: nowrap; flex-shrink: 0;
+}
+
+/* Portal zoom scaling + z-index fix — portals behind nodes */
+#portal-overlay { --portal-scale: 1; z-index: 1 !important; }
+.portal-ring { transform: translate(-50%, -50%) scale(var(--portal-scale, 1)) !important; transition: opacity 0.15s ease; z-index: 1 !important; }
+
+/* Section header (e.g. "Recently Used") */
+.nsp-section-header {
+  padding: 6px 12px 3px;
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.8px; color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 2px;
+}

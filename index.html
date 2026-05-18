@@ -1,11 +1,359 @@
 <!DOCTYPE html>
+
 <html lang="en">
+
 <head>
+
   <meta charset="UTF-8">
-  <title>Nova</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>NodeFlow AI — Visual Scripting</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+
+  <link rel="stylesheet" href="settings.css">
+  <link rel="stylesheet" href="search-popup.css">
+  <link rel="stylesheet" href="node-help-panel.css">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
 </head>
+
 <body>
-  <div id="app"></div>
-  <script type="module" src="/src/main.ts"></script>
+
+  <div id="menu-bar">
+
+    <div class="menu-brand" onclick="app.goHome()">
+
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+
+      NodeFlow AI
+
+    </div>
+
+    <div class="menu-item" id="menu-file">File
+
+      <div class="menu-dropdown">
+
+        <button class="menu-dropdown-item" onclick="app.newProject()">New Project <span class="shortcut">Ctrl+N</span></button>
+
+        <button class="menu-dropdown-item disabled" id="mi-close" onclick="app.closeProject()">Close Project</button>
+
+        <button class="menu-dropdown-item disabled" id="mi-open">Open Project</button>
+
+        <div class="menu-separator"></div>
+
+        <button class="menu-dropdown-item disabled" id="mi-save">Save</button>
+
+        <button class="menu-dropdown-item disabled" id="mi-saveas">Save As…</button>
+
+        <div class="menu-separator"></div>
+
+        <button class="menu-dropdown-item disabled" id="mi-export">Export Graph</button>
+
+        <button class="menu-dropdown-item disabled" id="mi-import">Import Graph</button>
+
+      </div>
+
+    </div>
+
+    <div class="menu-item disabled" id="menu-edit">Edit
+
+      <div class="menu-dropdown">
+
+        <button class="menu-dropdown-item disabled">Undo</button>
+
+        <button class="menu-dropdown-item disabled">Redo</button>
+
+        <div class="menu-separator"></div>
+
+        <button class="menu-dropdown-item disabled">Select All</button>
+
+        <button class="menu-dropdown-item disabled">Delete Selected</button>
+
+      </div>
+
+    </div>
+
+    <div class="menu-item disabled" id="menu-view">View
+
+      <div class="menu-dropdown">
+
+        <button class="menu-dropdown-item" onclick="app.toggleNodeLibrary()">Node Library</button>
+
+        <button class="menu-dropdown-item" onclick="app.toggleChat()">AI Assistant</button>
+
+        <div class="menu-separator"></div>
+
+        <button class="menu-dropdown-item" onclick="app.fitAll()">Zoom to Fit</button>
+
+      </div>
+
+    </div>
+
+    <div class="menu-item" id="menu-settings">Settings
+
+      <div class="menu-dropdown">
+
+        <button class="menu-dropdown-item" onclick="SettingsDialog.open()">Preferences</button>
+
+        <button class="menu-dropdown-item" onclick="SettingsDialog.open()">About NodeFlow AI</button>
+
+      </div>
+
+    </div>
+
+    <div class="menu-spacer"></div>
+
+    <div class="menu-right">
+
+      <button class="menu-item" onclick="NFLogger.downloadLogs()" title="Download session logs as JSON" style="font-size:12px;opacity:0.7;">📥 Logs</button>
+
+      <button class="menu-item disabled" id="menu-run" style="font-weight:600;">▶ Run</button>
+
+    </div>
+
+  </div>
+
+
+
+  <div id="landing-page" class="fade-in">
+
+    <div class="landing-left">
+
+      <div class="landing-hero slide-up">
+
+        <h1>Welcome to <span>NodeFlow AI</span></h1>
+
+        <p>Build visual scripts with an AI assistant. Create nodes, connect them, and let AI help you code the logic.</p>
+
+      </div>
+
+      <button class="btn-new-project slide-up" onclick="app.newProject()">
+
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+
+        New Project
+
+      </button>
+
+      <div class="templates-section slide-up"><h3>Start from a Template</h3><div class="templates-grid" id="templates-grid"></div></div>
+
+      <div class="recent-section slide-up"><h3>Recent Projects</h3><div class="recent-list" id="recent-list"></div></div>
+
+    </div>
+
+    <div class="landing-right">
+
+      <div class="chat-container">
+
+        <div class="chat-header"><div class="chat-header-icon">✦</div><div class="chat-header-text"><h3>AI Assistant</h3><p>● Online</p></div></div>
+
+        <div class="chat-messages" id="landing-chat-messages"></div>
+
+        <div class="chat-suggestions" id="landing-chat-suggestions"></div>
+
+        <div class="chat-input-area">
+
+          <textarea id="landing-chat-input" rows="1" placeholder="Ask me anything about NodeFlow…" onkeydown="app.handleChatKey(event,'landing')"></textarea>
+
+          <button class="chat-send-btn" onclick="app.sendChat('landing')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+
+  <div id="workspace-page">
+
+    <div class="node-library" id="node-library">
+
+      <div class="node-library-header"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg><h3>Node Library</h3></div>
+
+      <div class="node-search"><div class="node-search-wrapper"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg><input type="text" placeholder="Search nodes…" id="node-search-input" oninput="app.filterNodes(this.value)"></div></div>
+
+      <div class="node-categories" id="node-categories"></div>
+
+    </div>
+
+    <div class="canvas-area" id="canvas-area">
+
+      <svg class="canvas-grid-svg" id="canvas-grid-svg" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"><defs><pattern id="smallGrid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M 24 0 L 0 0 0 24" fill="none" stroke="rgba(69,71,90,0.4)" stroke-width="0.5"/></pattern><pattern id="bigGrid" width="120" height="120" patternUnits="userSpaceOnUse"><rect width="120" height="120" fill="url(#smallGrid)"/><path d="M 120 0 L 0 0 0 120" fill="none" stroke="rgba(69,71,90,0.9)" stroke-width="1"/></pattern></defs><rect width="200%" height="200%" x="-50%" y="-50%" fill="url(#bigGrid)"/></svg>
+
+      <div id="node-canvas"></div>
+
+      <svg id="wire-svg" class="wire-layer"></svg>
+
+      <div id="portal-overlay"></div>
+
+      <div id="wire-ai-badge">✦ AI</div>
+
+      <div id="viewport-3d" style="position:absolute;inset:0;z-index:5;display:none;"></div>
+
+      <div class="canvas-toolbar">
+
+        <button class="canvas-tool-btn" id="btn-view-nodes" title="Node View" onclick="app.setView('nodes')" style="color:var(--accent-blue);font-weight:700;font-size:12px;">2D</button>
+
+        <button class="canvas-tool-btn" id="btn-view-3d" title="3D Viewport" onclick="app.setView('3d')" style="font-size:12px;">3D</button>
+
+        <div class="canvas-tool-sep"></div>
+
+        <button class="canvas-tool-btn" title="Zoom In" onclick="app.zoomIn()">+</button>
+
+        <button class="canvas-tool-btn" title="Zoom Out" onclick="app.zoomOut()">−</button>
+
+        <button class="canvas-tool-btn" title="Zoom to Fit" onclick="app.fitAll()">⊞</button>
+        <button class="canvas-tool-btn" title="Auto Layout (L)" onclick="if(app.autoLayout)app.autoLayout()" style="font-size:11px;">⧉</button>
+
+        <div class="canvas-tool-sep"></div>
+
+        <button class="canvas-tool-btn" title="Run Graph" onclick="app.runGraph()" style="color:var(--accent-green);">▶</button>
+
+      </div>
+
+      <div class="canvas-zoom" id="zoom-indicator">100%</div>
+
+    </div>
+
+    <div class="ws-chat-panel dock-right" id="ws-chat-panel">
+
+      <div class="chat-resize-handle" id="chat-resize-handle"></div>
+
+      <div class="chat-container">
+
+        <div class="chat-header" id="ws-chat-header"><div class="chat-header-icon">✦</div><div class="chat-header-text"><h3>AI Assistant</h3><p>● Online</p></div><div class="chat-header-actions"><button class="chat-header-btn" title="Dock" onclick="app.showDockSelector(event)">⊞</button><button class="chat-header-btn" title="Float" onclick="app.detachChat()">⇱</button><button class="chat-header-btn" title="Close" onclick="app.toggleChat()">✕</button></div></div>
+
+        <div class="chat-messages" id="ws-chat-messages"></div>
+
+        <div class="chat-suggestions" id="ws-chat-suggestions"></div>
+
+        <div class="chat-input-area">
+
+          <textarea id="ws-chat-input" rows="1" placeholder="Ask AI to create or modify nodes…" onkeydown="app.handleChatKey(event,'workspace')"></textarea>
+
+          <button class="chat-send-btn" onclick="app.sendChat('workspace')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <button class="chat-toggle-btn hidden" id="chat-toggle-btn" onclick="app.toggleChat()">✦</button>
+
+  </div>
+
+
+
+  <div class="dock-selector" id="dock-selector">
+
+    <button class="dock-opt" data-pos="left" onclick="app.dockChat('left')" title="Left">◧</button>
+
+    <button class="dock-opt active" data-pos="right" onclick="app.dockChat('right')" title="Right">◨</button>
+
+    <button class="dock-opt" data-pos="bottom" onclick="app.dockChat('bottom')" title="Bottom">⬓</button>
+
+    <button class="dock-opt" data-pos="float" onclick="app.detachChat()" title="Float">⇱</button>
+
+  </div>
+
+  <div class="context-menu" id="context-menu">
+
+    <button class="context-menu-item" onclick="app.ctxAction('add')"><span class="cmi-icon">+</span> Add Node…</button>
+
+    <div class="menu-separator"></div>
+
+    <button class="context-menu-item" onclick="app.ctxAction('fit')"><span class="cmi-icon">⊞</span> Zoom to Fit</button>
+
+  </div>
+
+  <!-- Fallback inline loader for file:// protocol -->
+  <script>
+    // Check if we're loading from file:// protocol and load scripts directly
+    if (location.protocol === 'file:' || !location.hostname) {
+      console.log('Loading application from file:// protocol, using direct script injection...');
+      
+      const scriptFiles = [
+        'logger.js',
+        'node-metadata.js',
+        'geometry-lib.js',
+        'line-render-patch.js',
+        'geo-advanced.js',
+        'nurbs-math.js',
+        'nodes.js',
+        'revit-nodes.js',
+        'parser.js',
+        'ai-engine.js',
+        'gpt-client.js',
+        'app.js',
+        'node-renderer.js',
+        'pyrunner.js',
+        'engine.js',
+        'viewer3d.js',
+        'geo-selector.js',
+        'ui-enhancements.js',
+        'save-load.js',
+        'node-library.js',
+        'logger-patch.js',
+        'wire-portal-patch.js',
+        'port-handler.js',
+        'node-help.js',
+        'node-help-panel.js',
+        'node-search-popup.js'
+      ];
+
+      function loadScript(src) {
+        return fetch(src)
+          .then(r => r.text())
+          .then(text => {
+            const script = document.createElement('script');
+            script.type = 'text/javascript';
+            script.text = text;
+            document.head.appendChild(script);
+          })
+          .catch(e => console.error(`Failed to load ${src}:`, e));
+      }
+
+      // Load all scripts sequentially
+      function loadAllScripts() {
+        let promise = Promise.resolve();
+        for (const file of scriptFiles) {
+          promise = promise.then(() => loadScript(file));
+        }
+        return promise.then(() => {
+          console.log('All scripts loaded. Initializing app...');
+          if (typeof app !== 'undefined' && !app.initialized) {
+            app.init();
+          }
+        });
+      }
+
+      // Start loading when DOM is ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', loadAllScripts);
+      } else {
+        loadAllScripts();
+      }
+    }
+  </script>
+
+  <script type="module" src="src/main.js"></script>
+
 </body>
+
 </html>
+
