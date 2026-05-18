@@ -35,6 +35,7 @@ import {
 import { installGeoSelector } from './viewer/geo-selector.js';
 
 const NovaConnect = createNovaConnectClient();
+let installedRevitBridge = RevitBridge;
 
 const NodeFlow = {
   FormulaEval,
@@ -69,7 +70,12 @@ const NodeFlow = {
   installNodeHelpPanel,
   installRevitNodes,
   installGeoSelector,
-  RevitBridge,
+  get RevitBridge() {
+    return (typeof window !== 'undefined' && window.RevitBridge) || installedRevitBridge;
+  },
+  set RevitBridge(value) {
+    installedRevitBridge = value;
+  },
   RevitElement,
   NovaConnect,
   NovaConnectClient,
@@ -104,7 +110,11 @@ if (typeof window !== 'undefined') {
 }
 
 function installBeforeAppInit() {
-  installRevitNodes();
+  const installedRevitBridge = installRevitNodes();
+  NodeFlow.RevitBridge = installedRevitBridge;
+  if (typeof window !== 'undefined') {
+    window.NodeFlow = NodeFlow;
+  }
   installLineRenderPatch();
   installNodeRenderer();
   installNodeLibrary();
