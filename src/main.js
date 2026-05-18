@@ -4,8 +4,10 @@ import { NFLogger } from './core/logger.js';
 import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/node-metadata.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
 import { GPTClient, SettingsDialog } from './ai/gpt-client.js';
+import { Geo } from './geometry/index.js';
 import { Viewer3D } from './viewer/viewer3d.js';
 import { installEngine } from './core/engine.js';
+import { installSaveLoad } from './app/save-load.js';
 import './ai/gpt-integration.js';
 import './legacy-loader.js';
 import { createComputeContext, computeNodeValue } from './core/compute-engine.js';
@@ -16,6 +18,10 @@ import { installNodeLibrary } from './ui/node-library.js';
 import { installNodeRenderer } from './ui/node-renderer.js';
 import { installNodeSearchPopup } from './ui/node-search-popup.js';
 import { installWirePortalPatch } from './ui/wire-portal-patch.js';
+import { installUiEnhancements } from './ui/ui-enhancements.js';
+import { installPortHandler } from './ui/port-handler.js';
+import { installNodeHelp } from './ui/node-help.js';
+import { installNodeHelpPanel } from './ui/node-help-panel.js';
 
 const NodeFlow = {
   FormulaEval,
@@ -32,6 +38,7 @@ const NodeFlow = {
   SettingsDialog,
   Viewer3D,
   installEngine,
+  installSaveLoad,
   createComputeContext,
   computeNodeValue,
   installLineRenderPatch,
@@ -39,6 +46,10 @@ const NodeFlow = {
   installNodeRenderer,
   installNodeSearchPopup,
   installWirePortalPatch,
+  installUiEnhancements,
+  installPortHandler,
+  installNodeHelp,
+  installNodeHelpPanel,
   ...GraphHelpers,
   ...NodeLibraryUtils
 };
