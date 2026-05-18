@@ -4,6 +4,8 @@
 
 Complete the remaining module migration by replacing `src/legacy-loader.js` raw-script injection with explicit ES module imports, while preserving legacy `window.*` compatibility until each consumer has moved to direct imports.
 
+**Current status (May 18, 2026):** Runtime loading now uses `src/main.js` and explicit `src/` module imports. `src/legacy-loader.js`, duplicate root runtime scripts, and the old `index.html` file-protocol fallback loader have been removed. Remaining cleanup should focus on shrinking temporary `window.*` compatibility bridges and broadening browser workflow coverage.
+
 ## Branching Strategy
 
 - `main` remains the production-ready branch.
@@ -124,7 +126,7 @@ Complete the remaining module migration by replacing `src/legacy-loader.js` raw-
 - Add `src/app/app.js`.
 - Export an app factory or singleton initializer.
 - Replace global script-order initialization with explicit `init()` from `src/main.js`.
-- Keep file-protocol fallback behavior documented if root legacy files remain for local fallback.
+- Document that the file-protocol fallback is no longer supported after root runtime files are removed.
 
 **Acceptance criteria:**
 
@@ -183,7 +185,7 @@ Complete the remaining module migration by replacing `src/legacy-loader.js` raw-
 - Remove all `?raw` imports used only by `legacy-loader.js`.
 - Delete or retire `src/legacy-loader.js`.
 - Update `docs/phase-3.md`, `docs/toolchain-plan.md`, and `docs/enterprise-readiness-strategy.md`.
-- Verify whether root legacy files are still needed for file-protocol fallback and document the decision.
+- Remove root runtime files that only existed for the file-protocol fallback and document the decision.
 
 **Acceptance criteria:**
 
@@ -210,7 +212,7 @@ Complete the remaining module migration by replacing `src/legacy-loader.js` raw-
 - PR targets `develop`.
 - Scope is limited to one migration task.
 - Compatibility globals are documented in the PR description.
-- `src/legacy-loader.js` has fewer raw-loaded files after the PR, unless the branch is a preparatory test-only branch.
+- The PR does not reintroduce `src/legacy-loader.js`, root runtime scripts, or raw-script loading.
 - Relevant unit tests are added or updated.
 - Browser workflow tests are updated for user-facing runtime behavior.
 - CI passes before merge.

@@ -18,8 +18,8 @@ These instructions apply to the entire repository.
 
 - The app is migrating from legacy global browser scripts to explicit `src/` modules.
 - New or migrated code should live under `src/` and expose `window.*` compatibility bridges only when legacy consumers still need them.
-- Keep root legacy files intact when they are still needed by the file-protocol fallback in `index.html`.
-- Reduce `src/legacy-loader.js` raw-script injection incrementally, one contained runtime slice at a time.
+- Do not reintroduce root runtime scripts or the removed file-protocol fallback loader in `index.html`.
+- Reduce remaining compatibility globals incrementally, one contained runtime slice at a time.
 - Follow the current migration notes in:
   - `docs/toolchain-plan.md`
   - `docs/phase-3.md`

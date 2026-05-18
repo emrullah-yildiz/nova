@@ -11,7 +11,7 @@ This repository contains a lightweight static web application that combines a no
 ## Current status
 
 - Prototype/demo application, not yet packaged for production
-- Plain HTML/CSS/JavaScript with global browser scripts
+- Vite-powered HTML/CSS/JavaScript application with explicit ES module bootstrap
 - Includes AI prompt integration via OpenAI/Groq/OpenRouter
 - Includes Revit scripting examples and geometry utilities
 
@@ -52,13 +52,14 @@ npm run test:e2e
 
 ## Project structure
 
-- `index.html` — main application shell
-- `app.js` — application state and UI workflow
-- `engine.js` — graph execution and node runtime
-- `geometry-lib.js`, `geo-advanced.js`, `nurbs-math.js` — geometry kernel
-- `gpt-client.js`, `gpt-integration.js` — AI API integration
-- `node-library.js`, `node-renderer.js`, `node-search-popup.js` — node editor UI
-- `save-load.js`, `logger.js`, `viewer3d.js` — persistence, logging, and 3D viewport
+- `index.html` - main application shell
+- `src/main.js` - application bootstrap and module installer sequence
+- `src/app/`, `src/core/`, `src/runtime/` - app state, graph execution, parser, and Python runner runtime
+- `src/geometry/` - geometry kernel and math utilities
+- `src/ai/` - AI client and provider integration
+- `src/ui/` - node editor, panels, persistence UI, and Revit/geometry selector modules
+- `src/viewer/` - 3D viewport and rendering helpers
+- `tests/`, `e2e/` - unit and browser workflow coverage
 
 ## Phase 1 launch
 
@@ -79,4 +80,4 @@ This initial phase has begun with:
 
 ## Notes for maintainers
 
-This repo currently works as a static browser app, but enterprise readiness requires upstream work on packaging, modularization, testing, and security.
+This repo now boots through the Vite/module path only. Legacy root runtime scripts and the old file-protocol fallback loader have been removed, so new runtime work should be added under `src/`.
