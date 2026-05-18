@@ -6,14 +6,12 @@ Create a reproducible build workflow for the prototype that supports incremental
 
 ## Current state
 
-- The app is currently authored as a legacy browser prototype with multiple classic `<script>` files.
+- The app now boots through `src/main.js` using explicit ES module imports.
 - Quality tooling is in place: ESLint, Prettier, Vitest.
-- Core behavior has started migrating into `src/core/`, `src/ai/`, and `src/ui/` modules.
-- The runtime still depends on legacy files such as `app.js`, `engine.js`, `gpt-client.js`, and `node-library.js`.
+- Core behavior has migrated into `src/core/`, `src/ai/`, `src/app/`, `src/runtime/`, `src/geometry/`, `src/viewer/`, and `src/ui/` modules.
 - `npm test`, `npm test -- --coverage`, `npm run lint:all`, and `npm run build` currently complete successfully.
-- The current Vite build works, but it still bundles the legacy runtime through `src/legacy-loader.js` and reports a large JavaScript chunk warning.
-- Compatibility bridges are in place for `Viewer3D`, `AIEngine`, `NFLogger`, `NODE_META`, and the node registry globals: `src/main.js` imports their `src/` modules directly and exposes legacy `window.*` globals, so the Vite boot path no longer injects root `viewer3d.js`, `ai-engine.js`, `logger.js`, `node-metadata.js`, or `nodes.js` as raw text.
-- The remaining module migration is organized as branch-sized tasks in `docs/module-migration-branch-plan.md`.
+- The Vite build works without `src/legacy-loader.js` or `?raw` legacy script injection.
+- Compatibility bridges remain in place for browser globals such as `window.app`, `window.Geo`, `window.Viewer3D`, `window.NFLogger`, and node registry objects while inline handlers and plugin integrations are still being cleaned up.
 
 ## Recommended next steps
 
@@ -35,7 +33,7 @@ Create a reproducible build workflow for the prototype that supports incremental
 - `npm run format` — code formatting via `prettier`
 - `npm run build` - produces the current Vite `dist/` bundle while migration continues
 
-Current correction: `npm run build` is no longer a placeholder. It produces the Vite `dist/` bundle, with the remaining caveat that the bundle still includes legacy scripts through `src/legacy-loader.js`.
+Current correction: `npm run build` is no longer a placeholder. It produces the Vite `dist/` bundle through explicit source-module imports.
 
 ## Build output
 
@@ -51,9 +49,9 @@ Current correction: `npm run build` is no longer a placeholder. It produces the 
    - AI provider and GPT integration
    - UI helpers and node library logic
 3. Add tests for each extracted module before replacing the legacy entrypoint.
-4. Continue replacing `src/legacy-loader.js` raw-script injection with explicit imports as legacy files are converted. `Viewer3D`, `AIEngine`, `NFLogger`, `NODE_META`, and the node registry have already moved to this pattern.
-5. Split the production bundle once large runtime areas have stable module boundaries.
-6. Remove `src/legacy-loader.js` after all branch tasks in `docs/module-migration-branch-plan.md` have landed.
+4. Continue reducing compatibility globals and inline event handlers now that raw-script injection is gone.
+5. Split the production bundle if future runtime growth pushes chunks back over the warning threshold.
+6. Expand browser workflow coverage around drag/drop wiring, file import/export, 3D viewport behavior, and settings flows.
 
 ## Acceptance criteria for Phase 2
 

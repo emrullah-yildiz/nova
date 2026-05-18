@@ -38,15 +38,11 @@ Move the project from prototype tooling into a maintainable, buildable architect
 ## Current validation update
 
 - `npm run build` succeeds and emits `dist/index.html` plus bundled assets under `dist/assets/`.
-- The production build currently reports a large JavaScript chunk warning because the legacy runtime is still loaded through `src/legacy-loader.js`.
-- Phase 3 should remain open until raw legacy script injection is replaced by explicit module imports for the major runtime areas.
-- `Viewer3D` is now imported from `src/viewer/viewer3d.js` and exposed through `window.Viewer3D` for legacy consumers, removing one raw-script injection from the Vite boot path.
-- `AIEngine` is now imported from `src/ai/ai-engine.js` and exposed through `window.AIEngine`, removing another raw-script injection from the Vite boot path.
-- `NFLogger` is now imported from `src/core/logger.js` and exposed through `window.NFLogger`, removing the logger raw-script injection from the Vite boot path.
-- `NODE_META` and its helper functions are now imported from `src/core/node-metadata.js` and exposed through compatibility globals, removing the metadata raw-script injection from the Vite boot path.
-- `NODE_LIBRARY`, `NODE_TYPE_MAP`, and `TYPE_COLORS` are now imported from `src/core/nodes.js` and exposed through compatibility globals, removing the node registry raw-script injection from the Vite boot path.
-- The remaining migration work is split into GitHub-ready branch tasks in `docs/module-migration-branch-plan.md`.
+- `src/main.js` now initializes the app using explicit ES module imports.
+- `src/legacy-loader.js` raw-script injection has been removed from the Vite boot path.
+- Runtime compatibility globals remain available where legacy inline handlers and browser integrations still depend on `window.*`.
+- The production build no longer reports the previous large JavaScript chunk warning caused by bundling raw legacy scripts.
 
 ## Notes
 
-This phase is intentionally incremental: it establishes the build tooling and entrypoint without requiring a full runtime refactor yet.
+This phase now establishes the build tooling, module entrypoint, and explicit runtime bootstrap without the raw legacy loader. Remaining hardening belongs in follow-up enterprise readiness work: broader browser workflow coverage, deployment, and production security review.
