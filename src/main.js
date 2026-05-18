@@ -25,7 +25,16 @@ import { installPortHandler } from './ui/port-handler.js';
 import { installNodeHelp } from './ui/node-help.js';
 import { installNodeHelpPanel } from './ui/node-help-panel.js';
 import { installRevitNodes, RevitBridge, RevitElement } from './integrations/revit/revit-nodes.js';
+import { createNovaConnectClient, NovaConnectClient } from './integrations/connect/client.js';
+import * as NovaConnectProtocol from './integrations/connect/protocol.js';
+import {
+  ApsDesignAutomationAdapter,
+  ApsDerivativeAdapter,
+  ApsDocsAdapter
+} from './integrations/connect/aps-adapters.js';
 import { installGeoSelector } from './viewer/geo-selector.js';
+
+const NovaConnect = createNovaConnectClient();
 
 const NodeFlow = {
   FormulaEval,
@@ -62,6 +71,12 @@ const NodeFlow = {
   installGeoSelector,
   RevitBridge,
   RevitElement,
+  NovaConnect,
+  NovaConnectClient,
+  NovaConnectProtocol,
+  ApsDocsAdapter,
+  ApsDerivativeAdapter,
+  ApsDesignAutomationAdapter,
   ...GraphHelpers,
   ...NodeLibraryUtils
 };
@@ -81,6 +96,11 @@ if (typeof window !== 'undefined') {
   window.GPTClient = GPTClient;
   window.SettingsDialog = SettingsDialog;
   window.Viewer3D = Viewer3D;
+  window.NovaConnect = NovaConnect;
+  window.NovaConnectProtocol = NovaConnectProtocol;
+  window.ApsDocsAdapter = ApsDocsAdapter;
+  window.ApsDerivativeAdapter = ApsDerivativeAdapter;
+  window.ApsDesignAutomationAdapter = ApsDesignAutomationAdapter;
 }
 
 function installBeforeAppInit() {

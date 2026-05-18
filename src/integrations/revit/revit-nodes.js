@@ -1,4 +1,10 @@
 import { Geo } from '../../geometry/index.js';
+import {
+  SOURCES,
+  createGeometryEnvelope,
+  createIdentity,
+  normalizeElementRecord
+} from '../connect/protocol.js';
 
 function getRuntimeGlobal() {
   if (typeof window !== 'undefined') return window;
@@ -26,6 +32,14 @@ function RevitElement(data) {
   this.typeName = data.typeName || '';
   this.levelName = data.levelName || '';
   this.params = data.params || {};
+  this.identity = createIdentity({
+    source: SOURCES.REVIT_LOCAL,
+    sourceId: data.sourceId || data.id || 0,
+    versionId: data.versionId || '',
+    ...(data.identity || {})
+  });
+  this.sourceId = this.identity.sourceId;
+  this.versionId = this.identity.versionId;
 }
 
 RevitElement.prototype.toString = function() {
@@ -49,12 +63,68 @@ export function installRevitNodes(runtimeGlobal = getRuntimeGlobal()) {
 
 window.RevitElement = RevitElement;
 
+function getConnectClient() {
+  var client = window.NovaConnect;
+  if (!client) return null;
+  if (client.status === 'connected') return client;
+  if (client.snapshot || Object.keys(client.elementsByCategory || {}).length > 0) return client;
+  return null;
+}
+
+function getCachedElements(category) {
+  var client = getConnectClient();
+  if (!client || !client.elementsByCategory) return null;
+  var cached = client.elementsByCategory[category];
+  return Array.isArray(cached) ? cached : null;
+}
+
+function geometryEnvelopeToGeo(envelope) {
+  if (!envelope || envelope.kind !== 'mesh' || !envelope.data) return null;
+  var vertices = envelope.data.vertices || [];
+  var faces = envelope.data.faces || [];
+  if (!Array.isArray(vertices) || !Array.isArray(faces)) return null;
+  var points = [];
+  for (var i = 0; i < vertices.length; i++) {
+    var vertex = vertices[i];
+    points.push(new Geo.Point3(Number(vertex[0] || 0), Number(vertex[1] || 0), Number(vertex[2] || 0)));
+  }
+  return new Geo.Mesh3(points, faces.map(function(face) { return face.slice(); }));
+}
+
 // ═══════════════════════════════════════
 // RevitBridge — data access layer
 // ═══════════════════════════════════════
 
 RevitBridge = {
+  getConnectClient: getConnectClient,
+
+  isLive() {
+    var client = getConnectClient();
+    return !!(client && client.status === 'connected');
+  },
+
+  async connect(options) {
+    var client = window.NovaConnect;
+    if (!client) throw new Error('NovaConnect client is not installed');
+    if (options) {
+      if (options.url) client.url = options.url;
+      if (options.sessionId) client.sessionId = options.sessionId;
+      if (options.projectId) client.projectId = options.projectId;
+      if (options.pairingToken) client.pairingToken = options.pairingToken;
+    }
+    await client.connect();
+    return client;
+  },
+
+  async refreshProject() {
+    var client = getConnectClient();
+    if (!client || client.status !== 'connected') return this.getData();
+    return client.getProjectSnapshot();
+  },
+
   getData() {
+    var client = getConnectClient();
+    if (client && client.snapshot) return client.snapshot;
     if (typeof REVIT_DATA !== 'undefined') return REVIT_DATA;
     if (typeof window.REVIT_DATA !== 'undefined') return window.REVIT_DATA;
     return { categories: {}, levels: [], sheets: [], types: {}, selection: [], activeView: '', projectName: 'No Project' };
@@ -64,13 +134,17 @@ RevitBridge = {
   wrapElement(raw) {
     if (raw instanceof RevitElement) return raw;
     if (!raw || typeof raw !== 'object') return null;
+    var normalized = raw._type === 'ElementRecord'
+      ? raw
+      : normalizeElementRecord(raw, raw.identity || { source: SOURCES.REVIT_LOCAL });
     return new RevitElement({
-      id: raw.id || 0,
-      name: raw.name || '',
-      category: raw.category || '',
-      typeName: raw.typeName || '',
-      levelName: raw.levelName || '',
-      params: raw.params || {}
+      id: normalized.id || 0,
+      name: normalized.name || '',
+      category: normalized.category || '',
+      typeName: normalized.typeName || '',
+      levelName: normalized.levelName || '',
+      params: normalized.params || {},
+      identity: normalized.identity
     });
   },
 
@@ -106,6 +180,15 @@ RevitBridge = {
   },
 
   getElements(category) {
+    var liveRaw = getCachedElements(category);
+    if (liveRaw) {
+      var liveResult = [];
+      for (var li = 0; li < liveRaw.length; li++) {
+        var liveWrapped = this.wrapElement(liveRaw[li]);
+        if (liveWrapped) liveResult.push(liveWrapped);
+      }
+      return liveResult;
+    }
     var d = this.getData();
     var raw = [];
     if (category === 'Sheets') raw = d.sheets || [];
@@ -115,6 +198,18 @@ RevitBridge = {
       raw = cat ? (cat.elements || cat || []) : [];
       if (!Array.isArray(raw)) raw = [];
     }
+    var result = [];
+    for (var i = 0; i < raw.length; i++) {
+      var wrapped = this.wrapElement(raw[i]);
+      if (wrapped) result.push(wrapped);
+    }
+    return result;
+  },
+
+  async queryElements(category, options) {
+    var client = getConnectClient();
+    if (!client || client.status !== 'connected') return this.getElements(category);
+    var raw = await client.queryElements(category, options || {});
     var result = [];
     for (var i = 0; i < raw.length; i++) {
       var wrapped = this.wrapElement(raw[i]);
@@ -175,6 +270,10 @@ RevitBridge = {
   // ═══════════════════════════════════════
 
   getMeshById(elementId) {
+    var client = getConnectClient();
+    if (client && client.geometryById && client.geometryById[String(elementId)]) {
+      return client.geometryById[String(elementId)];
+    }
     var meshes = (typeof REVIT_MESHES !== 'undefined') ? REVIT_MESHES : (window.REVIT_MESHES || []);
     var idStr = String(elementId);
     for (var i = 0; i < meshes.length; i++) {
@@ -185,6 +284,7 @@ RevitBridge = {
 
   // Convert a REVIT_MESHES record into a Geo.Mesh3 object
   meshDataToGeo(meshRecord) {
+    if (meshRecord && meshRecord._type === 'GeometryEnvelope') return geometryEnvelopeToGeo(meshRecord);
     if (!meshRecord || !meshRecord.vertices || !meshRecord.indices) return null;
     if (typeof Geo === 'undefined' || !Geo.Mesh3) return null;
 
@@ -218,7 +318,9 @@ RevitBridge = {
   getGeometries(elements) {
     if (!elements || !Array.isArray(elements)) return [];
     var meshes = (typeof REVIT_MESHES !== 'undefined') ? REVIT_MESHES : (window.REVIT_MESHES || []);
-    if (meshes.length === 0) {
+    var client = getConnectClient();
+    var hasLiveGeometry = client && client.geometryById && Object.keys(client.geometryById).length > 0;
+    if (meshes.length === 0 && !hasLiveGeometry) {
       console.warn('[RevitBridge] REVIT_MESHES not available — run geometry export first');
       return [];
     }
@@ -233,6 +335,36 @@ RevitBridge = {
       }
     }
     return result;
+  },
+
+  async getLiveGeometries(elements, options) {
+    if (!elements || !Array.isArray(elements)) return [];
+    var client = getConnectClient();
+    if (!client || client.status !== 'connected') return this.getGeometries(elements);
+    var ids = elements.map(function(el) {
+      if (el instanceof RevitElement) return el.identity.sourceId;
+      return (el.identity && el.identity.sourceId) || el.id;
+    });
+    var envelopes = await client.getGeometry(ids, options || {});
+    var result = [];
+    for (var i = 0; i < envelopes.length; i++) {
+      var geoMesh = geometryEnvelopeToGeo(envelopes[i]);
+      if (geoMesh) result.push(geoMesh);
+    }
+    return result;
+  },
+
+  async sendGeometry(geometry, identity, options) {
+    var client = getConnectClient();
+    if (!client || client.status !== 'connected') {
+      return {
+        ok: false,
+        code: 'NOVA_CONNECT_OFFLINE',
+        message: 'Connect to a local Revit host before sending geometry.'
+      };
+    }
+    var envelope = createGeometryEnvelope(geometry, identity || { source: SOURCES.REVIT_LOCAL }, options || {});
+    return client.sendGeometry(envelope, envelope.identity, options || {});
   }
 };
 window.RevitBridge = RevitBridge;
