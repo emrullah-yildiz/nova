@@ -56,6 +56,13 @@ const walls = await NodeFlow.RevitBridge.queryElements('Walls');
 const meshes = await NodeFlow.RevitBridge.getLiveGeometries(walls);
 ```
 
+You can also use the in-app **Connect** button in the top menu:
+
+1. Enter `ws://127.0.0.1:8765`.
+2. Enter the same pairing token used by the hub and mock Revit host.
+3. Click **Connect**.
+4. Click **Query Walls**, **Get Geometry**, or **Send Test Point** to verify the local bridge loop.
+
 The Revit plugin side should connect as a `host`, validate the pairing token, and handle write operations through Revit External Events. WebSocket handlers must only enqueue work.
 
 ## APS Scope
@@ -71,7 +78,7 @@ Low-latency live editing remains the responsibility of `local-revit`.
 ## Next Implementation Slices
 
 1. Build the compiled Revit add-in host that mirrors the mock host contract and uses External Events for all model writes.
-2. Add a connection UI in Nova for hub URL, token, status, reconnect, and explicit write approval.
-3. Implement DirectShape mesh write acceptance in the Revit host.
+2. Add explicit write approval controls before enabling real Revit writes.
+3. Implement DirectShape mesh write acceptance in the compiled Revit host.
 4. Add APS OAuth and project/version browser UI.
 5. Add IFC mapping once the local and APS identity contract is stable.
