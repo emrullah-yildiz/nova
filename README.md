@@ -1,6 +1,6 @@
-# NodeFlow AI
+# Nova
 
-NodeFlow AI is a browser-based visual scripting and parametric design prototype with AI-assisted graph editing.
+Nova is a browser-based visual scripting and parametric design prototype with AI-assisted graph editing.
 
 Nova is a visual scripting workspace for Revit/Rhino.
 
