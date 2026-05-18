@@ -75,6 +75,11 @@ describe('Nova Connect panel (simplified)', () => {
             this.sessionId = 'local-revit-session';
             return true;
           },
+          elementsByCategory: {},
+          getProjectSnapshot: async function() {
+            this.elementsByCategory = { Walls: [{ id: 1 }] };
+            return { categories: { Walls: { elements: [{ id: 1 }] } } };
+          },
           disconnect: function() {
             this.status = 'disconnected';
           }
@@ -100,7 +105,7 @@ describe('Nova Connect panel (simplified)', () => {
     app.novaConnectPanelOpen = true;
     app._renderNovaConnectPanel();
     await app.connectNovaConnect();
-    expect(app.novaConnectLastResult.message).toContain('Connected successfully');
+    expect(app.novaConnectLastResult.message).toContain('Connected to Revit session');
 
     // Disconnect
     await app.disconnectNovaConnect();
@@ -139,6 +144,35 @@ describe('Nova Connect panel (simplified)', () => {
       projectId: 'Sample'
     });
     expect(app.novaConnectLastResult.message).toBe('Opened from Revit. Click Connect to establish connection.');
+  });
+
+  it('reports when the hub connects but no Revit host snapshot is available', async () => {
+    const document = createDocumentStub();
+    const app = {};
+    const runtime = {
+      document,
+      localStorage: { getItem: () => null, setItem: () => {} },
+      NodeFlow: {
+        NovaConnect: {
+          status: 'disconnected',
+          peerConnected: false,
+          connect: async function() {
+            this.status = 'connected';
+            return true;
+          },
+          getProjectSnapshot: async function() {
+            throw new Error('No host is connected for this session');
+          }
+        }
+      }
+    };
+
+    installNovaConnectPanel(app, runtime);
+    await app.connectNovaConnect();
+
+    expect(app.novaConnectLastResult.ok).toBe(false);
+    expect(app.novaConnectLastResult.message).toContain('no Revit host is paired');
+    expect(app.novaConnectLastResult.detail).toContain('No host');
   });
 
   it('idempotent — calling install twice does not re-install', () => {

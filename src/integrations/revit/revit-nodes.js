@@ -191,8 +191,18 @@ RevitBridge = {
   getElements(category) {
     var liveRaw = getCachedElements(category);
     if (!liveRaw) {
-      console.error('[RevitBridge] Failed to get elements for "' + category + '": No elements cached. Ensure Revit is connected via Connect Hub.');
-      throw new Error('Revit connection required: No elements cached for category "' + category + '". Ensure Revit is connected via Connect Hub.');
+      var client = getConnectClient();
+      var knownCategories = client && client.elementsByCategory ? Object.keys(client.elementsByCategory) : [];
+      console.error('[RevitBridge] Failed to get elements for "' + category + '": No elements cached.', {
+        clientStatus: client ? client.status : 'missing',
+        peerConnected: client ? client.peerConnected : false,
+        knownCategories: knownCategories
+      });
+      throw new Error(
+        'Revit connection required: No elements cached for category "' + category + '". ' +
+        'Connect Nova to the hub after Revit host is paired, or click Connect again to refresh the project snapshot. ' +
+        'Known categories: ' + (knownCategories.length ? knownCategories.join(', ') : 'none')
+      );
     }
     var liveResult = [];
     for (var li = 0; li < liveRaw.length; li++) {

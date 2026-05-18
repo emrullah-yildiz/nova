@@ -22,6 +22,7 @@ export class NovaConnectClient {
     this.snapshot = null;
     this.elementsByCategory = {};
     this.geometryById = {};
+    this.peerConnected = false;
   }
 
   connect() {
@@ -165,6 +166,15 @@ export class NovaConnectClient {
     if (envelope.type === 'connection.established') {
       this.sessionId = envelope.sessionId || envelope.payload.sessionId || this.sessionId;
       this.projectId = envelope.projectId || envelope.payload.projectId || this.projectId;
+      this.peerConnected = !!envelope.payload.peerConnected;
+    }
+    if (envelope.type === 'peer.connected') {
+      this.peerConnected = true;
+      this.emit('peer.connected', envelope);
+    }
+    if (envelope.type === 'peer.disconnected') {
+      this.peerConnected = false;
+      this.emit('peer.disconnected', envelope);
     }
     if (envelope.type === 'project.snapshot') this.applyProjectSnapshot(envelope.payload || {});
     if (envelope.type === 'project.changed') this.emit('stale', envelope.payload);
