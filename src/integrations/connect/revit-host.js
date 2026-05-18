@@ -133,7 +133,8 @@ export class NovaRevitHostAdapter {
   }
 
   async handleGeometryCreate(payload) {
-    if (this.requireWriteApproval && payload.requireUserApproval === false) {
+    const approval = payload.approval || {};
+    if (this.requireWriteApproval && approval.approved !== true) {
       return createResult({
         ok: false,
         message: 'Revit writes require explicit user approval.',

@@ -63,6 +63,11 @@ describe('Nova Connect panel', () => {
     const document = createDocumentStub();
     const app = {};
     const walls = [{ id: 3001, category: 'Walls', name: 'Basic Wall' }];
+    const approvalCheckbox = document.createElement('input');
+    approvalCheckbox.id = 'nova-connect-write-approval';
+    approvalCheckbox.checked = false;
+    document.elements.set(approvalCheckbox.id, approvalCheckbox);
+    const sendCalls = [];
     const runtime = {
       document,
       localStorage: {
@@ -84,7 +89,10 @@ describe('Nova Connect panel', () => {
         RevitBridge: {
           queryElements: async () => walls,
           getLiveGeometries: async () => [new Geo.Mesh3([], [])],
-          sendGeometry: async () => ({ ok: true, message: 'Accepted.', data: { directShapeId: 'mock-1' } })
+          sendGeometry: async (geometry, identity, options) => {
+            sendCalls.push({ geometry, identity, options });
+            return { ok: true, message: 'Accepted.', data: { directShapeId: 'mock-1' } };
+          }
         },
         Geo
       }
@@ -106,6 +114,17 @@ describe('Nova Connect panel', () => {
     expect(app.novaConnectLastResult.message).toBe('Received 1 mesh result.');
 
     await app.sendNovaConnectTestPoint();
+    expect(app.novaConnectLastResult.message).toBe('Approve this write operation before sending geometry.');
+    expect(sendCalls).toHaveLength(0);
+
+    approvalCheckbox.checked = true;
+    await app.sendNovaConnectTestPoint();
     expect(app.novaConnectLastResult.detail).toContain('mock-1');
+    expect(sendCalls[0].options.approval).toMatchObject({
+      approved: true,
+      approvedBy: 'nova-connect-panel',
+      scope: 'single-operation'
+    });
+    expect(approvalCheckbox.checked).toBe(false);
   });
 });

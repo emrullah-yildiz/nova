@@ -50,6 +50,14 @@ describe('NovaRevitHostAdapter', () => {
     const snapshot = await client.getProjectSnapshot();
     const walls = await client.queryElements('Walls');
     const geometries = await client.getGeometry([walls[0].identity.sourceId]);
+    const blockedCreateResult = await client.sendGeometry(
+      new Geo.Mesh3([
+        new Geo.Point3(0, 0, 0),
+        new Geo.Point3(1, 0, 0),
+        new Geo.Point3(0, 1, 0)
+      ], [[0, 1, 2]]),
+      { source: 'revit-local', sourceId: 'blocked-mesh' }
+    );
     const createResult = await client.sendGeometry(
       new Geo.Mesh3([
         new Geo.Point3(0, 0, 0),
@@ -57,13 +65,20 @@ describe('NovaRevitHostAdapter', () => {
         new Geo.Point3(0, 1, 0)
       ], [[0, 1, 2]]),
       { source: 'revit-local', sourceId: 'nova-mesh' },
-      { metadata: { category: 'Generic Models' } }
+      {
+        metadata: { category: 'Generic Models' },
+        approval: { approved: true, approvedBy: 'test-user', scope: 'single-operation' }
+      }
     );
 
     expect(snapshot.projectName).toBe('Mock Revit Project');
     expect(walls).toHaveLength(1);
     expect(walls[0].identity.source).toBe('revit-local');
     expect(geometries[0]).toMatchObject({ _type: 'GeometryEnvelope', kind: 'mesh' });
+    expect(blockedCreateResult).toMatchObject({
+      ok: false,
+      code: 'WRITE_APPROVAL_REQUIRED'
+    });
     expect(createResult).toMatchObject({
       ok: true,
       data: expect.objectContaining({ directShapeId: 'mock-directshape-1' })

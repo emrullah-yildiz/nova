@@ -62,7 +62,8 @@ function installAppMethods(app, runtimeGlobal) {
     return {
       url: valueOf(document, 'nova-connect-url', 'ws://127.0.0.1:8765'),
       token: valueOf(document, 'nova-connect-token', ''),
-      projectId: valueOf(document, 'nova-connect-project', '')
+      projectId: valueOf(document, 'nova-connect-project', ''),
+      writeApproved: checkedOf(document, 'nova-connect-write-approval')
     };
   };
 
@@ -131,13 +132,29 @@ function installAppMethods(app, runtimeGlobal) {
     const bridge = this._getNovaRevitBridge();
     const Geo = runtimeGlobal.NodeFlow ? runtimeGlobal.NodeFlow.Geo : runtimeGlobal.Geo;
     if (!bridge || !bridge.sendGeometry || !Geo) return this._setNovaConnectResult({ ok: false, message: 'Send geometry bridge is not available.' });
+    const settings = this._collectNovaConnectSettings();
+    if (!settings.writeApproved) {
+      return this._setNovaConnectResult({
+        ok: false,
+        message: 'Approve this write operation before sending geometry.',
+        detail: 'Enable "Approve one Revit write" in the Connect panel. This prevents accidental model writes when the real Revit host is connected.'
+      });
+    }
     try {
       const result = await bridge.sendGeometry(new Geo.Point3(1, 2, 3), {
         source: 'revit-local',
         sourceId: 'nova-connect-test-point'
       }, {
-        metadata: { category: 'Generic Models' }
+        metadata: { category: 'Generic Models' },
+        approval: {
+          approved: true,
+          approvedAt: Date.now(),
+          approvedBy: 'nova-connect-panel',
+          scope: 'single-operation',
+          message: 'User approved sending the Nova Connect test point.'
+        }
       });
+      this._clearNovaConnectWriteApproval();
       this._setNovaConnectResult({
         ok: !!result.ok,
         message: result.message || (result.ok ? 'Geometry accepted.' : 'Geometry rejected.'),
@@ -146,6 +163,11 @@ function installAppMethods(app, runtimeGlobal) {
     } catch (error) {
       this._setNovaConnectResult({ ok: false, message: error.message || 'Geometry send failed.' });
     }
+  };
+
+  app._clearNovaConnectWriteApproval = function() {
+    const checkbox = runtimeGlobal.document.getElementById('nova-connect-write-approval');
+    if (checkbox) checkbox.checked = false;
   };
 
   app._renderNovaConnectPanel = function() {
@@ -170,6 +192,7 @@ function installAppMethods(app, runtimeGlobal) {
       '<label class="ncp-label">Hub URL<input id="nova-connect-url" value="' + escapeHtml(settings.url) + '" autocomplete="off"></label>' +
       '<label class="ncp-label">Pairing Token<input id="nova-connect-token" value="' + escapeHtml(settings.token) + '" autocomplete="off"></label>' +
       '<label class="ncp-label">Project ID<input id="nova-connect-project" value="' + escapeHtml(settings.projectId) + '" autocomplete="off"></label>' +
+      '<label class="ncp-approval"><input id="nova-connect-write-approval" type="checkbox"> <span>Approve one Revit write</span></label>' +
       '<div class="ncp-actions">' +
         '<button onclick="app.connectNovaConnect()">Connect</button>' +
         '<button onclick="app.disconnectNovaConnect()">Disconnect</button>' +
@@ -269,6 +292,25 @@ function injectStyles(document) {
       padding: 9px 10px;
       font-size: 13px;
     }
+    .ncp-approval {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 4px 0 12px;
+      padding: 10px;
+      border: 1px solid rgba(249, 226, 175, 0.35);
+      border-radius: 6px;
+      background: rgba(249, 226, 175, 0.08);
+      color: var(--text-primary);
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .ncp-approval input {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      accent-color: var(--accent-green);
+    }
     .ncp-actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -318,6 +360,11 @@ function injectStyles(document) {
 function valueOf(document, id, fallback) {
   const element = document.getElementById(id);
   return element ? element.value.trim() : fallback;
+}
+
+function checkedOf(document, id) {
+  const element = document.getElementById(id);
+  return !!(element && element.checked);
 }
 
 function readJson(value) {
