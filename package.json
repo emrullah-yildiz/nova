@@ -10,6 +10,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "connect:hub": "node scripts/connect-hub.cjs",
+    "connect:mock-revit": "node scripts/connect-mock-revit-host.cjs",
     "lint": "eslint tests/ --ext .js --ignore-path .gitignore",
     "lint:tests": "eslint tests/ --ext .js --ignore-path .gitignore",
     "lint:src": "eslint src/ --ext .js --ignore-path .gitignore",

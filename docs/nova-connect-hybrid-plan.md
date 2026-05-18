@@ -13,6 +13,7 @@ Completed:
 - Wired Nova Connect into `src/main.js` without auto-connecting on app startup.
 - Extended `RevitBridge` so existing nodes can keep using mock/exported Revit data while live sessions can supply cached elements, query the host, read geometry envelopes, and send geometry.
 - Added tests for protocol normalization, client request routing, local hub routing, APS adapter request shape, and RevitBridge live-cache behavior.
+- Added a mock Revit host adapter and CLI so the browser client can exercise the full local bridge loop before the compiled Revit add-in exists.
 
 ## Architecture
 
@@ -40,11 +41,19 @@ Start the hub:
 npm run connect:hub -- --token=your-pairing-token
 ```
 
+In a second terminal, start the mock Revit host:
+
+```powershell
+npm run connect:mock-revit -- --token=your-pairing-token
+```
+
 In the browser console or future connection UI:
 
 ```js
+NodeFlow.NovaConnect.pairingToken = 'your-pairing-token';
 await NodeFlow.NovaConnect.connect();
-await NodeFlow.RevitBridge.queryElements('Walls');
+const walls = await NodeFlow.RevitBridge.queryElements('Walls');
+const meshes = await NodeFlow.RevitBridge.getLiveGeometries(walls);
 ```
 
 The Revit plugin side should connect as a `host`, validate the pairing token, and handle write operations through Revit External Events. WebSocket handlers must only enqueue work.
@@ -61,7 +70,7 @@ Low-latency live editing remains the responsibility of `local-revit`.
 
 ## Next Implementation Slices
 
-1. Build the Revit plugin host that speaks Nova Connect and uses External Events for all model writes.
+1. Build the compiled Revit add-in host that mirrors the mock host contract and uses External Events for all model writes.
 2. Add a connection UI in Nova for hub URL, token, status, reconnect, and explicit write approval.
 3. Implement DirectShape mesh write acceptance in the Revit host.
 4. Add APS OAuth and project/version browser UI.

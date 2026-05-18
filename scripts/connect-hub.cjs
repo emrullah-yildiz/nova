@@ -9,12 +9,13 @@ function createConnectHub(options = {}) {
   const port = options.port || 8765;
   const host = options.host || '127.0.0.1';
   const pairingToken = options.pairingToken || createId('pair');
+  const defaultSessionId = options.defaultSessionId || 'local-revit-session';
   const sessions = new Map();
   const clients = new Map();
   const server = new WebSocketServer({ host, port });
 
   function getOrCreateSession(sessionId) {
-    const id = sessionId || createId('session');
+    const id = sessionId || defaultSessionId;
     if (!sessions.has(id)) {
       sessions.set(id, { id, host: null, viewers: new Set(), createdAt: Date.now(), projectId: '' });
     }

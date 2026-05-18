@@ -16,6 +16,7 @@ This section documents the current module layout after the Phase 3 migration.
     - `src/integrations/connect/` - neutral protocol, browser WebSocket client, and APS adapters
     - `src/integrations/revit/` - Revit element bridge and compatibility node helpers
 - `scripts/connect-hub.cjs` - localhost Nova Connect WebSocket hub for live desktop bridge sessions
+- `scripts/connect-mock-revit-host.cjs` - mock Revit host for local protocol testing before the compiled Revit add-in exists
 - `tests/` - automated unit and browser workflow tests
 - `docs/` - process, architecture, and onboarding documentation
 - root legacy files - historical/no-build fallback files; keep source-of-truth changes in `src/`
