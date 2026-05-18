@@ -71,4 +71,40 @@ describe('NovaConnectClient', () => {
     expect(records[0].identity.source).toBe('revit-local');
     expect(client.elementsByCategory.Walls[0].identity.sourceId).toBe('3001');
   });
+
+  it('sends explicit write approval metadata with geometry create requests', async () => {
+    const client = new NovaConnectClient({ WebSocketImpl: FakeSocket });
+    await client.connect();
+
+    const send = client.sendGeometry({ kind: 'point', data: { x: 1, y: 2, z: 3 } }, { source: 'revit-local', sourceId: 'pt-1' }, {
+      approval: {
+        approved: true,
+        approvedBy: 'test-user',
+        scope: 'single-operation',
+        message: 'Approved test write'
+      }
+    });
+
+    const requestEnvelope = FakeSocket.instance.sent[1];
+    client.handleMessage(JSON.stringify({
+      version: 1,
+      id: 'reply-geometry',
+      replyTo: requestEnvelope.id,
+      type: 'geometry.create.result',
+      source: 'revit-local',
+      target: 'nova-browser',
+      sessionId: 'session-1',
+      projectId: 'project-1',
+      timestamp: Date.now(),
+      payload: { ok: true },
+      error: null
+    }));
+    await expect(send).resolves.toEqual({ ok: true });
+    expect(requestEnvelope.payload.approval).toMatchObject({
+      approved: true,
+      approvedBy: 'test-user',
+      scope: 'single-operation',
+      message: 'Approved test write'
+    });
+  });
 });

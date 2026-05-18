@@ -136,6 +136,14 @@ socket.on('message', raw => {
       geometries: (request.payload.elementIds || []).map(id => geometryById[String(id)]).filter(Boolean)
     });
   } else if (request.type === 'geometry.create') {
+    if (!request.payload.approval || request.payload.approval.approved !== true) {
+      reply(socket, request, 'geometry.create.result', {
+        ok: false,
+        code: 'WRITE_APPROVAL_REQUIRED',
+        message: 'Revit writes require explicit user approval.'
+      });
+      return;
+    }
     reply(socket, request, 'geometry.create.result', {
       ok: true,
       data: {

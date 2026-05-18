@@ -62,8 +62,10 @@ You can also use the in-app **Connect** button in the top menu:
 2. Enter the same pairing token used by the hub and mock Revit host.
 3. Click **Connect**.
 4. Click **Query Walls**, **Get Geometry**, or **Send Test Point** to verify the local bridge loop.
+5. Before **Send Test Point**, enable **Approve one Revit write**. The approval is consumed after one send, so each write needs a deliberate user action.
 
 The Revit plugin side should connect as a `host`, validate the pairing token, and handle write operations through Revit External Events. WebSocket handlers must only enqueue work.
+Write requests must include a structured `approval` payload with `approved: true`; mock and real hosts should reject unapproved writes.
 
 ## APS Scope
 

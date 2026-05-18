@@ -113,7 +113,11 @@ export class NovaConnectClient {
     const envelope = geometry && geometry._type === 'GeometryEnvelope'
       ? geometry
       : createGeometryEnvelope(geometry, identity, options);
-    const response = await this.request('geometry.create', { geometry: envelope, requireUserApproval: options.requireUserApproval !== false }, { target: 'host' });
+    const response = await this.request('geometry.create', {
+      geometry: envelope,
+      approval: normalizeWriteApproval(options.approval),
+      requireUserApproval: options.requireUserApproval !== false
+    }, { target: 'host' });
     return response.payload;
   }
 
@@ -194,6 +198,16 @@ export class NovaConnectClient {
 
 export function createNovaConnectClient(options = {}) {
   return new NovaConnectClient(options);
+}
+
+function normalizeWriteApproval(approval = {}) {
+  return {
+    approved: approval.approved === true,
+    approvedAt: approval.approvedAt || (approval.approved === true ? Date.now() : null),
+    approvedBy: approval.approvedBy || 'nova-user',
+    scope: approval.scope || 'single-operation',
+    message: approval.message || ''
+  };
 }
 
 export default NovaConnectClient;
