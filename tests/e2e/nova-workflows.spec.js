@@ -73,6 +73,112 @@ test.describe('Nova browser workflows', () => {
     await expect(page.locator('#node-canvas .node')).toHaveCount(4);
   });
 
+  test('exports a project file with stable graph payload shape', async ({ page }) => {
+    await waitForApp(page);
+
+    const result = await page.evaluate(async () => {
+      localStorage.clear();
+      app.newProject();
+
+      const number = app.addNodeToCanvas('number-input', 90, 120);
+      const watch = app.addNodeToCanvas('output-watch', 360, 120);
+
+      number.controlValues.val = 64;
+      app.addWire(number.id, 'value', watch.id, 'value');
+      app._projectName = 'Export Contract';
+
+      const originalCreateObjectURL = URL.createObjectURL;
+      const originalRevokeObjectURL = URL.revokeObjectURL;
+      const originalClick = HTMLAnchorElement.prototype.click;
+
+      let exportedBlob;
+      let downloadName;
+      let revokedUrl;
+
+      URL.createObjectURL = blob => {
+        exportedBlob = blob;
+        return 'blob:nova-export-test';
+      };
+      URL.revokeObjectURL = url => {
+        revokedUrl = url;
+      };
+      HTMLAnchorElement.prototype.click = function() {
+        downloadName = this.download;
+      };
+
+      try {
+        app.saveToFile();
+        const payload = JSON.parse(await exportedBlob.text());
+
+        return {
+          downloadName,
+          revokedUrl,
+          version: payload.version,
+          name: payload.name,
+          nodeTypes: payload.nodes.map(node => node.type),
+          wireCount: payload.wires.length,
+          runtimeResultsPersisted: payload.nodes.some(node => node._pyResults !== null)
+        };
+      } finally {
+        URL.createObjectURL = originalCreateObjectURL;
+        URL.revokeObjectURL = originalRevokeObjectURL;
+        HTMLAnchorElement.prototype.click = originalClick;
+      }
+    });
+
+    expect(result).toEqual({
+      downloadName: 'Export Contract.nodeflow',
+      revokedUrl: 'blob:nova-export-test',
+      version: 2,
+      name: 'Export Contract',
+      nodeTypes: ['number-input', 'output-watch'],
+      wireCount: 1,
+      runtimeResultsPersisted: false
+    });
+  });
+
+  test('handles missing and malformed local projects without corrupting the current graph', async ({ page }) => {
+    await waitForApp(page);
+
+    const result = await page.evaluate(() => {
+      localStorage.clear();
+      app.newProject();
+
+      const originalAddAIMessage = app.addAIMessage.bind(app);
+      const messages = [];
+      app.addAIMessage = function(scope, message) {
+        messages.push({ scope, message });
+        return originalAddAIMessage(scope, message);
+      };
+
+      const stableNode = app.addNodeToCanvas('number-input', 80, 80);
+      stableNode.controlValues.val = 7;
+
+      app.openFromLocal('Missing Project');
+
+      const afterMissing = {
+        nodeCount: app.nodes.length,
+        value: app.computeNodeValue(app.nodes[0])
+      };
+
+      localStorage.setItem('nodeflow_project_Broken Project', '{not valid json');
+      app.openFromLocal('Broken Project');
+
+      return {
+        afterMissing,
+        finalNodeCount: app.nodes.length,
+        finalValue: app.computeNodeValue(app.nodes[0]),
+        messages: messages.map(entry => entry.message)
+      };
+    });
+
+    expect(result.afterMissing).toEqual({ nodeCount: 1, value: 7 });
+    expect(result.finalNodeCount).toBe(1);
+    expect(result.finalValue).toBe(7);
+    expect(result.messages.some(message => message.includes('not found in browser storage'))).toBe(true);
+    expect(result.messages.some(message => message.includes('Load failed'))).toBe(true);
+  });
+
   test('reports missing API key before attempting an AI provider call', async ({ page }) => {
     await waitForApp(page);
 
