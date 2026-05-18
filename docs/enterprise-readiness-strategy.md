@@ -12,21 +12,21 @@
 
 Nova is currently a **feature-complete prototype** with functional proof-of-concept code (graph engine, 3D geometry, AI integration, Revit integration). However, it requires significant work in **infrastructure, testing, documentation, and deployment** to be production-ready for enterprise use.
 
-### Current Assessment: **Phase 2.5/3 (60% Complete)**
+### Current Assessment: **Phase 3 Complete / Enterprise Hardening Next**
 
 - ✅ Core functionality working
 - ✅ Build toolchain established (Vite)
 - ✅ Initial testing framework in place
 - ✅ Module structure defined
 - ✅ Raw legacy-loader module migration complete
-- ❌ CI/CD pipeline missing
+- ✅ CI/CD pipeline present for lint, tests, browser workflows, audit, and build
 - ❌ Enterprise-grade testing incomplete
 - ❌ Deployment strategy undefined
 - ❌ WebSocket server for plugin integration not yet built
 
 ### Timeline to Enterprise Readiness
 - **IMMEDIATE (Week 1):** Make CI strict, preserve quiet lint output, and verify the browser runtime
-- **SHORT-TERM (Weeks 2-3):** Complete module migration, reach 70% test coverage
+- **SHORT-TERM (Weeks 2-3):** Reduce compatibility globals, deepen workflow coverage, reach 70% overall coverage
 - **MEDIUM-TERM (Weeks 4-6):** Production hardening, logging, security
 - **LONG-TERM (Weeks 7-12):** TypeScript migration, deployment infrastructure, plugin systems
 
@@ -54,8 +54,8 @@ Nova is currently a **feature-complete prototype** with functional proof-of-conc
 
 | Gap | Impact | Severity |
 |-----|--------|----------|
-| **Module migration incomplete** | app.js, engine.js still legacy globals | 🔴 HIGH |
-| **No CI/CD pipeline** | No automated testing on commits | 🔴 HIGH |
+| **Compatibility bridges remain** | `window.*` globals and inline handlers still exist during cleanup | 🟠 MEDIUM |
+| **CI/CD deployment incomplete** | Gates exist, but deploy jobs are placeholders | 🟠 MEDIUM |
 | **<50% test coverage** | Risk of regressions in production | 🔴 HIGH |
 | **No error monitoring** | Can't debug issues in production | 🟠 MEDIUM |
 | **No performance tracking** | Don't know if optimizations work | 🟠 MEDIUM |
@@ -135,7 +135,9 @@ Capture baseline metrics:
 
 ---
 
-### SHORT-TERM (Weeks 2-3): Complete Module Migration
+### SHORT-TERM (Weeks 2-3): Compatibility Cleanup And Coverage
+
+**Current status:** the raw-loader module migration is complete. `src/main.js` imports and installs the moduleized runtime directly, and `src/legacy-loader.js` has been removed. The sections below are retained as historical implementation guidance; future work should focus on removing temporary compatibility bridges, replacing inline event handlers, and expanding browser workflow coverage.
 
 #### 2.1 Migrate `app.js` to `src/core/app.js`
 
@@ -738,7 +740,7 @@ spec:
 | Phase | Focus | Hours | Weeks |
 |-------|-------|-------|-------|
 | **Week 1** | Critical fixes + CI/CD | 20 | 1 |
-| **Weeks 2-3** | Module migration + tests | 60 | 2 |
+| **Weeks 2-3** | Compatibility cleanup + workflow coverage | 60 | 2 |
 | **Weeks 4-6** | Hardening + optimization | 50 | 3 |
 | **Weeks 7-9** | TypeScript + advanced tests | 50 | 3 |
 | **Weeks 10-12** | Plugin infrastructure | 40 | 3 |
@@ -748,7 +750,7 @@ spec:
 ### Staffing Model
 
 - **1 Senior Dev (full-time):** Leads architecture, reviews code, handles complex modules
-- **1-2 Mid-level Devs:** Module migration, testing, feature work
+- **1-2 Mid-level Devs:** Compatibility cleanup, testing, feature work
 - **1 DevOps Engineer (part-time):** CI/CD, monitoring, deployment
 
 ### Risk Mitigation
@@ -756,7 +758,7 @@ spec:
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|-----------|
 | Vite integration issues | Medium | High | Week 1: extensive testing |
-| Module migration breaks UI | High | High | Keep compatibility shims; extensive testing |
+| Compatibility cleanup breaks UI | Medium | High | Remove globals incrementally; keep Playwright coverage active |
 | Test coverage plateau | Medium | High | Pair programming; test-driven development |
 | Performance regressions | Medium | Medium | Baseline benchmarks before optimization |
 | Dependency conflicts | Low | High | Regular audits; update strategy |
