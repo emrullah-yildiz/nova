@@ -4,7 +4,7 @@ import { NFLogger } from './core/logger.js';
 import './core/engine.js';
 import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/node-metadata.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
-import { Geo } from './geometry/index.js';
+import './geometry/index.js';
 import { Viewer3D } from './viewer/viewer3d.js';
 import { installSaveLoad } from './app/save-load.js';
 import { installLineRenderPatch } from './ui/line-render-patch.js';
