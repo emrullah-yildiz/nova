@@ -1,6 +1,7 @@
 import { AIEngine } from './ai/ai-engine.js';
 import { GPTClient, SettingsDialog } from './ai/gpt-client.js';
 import { NFLogger } from './core/logger.js';
+import './core/engine.js';
 import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/node-metadata.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
 import { Geo } from './geometry/index.js';
@@ -11,7 +12,6 @@ import parserSource from '../parser.js?raw';
 import appSource from '../app.js?raw';
 import nodeRendererSource from '../node-renderer.js?raw';
 import pyRunnerSource from '../pyrunner.js?raw';
-import engineSource from '../engine.js?raw';
 import geoSelectorSource from '../geo-selector.js?raw';
 import uiEnhancementsSource from '../ui-enhancements.js?raw';
 import saveLoadSource from '../save-load.js?raw';
@@ -44,7 +44,6 @@ const legacyScripts = [
   { name: 'app.js', source: appSource },
   { name: 'node-renderer.js', source: nodeRendererSource },
   { name: 'pyrunner.js', source: pyRunnerSource },
-  { name: 'engine.js', source: engineSource },
   { name: 'geo-selector.js', source: geoSelectorSource },
   { name: 'ui-enhancements.js', source: uiEnhancementsSource },
   { name: 'save-load.js', source: saveLoadSource },

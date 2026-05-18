@@ -1,5 +1,4 @@
-import fs from 'fs';
-import path from 'path';
+import { FormulaEval } from '../src/core/formula-eval.js';
 
 function createElementStub() {
   return {
@@ -29,18 +28,17 @@ function createElementStub() {
   };
 }
 
-beforeAll(() => {
+beforeAll(async () => {
   globalThis.window = globalThis;
   globalThis.document = {
-    addEventListener(name, cb) {
-      if (name === 'DOMContentLoaded') cb();
-    },
+    addEventListener() {},
     getElementById() { return createElementStub(); },
     querySelector() { return createElementStub(); },
     querySelectorAll() { return []; },
     createElement() { return createElementStub(); },
     body: createElementStub()
   };
+  globalThis.FormulaEval = FormulaEval;
 
   globalThis.app = {
     nodes: [],
@@ -62,12 +60,8 @@ beforeAll(() => {
     renderNodeLibrary() {}
   };
 
-  const formulaPath = path.resolve(process.cwd(), 'formula-eval.js');
-  eval(fs.readFileSync(formulaPath, 'utf8'));
-
-  const enginePath = path.resolve(process.cwd(), 'engine.js');
-  const code = fs.readFileSync(enginePath, 'utf8');
-  eval(code);
+  const { installEngine } = await import('../src/core/engine.js');
+  installEngine(globalThis.app);
 });
 
 describe('Engine computeNodeValue', () => {
