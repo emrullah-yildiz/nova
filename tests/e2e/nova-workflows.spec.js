@@ -5,6 +5,13 @@ async function waitForApp(page) {
   await page.waitForFunction(() => window.app && window.app.initialized);
 }
 
+async function addNodeFromLibrary(page, searchText, buttonName) {
+  await page.locator('#node-search-input').fill(searchText);
+  const item = page.locator('#node-categories .node-lib-item', { hasText: buttonName }).first();
+  await expect(item).toBeVisible();
+  await item.click();
+}
+
 test.describe('Nova browser workflows', () => {
   test('loads the landing page and opens a workspace', async ({ page }) => {
     await waitForApp(page);
@@ -71,6 +78,46 @@ test.describe('Nova browser workflows', () => {
     });
 
     await expect(page.locator('#node-canvas .node')).toHaveCount(4);
+  });
+
+  test('adds nodes from the library search and executes a connected graph', async ({ page }) => {
+    await waitForApp(page);
+
+    await page.getByRole('button', { name: /New Project/i }).click();
+    await expect(page.locator('#workspace-page')).toBeVisible();
+
+    await addNodeFromLibrary(page, 'number', 'Number');
+    await addNodeFromLibrary(page, 'number', 'Number');
+    await addNodeFromLibrary(page, 'math.add', 'Math.Add');
+    await addNodeFromLibrary(page, 'watch', 'Watch');
+
+    await expect(page.locator('#node-canvas .node')).toHaveCount(4);
+
+    const result = await page.evaluate(() => {
+      const numbers = app.nodes.filter(node => node.type === 'number-input');
+      const sum = app.nodes.find(node => node.type === 'math-add');
+      const watch = app.nodes.find(node => node.type === 'output-watch');
+
+      numbers[0].controlValues.val = 11;
+      numbers[1].controlValues.val = 31;
+
+      app.addWire(numbers[0].id, 'value', sum.id, 'a');
+      app.addWire(numbers[1].id, 'value', sum.id, 'b');
+      app.addWire(sum.id, 'result', watch.id, 'value');
+
+      app.renderWires();
+
+      return {
+        nodeTypes: app.nodes.map(node => node.type),
+        wireCount: app.wires.length,
+        computed: app.computeNodeValue(watch)
+      };
+    });
+
+    expect(result.nodeTypes).toEqual(['number-input', 'number-input', 'math-add', 'output-watch']);
+    expect(result.wireCount).toBe(3);
+    expect(result.computed).toBe(42);
+    await expect(page.locator('#wire-svg path')).not.toHaveCount(0);
   });
 
   test('reports missing API key before attempting an AI provider call', async ({ page }) => {
