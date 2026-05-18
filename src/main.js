@@ -13,6 +13,11 @@ import './legacy-loader.js';
 import { createComputeContext, computeNodeValue } from './core/compute-engine.js';
 import * as GraphHelpers from './core/graph-helpers.js';
 import * as NodeLibraryUtils from './ui/node-library-utils.js';
+import { installLineRenderPatch } from './ui/line-render-patch.js';
+import { installNodeLibrary } from './ui/node-library.js';
+import { installNodeRenderer } from './ui/node-renderer.js';
+import { installNodeSearchPopup } from './ui/node-search-popup.js';
+import { installWirePortalPatch } from './ui/wire-portal-patch.js';
 
 const NodeFlow = {
   FormulaEval,
@@ -33,6 +38,11 @@ const NodeFlow = {
   installEngine,
   createComputeContext,
   computeNodeValue,
+  installLineRenderPatch,
+  installNodeLibrary,
+  installNodeRenderer,
+  installNodeSearchPopup,
+  installWirePortalPatch,
   ...GraphHelpers,
   ...NodeLibraryUtils
 };
