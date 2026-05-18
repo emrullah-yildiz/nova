@@ -144,7 +144,7 @@ Remaining follow-up work is cleanup rather than migration: reduce temporary `win
 - Add `src/app/app.js`.
 - Export an app factory or singleton initializer.
 - Replace global script-order initialization with explicit `init()` from `src/main.js`.
-- Keep file-protocol fallback behavior documented if root legacy files remain for local fallback.
+- Document that the file-protocol fallback is no longer supported after root runtime files are removed.
 
 **Acceptance criteria:**
 
@@ -203,7 +203,7 @@ Remaining follow-up work is cleanup rather than migration: reduce temporary `win
 - Remove all `?raw` imports used only by `legacy-loader.js`.
 - Delete or retire `src/legacy-loader.js`.
 - Update `docs/phase-3.md`, `docs/toolchain-plan.md`, and `docs/enterprise-readiness-strategy.md`.
-- Verify whether root legacy files are still needed for file-protocol fallback and document the decision.
+- Remove root runtime files that only existed for the file-protocol fallback and document the decision.
 
 **Acceptance criteria:**
 

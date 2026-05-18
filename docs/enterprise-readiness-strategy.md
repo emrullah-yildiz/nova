@@ -4,7 +4,7 @@
 **Version:** 1.0  
 **Status:** Strategic Planning Document
 
-**Repository validation update (May 18, 2026):** The repo has advanced beyond parts of this original roadmap. `npm test` passes with 37 tests across 10 files, `npm run build` produces `dist/`, `.github/workflows/ci.yml` exists, and CI gates lint, unit tests, Playwright browser workflow tests, build, and `npm audit --audit-level=moderate`. Snyk runs as a strict gate when `SNYK_TOKEN` is configured. The Vite boot path now uses explicit `src/` module imports without `src/legacy-loader.js` raw-script injection, while temporary `window.*` compatibility bridges remain for inline handlers and browser integrations. The remaining enterprise blockers are deeper workflow coverage, real deployment, and production hardening.
+**Repository validation update (May 18, 2026):** The repo has advanced beyond parts of this original roadmap. `npm test` passes with 37 tests across 10 files, `npm run build` produces `dist/`, `.github/workflows/ci.yml` exists, and CI gates lint, unit tests, Playwright browser workflow tests, build, and `npm audit --audit-level=moderate`. Snyk runs as a strict gate when `SNYK_TOKEN` is configured. The Vite boot path now uses explicit `src/` module imports without `src/legacy-loader.js` raw-script injection, and duplicate root runtime scripts plus the old file-protocol fallback loader have been removed. Temporary `window.*` compatibility bridges remain for inline handlers and browser integrations. The remaining enterprise blockers are deeper workflow coverage, real deployment, and production hardening.
 
 ---
 
@@ -797,7 +797,7 @@ spec:
 1. Configure `SNYK_TOKEN` in GitHub so the existing Snyk step runs as a strict high-severity gate.
 2. Keep `npm run lint:all`, `npm test`, and `npm run build` as required local and CI gates.
 3. Extend browser workflow verification beyond the new smoke suite into drag/drop wiring, file import/export, 3D viewport behavior, and settings flows.
-4. Continue reducing temporary `window.*` compatibility bridges and inline event handlers now that raw-script injection has been removed.
+4. Continue reducing temporary `window.*` compatibility bridges and inline event handlers now that raw-script injection and duplicate root runtime scripts have been removed.
 5. Convert placeholder deploy jobs into a real staging or static-hosting deployment target.
 
 ### What NOT to Do
