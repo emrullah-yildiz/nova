@@ -8,8 +8,10 @@ import { Geo } from './geometry/index.js';
 import { Viewer3D } from './viewer/viewer3d.js';
 import { installEngine } from './core/engine.js';
 import app, { initializeApp } from './app/app.js';
+import { installLoggerPatch } from './app/logger-patch.js';
+import { installSaveLoad } from './app/save-load.js';
 import './ai/gpt-integration.js';
-import './legacy-loader.js';
+import { PythonRunner } from './runtime/pyrunner.js';
 import { createComputeContext, computeNodeValue } from './core/compute-engine.js';
 import * as GraphHelpers from './core/graph-helpers.js';
 import * as NodeLibraryUtils from './ui/node-library-utils.js';
@@ -22,6 +24,8 @@ import { installUiEnhancements } from './ui/ui-enhancements.js';
 import { installPortHandler } from './ui/port-handler.js';
 import { installNodeHelp } from './ui/node-help.js';
 import { installNodeHelpPanel } from './ui/node-help-panel.js';
+import { installRevitNodes, RevitBridge, RevitElement } from './integrations/revit/revit-nodes.js';
+import { installGeoSelector } from './viewer/geo-selector.js';
 
 const NodeFlow = {
   FormulaEval,
@@ -41,8 +45,10 @@ const NodeFlow = {
   initializeApp,
   installEngine,
   installSaveLoad,
+  installLoggerPatch,
   createComputeContext,
   computeNodeValue,
+  PythonRunner,
   installLineRenderPatch,
   installNodeLibrary,
   installNodeRenderer,
@@ -52,6 +58,10 @@ const NodeFlow = {
   installPortHandler,
   installNodeHelp,
   installNodeHelpPanel,
+  installRevitNodes,
+  installGeoSelector,
+  RevitBridge,
+  RevitElement,
   ...GraphHelpers,
   ...NodeLibraryUtils
 };
@@ -73,9 +83,30 @@ if (typeof window !== 'undefined') {
   window.Viewer3D = Viewer3D;
 }
 
+function installBeforeAppInit() {
+  installRevitNodes();
+  installLineRenderPatch();
+  installNodeRenderer();
+  installNodeLibrary();
+  installWirePortalPatch();
+  installNodeSearchPopup();
+  installLoggerPatch(app);
+}
+
+function installAfterAppInit() {
+  installSaveLoad(app);
+  installUiEnhancements(app);
+  installPortHandler(app);
+  installNodeHelp(app);
+  installNodeHelpPanel(app);
+  installGeoSelector(app);
+}
+
 function startAppShell() {
   try {
+    installBeforeAppInit();
     initializeApp();
+    installAfterAppInit();
   } catch (error) {
     console.error('Error initializing app:', error);
     setTimeout(startAppShell, 100);
