@@ -4,6 +4,8 @@ import { NFLogger } from './core/logger.js';
 import './core/engine.js';
 import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/node-metadata.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
+import { CodeParser } from './runtime/parser.js';
+import { PythonRunner } from './runtime/pyrunner.js';
 import { Viewer3D } from './viewer/viewer3d.js';
 import geometryLibSource from '../geometry-lib.js?raw';
 import lineRenderPatchSource from '../line-render-patch.js?raw';
