@@ -6,7 +6,7 @@
   "main": "index.html",
   "scripts": {
     "start": "vite --host 127.0.0.1",
-    "dev": "vite",
+    "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "preview": "vite preview",
     "connect:hub": "node scripts/connect-hub.cjs",
