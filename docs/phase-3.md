@@ -7,42 +7,42 @@ Move the project from prototype tooling into a maintainable, buildable architect
 ## Goals
 
 - Establish a modern module-aware build system
-- Create a single application entrypoint for future refactoring
-- Begin migrating legacy browser globals to explicit source modules
+- Create a single application entrypoint
+- Move legacy browser runtime behavior into explicit source modules
+- Preserve temporary compatibility globals only where current browser markup or integrations still require them
 - Document the enterprise delivery workflow and acceptance criteria
 
-## Phase 3 deliverables
+## Phase 3 Deliverables
 
 - `vite.config.js` for modern dev and production builds
 - `src/main.js` as the module bootstrap entrypoint
-- `package.json` scripts for `dev`, `build`, and `preview`
-- A documented Source→Dist plan in `docs/toolchain-plan.md`
-- `docs/phase-3.md` describing enterprise packaging goals
+- Source modules under `src/` for app, core, runtime, geometry, AI, UI, viewer, and integration layers
+- `package.json` scripts for dev, build, test, lint, and browser workflow validation
+- Documentation for the Source to Dist workflow and migration status
 
-## Phase 3 tasks
+## Completion Status
 
-1. Add Vite as the primary build and dev server tool.
-2. Create a module-aware application entrypoint under `src/main.js`.
-3. Preserve current runtime behavior with compatibility wrappers during migration.
-4. Update `index.html` to optionally support ESM bootstrap.
-5. Add build scripts and documentation for the Source→Dist workflow.
-6. Extend source structure guidance for enterprise packaging.
-
-## Acceptance criteria
-
-- `npm run dev` starts a local dev server for the app.
-- `npm run build` produces a `dist/` bundle from the current application shell.
-- The repository has a documented enterprise packaging plan.
-- Core modules can be incrementally imported from `src/`.
-
-## Current validation update
+**Status as of May 18, 2026:** complete.
 
 - `npm run build` succeeds and emits `dist/index.html` plus bundled assets under `dist/assets/`.
-- `src/main.js` now initializes the app using explicit ES module imports.
+- `src/main.js` initializes the app using explicit ES module imports.
 - `src/legacy-loader.js` raw-script injection has been removed from the Vite boot path.
-- Runtime compatibility globals remain available where legacy inline handlers and browser integrations still depend on `window.*`.
+- There are no remaining `?raw` runtime imports under `src/`.
 - The production build no longer reports the previous large JavaScript chunk warning caused by bundling raw legacy scripts.
+- Runtime compatibility globals remain available where inline handlers and browser integrations still depend on `window.*`.
 
-## Notes
+## Current Validation Gates
 
-This phase now establishes the build tooling, module entrypoint, and explicit runtime bootstrap without the raw legacy loader. Remaining hardening belongs in follow-up enterprise readiness work: broader browser workflow coverage, deployment, and production security review.
+- `npm run lint:all`
+- `npm test`
+- `npm run test:e2e`
+- `npm run build`
+- `npm audit --audit-level=moderate`
+
+## Follow-Up Work
+
+- Reduce temporary `window.*` compatibility bridges.
+- Replace inline HTML event handlers with module-owned DOM listeners.
+- Decide whether root legacy files should remain as a no-build fallback or be retired.
+- Expand browser workflow coverage around drag/drop wiring, save/load, help panels, 3D viewport selection, settings, and Revit data flows.
+- Replace placeholder deploy jobs with a real staging or production deployment target.
