@@ -633,11 +633,13 @@ const app = {
 
     if (Array.isArray(val)) {
 
-      const items = val.slice(0, 5).map(v => typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(2)) : v);
+      const items = val.map((v, i) => {
+        const display = typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(2)) : String(v);
+        return `<div class="data-list-row"><span class="data-list-index">${i}</span><span class="data-list-item" style="color:var(--accent-peach)">${display}</span></div>`;
+      }).join('');
 
-      const suffix = val.length > 5 ? ', …' : '';
 
-      return `<span style="color:var(--accent-peach)">[${items.join(', ')}${suffix}]</span> <span style="color:var(--text-muted)">(${val.length})</span>`;
+      return `<div class="data-list-view"><div class="data-list-header"><span style="font-size:8px;color:var(--text-muted)">List</span><span style="font-size:8px;color:var(--accent-peach)">(${val.length})</span></div><div class="data-list-body">${items}</div></div>`;
 
     }
 

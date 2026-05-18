@@ -977,13 +977,11 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     depth = depth || 0;
 
-    var maxShow = depth === 0 ? 10 : 6;
-
     var tid = '_ul' + (++_uListId);
 
     var collapsed = depth > 0;
 
-    var h = '<div style="text-align:right;width:100%">';
+    var h = '<div class="data-list-view">';
 
     h += '<div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:1px 0" onclick="var b=document.getElementById(\'' + tid + '\');if(b){b.style.display=b.style.display===\'none\'?\'block\':\'none\';this.querySelector(\'.lc\').textContent=b.style.display===\'none\'?\'▸\':\'▾\'}">';
 
@@ -995,7 +993,9 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     h += '</div>';
 
-    h += '<div id="' + tid + '" style="display:' + (collapsed ? 'none' : 'block') + '">';
+    h += '<div id="' + tid + '" class="data-list-body" style="display:' + (collapsed ? 'none' : 'block') + '">';
+
+    var maxShow = arr.length;
 
     var showCount = Math.min(arr.length, maxShow);
 
@@ -1009,7 +1009,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       if (Array.isArray(item)) {
 
-        h += '<div style="flex:1">' + app._fmtListUniversal(item, depth + 1) + '</div>';
+        h += '<div class="data-list-item">' + app._fmtListUniversal(item, depth + 1) + '</div>';
 
       } else {
 
@@ -1028,7 +1028,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
         else { disp = String(item).substring(0, 24); col = 'var(--accent-peach)'; }
 
-        h += '<span style="color:' + col + ';font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + disp + '</span>';
+        h += '<span class="data-list-item" style="color:' + col + ';font-size:9px">' + disp + '</span>';
 
       }
 
@@ -1553,7 +1553,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     // 0. Refresh Revit data on Run if connected to a live session
 
-    var revitClient = typeof NovaConnect !== 'undefined' ? NovaConnect : null;
+    var runtimeGlobal = typeof globalThis !== 'undefined' ? globalThis : {};
+    var revitClient = runtimeGlobal.NovaConnect || (runtimeGlobal.NodeFlow && runtimeGlobal.NodeFlow.NovaConnect) || null;
     if (revitClient && revitClient.status === 'connected') {
       var revitBridge = typeof RevitBridge !== 'undefined' ? RevitBridge : null;
       if (revitBridge && typeof revitBridge.refreshProject === 'function') {

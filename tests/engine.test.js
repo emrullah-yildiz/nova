@@ -91,4 +91,14 @@ describe('Engine computeNodeValue', () => {
     app.wires = [];
     expect(app.computeNodeValue(app.nodes[0])).toBe(9);
   });
+
+  it('renders every list item in the data inspector', () => {
+    const html = app.formatValue(Array.from({ length: 20 }, (_, index) => index));
+
+    expect(html).toContain('data-list-view');
+    expect(html).toContain('data-list-body');
+    expect(html).toContain('(20)');
+    expect(html).toContain('>19<');
+    expect(html).not.toContain('more</div>');
+  });
 });
