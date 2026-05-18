@@ -6,9 +6,9 @@ function createId(prefix) {
 }
 
 function createConnectHub(options = {}) {
-  const port = options.port || 8765;
-  const host = options.host || '127.0.0.1';
-  const pairingToken = options.pairingToken || createId('pair');
+  const port = options.port ?? 8765;
+  const host = options.host ?? '127.0.0.1';
+  const pairingToken = options.pairingToken ?? createId('pair');
   const defaultSessionId = options.defaultSessionId || 'local-revit-session';
   const sessions = new Map();
   const clients = new Map();
