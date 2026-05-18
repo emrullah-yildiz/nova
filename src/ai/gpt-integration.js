@@ -1,3 +1,5 @@
+import { GPTClient } from './gpt-client.js';
+
 document.addEventListener('DOMContentLoaded', () => {
   app.respond = function(ch, txt) {
     const l = txt.toLowerCase();

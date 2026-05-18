@@ -3,10 +3,9 @@ import { AIEngine } from './ai/ai-engine.js';
 import { NFLogger } from './core/logger.js';
 import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/node-metadata.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
-import { CodeParser } from './runtime/parser.js';
-import { PythonRunner } from './runtime/pyrunner.js';
-import { GPTClient } from './ai/gpt-client.js';
+import { GPTClient, SettingsDialog } from './ai/gpt-client.js';
 import { Viewer3D } from './viewer/viewer3d.js';
+import { installEngine } from './core/engine.js';
 import './ai/gpt-integration.js';
 import './legacy-loader.js';
 import { createComputeContext, computeNodeValue } from './core/compute-engine.js';
@@ -26,7 +25,9 @@ const NodeFlow = {
   buildNodeReference,
   enrichNodeDefinitions,
   GPTClient,
+  SettingsDialog,
   Viewer3D,
+  installEngine,
   createComputeContext,
   computeNodeValue,
   ...GraphHelpers,
@@ -47,6 +48,7 @@ if (typeof window !== 'undefined') {
   window.enrichNodeDefinitions = enrichNodeDefinitions;
   window.FormulaEval = FormulaEval;
   window.GPTClient = GPTClient;
+  window.SettingsDialog = SettingsDialog;
   window.Viewer3D = Viewer3D;
 }
 

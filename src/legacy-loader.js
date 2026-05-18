@@ -1,5 +1,7 @@
 import { AIEngine } from './ai/ai-engine.js';
+import { GPTClient, SettingsDialog } from './ai/gpt-client.js';
 import { NFLogger } from './core/logger.js';
+import './core/engine.js';
 import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/node-metadata.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
 import { CodeParser } from './runtime/parser.js';
@@ -10,10 +12,10 @@ import lineRenderPatchSource from '../line-render-patch.js?raw';
 import geoAdvancedSource from '../geo-advanced.js?raw';
 import nurbsMathSource from '../nurbs-math.js?raw';
 import revitNodesSource from '../revit-nodes.js?raw';
-import gptClientSource from '../gpt-client.js?raw';
+import parserSource from '../parser.js?raw';
 import appSource from '../app.js?raw';
 import nodeRendererSource from '../node-renderer.js?raw';
-import engineSource from '../engine.js?raw';
+import pyRunnerSource from '../pyrunner.js?raw';
 import geoSelectorSource from '../geo-selector.js?raw';
 import uiEnhancementsSource from '../ui-enhancements.js?raw';
 import saveLoadSource from '../save-load.js?raw';
@@ -32,8 +34,8 @@ if (typeof window !== 'undefined') {
   window.NODE_LIBRARY = NODE_LIBRARY;
   window.NODE_TYPE_MAP = NODE_TYPE_MAP;
   window.TYPE_COLORS = TYPE_COLORS;
-  window.CodeParser = CodeParser;
-  window.PythonRunner = PythonRunner;
+  window.GPTClient = GPTClient;
+  window.SettingsDialog = SettingsDialog;
   window.buildNodeReference = buildNodeReference;
   window.enrichNodeDefinitions = enrichNodeDefinitions;
   window.Viewer3D = Viewer3D;
@@ -45,10 +47,10 @@ const legacyScripts = [
   { name: 'geo-advanced.js', source: geoAdvancedSource },
   { name: 'nurbs-math.js', source: nurbsMathSource },
   { name: 'revit-nodes.js', source: revitNodesSource },
-  { name: 'gpt-client.js', source: gptClientSource },
+  { name: 'parser.js', source: parserSource },
   { name: 'app.js', source: appSource },
   { name: 'node-renderer.js', source: nodeRendererSource },
-  { name: 'engine.js', source: engineSource },
+  { name: 'pyrunner.js', source: pyRunnerSource },
   { name: 'geo-selector.js', source: geoSelectorSource },
   { name: 'ui-enhancements.js', source: uiEnhancementsSource },
   { name: 'save-load.js', source: saveLoadSource },
