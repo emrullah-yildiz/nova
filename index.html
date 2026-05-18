@@ -8,7 +8,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>NodeFlow AI — Visual Scripting</title>
+  <title>Nova — Visual Scripting</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
 
@@ -36,7 +36,7 @@
 
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
 
-      NodeFlow AI
+      Nova
 
     </div>
 
@@ -106,7 +106,7 @@
 
         <button class="menu-dropdown-item" onclick="SettingsDialog.open()">Preferences</button>
 
-        <button class="menu-dropdown-item" onclick="SettingsDialog.open()">About NodeFlow AI</button>
+        <button class="menu-dropdown-item" onclick="SettingsDialog.open()">About Nova</button>
 
       </div>
 
@@ -132,7 +132,7 @@
 
       <div class="landing-hero slide-up">
 
-        <h1>Welcome to <span>NodeFlow AI</span></h1>
+        <h1>Welcome to <span>Nova</span></h1>
 
         <p>Build visual scripts with an AI assistant. Create nodes, connect them, and let AI help you code the logic.</p>
 
@@ -280,76 +280,6 @@
     <button class="context-menu-item" onclick="app.ctxAction('fit')"><span class="cmi-icon">⊞</span> Zoom to Fit</button>
 
   </div>
-
-  <!-- Fallback inline loader for file:// protocol -->
-  <script>
-    // Check if we're loading from file:// protocol and load scripts directly
-    if (location.protocol === 'file:' || !location.hostname) {
-      console.log('Loading application from file:// protocol, using direct script injection...');
-      
-      const scriptFiles = [
-        'logger.js',
-        'node-metadata.js',
-        'geometry-lib.js',
-        'line-render-patch.js',
-        'geo-advanced.js',
-        'nurbs-math.js',
-        'nodes.js',
-        'revit-nodes.js',
-        'parser.js',
-        'ai-engine.js',
-        'gpt-client.js',
-        'app.js',
-        'node-renderer.js',
-        'pyrunner.js',
-        'engine.js',
-        'viewer3d.js',
-        'geo-selector.js',
-        'ui-enhancements.js',
-        'save-load.js',
-        'node-library.js',
-        'logger-patch.js',
-        'wire-portal-patch.js',
-        'port-handler.js',
-        'node-help.js',
-        'node-help-panel.js',
-        'node-search-popup.js'
-      ];
-
-      function loadScript(src) {
-        return fetch(src)
-          .then(r => r.text())
-          .then(text => {
-            const script = document.createElement('script');
-            script.type = 'text/javascript';
-            script.text = text;
-            document.head.appendChild(script);
-          })
-          .catch(e => console.error(`Failed to load ${src}:`, e));
-      }
-
-      // Load all scripts sequentially
-      function loadAllScripts() {
-        let promise = Promise.resolve();
-        for (const file of scriptFiles) {
-          promise = promise.then(() => loadScript(file));
-        }
-        return promise.then(() => {
-          console.log('All scripts loaded. Initializing app...');
-          if (typeof app !== 'undefined' && !app.initialized) {
-            app.init();
-          }
-        });
-      }
-
-      // Start loading when DOM is ready
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', loadAllScripts);
-      } else {
-        loadAllScripts();
-      }
-    }
-  </script>
 
   <script type="module" src="src/main.js"></script>
 

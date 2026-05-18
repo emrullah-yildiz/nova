@@ -3,7 +3,7 @@ import { Geo } from './geometry-lib.js';
 /* eslint-disable no-redeclare, no-unused-vars */
 
 // ============================================
-// NODEFLOW AI — NURBS & Advanced Mathematics
+// Nova — NURBS & Advanced Mathematics
 // Full NURBS curves/surfaces + noise + attractors
 // + Voronoi + exotic parametric surfaces
 // Inspired by Maya, Rhino/Grasshopper, Houdini

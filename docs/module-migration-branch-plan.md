@@ -4,6 +4,26 @@
 
 Complete the remaining module migration by replacing `src/legacy-loader.js` raw-script injection with explicit ES module imports, while preserving legacy `window.*` compatibility until each consumer has moved to direct imports.
 
+## Current Status
+
+**Status as of May 18, 2026:** Complete on `feature/module-legacy-loader-removal`.
+
+The Vite boot path now starts from `src/main.js` and uses explicit ES module imports. `src/legacy-loader.js` has been deleted, and there are no remaining `?raw` imports under `src/`.
+
+| Migration slice | Status | Module location |
+| --- | --- | --- |
+| Geometry kernel | Complete | `src/geometry/` |
+| Parser and Python runner | Complete | `src/runtime/` |
+| AI client runtime | Complete | `src/ai/` |
+| Engine runtime | Complete | `src/core/` |
+| Node editor UI | Complete | `src/ui/` |
+| App shell | Complete | `src/app/app.js` |
+| Persistence and panels | Complete | `src/app/save-load.js`, `src/ui/` |
+| Geo selector and Revit bridge | Complete | `src/viewer/geo-selector.js`, `src/integrations/revit/` |
+| Raw legacy loader removal | Complete | `src/main.js` direct bootstrap |
+
+Remaining follow-up work is cleanup rather than migration: reduce temporary `window.*` compatibility bridges, replace inline HTML event handlers with DOM listeners, decide whether root legacy files are still needed as a no-build/file-protocol fallback, and broaden browser workflow coverage around drag/drop wiring, save/load, help panels, 3D viewport selection, and Revit data flows.
+
 ## Branching Strategy
 
 - `main` remains the production-ready branch.
@@ -124,7 +144,7 @@ Complete the remaining module migration by replacing `src/legacy-loader.js` raw-
 - Add `src/app/app.js`.
 - Export an app factory or singleton initializer.
 - Replace global script-order initialization with explicit `init()` from `src/main.js`.
-- Keep file-protocol fallback behavior documented if root legacy files remain for local fallback.
+- Document that the file-protocol fallback is no longer supported after root runtime files are removed.
 
 **Acceptance criteria:**
 
@@ -183,7 +203,7 @@ Complete the remaining module migration by replacing `src/legacy-loader.js` raw-
 - Remove all `?raw` imports used only by `legacy-loader.js`.
 - Delete or retire `src/legacy-loader.js`.
 - Update `docs/phase-3.md`, `docs/toolchain-plan.md`, and `docs/enterprise-readiness-strategy.md`.
-- Verify whether root legacy files are still needed for file-protocol fallback and document the decision.
+- Remove root runtime files that only existed for the file-protocol fallback and document the decision.
 
 **Acceptance criteria:**
 
@@ -210,7 +230,8 @@ Complete the remaining module migration by replacing `src/legacy-loader.js` raw-
 - PR targets `develop`.
 - Scope is limited to one migration task.
 - Compatibility globals are documented in the PR description.
-- `src/legacy-loader.js` has fewer raw-loaded files after the PR, unless the branch is a preparatory test-only branch.
+- For historical module-migration PRs: `src/legacy-loader.js` had fewer raw-loaded files after each PR.
+- For the final loader-removal PR: `src/legacy-loader.js` is deleted and `src/main.js` initializes through ES module imports only.
 - Relevant unit tests are added or updated.
 - Browser workflow tests are updated for user-facing runtime behavior.
 - CI passes before merge.
