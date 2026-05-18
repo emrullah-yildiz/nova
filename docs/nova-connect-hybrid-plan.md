@@ -67,6 +67,15 @@ You can also use the in-app **Connect** button in the top menu:
 The Revit plugin side should connect as a `host`, validate the pairing token, and handle write operations through Revit External Events. WebSocket handlers must only enqueue work.
 Write requests must include a structured `approval` payload with `approved: true`; mock and real hosts should reject unapproved writes.
 
+The first Revit add-in launcher skeleton lives in `integrations/revit-addin/`. It adds a Revit ribbon button that opens Nova with the Connect panel prefilled by URL parameters:
+
+- `novaConnectOpen=1`
+- `novaConnectUrl`
+- `novaConnectToken`
+- `novaConnectProject`
+
+The next add-in step is to keep a real Revit host WebSocket connection alive after launching Nova.
+
 ## APS Scope
 
 APS is implemented as an adapter foundation, not the live-edit transport:
