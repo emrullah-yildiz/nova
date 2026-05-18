@@ -14,13 +14,21 @@ public class OpenNovaCommand : IExternalCommand
             UIApplication uiApplication = commandData.Application;
             NovaLaunchInfo launchInfo = NovaLauncher.CreateLaunchInfo(uiApplication);
             NovaLauncher.WriteLaunchInfo(launchInfo);
+
+            // Start the WebSocket host client to connect to Connect Hub
+            // This must happen BEFORE opening the browser so the hub
+            // sees a host when the viewer connects.
+            App.EnsureHostClient(uiApplication, launchInfo.HubUrl, launchInfo.PairingToken);
+
+            // Open the web app in the browser
             NovaLauncher.OpenNova(launchInfo);
 
             TaskDialog.Show(
                 "Nova",
                 "Nova opened in your browser.\n\n" +
                 "Pairing token:\n" + launchInfo.PairingToken + "\n\n" +
-                "Start the local hub with the same token if it is not already running.");
+                "Make sure the Connect Hub is running with the same token:\n" +
+                "node scripts/connect-hub.cjs --token=" + launchInfo.PairingToken);
 
             return Result.Succeeded;
         }
