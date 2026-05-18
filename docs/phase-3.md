@@ -45,6 +45,7 @@ Move the project from prototype tooling into a maintainable, buildable architect
 - `NFLogger` is now imported from `src/core/logger.js` and exposed through `window.NFLogger`, removing the logger raw-script injection from the Vite boot path.
 - `NODE_META` and its helper functions are now imported from `src/core/node-metadata.js` and exposed through compatibility globals, removing the metadata raw-script injection from the Vite boot path.
 - `NODE_LIBRARY`, `NODE_TYPE_MAP`, and `TYPE_COLORS` are now imported from `src/core/nodes.js` and exposed through compatibility globals, removing the node registry raw-script injection from the Vite boot path.
+- The remaining migration work is split into GitHub-ready branch tasks in `docs/module-migration-branch-plan.md`.
 
 ## Notes
 

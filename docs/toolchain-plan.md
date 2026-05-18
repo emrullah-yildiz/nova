@@ -13,6 +13,7 @@ Create a reproducible build workflow for the prototype that supports incremental
 - `npm test`, `npm test -- --coverage`, `npm run lint:all`, and `npm run build` currently complete successfully.
 - The current Vite build works, but it still bundles the legacy runtime through `src/legacy-loader.js` and reports a large JavaScript chunk warning.
 - Compatibility bridges are in place for `Viewer3D`, `AIEngine`, `NFLogger`, `NODE_META`, and the node registry globals: `src/main.js` imports their `src/` modules directly and exposes legacy `window.*` globals, so the Vite boot path no longer injects root `viewer3d.js`, `ai-engine.js`, `logger.js`, `node-metadata.js`, or `nodes.js` as raw text.
+- The remaining module migration is organized as branch-sized tasks in `docs/module-migration-branch-plan.md`.
 
 ## Recommended next steps
 
@@ -23,6 +24,7 @@ Create a reproducible build workflow for the prototype that supports incremental
    - Prefer `Vite` for fast dev server, HTML entry processing, and static asset handling.
    - Use `esbuild` or `Rollup` if a lightweight bundle is desired.
 5. Preserve the current app behavior during migration by using compatibility wrapper files at the legacy entrypoint.
+6. Use the branch plan in `docs/module-migration-branch-plan.md` to create focused PRs from `develop` back into `develop`.
 
 ## Toolchain components
 
@@ -51,6 +53,7 @@ Current correction: `npm run build` is no longer a placeholder. It produces the 
 3. Add tests for each extracted module before replacing the legacy entrypoint.
 4. Continue replacing `src/legacy-loader.js` raw-script injection with explicit imports as legacy files are converted. `Viewer3D`, `AIEngine`, `NFLogger`, `NODE_META`, and the node registry have already moved to this pattern.
 5. Split the production bundle once large runtime areas have stable module boundaries.
+6. Remove `src/legacy-loader.js` after all branch tasks in `docs/module-migration-branch-plan.md` have landed.
 
 ## Acceptance criteria for Phase 2
 

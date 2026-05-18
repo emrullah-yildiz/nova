@@ -795,7 +795,7 @@ spec:
 1. Configure `SNYK_TOKEN` in GitHub so the existing Snyk step runs as a strict high-severity gate.
 2. Keep `npm run lint:all`, `npm test`, and `npm run build` as required local and CI gates.
 3. Extend browser workflow verification beyond the new smoke suite into drag/drop wiring, file import/export, 3D viewport behavior, and settings flows.
-4. Continue replacing `src/legacy-loader.js` raw-script injection with explicit module imports.
+4. Continue replacing `src/legacy-loader.js` raw-script injection with explicit module imports using the branch tasks in `docs/module-migration-branch-plan.md`.
 5. Convert placeholder deploy jobs into a real staging or static-hosting deployment target.
 
 ### What NOT to Do
