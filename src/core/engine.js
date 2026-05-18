@@ -1003,9 +1003,9 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       var item = arr[i];
 
-      h += '<div class="data-list-row">';
+      h += '<div style="display:flex;gap:4px;padding:1px 0;border-bottom:1px solid rgba(49,50,68,0.15)">';
 
-      h += '<span class="data-list-index">' + i + '</span>';
+      h += '<span style="color:var(--text-disabled);font-size:8px;min-width:16px;text-align:left;flex-shrink:0">' + i + '</span>';
 
       if (Array.isArray(item)) {
 
