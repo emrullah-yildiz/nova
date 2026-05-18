@@ -41,8 +41,7 @@ Current correction: `npm run build` is no longer a placeholder. It produces the 
 
 - `dist/` — production assets
 - `dist/index.html` — built app shell
-- `dist/js/` — bundled JavaScript
-- `dist/css/` — optimized styles (future)
+- `dist/assets/` — bundled JavaScript and static assets
 
 ## Migration plan
 
