@@ -191,8 +191,18 @@ RevitBridge = {
   getElements(category) {
     var liveRaw = getCachedElements(category);
     if (!liveRaw) {
-      console.error('[RevitBridge] Failed to get elements for "' + category + '": No elements cached. Ensure Revit is connected via Connect Hub.');
-      throw new Error('Revit connection required: No elements cached for category "' + category + '". Ensure Revit is connected via Connect Hub.');
+      var client = getConnectClient();
+      var knownCategories = client && client.elementsByCategory ? Object.keys(client.elementsByCategory) : [];
+      console.error('[RevitBridge] Failed to get elements for "' + category + '": No elements cached.', {
+        clientStatus: client ? client.status : 'missing',
+        peerConnected: client ? client.peerConnected : false,
+        knownCategories: knownCategories
+      });
+      throw new Error(
+        'Revit connection required: No elements cached for category "' + category + '". ' +
+        'Connect Nova to the hub after Revit host is paired, or click Connect again to refresh the project snapshot. ' +
+        'Known categories: ' + (knownCategories.length ? knownCategories.join(', ') : 'none')
+      );
     }
     var liveResult = [];
     for (var li = 0; li < liveRaw.length; li++) {
@@ -437,13 +447,39 @@ RevitBridge = {
     var ids = elements.map(function(el) {
       if (el instanceof RevitElement) return el.identity.sourceId;
       return (el.identity && el.identity.sourceId) || el.id;
+    }).filter(function(id) { return id !== undefined && id !== null && String(id).length > 0; });
+    var batchSize = Math.max(1, Number(options && options.batchSize) || 50);
+    var envelopes = [];
+    console.info('[RevitBridge] Element.Geometries requesting live geometry', {
+      elementCount: elements.length,
+      idCount: ids.length,
+      batchSize: batchSize,
+      sampleIds: ids.slice(0, 5)
     });
-    var envelopes = await client.getGeometry(ids, options || {});
+    for (var offset = 0; offset < ids.length; offset += batchSize) {
+      var batchIds = ids.slice(offset, offset + batchSize);
+      console.info('[RevitBridge] geometry.get batch', {
+        batch: Math.floor(offset / batchSize) + 1,
+        count: batchIds.length,
+        firstId: batchIds[0],
+        lastId: batchIds[batchIds.length - 1]
+      });
+      var batch = await client.getGeometry(batchIds, options || {});
+      console.info('[RevitBridge] geometry.get batch returned', {
+        requested: batchIds.length,
+        geometries: batch.length
+      });
+      envelopes = envelopes.concat(batch);
+    }
     var result = [];
     for (var i = 0; i < envelopes.length; i++) {
       var geoMesh = geometryEnvelopeToGeo(envelopes[i]);
       if (geoMesh) result.push(geoMesh);
     }
+    console.info('[RevitBridge] Element.Geometries converted live geometry', {
+      envelopes: envelopes.length,
+      meshes: result.length
+    });
     return result;
   },
 

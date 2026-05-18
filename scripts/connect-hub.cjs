@@ -91,6 +91,34 @@ function createConnectHub(options = {}) {
     session.projectId = envelope.projectId || payload.projectId || session.projectId;
     clients.set(socket, { role, sessionId: session.id });
 
+    if (role === 'host') {
+      session.viewers.forEach(viewer => send(viewer, {
+        version: 1,
+        id: createId('peer'),
+        type: 'peer.connected',
+        source: 'nova-connect-hub',
+        target: 'viewer',
+        sessionId: session.id,
+        projectId: session.projectId,
+        timestamp: Date.now(),
+        payload: { role: 'host' },
+        error: null
+      }));
+    } else if (session.host) {
+      send(session.host, {
+        version: 1,
+        id: createId('peer'),
+        type: 'peer.connected',
+        source: 'nova-connect-hub',
+        target: 'host',
+        sessionId: session.id,
+        projectId: session.projectId,
+        timestamp: Date.now(),
+        payload: { role: 'viewer' },
+        error: null
+      });
+    }
+
     send(socket, {
       version: 1,
       id: createId('conn'),
@@ -132,7 +160,21 @@ function createConnectHub(options = {}) {
       if (!info) return;
       const session = sessions.get(info.sessionId);
       if (!session) return;
-      if (session.host === socket) session.host = null;
+      if (session.host === socket) {
+        session.host = null;
+        session.viewers.forEach(viewer => send(viewer, {
+          version: 1,
+          id: createId('peer'),
+          type: 'peer.disconnected',
+          source: 'nova-connect-hub',
+          target: 'viewer',
+          sessionId: session.id,
+          projectId: session.projectId,
+          timestamp: Date.now(),
+          payload: { role: 'host' },
+          error: null
+        }));
+      }
       session.viewers.delete(socket);
     });
   });
