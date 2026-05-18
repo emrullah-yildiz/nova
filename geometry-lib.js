@@ -629,9 +629,4 @@ const Geo = {
 };
 
 // Make globally accessible
-if (typeof window !== 'undefined') {
-  window.Geo = Geo;
-}
-
-export { Geo };
-export default Geo;
+window.Geo = Geo;

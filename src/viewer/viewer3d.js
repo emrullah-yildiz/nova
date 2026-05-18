@@ -209,7 +209,7 @@ export const Viewer3D = {
 
   parsePoint(val) {
     if (typeof val === 'string') {
-      const m = val.match(/\(\s*(-?[\d.]+),\s*(-?[\d.]+),\s*(-?[\d.]+)\s*\)/);
+      const m = val.match(/\(([-\d.]+),\s*([\d.]+),\s*([\d.]+)\)/);
       return m ? [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])] : null;
     }
     if (Array.isArray(val) && val.length >= 2) return val.map(Number);

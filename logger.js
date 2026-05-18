@@ -4,7 +4,7 @@
 // and graph events for debugging
 // ============================================
 
-export const NFLogger = {
+const NFLogger = {
   logs: [],
   MAX_LOGS: 5000,
   startTime: Date.now(),
@@ -280,7 +280,9 @@ export const NFLogger = {
     
     // Fallback: try writing via fetch to file:// (usually blocked)
     try {
-      // Placeholder for environments that may allow file writes.
+      var pagePath = decodeURIComponent(window.location.pathname);
+      var dirPath = pagePath.substring(0, pagePath.lastIndexOf('/'));
+      var filePath = 'file://' + dirPath + '/nf-session-logs.json';
       // This won't work in most browsers but worth trying
     } catch(e) { /* ignore */ }
     
@@ -341,7 +343,5 @@ export const NFLogger = {
   }
 };
 
-if (typeof window !== 'undefined') {
-  window.NFLogger = NFLogger;
-  NFLogger.init();
-}
+// Auto-init
+NFLogger.init();

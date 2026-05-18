@@ -1,6 +1,4 @@
-// ============================================
-
-/* eslint-disable no-empty, no-constant-condition, no-dupe-else-if, no-unused-vars */
+// ============================================
 // NODEFLOW AI — OpenAI GPT-4 Client
 // Real AI integration with streaming support
 // ============================================
@@ -80,8 +78,8 @@ const GPTClient = {
   setModel(model) {
     localStorage.setItem('nodeflow_openai_model', model);
   },
-  getApiUrl(providerOverride) {
-    var provider = providerOverride || this.getProvider();
+  getApiUrl() {
+    var provider = this.getProvider();
     var prov = this.PROVIDERS[provider];
     if (!prov) return this.PROVIDERS.openai.apiUrl;
     return prov.apiUrl;
@@ -89,14 +87,14 @@ const GPTClient = {
   getExtraHeaders() {
     var provider = this.getProvider();
     if (provider === 'openrouter') {
-      return { 'HTTP-Referer': typeof window !== 'undefined' ? window.location.href : '', 'X-Title': 'NodeFlow AI' };
+      return { 'HTTP-Referer': window.location.href, 'X-Title': 'NodeFlow AI' };
     }
     return {};
   },
 
   // Auto-detect provider from key prefix
   detectProvider(key) {
-    if (!key) return 'openai';
+    if (!key) return 'anthropic';
     if (key.startsWith('sk-ant-')) return 'openrouter';
     if (key.startsWith('gsk_')) return 'groq';
     if (key.startsWith('sk-or-')) return 'openrouter';
@@ -105,13 +103,7 @@ const GPTClient = {
 
   // ── SYSTEM PROMPT ──
   // Compact few-shot system prompt. ~3k tokens.
-  isApiKeyValid(key) {
-
-    return typeof key === 'string' && key.length > 10;
-
-  },
-
-  buildSystemPrompt(existingCode) {
+  buildSystemPrompt(existingCode) {
     let sys = `You are the AI for NodeFlow AI, a visual node-based scripting tool with a 3D viewport (Three.js). You generate Python code that becomes visual nodes on a canvas.
 
 ## RESPONSE FORMAT
@@ -760,9 +752,5 @@ const SettingsDialog = {
   }
 };
 
-if (typeof window !== 'undefined') {
-  window.GPTClient = GPTClient;
-  window.SettingsDialog = SettingsDialog;
-}
-
-export { GPTClient, SettingsDialog };
+window.GPTClient = GPTClient;
+window.SettingsDialog = SettingsDialog;

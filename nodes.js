@@ -5,9 +5,9 @@
 // Categories: A→Z. Nodes within each: A→Z.
 // ============================================
 
-export const NODE_LIBRARY = { categories: [] };
-export const NODE_TYPE_MAP = {};
-export const TYPE_COLORS = {
+const NODE_LIBRARY = { categories: [] };
+const NODE_TYPE_MAP = {};
+const TYPE_COLORS = {
   number: '#a6e3a1', string: '#f9e2af', boolean: '#f38ba8',
   point: '#89b4fa', vector: '#94e2d5', line: '#89b4fa',
   circle: '#89b4fa', list: '#fab387', any: '#a6adc8', function: '#f5c2e7',
@@ -278,9 +278,3 @@ NODE_LIBRARY.categories.forEach(function(cat) {
 });
 
 console.log('[NodeFlow] Node Registry — ' + NODE_LIBRARY.categories.length + ' categories, ' + Object.keys(NODE_TYPE_MAP).length + ' types');
-
-if (typeof window !== 'undefined') {
-  window.NODE_LIBRARY = NODE_LIBRARY;
-  window.NODE_TYPE_MAP = NODE_TYPE_MAP;
-  window.TYPE_COLORS = TYPE_COLORS;
-}

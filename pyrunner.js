@@ -1,6 +1,4 @@
-/* eslint-disable no-redeclare */
-
-// ============================================
+// ============================================
 // NODEFLOW AI — Python Runner (Local JS eval)
 // Translates Python → JS and executes locally
 // Supports: math, Geo library, loops, conditionals
@@ -9,10 +7,8 @@
 const PythonRunner = {
   // Execute Python code with given inputs
   // Returns { outputs: { varName: value }, error: null|string }
-  execute(code, inputs) {
-    const runtimeGlobal = typeof window !== 'undefined' ? window : globalThis;
-
-    try {
+  execute(code, inputs) {
+    try {
       const lines = code.split('\n');
       let jsCode = '';
 
@@ -125,7 +121,7 @@ const PythonRunner = {
       const inputDecls = Object.keys(inputs || {}).map(k => 'let ' + k + ' = __inputs__["' + k + '"];').join('\n');
 
       const wrappedCode = `
-        (function(__inputs__, __runtimeGlobal__) {
+        (function(__inputs__) {
           ${inputDecls}
 
           // Builtins
@@ -146,7 +142,7 @@ const PythonRunner = {
 
           // Geo library — wrap constructors so they work without 'new' keyword
           // Auto-proxy: copies ALL methods/classes from window.Geo so new additions are always available
-          const _Geo = __runtimeGlobal__.Geo || {};
+          const _Geo = window.Geo;
           const Geo = {};
           // Copy all static functions and properties
           Object.keys(_Geo).forEach(function(key) {
@@ -180,7 +176,7 @@ const PythonRunner = {
           });
 
           // RevitBridge — access pre-fetched Revit data
-          const RevitBridge = __runtimeGlobal__.RevitBridge || {
+          const RevitBridge = window.RevitBridge || {
             getData: function() { return {}; },
             getElements: function() { return []; },
             getTypes: function() { return []; },
@@ -190,7 +186,7 @@ const PythonRunner = {
             getActiveView: function() { return {}; },
             getProjectName: function() { return 'No Project'; },
             getParam: function(el, name) { return el && el.params ? el.params[name] || null : null; },
-            filterByParam: function(els, p, op, v) { return (__runtimeGlobal__.RevitBridge || this).filterByParam(els, p, op, v); }
+            filterByParam: function(els, p, op, v) { return (window.RevitBridge || this).filterByParam(els, p, op, v); }
           };
 
           ${jsCode}
@@ -210,8 +206,8 @@ const PythonRunner = {
         })
       `;
 
-      const fn = (0, eval)(wrappedCode);
-      const result = fn(inputs || {}, runtimeGlobal);
+      const fn = eval(wrappedCode);
+      const result = fn(inputs || {});
 
       return { outputs: result || {}, error: null };
     } catch (e) {
@@ -220,14 +216,12 @@ const PythonRunner = {
   }
 };
 
-if (typeof window !== 'undefined') {
-  window.PythonRunner = PythonRunner;
-}
+window.PythonRunner = PythonRunner;
 
 // ============================================
 // PYTHON NODE UI — patches app after load
 // ============================================
-if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', () => {
   const origRenderNode = app.renderNode.bind(app);
 
   app.renderNode = function(nd) {
@@ -639,7 +633,4 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     summary: function() { console.log(app.getErrorLogSummary()); return app.getErrorLogSummary(); },
     clear: function() { app.clearErrorLog(); console.log('Error log cleared.'); }
   };
-});
-
-export { PythonRunner };
-export default PythonRunner;
+});

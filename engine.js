@@ -11,17 +11,7 @@
 // REPLACES: geo-viewer-patch.js, code-renderer.js, list-node-patch.js
 // ============================================
 
-/* eslint-disable no-redeclare, no-inner-declarations, no-empty, no-unused-vars */
-
-function getRuntimeApp() {
-  if (typeof window !== 'undefined' && window.app) return window.app;
-  if (typeof globalThis !== 'undefined' && globalThis.app) return globalThis.app;
-  return null;
-}
-
-export function installEngine(targetApp = getRuntimeApp()) {
-  if (!targetApp) return false;
-  const app = targetApp;
+document.addEventListener('DOMContentLoaded', function() {
 
   // ═══════════════════════════════════════
   // COMPUTE CACHE
@@ -1257,13 +1247,4 @@ export function installEngine(targetApp = getRuntimeApp()) {
   };
 
   if (typeof NFLogger !== 'undefined') NFLogger.info('engine', 'Engine v1 loaded');
-  return true;
-}
-
-if (typeof document !== 'undefined') {
-  document.addEventListener('DOMContentLoaded', function() {
-    installEngine();
-  });
-}
-
-export default installEngine;
+});

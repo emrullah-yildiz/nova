@@ -4,7 +4,7 @@
 **Version:** 1.0  
 **Status:** Strategic Planning Document
 
-**Repository validation update (May 18, 2026):** The repo has advanced beyond parts of this original roadmap. `npm test` passes with 37 tests across 10 files, `npm run build` produces `dist/`, `.github/workflows/ci.yml` exists, and CI gates lint, unit tests, Playwright browser workflow tests, build, and `npm audit --audit-level=moderate`. Snyk runs as a strict gate when `SNYK_TOKEN` is configured. The Vite boot path now uses explicit `src/` module imports without `src/legacy-loader.js` raw-script injection, and duplicate root runtime scripts plus the old file-protocol fallback loader have been removed. Temporary `window.*` compatibility bridges remain for inline handlers and browser integrations. The remaining enterprise blockers are deeper workflow coverage, real deployment, and production hardening.
+**Repository validation update (May 18, 2026):** The repo has advanced beyond parts of this original roadmap. `npm test` passes with 29 tests across 8 files, `npm test -- --coverage` reports 81.54% statement coverage for the extracted `src/` modules, `npm run build` produces `dist/`, `.github/workflows/ci.yml` exists, and `npm run lint:all` now exits successfully without warnings. CI now gates lint, unit tests, Playwright browser workflow tests, build, and `npm audit --audit-level=moderate`; the audit gate currently reports 0 vulnerabilities after removing `live-server`. Snyk runs as a strict gate when `SNYK_TOKEN` is configured. `Viewer3D`, `AIEngine`, `NFLogger`, `NODE_META`, and the node registry globals have started the legacy-loader reduction by moving to explicit `src/` module imports with `window.*` compatibility bridges. The remaining enterprise blockers are broader legacy-runtime migration, deeper workflow coverage, real deployment, and production hardening.
 
 ---
 
@@ -12,21 +12,21 @@
 
 Nova is currently a **feature-complete prototype** with functional proof-of-concept code (graph engine, 3D geometry, AI integration, Revit integration). However, it requires significant work in **infrastructure, testing, documentation, and deployment** to be production-ready for enterprise use.
 
-### Current Assessment: **Phase 3 Complete / Enterprise Hardening Next**
+### Current Assessment: **Phase 2.5/3 (60% Complete)**
 
 - ✅ Core functionality working
 - ✅ Build toolchain established (Vite)
 - ✅ Initial testing framework in place
 - ✅ Module structure defined
-- ✅ Raw legacy-loader module migration complete
-- ✅ CI/CD pipeline present for lint, tests, browser workflows, audit, and build
+- ❌ Full module migration incomplete
+- ❌ CI/CD pipeline missing
 - ❌ Enterprise-grade testing incomplete
 - ❌ Deployment strategy undefined
 - ❌ WebSocket server for plugin integration not yet built
 
 ### Timeline to Enterprise Readiness
 - **IMMEDIATE (Week 1):** Make CI strict, preserve quiet lint output, and verify the browser runtime
-- **SHORT-TERM (Weeks 2-3):** Reduce compatibility globals, deepen workflow coverage, reach 70% overall coverage
+- **SHORT-TERM (Weeks 2-3):** Complete module migration, reach 70% test coverage
 - **MEDIUM-TERM (Weeks 4-6):** Production hardening, logging, security
 - **LONG-TERM (Weeks 7-12):** TypeScript migration, deployment infrastructure, plugin systems
 
@@ -54,10 +54,9 @@ Nova is currently a **feature-complete prototype** with functional proof-of-conc
 
 | Gap | Impact | Severity |
 |-----|--------|----------|
-| **Compatibility bridges remain** | `window.*` globals and inline handlers still exist during cleanup | 🟠 MEDIUM |
-| **CI/CD deployment incomplete** | Gates exist, but deploy jobs are placeholders | 🟠 MEDIUM |
-| **Enterprise workflow coverage incomplete** | Node editor, persistence, viewer, AI, Revit, accessibility, and performance paths need broader automated coverage | 🔴 HIGH |
-| **Coverage ratchet missing** | Coverage is reported but not yet enforced as an enterprise quality gate | 🔴 HIGH |
+| **Module migration incomplete** | app.js, engine.js still legacy globals | 🔴 HIGH |
+| **No CI/CD pipeline** | No automated testing on commits | 🔴 HIGH |
+| **<50% test coverage** | Risk of regressions in production | 🔴 HIGH |
 | **No error monitoring** | Can't debug issues in production | 🟠 MEDIUM |
 | **No performance tracking** | Don't know if optimizations work | 🟠 MEDIUM |
 | **No security scanning** | Vulnerable dependencies not detected | 🟠 MEDIUM |
@@ -68,7 +67,7 @@ Nova is currently a **feature-complete prototype** with functional proof-of-conc
 Current corrections to the gap table:
 
 - `No CI/CD pipeline` should now be read as `CI/CD exists and enforces core gates`: lint and npm audit now fail the workflow when they fail; Snyk is strict when `SNYK_TOKEN` is configured.
-- `<50% test coverage` is no longer accurate for extracted modules, but enterprise workflow coverage is still incomplete. Use `docs/enterprise-testing-branch-plan.md` as the focused branch plan for closing this gap.
+- `<50% test coverage` is no longer accurate for extracted modules: the current measured baseline is 81.54% statements / 87.32% lines, but legacy UI/runtime workflow coverage is still incomplete.
 - `No security scanning` should now be read as `security scanning is partially configured`: npm audit blocks the workflow; Snyk requires a configured token.
 - `No deployment docs` should now be read as `deployment remains placeholder-only`: the CI deploy jobs describe intent but do not ship to a real target.
 
@@ -136,9 +135,7 @@ Capture baseline metrics:
 
 ---
 
-### SHORT-TERM (Weeks 2-3): Compatibility Cleanup And Coverage
-
-**Current status:** the raw-loader module migration is complete. `src/main.js` imports and installs the moduleized runtime directly, and `src/legacy-loader.js` has been removed. The sections below are retained as historical implementation guidance; future work should focus on removing temporary compatibility bridges, replacing inline event handlers, and expanding browser workflow coverage.
+### SHORT-TERM (Weeks 2-3): Complete Module Migration
 
 #### 2.1 Migrate `app.js` to `src/core/app.js`
 
@@ -741,7 +738,7 @@ spec:
 | Phase | Focus | Hours | Weeks |
 |-------|-------|-------|-------|
 | **Week 1** | Critical fixes + CI/CD | 20 | 1 |
-| **Weeks 2-3** | Compatibility cleanup + workflow coverage | 60 | 2 |
+| **Weeks 2-3** | Module migration + tests | 60 | 2 |
 | **Weeks 4-6** | Hardening + optimization | 50 | 3 |
 | **Weeks 7-9** | TypeScript + advanced tests | 50 | 3 |
 | **Weeks 10-12** | Plugin infrastructure | 40 | 3 |
@@ -751,7 +748,7 @@ spec:
 ### Staffing Model
 
 - **1 Senior Dev (full-time):** Leads architecture, reviews code, handles complex modules
-- **1-2 Mid-level Devs:** Compatibility cleanup, testing, feature work
+- **1-2 Mid-level Devs:** Module migration, testing, feature work
 - **1 DevOps Engineer (part-time):** CI/CD, monitoring, deployment
 
 ### Risk Mitigation
@@ -759,7 +756,7 @@ spec:
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|-----------|
 | Vite integration issues | Medium | High | Week 1: extensive testing |
-| Compatibility cleanup breaks UI | Medium | High | Remove globals incrementally; keep Playwright coverage active |
+| Module migration breaks UI | High | High | Keep compatibility shims; extensive testing |
 | Test coverage plateau | Medium | High | Pair programming; test-driven development |
 | Performance regressions | Medium | Medium | Baseline benchmarks before optimization |
 | Dependency conflicts | Low | High | Regular audits; update strategy |
@@ -797,8 +794,8 @@ spec:
 
 1. Configure `SNYK_TOKEN` in GitHub so the existing Snyk step runs as a strict high-severity gate.
 2. Keep `npm run lint:all`, `npm test`, and `npm run build` as required local and CI gates.
-3. Execute the testing branch plan in `docs/enterprise-testing-branch-plan.md`, starting with `feature/testing-node-editor-workflows`.
-4. Continue reducing temporary `window.*` compatibility bridges and inline event handlers now that raw-script injection and duplicate root runtime scripts have been removed.
+3. Extend browser workflow verification beyond the new smoke suite into drag/drop wiring, file import/export, 3D viewport behavior, and settings flows.
+4. Continue replacing `src/legacy-loader.js` raw-script injection with explicit module imports using the branch tasks in `docs/module-migration-branch-plan.md`.
 5. Convert placeholder deploy jobs into a real staging or static-hosting deployment target.
 
 ### What NOT to Do

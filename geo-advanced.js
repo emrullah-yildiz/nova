@@ -1,5 +1,3 @@
-import { Geo } from './geometry-lib.js';
-
 // ============================================
 // NODEFLOW AI — Advanced Geometry Operations
 // Parametric surfaces, sweeps, pipes, isolines,
@@ -8,7 +6,7 @@ import { Geo } from './geometry-lib.js';
 // ============================================
 
 (function() {
-  const G = Geo;
+  const G = window.Geo;
   const P = function(x,y,z){ return new G.Point3(x,y,z); };
   const V = function(x,y,z){ return new G.Vector3(x,y,z); };
 
@@ -685,7 +683,10 @@ import { Geo } from './geometry-lib.js';
   // ══════════════════════════════════════
   // Update PythonRunner wrapper with new functions
   // ══════════════════════════════════════
-})();
+  if (window.PythonRunner) {
+    const origExec = PythonRunner.execute;
+    const origCode = origExec.toString();
+    // We'll patch by adding new Geo methods to the wrapper in the next integration patch
+  }
 
-export { Geo };
-export default Geo;
+})();

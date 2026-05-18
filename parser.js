@@ -1,8 +1,4 @@
-import { NODE_TYPE_MAP } from '../core/nodes.js';
-
-/* eslint-disable no-unused-vars */
-
-// ============================================
+// ============================================
 // NODEFLOW AI — Universal Code Parser v6
 // PRINCIPLE:
 // - Maximize use of visual nodes (Number, Point, Box, etc.)
@@ -578,11 +574,4 @@ const CodeParser = {
     if (current.trim()) args.push(current.trim());
     return args;
   }
-};
-
-if (typeof window !== 'undefined') {
-  window.CodeParser = CodeParser;
-}
-
-export { CodeParser };
-export default CodeParser;
+};

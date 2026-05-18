@@ -1,7 +1,3 @@
-import { Geo } from './geometry-lib.js';
-
-/* eslint-disable no-redeclare, no-unused-vars */
-
 // ============================================
 // NODEFLOW AI — NURBS & Advanced Mathematics
 // Full NURBS curves/surfaces + noise + attractors
@@ -10,7 +6,7 @@ import { Geo } from './geometry-lib.js';
 // ============================================
 
 (function() {
-  const G = Geo;
+  const G = window.Geo;
   const P = function(x,y,z){ return new G.Point3(x||0,y||0,z||0); };
   const V = function(x,y,z){ return new G.Vector3(x||0,y||0,z||0); };
 
@@ -1049,6 +1045,3 @@ import { Geo } from './geometry-lib.js';
   console.log('[NodeFlow] NURBS + Advanced Math library loaded');
 
 })();
-
-export { Geo };
-export default Geo;

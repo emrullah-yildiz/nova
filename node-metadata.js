@@ -5,7 +5,7 @@
 // Used by: AI system prompt, parser logging, UI tooltips
 // ============================================
 
-export const NODE_META = {
+const NODE_META = {
   // ═══════════════════════════════════════
   // INPUT NODES
   // ═══════════════════════════════════════
@@ -534,7 +534,7 @@ export const NODE_META = {
 // BUILD AI REFERENCE FROM METADATA
 // Generates a compact text block the AI system prompt can use
 // ═══════════════════════════════════════
-export function buildNodeReference() {
+function buildNodeReference() {
   var lines = [];
   lines.push('## AVAILABLE NODES — Use these patterns in your code');
   lines.push('Each line below shows: NodeType | Python pattern | When to use');
@@ -581,7 +581,7 @@ export function buildNodeReference() {
 // ENRICH NODE DEFINITIONS WITH METADATA
 // Patches NODE_TYPE_MAP after all node files load
 // ═══════════════════════════════════════
-export function enrichNodeDefinitions() {
+function enrichNodeDefinitions() {
   if (typeof NODE_TYPE_MAP === 'undefined') return;
   for (var nodeType in NODE_META) {
     var def = NODE_TYPE_MAP[nodeType];
