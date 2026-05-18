@@ -1,5 +1,4 @@
 import { installNovaConnectPanel } from '../src/integrations/connect/connect-panel.js';
-import { Geo } from '../src/geometry/index.js';
 
 function createElementStub(tagName = 'div') {
   return {
@@ -58,16 +57,10 @@ function createDocumentStub() {
   return document;
 }
 
-describe('Nova Connect panel', () => {
-  it('installs a menu button and runs bridge actions through app methods', async () => {
+describe('Nova Connect panel (simplified)', () => {
+  it('installs a menu button, toggles panel, and connects/disconnects', async () => {
     const document = createDocumentStub();
     const app = {};
-    const walls = [{ id: 3001, category: 'Walls', name: 'Basic Wall' }];
-    const approvalCheckbox = document.createElement('input');
-    approvalCheckbox.id = 'nova-connect-write-approval';
-    approvalCheckbox.checked = false;
-    document.elements.set(approvalCheckbox.id, approvalCheckbox);
-    const sendCalls = [];
     const runtime = {
       document,
       localStorage: {
@@ -85,47 +78,39 @@ describe('Nova Connect panel', () => {
           disconnect: function() {
             this.status = 'disconnected';
           }
-        },
-        RevitBridge: {
-          queryElements: async () => walls,
-          getLiveGeometries: async () => [new Geo.Mesh3([], [])],
-          sendGeometry: async (geometry, identity, options) => {
-            sendCalls.push({ geometry, identity, options });
-            return { ok: true, message: 'Accepted.', data: { directShapeId: 'mock-1' } };
-          }
-        },
-        Geo
+        }
       }
     };
 
     installNovaConnectPanel(app, runtime);
 
+    // Menu button installed
     expect(document.getElementById('menu-connect')).toBeTruthy();
+
+    // Panel toggles visible
+    expect(document.getElementById('nova-connect-panel').className).not.toContain('visible');
     app.toggleNovaConnectPanel();
     expect(document.getElementById('nova-connect-panel').className).toContain('visible');
 
+    // Panel toggles closed
+    app.closeNovaConnectPanel();
+    expect(document.getElementById('nova-connect-panel').className).not.toContain('visible');
+
+    // Connect
+    app.novaConnectPanelOpen = true;
+    app._renderNovaConnectPanel();
     await app.connectNovaConnect();
-    expect(app.novaConnectLastResult.message).toContain('Connected');
+    expect(app.novaConnectLastResult.message).toContain('Connected successfully');
 
-    await app.queryNovaConnectWalls();
-    expect(app.novaConnectLastResult.message).toBe('Received 1 wall element.');
+    // Disconnect
+    await app.disconnectNovaConnect();
+    expect(app.novaConnectLastResult.message).toBe('Disconnected.');
 
-    await app.getNovaConnectGeometry();
-    expect(app.novaConnectLastResult.message).toBe('Received 1 mesh result.');
-
-    await app.sendNovaConnectTestPoint();
-    expect(app.novaConnectLastResult.message).toBe('Approve this write operation before sending geometry.');
-    expect(sendCalls).toHaveLength(0);
-
-    approvalCheckbox.checked = true;
-    await app.sendNovaConnectTestPoint();
-    expect(app.novaConnectLastResult.detail).toContain('mock-1');
-    expect(sendCalls[0].options.approval).toMatchObject({
-      approved: true,
-      approvedBy: 'nova-connect-panel',
-      scope: 'single-operation'
-    });
-    expect(approvalCheckbox.checked).toBe(false);
+    // Panel HTML contains the settings fields
+    const panel = document.getElementById('nova-connect-panel');
+    expect(panel).toBeTruthy();
+    expect(panel.innerHTMLValue).toContain('nova-connect-url');
+    expect(panel.innerHTMLValue).toContain('ws://127.0.0.1:8765');
   });
 
   it('opens prefilled from Revit launcher URL parameters', () => {
@@ -141,9 +126,7 @@ describe('Nova Connect panel', () => {
         setItem: () => {}
       },
       NodeFlow: {
-        NovaConnect: { status: 'disconnected' },
-        RevitBridge: {},
-        Geo
+        NovaConnect: { status: 'disconnected' }
       }
     };
 
@@ -155,6 +138,21 @@ describe('Nova Connect panel', () => {
       token: 'token-123',
       projectId: 'Sample'
     });
-    expect(app.novaConnectLastResult.message).toBe('Opened from Revit. Start the hub, then click Connect.');
+    expect(app.novaConnectLastResult.message).toBe('Opened from Revit. Click Connect to establish connection.');
+  });
+
+  it('idempotent — calling install twice does not re-install', () => {
+    const document = createDocumentStub();
+    const app = {};
+    const runtime = {
+      document,
+      localStorage: { getItem: () => null, setItem: () => {} },
+      NodeFlow: { NovaConnect: { status: 'disconnected' } }
+    };
+
+    const first = installNovaConnectPanel(app, runtime);
+    const second = installNovaConnectPanel(app, runtime);
+    expect(first).toBe(app);
+    expect(second).toBe(app);
   });
 });

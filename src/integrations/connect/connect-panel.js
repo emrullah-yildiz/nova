@@ -40,10 +40,6 @@ function installAppMethods(app, runtimeGlobal) {
     return runtimeGlobal.NodeFlow ? runtimeGlobal.NodeFlow.NovaConnect : runtimeGlobal.NovaConnect;
   };
 
-  app._getNovaRevitBridge = function() {
-    return runtimeGlobal.NodeFlow ? runtimeGlobal.NodeFlow.RevitBridge : runtimeGlobal.RevitBridge;
-  };
-
   app._readNovaConnectSettings = function() {
     const stored = readJson(runtimeGlobal.localStorage && runtimeGlobal.localStorage.getItem(STORAGE_KEY));
     const launch = readLaunchParameters(runtimeGlobal);
@@ -64,8 +60,7 @@ function installAppMethods(app, runtimeGlobal) {
     return {
       url: valueOf(document, 'nova-connect-url', 'ws://127.0.0.1:8765'),
       token: valueOf(document, 'nova-connect-token', ''),
-      projectId: valueOf(document, 'nova-connect-project', ''),
-      writeApproved: checkedOf(document, 'nova-connect-write-approval')
+      projectId: valueOf(document, 'nova-connect-project', '')
     };
   };
 
@@ -85,7 +80,7 @@ function installAppMethods(app, runtimeGlobal) {
     this._setNovaConnectResult({ ok: true, message: 'Connecting to Nova Connect hub...' });
     try {
       await client.connect();
-      this._setNovaConnectResult({ ok: true, message: 'Connected to session ' + (client.sessionId || 'pending') + '.' });
+      this._setNovaConnectResult({ ok: true, message: 'Connected successfully to session ' + (client.sessionId || 'pending') + '.' });
     } catch (error) {
       this._setNovaConnectResult({ ok: false, message: error.message || 'Connection failed.' });
     }
@@ -95,81 +90,6 @@ function installAppMethods(app, runtimeGlobal) {
     const client = this._getNovaConnect();
     if (client) client.disconnect();
     this._setNovaConnectResult({ ok: true, message: 'Disconnected.' });
-  };
-
-  app.queryNovaConnectWalls = async function() {
-    const bridge = this._getNovaRevitBridge();
-    if (!bridge || !bridge.queryElements) return this._setNovaConnectResult({ ok: false, message: 'RevitBridge is not available.' });
-    try {
-      const walls = await bridge.queryElements('Walls');
-      this._setNovaConnectResult({
-        ok: true,
-        message: 'Received ' + walls.length + ' wall element' + (walls.length === 1 ? '.' : 's.'),
-        detail: walls.map(element => element.category + ' [' + element.id + '] ' + element.name).join('\n')
-      });
-    } catch (error) {
-      this._setNovaConnectResult({ ok: false, message: error.message || 'Wall query failed.' });
-    }
-  };
-
-  app.getNovaConnectGeometry = async function() {
-    const bridge = this._getNovaRevitBridge();
-    if (!bridge || !bridge.queryElements || !bridge.getLiveGeometries) {
-      return this._setNovaConnectResult({ ok: false, message: 'Live geometry bridge is not available.' });
-    }
-    try {
-      const walls = await bridge.queryElements('Walls');
-      const meshes = await bridge.getLiveGeometries(walls);
-      this._setNovaConnectResult({
-        ok: true,
-        message: 'Received ' + meshes.length + ' mesh result' + (meshes.length === 1 ? '.' : 's.'),
-        detail: meshes.map(mesh => mesh.toString ? mesh.toString() : mesh._type).join('\n')
-      });
-    } catch (error) {
-      this._setNovaConnectResult({ ok: false, message: error.message || 'Geometry request failed.' });
-    }
-  };
-
-  app.sendNovaConnectTestPoint = async function() {
-    const bridge = this._getNovaRevitBridge();
-    const Geo = runtimeGlobal.NodeFlow ? runtimeGlobal.NodeFlow.Geo : runtimeGlobal.Geo;
-    if (!bridge || !bridge.sendGeometry || !Geo) return this._setNovaConnectResult({ ok: false, message: 'Send geometry bridge is not available.' });
-    const settings = this._collectNovaConnectSettings();
-    if (!settings.writeApproved) {
-      return this._setNovaConnectResult({
-        ok: false,
-        message: 'Approve this write operation before sending geometry.',
-        detail: 'Enable "Approve one Revit write" in the Connect panel. This prevents accidental model writes when the real Revit host is connected.'
-      });
-    }
-    try {
-      const result = await bridge.sendGeometry(new Geo.Point3(1, 2, 3), {
-        source: 'revit-local',
-        sourceId: 'nova-connect-test-point'
-      }, {
-        metadata: { category: 'Generic Models' },
-        approval: {
-          approved: true,
-          approvedAt: Date.now(),
-          approvedBy: 'nova-connect-panel',
-          scope: 'single-operation',
-          message: 'User approved sending the Nova Connect test point.'
-        }
-      });
-      this._clearNovaConnectWriteApproval();
-      this._setNovaConnectResult({
-        ok: !!result.ok,
-        message: result.message || (result.ok ? 'Geometry accepted.' : 'Geometry rejected.'),
-        detail: result.data ? JSON.stringify(result.data, null, 2) : ''
-      });
-    } catch (error) {
-      this._setNovaConnectResult({ ok: false, message: error.message || 'Geometry send failed.' });
-    }
-  };
-
-  app._clearNovaConnectWriteApproval = function() {
-    const checkbox = runtimeGlobal.document.getElementById('nova-connect-write-approval');
-    if (checkbox) checkbox.checked = false;
   };
 
   app._renderNovaConnectPanel = function() {
@@ -189,25 +109,19 @@ function installAppMethods(app, runtimeGlobal) {
     panel.innerHTML =
       '<div class="ncp-header">' +
         '<div><h2>Nova Connect</h2><p class="ncp-status ncp-status-' + escapeHtml(status) + '">' + escapeHtml(status) + '</p></div>' +
-        '<button class="ncp-icon-btn" onclick="app.closeNovaConnectPanel()" title="Close">x</button>' +
+        '<button class="ncp-icon-btn" onclick="app.closeNovaConnectPanel()" title="Close">×</button>' +
       '</div>' +
-      '<label class="ncp-label">Hub URL<input id="nova-connect-url" value="' + escapeHtml(settings.url) + '" autocomplete="off"></label>' +
-      '<label class="ncp-label">Pairing Token<input id="nova-connect-token" value="' + escapeHtml(settings.token) + '" autocomplete="off"></label>' +
-      '<label class="ncp-label">Project ID<input id="nova-connect-project" value="' + escapeHtml(settings.projectId) + '" autocomplete="off"></label>' +
-      '<label class="ncp-approval"><input id="nova-connect-write-approval" type="checkbox"> <span>Approve one Revit write</span></label>' +
+      '<label class="ncp-label">Hub URL<input id="nova-connect-url" value="' + escapeHtml(settings.url) + '" autocomplete="off" placeholder="ws://127.0.0.1:8765"></label>' +
+      '<label class="ncp-label">Pairing Token (optional)<input id="nova-connect-token" value="' + escapeHtml(settings.token) + '" autocomplete="off" placeholder="Leave empty if not required"></label>' +
+      '<label class="ncp-label">Project ID (optional)<input id="nova-connect-project" value="' + escapeHtml(settings.projectId) + '" autocomplete="off" placeholder="Auto-detected from Revit"></label>' +
       '<div class="ncp-actions">' +
         '<button onclick="app.connectNovaConnect()">Connect</button>' +
         '<button onclick="app.disconnectNovaConnect()">Disconnect</button>' +
       '</div>' +
-      '<div class="ncp-actions ncp-actions-stack">' +
-        '<button onclick="app.queryNovaConnectWalls()">Query Walls</button>' +
-        '<button onclick="app.getNovaConnectGeometry()">Get Geometry</button>' +
-        '<button onclick="app.sendNovaConnectTestPoint()">Send Test Point</button>' +
-      '</div>' +
-      '<div class="ncp-result ' + (result && result.ok === false ? 'ncp-result-error' : '') + '">' +
-        '<strong>' + escapeHtml(result ? result.message : 'Ready for a local Revit or mock Revit session.') + '</strong>' +
-        (result && result.detail ? '<pre>' + escapeHtml(result.detail) + '</pre>' : '') +
-      '</div>';
+      (result ? '<div class="ncp-result ' + (result.ok === false ? 'ncp-result-error' : '') + '">' +
+        '<strong>' + escapeHtml(result.message) + '</strong>' +
+        (result.detail ? '<pre>' + escapeHtml(result.detail) + '</pre>' : '') +
+      '</div>' : '');
   };
 }
 
@@ -227,6 +141,16 @@ function installMenuButton(document, app) {
 
 function applyLaunchParameters(app, runtimeGlobal) {
   const launch = readLaunchParameters(runtimeGlobal);
+  
+  // Auto-connect if autoConnect parameter is set
+  if (launch.autoConnect) {
+    setTimeout(() => {
+      app.connectNovaConnect().catch(err => {
+        console.warn('[Nova Connect] Auto-connect failed:', err.message);
+      });
+    }, 500);
+  }
+  
   if (!launch.openPanel) return;
   app.novaConnectPanelOpen = true;
   if (runtimeGlobal.localStorage) {
@@ -239,7 +163,7 @@ function applyLaunchParameters(app, runtimeGlobal) {
   }
   app.novaConnectLastResult = {
     ok: true,
-    message: 'Opened from Revit. Start the hub, then click Connect.'
+    message: 'Opened from Revit. Click Connect to establish connection.'
   };
 }
 
@@ -251,7 +175,8 @@ function readLaunchParameters(runtimeGlobal) {
     url: params.get('novaConnectUrl') || '',
     token: params.get('novaConnectToken') || '',
     projectId: params.get('novaConnectProject') || '',
-    openPanel: params.get('novaConnectOpen') === '1'
+    openPanel: params.get('novaConnectOpen') === '1',
+    autoConnect: params.get('novaConnectAuto') === '1'
   };
 }
 
@@ -264,7 +189,7 @@ function injectStyles(document) {
       position: fixed;
       top: 44px;
       right: 0;
-      width: min(360px, calc(100vw - 24px));
+      width: min(340px, calc(100vw - 24px));
       height: calc(100vh - 44px);
       transform: translateX(100%);
       transition: transform 160ms ease;
@@ -272,7 +197,7 @@ function injectStyles(document) {
       background: var(--bg-secondary);
       border-left: 1px solid var(--border-color);
       box-shadow: -12px 0 32px rgba(0, 0, 0, 0.28);
-      padding: 16px;
+      padding: 20px;
       color: var(--text-primary);
       overflow-y: auto;
     }
@@ -282,37 +207,50 @@ function injectStyles(document) {
       align-items: flex-start;
       justify-content: space-between;
       gap: 12px;
-      margin-bottom: 16px;
+      margin-bottom: 20px;
     }
     .ncp-header h2 {
       margin: 0;
-      font-size: 16px;
+      font-size: 18px;
       line-height: 1.2;
-      letter-spacing: 0;
+      letter-spacing: -0.01em;
+      font-weight: 700;
     }
     .ncp-status {
-      margin: 4px 0 0;
+      margin: 6px 0 0;
       font-size: 12px;
       color: var(--text-muted);
       text-transform: capitalize;
+      font-weight: 500;
     }
     .ncp-status-connected { color: var(--accent-green); }
+    .ncp-status-connecting { color: var(--accent-blue); }
     .ncp-status-error, .ncp-status-unavailable { color: var(--accent-red); }
     .ncp-icon-btn {
-      width: 28px;
-      height: 28px;
+      width: 32px;
+      height: 32px;
       border: 1px solid var(--border-color);
       border-radius: 6px;
       background: var(--bg-surface);
       color: var(--text-secondary);
       cursor: pointer;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 120ms ease;
+    }
+    .ncp-icon-btn:hover {
+      background: var(--bg-primary);
+      border-color: var(--text-muted);
     }
     .ncp-label {
       display: grid;
-      gap: 6px;
-      margin-bottom: 12px;
-      font-size: 12px;
+      gap: 8px;
+      margin-bottom: 16px;
+      font-size: 13px;
       color: var(--text-secondary);
+      font-weight: 500;
     }
     .ncp-label input {
       width: 100%;
@@ -321,37 +259,26 @@ function injectStyles(document) {
       border-radius: 6px;
       background: var(--bg-primary);
       color: var(--text-primary);
-      padding: 9px 10px;
+      padding: 10px 12px;
       font-size: 13px;
+      transition: border-color 120ms ease;
     }
-    .ncp-approval {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 4px 0 12px;
-      padding: 10px;
-      border: 1px solid rgba(249, 226, 175, 0.35);
-      border-radius: 6px;
-      background: rgba(249, 226, 175, 0.08);
-      color: var(--text-primary);
-      font-size: 13px;
-      cursor: pointer;
+    .ncp-label input:focus {
+      outline: none;
+      border-color: var(--accent-blue);
     }
-    .ncp-approval input {
-      width: 16px;
-      height: 16px;
-      margin: 0;
-      accent-color: var(--accent-green);
+    .ncp-label input::placeholder {
+      color: var(--text-muted);
+      opacity: 0.6;
     }
     .ncp-actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin: 12px 0;
+      gap: 10px;
+      margin: 20px 0;
     }
-    .ncp-actions-stack { grid-template-columns: 1fr; }
     .ncp-actions button {
-      min-height: 34px;
+      min-height: 38px;
       border: 1px solid var(--border-color);
       border-radius: 6px;
       background: var(--bg-surface);
@@ -359,24 +286,42 @@ function injectStyles(document) {
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
+      transition: all 120ms ease;
+    }
+    .ncp-actions button:hover {
+      background: var(--bg-primary);
+      transform: translateY(-1px);
     }
     .ncp-actions button:first-child {
       background: var(--accent-blue);
-      color: var(--bg-tertiary);
+      color: white;
       border-color: var(--accent-blue);
     }
+    .ncp-actions button:first-child:hover {
+      background: var(--accent-blue);
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
     .ncp-result {
-      margin-top: 16px;
+      margin-top: 20px;
       border: 1px solid var(--border-color);
-      border-radius: 6px;
+      border-radius: 8px;
       background: var(--bg-primary);
-      padding: 12px;
+      padding: 14px;
       font-size: 13px;
-      line-height: 1.4;
+      line-height: 1.5;
       color: var(--text-secondary);
     }
-    .ncp-result strong { color: var(--text-primary); font-weight: 600; }
-    .ncp-result-error { border-color: rgba(243, 139, 168, 0.45); }
+    .ncp-result strong { 
+      color: var(--text-primary); 
+      font-weight: 600;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .ncp-result-error { 
+      border-color: rgba(243, 139, 168, 0.45);
+      background: rgba(243, 139, 168, 0.05);
+    }
     .ncp-result-error strong { color: var(--accent-red); }
     .ncp-result pre {
       white-space: pre-wrap;
@@ -392,11 +337,6 @@ function injectStyles(document) {
 function valueOf(document, id, fallback) {
   const element = document.getElementById(id);
   return element ? element.value.trim() : fallback;
-}
-
-function checkedOf(document, id) {
-  const element = document.getElementById(id);
-  return !!(element && element.checked);
 }
 
 function readJson(value) {

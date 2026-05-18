@@ -9,7 +9,7 @@ namespace Nova.RevitAddin;
 public static class NovaLauncher
 {
     public const string DefaultHubUrl = "ws://127.0.0.1:8765";
-    public const string DefaultNovaUrl = "http://127.0.0.1:5173";
+    public const string DefaultNovaUrl = "http://127.0.0.1:8080";
 
     public static NovaLaunchInfo CreateLaunchInfo(UIApplication application)
     {
