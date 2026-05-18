@@ -25,8 +25,7 @@ const NodeFlow = {
   NODE_LIBRARY,
   NODE_TYPE_MAP,
   TYPE_COLORS,
-  CodeParser,
-  PythonRunner,
+  Geo,
   buildNodeReference,
   enrichNodeDefinitions,
   GPTClient,
@@ -52,8 +51,7 @@ if (typeof window !== 'undefined') {
   window.NODE_LIBRARY = NODE_LIBRARY;
   window.NODE_TYPE_MAP = NODE_TYPE_MAP;
   window.TYPE_COLORS = TYPE_COLORS;
-  window.CodeParser = CodeParser;
-  window.PythonRunner = PythonRunner;
+  window.Geo = Geo;
   window.buildNodeReference = buildNodeReference;
   window.enrichNodeDefinitions = enrichNodeDefinitions;
   window.FormulaEval = FormulaEval;

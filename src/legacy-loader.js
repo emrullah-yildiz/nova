@@ -4,15 +4,9 @@ import { NFLogger } from './core/logger.js';
 import './core/engine.js';
 import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/node-metadata.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
-import { installLineRenderPatch } from './ui/line-render-patch.js';
-import { installNodeLibrary } from './ui/node-library.js';
-import { installNodeRenderer } from './ui/node-renderer.js';
-import { installNodeSearchPopup } from './ui/node-search-popup.js';
-import { installWirePortalPatch } from './ui/wire-portal-patch.js';
+import { Geo } from './geometry/index.js';
 import { Viewer3D } from './viewer/viewer3d.js';
-import geometryLibSource from '../geometry-lib.js?raw';
-import geoAdvancedSource from '../geo-advanced.js?raw';
-import nurbsMathSource from '../nurbs-math.js?raw';
+import lineRenderPatchSource from '../line-render-patch.js?raw';
 import revitNodesSource from '../revit-nodes.js?raw';
 import parserSource from '../parser.js?raw';
 import appSource from '../app.js?raw';
@@ -40,9 +34,7 @@ if (typeof window !== 'undefined') {
 }
 
 const legacyScripts = [
-  { name: 'geometry-lib.js', source: geometryLibSource },
-  { name: 'geo-advanced.js', source: geoAdvancedSource },
-  { name: 'nurbs-math.js', source: nurbsMathSource },
+  { name: 'line-render-patch.js', source: lineRenderPatchSource },
   { name: 'revit-nodes.js', source: revitNodesSource },
   { name: 'parser.js', source: parserSource },
   { name: 'app.js', source: appSource },
