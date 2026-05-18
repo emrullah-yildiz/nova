@@ -32,9 +32,14 @@ function RevitElement(data) {
   this.typeName = data.typeName || '';
   this.levelName = data.levelName || '';
   this.params = data.params || {};
+  this.geometry = data.geometry || null;
+  this.geometries = data.geometries || null;
+  this.mesh = data.mesh || null;
+  this.meshes = data.meshes || null;
+  this.raw = data.raw || data;
   this.identity = createIdentity({
     source: SOURCES.REVIT_LOCAL,
-    sourceId: data.sourceId || data.id || 0,
+    sourceId: data.sourceId || data.uniqueId || data.elementId || data.id || 0,
     versionId: data.versionId || '',
     ...(data.identity || {})
   });
@@ -143,6 +148,11 @@ RevitBridge = {
       typeName: normalized.typeName || '',
       levelName: normalized.levelName || '',
       params: normalized.params || {},
+      geometry: raw.geometry || normalized.geometry || null,
+      geometries: raw.geometries || normalized.geometries || null,
+      mesh: raw.mesh || normalized.mesh || null,
+      meshes: raw.meshes || normalized.meshes || null,
+      raw: raw,
       identity: normalized.identity
     });
   },
@@ -259,67 +269,161 @@ RevitBridge = {
   // ═══════════════════════════════════════
 
   getMeshById(elementId) {
+    var matches = this.getMeshesById(elementId);
+    return matches.length > 0 ? matches[0] : null;
+  },
+
+  getMeshesById(elementId) {
     var client = getConnectClient();
     if (client && client.geometryById && client.geometryById[String(elementId)]) {
-      return client.geometryById[String(elementId)];
+      var liveMapped = client.geometryById[String(elementId)];
+      return Array.isArray(liveMapped) ? liveMapped : [liveMapped];
     }
-    var meshes = (typeof REVIT_MESHES !== 'undefined') ? REVIT_MESHES : (window.REVIT_MESHES || []);
+    var meshes = this.getMeshRecords();
     var idStr = String(elementId);
-    for (var i = 0; i < meshes.length; i++) {
-      if (String(meshes[i].id) === idStr) return meshes[i];
+    if (!Array.isArray(meshes) && meshes && typeof meshes === 'object') {
+      var mapped = meshes[idStr] || meshes[elementId] || null;
+      return Array.isArray(mapped) ? mapped : (mapped ? [mapped] : []);
     }
-    return null;
+    var matches = [];
+    for (var i = 0; i < meshes.length; i++) {
+      if (this.meshMatchesElement(meshes[i], idStr)) matches.push(meshes[i]);
+    }
+    return matches;
+  },
+
+  getMeshRecords() {
+    if (typeof REVIT_MESHES !== 'undefined') return REVIT_MESHES;
+    if (window.REVIT_MESHES) return window.REVIT_MESHES;
+    var client = getConnectClient();
+    if (client && client.snapshot) return client.snapshot.meshes || client.snapshot.geometries || [];
+    return [];
+  },
+
+  getElementIdentity(element) {
+    if (!element) return '';
+    return String(
+      (element.identity && element.identity.sourceId) ||
+      element.id ||
+      element.elementId ||
+      element.sourceId ||
+      element.uniqueId ||
+      ''
+    );
+  },
+
+  meshMatchesElement(meshRecord, elementId) {
+    if (!meshRecord || !elementId) return false;
+    var ids = [
+      meshRecord.id,
+      meshRecord.elementId,
+      meshRecord.ElementId,
+      meshRecord.sourceId,
+      meshRecord.uniqueId,
+      meshRecord.dbId,
+      meshRecord.identity && meshRecord.identity.sourceId
+    ];
+    for (var i = 0; i < ids.length; i++) {
+      if (ids[i] !== undefined && ids[i] !== null && String(ids[i]) === String(elementId)) return true;
+    }
+    return false;
+  },
+
+  collectElementMeshRecords(element) {
+    var raw = element && element.raw ? element.raw : element;
+    var candidates = [];
+    ['geometry', 'geometries', 'mesh', 'meshes'].forEach(function(key) {
+      if (element && element[key]) candidates.push(element[key]);
+      if (raw && raw !== element && raw[key]) candidates.push(raw[key]);
+    });
+    var records = [];
+    function append(value) {
+      if (!value) return;
+      if (Array.isArray(value)) {
+        for (var i = 0; i < value.length; i++) append(value[i]);
+        return;
+      }
+      if (value.meshes && Array.isArray(value.meshes)) append(value.meshes);
+      else if (value.geometry && value.geometry !== value) append(value.geometry);
+      else if (records.indexOf(value) === -1) records.push(value);
+    }
+    for (var c = 0; c < candidates.length; c++) append(candidates[c]);
+    return records;
+  },
+
+  normalizeVertex(value) {
+    if (Array.isArray(value)) return new Geo.Point3(value[0] || 0, value[1] || 0, value[2] || 0);
+    return new Geo.Point3(value.x || value.X || 0, value.y || value.Y || 0, value.z || value.Z || 0);
+  },
+
+  normalizeColor(color) {
+    if (typeof color === 'number') return color;
+    if (typeof color === 'string') return parseInt(color.replace('#', ''), 16) || 0x89b4fa;
+    return 0x89b4fa;
   },
 
   // Convert a REVIT_MESHES record into a Geo.Mesh3 object
   meshDataToGeo(meshRecord) {
     if (meshRecord && meshRecord._type === 'GeometryEnvelope') return geometryEnvelopeToGeo(meshRecord);
-    if (!meshRecord || !meshRecord.vertices || !meshRecord.indices) return null;
+    if (!meshRecord) return null;
+    if (meshRecord._type === 'Mesh3') return meshRecord;
+    if (meshRecord.mesh) meshRecord = meshRecord.mesh;
+    if (!meshRecord.vertices) return null;
     if (typeof Geo === 'undefined' || !Geo.Mesh3) return null;
 
     var verts = meshRecord.vertices;
-    var indices = meshRecord.indices;
-    var vertCount = Math.floor(verts.length / 3);
-    var triCount = Math.floor(indices.length / 3);
+    var indices = meshRecord.indices || meshRecord.faces || meshRecord.triangles;
+    if (!indices) return null;
+    var verticesAreFlat = typeof verts[0] === 'number';
+    var indicesAreFlat = typeof indices[0] === 'number';
+    var vertCount = verticesAreFlat ? Math.floor(verts.length / 3) : verts.length;
+    var triCount = indicesAreFlat ? Math.floor(indices.length / 3) : indices.length;
     if (vertCount < 3 || triCount < 1) return null;
 
     var positions = [];
     for (var i = 0; i < vertCount; i++) {
-      positions.push(new Geo.Point3(verts[i * 3], verts[i * 3 + 1], verts[i * 3 + 2]));
+      positions.push(verticesAreFlat
+        ? new Geo.Point3(verts[i * 3], verts[i * 3 + 1], verts[i * 3 + 2])
+        : this.normalizeVertex(verts[i]));
     }
 
     var faces = [];
     for (var j = 0; j < triCount; j++) {
-      faces.push([indices[j * 3], indices[j * 3 + 1], indices[j * 3 + 2]]);
+      faces.push(indicesAreFlat
+        ? [indices[j * 3], indices[j * 3 + 1], indices[j * 3 + 2]]
+        : [indices[j][0], indices[j][1], indices[j][2]]);
     }
 
-    var mesh = new Geo.Mesh3(positions, faces);
-
-    // Apply color from material data
-    if (meshRecord.color && mesh._color !== undefined) {
-      mesh._color = meshRecord.color;
-    }
-
+    var mesh = new Geo.Mesh3(positions, faces, this.normalizeColor(meshRecord.color));
+    mesh.sourceId = meshRecord.elementId || meshRecord.id || meshRecord.sourceId || null;
+    mesh.sourceCategory = meshRecord.category || null;
     return mesh;
   },
 
   // Extract geometry for a list of RevitElement objects
   getGeometries(elements) {
     if (!elements || !Array.isArray(elements)) return [];
-    var meshes = (typeof REVIT_MESHES !== 'undefined') ? REVIT_MESHES : (window.REVIT_MESHES || []);
+    var meshes = this.getMeshRecords();
     var client = getConnectClient();
     var hasLiveGeometry = client && client.geometryById && Object.keys(client.geometryById).length > 0;
-    if (meshes.length === 0 && !hasLiveGeometry) {
+    var hasEmbeddedGeometry = elements.some(function(el) { return RevitBridge.collectElementMeshRecords(el).length > 0; });
+    if (Array.isArray(meshes) && meshes.length === 0 && !hasLiveGeometry && !hasEmbeddedGeometry) {
       console.warn('[RevitBridge] REVIT_MESHES not available — run geometry export first');
       return [];
     }
     var result = [];
     for (var i = 0; i < elements.length; i++) {
       var el = elements[i];
-      var elId = (el instanceof RevitElement) ? el.id : (el.id || 0);
-      var meshRecord = this.getMeshById(elId);
-      if (meshRecord) {
-        var geoMesh = this.meshDataToGeo(meshRecord);
+      var embedded = this.collectElementMeshRecords(el);
+      for (var em = 0; em < embedded.length; em++) {
+        var embeddedGeo = this.meshDataToGeo(embedded[em]);
+        if (embeddedGeo) result.push(embeddedGeo);
+      }
+      if (embedded.length > 0) continue;
+      var elId = this.getElementIdentity(el);
+      var meshRecords = this.getMeshesById(elId);
+      for (var mr = 0; mr < meshRecords.length; mr++) {
+        var geoMesh = this.meshDataToGeo(meshRecords[mr]);
         if (geoMesh) result.push(geoMesh);
       }
     }
