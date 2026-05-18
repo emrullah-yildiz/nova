@@ -5,6 +5,7 @@ import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/nod
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
 import { GPTClient } from './ai/gpt-client.js';
 import { Viewer3D } from './viewer/viewer3d.js';
+import { installEngine } from './core/engine.js';
 import './ai/gpt-integration.js';
 import './legacy-loader.js';
 import { createComputeContext, computeNodeValue } from './core/compute-engine.js';
@@ -23,6 +24,7 @@ const NodeFlow = {
   enrichNodeDefinitions,
   GPTClient,
   Viewer3D,
+  installEngine,
   createComputeContext,
   computeNodeValue,
   ...GraphHelpers,
