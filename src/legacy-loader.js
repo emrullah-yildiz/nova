@@ -1,4 +1,5 @@
 import { AIEngine } from './ai/ai-engine.js';
+import { GPTClient, SettingsDialog } from './ai/gpt-client.js';
 import { NFLogger } from './core/logger.js';
 import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/node-metadata.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
@@ -7,7 +8,6 @@ import { Viewer3D } from './viewer/viewer3d.js';
 import lineRenderPatchSource from '../line-render-patch.js?raw';
 import revitNodesSource from '../revit-nodes.js?raw';
 import parserSource from '../parser.js?raw';
-import gptClientSource from '../gpt-client.js?raw';
 import appSource from '../app.js?raw';
 import nodeRendererSource from '../node-renderer.js?raw';
 import pyRunnerSource from '../pyrunner.js?raw';
@@ -30,7 +30,8 @@ if (typeof window !== 'undefined') {
   window.NODE_LIBRARY = NODE_LIBRARY;
   window.NODE_TYPE_MAP = NODE_TYPE_MAP;
   window.TYPE_COLORS = TYPE_COLORS;
-  window.Geo = Geo;
+  window.GPTClient = GPTClient;
+  window.SettingsDialog = SettingsDialog;
   window.buildNodeReference = buildNodeReference;
   window.enrichNodeDefinitions = enrichNodeDefinitions;
   window.Viewer3D = Viewer3D;
@@ -40,7 +41,6 @@ const legacyScripts = [
   { name: 'line-render-patch.js', source: lineRenderPatchSource },
   { name: 'revit-nodes.js', source: revitNodesSource },
   { name: 'parser.js', source: parserSource },
-  { name: 'gpt-client.js', source: gptClientSource },
   { name: 'app.js', source: appSource },
   { name: 'node-renderer.js', source: nodeRendererSource },
   { name: 'pyrunner.js', source: pyRunnerSource },

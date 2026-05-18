@@ -3,8 +3,7 @@ import { AIEngine } from './ai/ai-engine.js';
 import { NFLogger } from './core/logger.js';
 import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/node-metadata.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
-import { Geo } from './geometry/index.js';
-import { GPTClient } from './ai/gpt-client.js';
+import { GPTClient, SettingsDialog } from './ai/gpt-client.js';
 import { Viewer3D } from './viewer/viewer3d.js';
 import './ai/gpt-integration.js';
 import './legacy-loader.js';
@@ -24,6 +23,7 @@ const NodeFlow = {
   buildNodeReference,
   enrichNodeDefinitions,
   GPTClient,
+  SettingsDialog,
   Viewer3D,
   createComputeContext,
   computeNodeValue,
@@ -44,6 +44,7 @@ if (typeof window !== 'undefined') {
   window.enrichNodeDefinitions = enrichNodeDefinitions;
   window.FormulaEval = FormulaEval;
   window.GPTClient = GPTClient;
+  window.SettingsDialog = SettingsDialog;
   window.Viewer3D = Viewer3D;
 }
 
