@@ -1,0 +1,199 @@
+import {
+  createEnvelope,
+  createErrorEnvelope,
+  createGeometryEnvelope,
+  normalizeElementRecord,
+  validateEnvelope
+} from './protocol.js';
+
+export class NovaConnectClient {
+  constructor(options = {}) {
+    this.url = options.url || 'ws://127.0.0.1:8765';
+    this.source = options.source || 'nova-browser';
+    this.sessionId = options.sessionId || '';
+    this.projectId = options.projectId || '';
+    this.pairingToken = options.pairingToken || '';
+    this.WebSocketImpl = options.WebSocketImpl || (typeof WebSocket !== 'undefined' ? WebSocket : null);
+    this.timeoutMs = options.timeoutMs || 8000;
+    this.socket = null;
+    this.status = 'disconnected';
+    this.pending = new Map();
+    this.listeners = {};
+    this.snapshot = null;
+    this.elementsByCategory = {};
+    this.geometryById = {};
+  }
+
+  connect() {
+    if (!this.WebSocketImpl) {
+      this.status = 'unavailable';
+      return Promise.resolve(false);
+    }
+
+    return new Promise((resolve, reject) => {
+      const socket = new this.WebSocketImpl(this.url);
+      this.socket = socket;
+      this.status = 'connecting';
+
+      socket.onopen = () => {
+        this.status = 'connected';
+        this.send('hello', {
+          role: 'viewer',
+          pairingToken: this.pairingToken,
+          capabilities: ['elements.query', 'geometry.get', 'geometry.create']
+        }, { target: 'hub' });
+        this.emit('status', this.status);
+        resolve(true);
+      };
+      socket.onerror = error => {
+        this.status = 'error';
+        this.emit('status', this.status);
+        reject(error);
+      };
+      socket.onclose = () => {
+        this.status = 'disconnected';
+        this.rejectPending('Connection closed');
+        this.emit('status', this.status);
+      };
+      socket.onmessage = event => this.handleMessage(event.data);
+    });
+  }
+
+  disconnect() {
+    if (this.socket) this.socket.close();
+  }
+
+  send(type, payload = {}, options = {}) {
+    const envelope = createEnvelope({
+      type,
+      source: this.source,
+      target: options.target || 'host',
+      sessionId: options.sessionId || this.sessionId,
+      projectId: options.projectId || this.projectId,
+      payload
+    });
+    this.sendEnvelope(envelope);
+    return envelope;
+  }
+
+  request(type, payload = {}, options = {}) {
+    const envelope = this.send(type, payload, options);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(envelope.id);
+        reject(new Error('Nova Connect request timed out: ' + type));
+      }, options.timeoutMs || this.timeoutMs);
+      this.pending.set(envelope.id, { resolve, reject, timer });
+    });
+  }
+
+  async getProjectSnapshot() {
+    const response = await this.request('project.snapshot', {}, { target: 'host' });
+    this.applyProjectSnapshot(response.payload || {});
+    return this.snapshot;
+  }
+
+  async queryElements(category, options = {}) {
+    const response = await this.request('elements.query', { category, page: options.page || 1, pageSize: options.pageSize || 200 }, { target: 'host' });
+    const records = (response.payload.elements || []).map(item => normalizeElementRecord(item, item.identity || { source: 'revit-local' }));
+    this.elementsByCategory[category] = records;
+    return records;
+  }
+
+  async getGeometry(elementIds, options = {}) {
+    const response = await this.request('geometry.get', { elementIds, detail: options.detail || 'mesh' }, { target: 'host' });
+    const geometries = response.payload.geometries || [];
+    geometries.forEach(item => {
+      if (item.identity && item.identity.sourceId) this.geometryById[item.identity.sourceId] = item;
+    });
+    return geometries;
+  }
+
+  async sendGeometry(geometry, identity = {}, options = {}) {
+    const envelope = geometry && geometry._type === 'GeometryEnvelope'
+      ? geometry
+      : createGeometryEnvelope(geometry, identity, options);
+    const response = await this.request('geometry.create', { geometry: envelope, requireUserApproval: options.requireUserApproval !== false }, { target: 'host' });
+    return response.payload;
+  }
+
+  applyProjectSnapshot(snapshot) {
+    this.snapshot = snapshot;
+    if (snapshot.sessionId) this.sessionId = snapshot.sessionId;
+    if (snapshot.projectId) this.projectId = snapshot.projectId;
+    if (snapshot.categories) {
+      Object.keys(snapshot.categories).forEach(category => {
+        const categoryData = snapshot.categories[category];
+        const elements = categoryData.elements || categoryData || [];
+        if (Array.isArray(elements)) {
+          this.elementsByCategory[category] = elements.map(item => normalizeElementRecord(item, item.identity || { source: 'revit-local' }));
+        }
+      });
+    }
+    this.emit('snapshot', this.snapshot);
+  }
+
+  handleMessage(raw) {
+    let envelope;
+    try {
+      envelope = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (error) {
+      this.emit('error', createErrorEnvelope(null, 'Invalid JSON message'));
+      return;
+    }
+
+    const validation = validateEnvelope(envelope);
+    if (!validation.ok) {
+      this.emit('error', createErrorEnvelope(envelope, validation.errors.join('; ')));
+      return;
+    }
+
+    if (envelope.type === 'pong') return;
+    if (envelope.type === 'connection.established') {
+      this.sessionId = envelope.sessionId || envelope.payload.sessionId || this.sessionId;
+      this.projectId = envelope.projectId || envelope.payload.projectId || this.projectId;
+    }
+    if (envelope.type === 'project.snapshot') this.applyProjectSnapshot(envelope.payload || {});
+    if (envelope.type === 'project.changed') this.emit('stale', envelope.payload);
+
+    const pending = this.pending.get(envelope.replyTo || envelope.id);
+    if (pending) {
+      clearTimeout(pending.timer);
+      this.pending.delete(envelope.replyTo || envelope.id);
+      if (envelope.error) pending.reject(new Error(envelope.error.message || 'Nova Connect error'));
+      else pending.resolve(envelope);
+      return;
+    }
+
+    this.emit(envelope.type, envelope);
+  }
+
+  sendEnvelope(envelope) {
+    if (!this.socket || this.socket.readyState !== 1) return false;
+    this.socket.send(JSON.stringify(envelope));
+    return true;
+  }
+
+  rejectPending(message) {
+    this.pending.forEach(pending => {
+      clearTimeout(pending.timer);
+      pending.reject(new Error(message));
+    });
+    this.pending.clear();
+  }
+
+  on(eventName, handler) {
+    if (!this.listeners[eventName]) this.listeners[eventName] = [];
+    this.listeners[eventName].push(handler);
+  }
+
+  emit(eventName, payload) {
+    (this.listeners[eventName] || []).forEach(handler => handler(payload));
+  }
+}
+
+export function createNovaConnectClient(options = {}) {
+  return new NovaConnectClient(options);
+}
+
+export default NovaConnectClient;

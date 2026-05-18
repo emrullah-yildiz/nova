@@ -12,7 +12,10 @@ This section documents the current module layout after the Phase 3 migration.
   - `src/geometry/` - geometry kernel and math utilities
   - `src/runtime/` - parser and Python runner modules
   - `src/viewer/` - 3D viewport, rendering helpers, and geometry selector
-  - `src/integrations/` - external integration bridges such as Revit
+  - `src/integrations/` - external integration bridges such as Revit and Nova Connect
+    - `src/integrations/connect/` - neutral protocol, browser WebSocket client, and APS adapters
+    - `src/integrations/revit/` - Revit element bridge and compatibility node helpers
+- `scripts/connect-hub.cjs` - localhost Nova Connect WebSocket hub for live desktop bridge sessions
 - `tests/` - automated unit and browser workflow tests
 - `docs/` - process, architecture, and onboarding documentation
 - root legacy files - historical/no-build fallback files; keep source-of-truth changes in `src/`
