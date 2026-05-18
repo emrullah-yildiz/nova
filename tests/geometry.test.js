@@ -1,17 +1,10 @@
-import fs from 'fs';
-import path from 'path';
-
-let Geo = null;
+import { Geo } from '../src/geometry/index.js';
 
 describe('Geo geometry kernel', () => {
   beforeAll(() => {
     if (typeof window === 'undefined') {
       globalThis.window = globalThis;
     }
-    const libPath = path.resolve(process.cwd(), 'geometry-lib.js');
-    const code = fs.readFileSync(libPath, 'utf8');
-    eval(code);
-    Geo = globalThis.Geo || Geo;
   });
 
   it('calculates Point3 distance correctly', () => {
@@ -36,5 +29,28 @@ describe('Geo geometry kernel', () => {
     const cross = x.cross(y);
     expect(cross.z).toBe(1);
     expect(cross.length()).toBeCloseTo(1);
+  });
+
+  it('loads advanced geometry helpers into the moduleized kernel', () => {
+    const line = new Geo.Line3(new Geo.Point3(0, 0, 0), new Geo.Point3(0, 0, 5));
+    const pipe = Geo.pipe(line, 0.5, 4, 8);
+
+    expect(pipe._type).toBe('Mesh3');
+    expect(pipe._solidType).toBe('Sweep');
+    expect(pipe.vertices.length).toBeGreaterThan(0);
+  });
+
+  it('loads NURBS helpers into the moduleized kernel', () => {
+    const curve = Geo.createNurbsCurve([
+      new Geo.Point3(0, 0, 0),
+      new Geo.Point3(5, 5, 0),
+      new Geo.Point3(10, 0, 0)
+    ], 2);
+
+    const point = curve.evaluate(0.5);
+
+    expect(curve._type).toBe('NurbsCurve');
+    expect(point).toBeInstanceOf(Geo.Point3);
+    expect(point.x).toBeGreaterThan(0);
   });
 });

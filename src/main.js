@@ -3,6 +3,7 @@ import { AIEngine } from './ai/ai-engine.js';
 import { NFLogger } from './core/logger.js';
 import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/node-metadata.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
+import { Geo } from './geometry/index.js';
 import { GPTClient } from './ai/gpt-client.js';
 import { Viewer3D } from './viewer/viewer3d.js';
 import './ai/gpt-integration.js';
@@ -19,6 +20,7 @@ const NodeFlow = {
   NODE_LIBRARY,
   NODE_TYPE_MAP,
   TYPE_COLORS,
+  Geo,
   buildNodeReference,
   enrichNodeDefinitions,
   GPTClient,
@@ -37,6 +39,7 @@ if (typeof window !== 'undefined') {
   window.NODE_LIBRARY = NODE_LIBRARY;
   window.NODE_TYPE_MAP = NODE_TYPE_MAP;
   window.TYPE_COLORS = TYPE_COLORS;
+  window.Geo = Geo;
   window.buildNodeReference = buildNodeReference;
   window.enrichNodeDefinitions = enrichNodeDefinitions;
   window.FormulaEval = FormulaEval;
