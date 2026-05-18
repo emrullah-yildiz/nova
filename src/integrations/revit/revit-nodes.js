@@ -125,6 +125,7 @@ RevitBridge = {
   getData() {
     var client = getConnectClient();
     if (client && client.snapshot) return client.snapshot;
+    console.error('[RevitBridge] Failed to get data: No active Revit session. Start the Connect Hub and pair with Revit.');
     throw new Error('Revit connection required: No active Revit session. Start the Connect Hub and pair with Revit.');
   },
 
@@ -179,7 +180,10 @@ RevitBridge = {
 
   getElements(category) {
     var liveRaw = getCachedElements(category);
-    if (!liveRaw) throw new Error('Revit connection required: No elements cached for category "' + category + '". Ensure Revit is connected via Connect Hub.');
+    if (!liveRaw) {
+      console.error('[RevitBridge] Failed to get elements for "' + category + '": No elements cached. Ensure Revit is connected via Connect Hub.');
+      throw new Error('Revit connection required: No elements cached for category "' + category + '". Ensure Revit is connected via Connect Hub.');
+    }
     var liveResult = [];
     for (var li = 0; li < liveRaw.length; li++) {
       var liveWrapped = this.wrapElement(liveRaw[li]);
@@ -190,7 +194,10 @@ RevitBridge = {
 
   async queryElements(category, options) {
     var client = getConnectClient();
-    if (!client || client.status !== 'connected') throw new Error('Revit connection required: Cannot query elements without active Revit session.');
+    if (!client || client.status !== 'connected') {
+      console.error('[RevitBridge] Failed to query "' + category + '": No active Revit session. Connect to a live Revit host first.');
+      throw new Error('Revit connection required: Cannot query elements without active Revit session.');
+    }
     var raw = await client.queryElements(category, options || {});
     var result = [];
     for (var i = 0; i < raw.length; i++) {
@@ -339,6 +346,7 @@ RevitBridge = {
   async sendGeometry(geometry, identity, options) {
     var client = getConnectClient();
     if (!client || client.status !== 'connected') {
+      console.error('[RevitBridge] Failed to send geometry: No active Revit session. Connect to a live Revit host first.');
       return {
         ok: false,
         code: 'NOVA_CONNECT_OFFLINE',
@@ -350,52 +358,6 @@ RevitBridge = {
   }
 };
 window.RevitBridge = RevitBridge;
-
-// ═══════════════════════════════════════
-// Mock REVIT_DATA for standalone testing
-// When real Revit data is injected (via step 2 export), it overrides this
-// ═══════════════════════════════════════
-if (typeof REVIT_DATA === 'undefined' && typeof window.REVIT_DATA === 'undefined') {
-  window.REVIT_DATA = {
-    projectName: 'Sample Project',
-    activeView: { name: '3D View', id: 100 },
-    levels: [
-      { id: 1001, name: 'Level 1', category: 'Levels', typeName: 'Level', levelName: '', params: { Elevation: '0.000' } },
-      { id: 1002, name: 'Level 2', category: 'Levels', typeName: 'Level', levelName: '', params: { Elevation: '3.500' } }
-    ],
-    sheets: [
-      { id: 2001, name: 'A101 - Floor Plan', category: 'Sheets', typeName: 'Sheet', levelName: '', params: { 'Sheet Number': 'A101' } }
-    ],
-    categories: {
-      'Walls': { elements: [
-        { id: 3001, name: 'Basic Wall', category: 'Walls', typeName: 'Generic - 200mm', levelName: 'Level 1', params: { Length: '5.000', Height: '3.500', Mark: 'W-01' } },
-        { id: 3002, name: 'Basic Wall', category: 'Walls', typeName: 'Generic - 200mm', levelName: 'Level 1', params: { Length: '8.200', Height: '3.500', Mark: 'W-02' } },
-        { id: 3003, name: 'Basic Wall', category: 'Walls', typeName: 'Curtain Wall', levelName: 'Level 1', params: { Length: '12.000', Height: '7.000', Mark: 'CW-01' } }
-      ]},
-      'Floors': { elements: [
-        { id: 4001, name: 'Floor', category: 'Floors', typeName: 'Generic 300mm', levelName: 'Level 1', params: { Area: '120.5', Mark: 'F-01' } },
-        { id: 4002, name: 'Floor', category: 'Floors', typeName: 'Generic 300mm', levelName: 'Level 2', params: { Area: '95.0', Mark: 'F-02' } }
-      ]},
-      'Doors': { elements: [
-        { id: 5001, name: 'Single-Flush', category: 'Doors', typeName: '0915 x 2134mm', levelName: 'Level 1', params: { Mark: 'D-01' } },
-        { id: 5002, name: 'Single-Flush', category: 'Doors', typeName: '0762 x 2134mm', levelName: 'Level 1', params: { Mark: 'D-02' } }
-      ]},
-      'Windows': { elements: [
-        { id: 6001, name: 'Fixed', category: 'Windows', typeName: '1200 x 1500mm', levelName: 'Level 1', params: { Mark: 'WIN-01' } }
-      ]},
-      'Furniture': { elements: [
-        { id: 7001, name: 'Desk', category: 'Furniture', typeName: '1525 x 762mm', levelName: 'Level 1', params: { Mark: 'FURN-01' } },
-        { id: 7002, name: 'Chair', category: 'Furniture', typeName: 'Office Chair', levelName: 'Level 1', params: { Mark: 'FURN-02' } },
-        { id: 7003, name: 'Table', category: 'Furniture', typeName: 'Conference Table', levelName: 'Level 2', params: { Mark: 'FURN-03' } }
-      ]}
-    },
-    types: {},
-    selection: []
-  };
-  console.log('[NodeFlow] Mock REVIT_DATA loaded for standalone testing (3 Walls, 2 Floors, 2 Doors, 1 Window, 3 Furniture)');
-} else {
-  console.log('[NodeFlow] REVIT_DATA loaded from Revit export');
-}
 
   return RevitBridge;
 }
