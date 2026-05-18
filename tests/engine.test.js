@@ -101,4 +101,38 @@ describe('Engine computeNodeValue', () => {
     expect(html).toContain('>19<');
     expect(html).not.toContain('more</div>');
   });
+
+  it('prefetches live Revit geometry for Element.Geometries nodes', async () => {
+    const liveMesh = { _type: 'Mesh3', vertices: [1], faces: [] };
+    const previousBridge = globalThis.RevitBridge;
+    let requestedElements = null;
+    globalThis.RevitBridge = {
+      getAllElements() {
+        return [{ id: 3001, identity: { sourceId: '3001' }, category: 'Walls' }];
+      },
+      async getLiveGeometries(elements) {
+        requestedElements = elements;
+        return [liveMesh];
+      },
+      getGeometries() {
+        return [];
+      }
+    };
+    app.nodes = [
+      { id: 'source', type: 'revit-all-elements-view', controlValues: {} },
+      { id: 'geo', type: 'revit-element-geometries', controlValues: {} }
+    ];
+    app.wires = [{ fromNode: 'source', fromPort: 'elements', toNode: 'geo', toPort: 'elements' }];
+
+    try {
+      await app._prepareLiveRevitGeometries();
+      const result = app.computeNodeValue(app.nodes[1]);
+
+      expect(requestedElements).toHaveLength(1);
+      expect(result).toEqual({ meshes: [liveMesh], count: 1 });
+    } finally {
+      if (previousBridge === undefined) delete globalThis.RevitBridge;
+      else globalThis.RevitBridge = previousBridge;
+    }
+  });
 });

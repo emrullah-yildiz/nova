@@ -238,6 +238,53 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
   };
 
+  app._getComputedInputValue = function(nd, portId) {
+    var wire = this.wires.find(function(w) { return w.toNode === nd.id && w.toPort === portId; });
+    if (!wire) return undefined;
+    var srcNd = this.nodes.find(function(n) { return n.id === wire.fromNode; });
+    if (!srcNd) return undefined;
+    this.computeNodeValue(srcNd);
+    if (srcNd._portValues && srcNd._portValues[wire.fromPort] !== undefined) return srcNd._portValues[wire.fromPort];
+    if ((srcNd.type === 'custom-python' || srcNd.type === 'custom-code') && srcNd._pyResults) {
+      if (srcNd._pyResults[wire.fromPort] !== undefined) return srcNd._pyResults[wire.fromPort];
+      var keys = Object.keys(srcNd._pyResults).filter(function(k) { return !k.startsWith('_') && k.length > 1; });
+      if (keys.length > 0) return srcNd._pyResults[keys[0]];
+    }
+    return this.computeNodeValue(srcNd);
+  };
+
+  app._prepareLiveRevitGeometries = async function() {
+    var runtimeGlobal = typeof globalThis !== 'undefined' ? globalThis : {};
+    var revitBridge = runtimeGlobal.RevitBridge || (runtimeGlobal.NodeFlow && runtimeGlobal.NodeFlow.RevitBridge) || null;
+    var geometryNodes = this.nodes.filter(function(node) { return node.type === 'revit-element-geometries'; });
+    geometryNodes.forEach(function(node) {
+      delete node._liveGeometryResult;
+      delete node._liveGeometryError;
+    });
+    if (!revitBridge || typeof revitBridge.getLiveGeometries !== 'function') return;
+    this.beginCompute();
+    try {
+      for (var i = 0; i < geometryNodes.length; i++) {
+        var nd = geometryNodes[i];
+        var inputElems = this._getComputedInputValue(nd, 'elements');
+        if (!inputElems) {
+          nd._liveGeometryResult = { meshes: [], count: 0 };
+          continue;
+        }
+        if (!Array.isArray(inputElems)) inputElems = [inputElems];
+        try {
+          var geoMeshes = await revitBridge.getLiveGeometries(inputElems);
+          if (Array.isArray(geoMeshes)) nd._liveGeometryResult = { meshes: geoMeshes, count: geoMeshes.length };
+        } catch (err) {
+          nd._liveGeometryError = err;
+          console.warn('[Revit] Could not fetch live geometry for Element.Geometries:', err.message || err);
+        }
+      }
+    } finally {
+      this.endCompute();
+    }
+  };
+
 
 
   // ═══════════════════════════════════════
@@ -886,6 +933,10 @@ export function installEngine(targetApp = getRuntimeApp()) {
         var inputElems = getInput('elements');
         if (!inputElems) { nd._portValues = { meshes: [], count: 0 }; return nd._portValues; }
         if (!Array.isArray(inputElems)) inputElems = [inputElems];
+        if (nd._liveGeometryResult) {
+          nd._portValues = nd._liveGeometryResult;
+          return nd._portValues;
+        }
         var geoMeshes = RevitBridge.getGeometries(inputElems);
         nd._portValues = { meshes: geoMeshes, count: geoMeshes.length };
         return nd._portValues;
@@ -1585,6 +1636,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
     // 3. Execute and render 3D — use compute pipeline for v2 nodes
+
+    await this._prepareLiveRevitGeometries();
 
     this._renderFromCompute();
 
