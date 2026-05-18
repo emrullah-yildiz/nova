@@ -18,6 +18,8 @@ import { installNodeLibrary } from './ui/node-library.js';
 import { installNodeRenderer } from './ui/node-renderer.js';
 import { installNodeSearchPopup } from './ui/node-search-popup.js';
 import { installWirePortalPatch } from './ui/wire-portal-patch.js';
+import { installRevitNodes, RevitBridge, RevitElement } from './integrations/revit/revit-nodes.js';
+import { installGeoSelector } from './viewer/geo-selector.js';
 
 const NodeFlow = {
   FormulaEval,
@@ -43,6 +45,10 @@ const NodeFlow = {
   installNodeRenderer,
   installNodeSearchPopup,
   installWirePortalPatch,
+  installRevitNodes,
+  installGeoSelector,
+  RevitBridge,
+  RevitElement,
   ...GraphHelpers,
   ...NodeLibraryUtils
 };

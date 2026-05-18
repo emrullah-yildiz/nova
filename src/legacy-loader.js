@@ -6,12 +6,15 @@ import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/nod
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
 import './geometry/index.js';
 import { Viewer3D } from './viewer/viewer3d.js';
-import lineRenderPatchSource from '../line-render-patch.js?raw';
-import revitNodesSource from '../revit-nodes.js?raw';
+import { installRevitNodes } from './integrations/revit/revit-nodes.js';
+import { installGeoSelector } from './viewer/geo-selector.js';
+import { installLineRenderPatch } from './ui/line-render-patch.js';
+import { installNodeLibrary } from './ui/node-library.js';
+import { installNodeRenderer } from './ui/node-renderer.js';
+import { installNodeSearchPopup } from './ui/node-search-popup.js';
+import { installWirePortalPatch } from './ui/wire-portal-patch.js';
 import parserSource from '../parser.js?raw';
-import appSource from '../app.js?raw';
 import pyRunnerSource from '../pyrunner.js?raw';
-import geoSelectorSource from '../geo-selector.js?raw';
 import uiEnhancementsSource from '../ui-enhancements.js?raw';
 import saveLoadSource from '../save-load.js?raw';
 import loggerPatchSource from '../logger-patch.js?raw';
@@ -34,12 +37,8 @@ if (typeof window !== 'undefined') {
 }
 
 const legacyScripts = [
-  { name: 'line-render-patch.js', source: lineRenderPatchSource },
-  { name: 'revit-nodes.js', source: revitNodesSource },
   { name: 'parser.js', source: parserSource },
-  { name: 'app.js', source: appSource },
   { name: 'pyrunner.js', source: pyRunnerSource },
-  { name: 'geo-selector.js', source: geoSelectorSource },
   { name: 'ui-enhancements.js', source: uiEnhancementsSource },
   { name: 'save-load.js', source: saveLoadSource },
   { name: 'logger-patch.js', source: loggerPatchSource },
@@ -67,35 +66,16 @@ function installMigratedNodeEditorModules() {
   installNodeSearchPopup();
 }
 
-// Ensure app.init() is called after all legacy scripts are loaded
-function initializeApp() {
-  if (typeof app === 'undefined') {
-    // App not yet defined, try again after a short delay
-    setTimeout(initializeApp, 10);
-    return;
-  }
-  
-  if (app.initialized) {
-    return; // Already initialized
-  }
-  
-  // Call init immediately
-  try {
-    app.init();
-  } catch (e) {
-    console.error('Error initializing app:', e);
-    // Try again after a delay
-    setTimeout(initializeApp, 100);
-  }
+function installMigratedGeoRevitModules() {
+  installRevitNodes();
+  installGeoSelector();
 }
 
 // If DOM is already ready, initialize now
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  // Small delay to ensure all synchronous scripts have executed
   installMigratedNodeEditorModules();
-  setTimeout(initializeApp, 0);
+  installMigratedGeoRevitModules();
 } else {
-  // Wait for DOM to be ready
   document.addEventListener('DOMContentLoaded', installMigratedNodeEditorModules);
-  document.addEventListener('DOMContentLoaded', initializeApp);
+  document.addEventListener('DOMContentLoaded', installMigratedGeoRevitModules);
 }
