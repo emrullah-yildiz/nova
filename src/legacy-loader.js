@@ -6,18 +6,23 @@ import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/nod
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
 import './geometry/index.js';
 import { Viewer3D } from './viewer/viewer3d.js';
+import { installSaveLoad } from './app/save-load.js';
+import { installLineRenderPatch } from './ui/line-render-patch.js';
+import { installNodeLibrary } from './ui/node-library.js';
+import { installNodeRenderer } from './ui/node-renderer.js';
+import { installNodeSearchPopup } from './ui/node-search-popup.js';
+import { installWirePortalPatch } from './ui/wire-portal-patch.js';
+import { installUiEnhancements } from './ui/ui-enhancements.js';
+import { installPortHandler } from './ui/port-handler.js';
+import { installNodeHelp } from './ui/node-help.js';
+import { installNodeHelpPanel } from './ui/node-help-panel.js';
 import lineRenderPatchSource from '../line-render-patch.js?raw';
 import revitNodesSource from '../revit-nodes.js?raw';
 import parserSource from '../parser.js?raw';
 import appSource from '../app.js?raw';
 import pyRunnerSource from '../pyrunner.js?raw';
 import geoSelectorSource from '../geo-selector.js?raw';
-import uiEnhancementsSource from '../ui-enhancements.js?raw';
-import saveLoadSource from '../save-load.js?raw';
 import loggerPatchSource from '../logger-patch.js?raw';
-import portHandlerSource from '../port-handler.js?raw';
-import nodeHelpSource from '../node-help.js?raw';
-import nodeHelpPanelSource from '../node-help-panel.js?raw';
 
 if (typeof window !== 'undefined') {
   window.AIEngine = AIEngine;
@@ -26,6 +31,7 @@ if (typeof window !== 'undefined') {
   window.NODE_LIBRARY = NODE_LIBRARY;
   window.NODE_TYPE_MAP = NODE_TYPE_MAP;
   window.TYPE_COLORS = TYPE_COLORS;
+  window.Geo = Geo;
   window.GPTClient = GPTClient;
   window.SettingsDialog = SettingsDialog;
   window.buildNodeReference = buildNodeReference;
@@ -40,12 +46,7 @@ const legacyScripts = [
   { name: 'app.js', source: appSource },
   { name: 'pyrunner.js', source: pyRunnerSource },
   { name: 'geo-selector.js', source: geoSelectorSource },
-  { name: 'ui-enhancements.js', source: uiEnhancementsSource },
-  { name: 'save-load.js', source: saveLoadSource },
-  { name: 'logger-patch.js', source: loggerPatchSource },
-  { name: 'port-handler.js', source: portHandlerSource },
-  { name: 'node-help.js', source: nodeHelpSource },
-  { name: 'node-help-panel.js', source: nodeHelpPanelSource }
+  { name: 'logger-patch.js', source: loggerPatchSource }
 ];
 
 function injectLegacyScript({ name, source }) {
@@ -67,6 +68,14 @@ function installMigratedNodeEditorModules() {
   installNodeSearchPopup();
 }
 
+function installMigratedPersistenceAndPanelModules() {
+  installSaveLoad();
+  installUiEnhancements();
+  installPortHandler();
+  installNodeHelp();
+  installNodeHelpPanel();
+}
+
 // Ensure app.init() is called after all legacy scripts are loaded
 function initializeApp() {
   if (typeof app === 'undefined') {
@@ -76,12 +85,14 @@ function initializeApp() {
   }
   
   if (app.initialized) {
+    installMigratedPersistenceAndPanelModules();
     return; // Already initialized
   }
   
   // Call init immediately
   try {
     app.init();
+    installMigratedPersistenceAndPanelModules();
   } catch (e) {
     console.error('Error initializing app:', e);
     // Try again after a delay
