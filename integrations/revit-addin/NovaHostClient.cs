@@ -375,9 +375,14 @@ public class NovaHostClient : IDisposable
         {
             foreach (var idVal in idsProp.EnumerateArray())
             {
-                elementIds.Add(idVal.GetInt64());
+                if (TryReadElementId(idVal, out var parsedId))
+                {
+                    elementIds.Add(parsedId);
+                }
             }
         }
+
+        System.Diagnostics.Debug.WriteLine("[Nova Host] geometry.get requested " + elementIds.Count + " element ids");
 
         var geometries = new List<Dictionary<string, object>>();
         var opt = new Options
@@ -411,6 +416,23 @@ public class NovaHostClient : IDisposable
         {
             geometries
         });
+
+        System.Diagnostics.Debug.WriteLine("[Nova Host] geometry.get returned " + geometries.Count + " mesh envelopes");
+    }
+
+    private static bool TryReadElementId(JsonElement value, out long elementId)
+    {
+        elementId = 0;
+        if (value.ValueKind == JsonValueKind.Number)
+        {
+            return value.TryGetInt64(out elementId);
+        }
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            var text = value.GetString();
+            return long.TryParse(text, out elementId);
+        }
+        return false;
     }
 
     private void HandleGeometryCreate(string? requestId, JsonElement request)
@@ -512,46 +534,56 @@ public class NovaHostClient : IDisposable
         var vertices = new List<List<double>>();
         var faces = new List<List<int>>();
 
-        foreach (var obj in geo)
+        void AddTriangle(XYZ v0, XYZ v1, XYZ v2)
         {
-            if (obj is Mesh mesh)
-            {
-                for (int i = 0; i < mesh.NumTriangles; i++)
-                {
-                    var tri = mesh.get_Triangle(i);
-                    var v0 = tri.get_Vertex(0);
-                    var v1 = tri.get_Vertex(1);
-                    var v2 = tri.get_Vertex(2);
+            int baseIdx = vertices.Count;
+            vertices.Add(new List<double> { v0.X, v0.Y, v0.Z });
+            vertices.Add(new List<double> { v1.X, v1.Y, v1.Z });
+            vertices.Add(new List<double> { v2.X, v2.Y, v2.Z });
+            faces.Add(new List<int> { baseIdx, baseIdx + 1, baseIdx + 2 });
+        }
 
-                    int baseIdx = vertices.Count;
-                    vertices.Add(new List<double> { v0.X, v0.Y, v0.Z });
-                    vertices.Add(new List<double> { v1.X, v1.Y, v1.Z });
-                    vertices.Add(new List<double> { v2.X, v2.Y, v2.Z });
-                    faces.Add(new List<int> { baseIdx, baseIdx + 1, baseIdx + 2 });
-                }
+        void AddMesh(Mesh mesh)
+        {
+            for (int i = 0; i < mesh.NumTriangles; i++)
+            {
+                var tri = mesh.get_Triangle(i);
+                AddTriangle(tri.get_Vertex(0), tri.get_Vertex(1), tri.get_Vertex(2));
             }
-            else if (obj is Solid solid && solid.Faces.Size > 0)
-            {
-                foreach (Face face in solid.Faces)
-                {
-                    var triMesh = face.Triangulate();
-                    if (triMesh == null) continue;
-                    for (int i = 0; i < triMesh.NumTriangles; i++)
-                    {
-                        var tri = triMesh.get_Triangle(i);
-                        var v0 = tri.get_Vertex(0);
-                        var v1 = tri.get_Vertex(1);
-                        var v2 = tri.get_Vertex(2);
+        }
 
-                        int baseIdx = vertices.Count;
-                        vertices.Add(new List<double> { v0.X, v0.Y, v0.Z });
-                        vertices.Add(new List<double> { v1.X, v1.Y, v1.Z });
-                        vertices.Add(new List<double> { v2.X, v2.Y, v2.Z });
-                        faces.Add(new List<int> { baseIdx, baseIdx + 1, baseIdx + 2 });
-                    }
+        void AddSolid(Solid solid)
+        {
+            if (solid.Faces.Size <= 0) return;
+            foreach (Face face in solid.Faces)
+            {
+                var triMesh = face.Triangulate();
+                if (triMesh == null) continue;
+                AddMesh(triMesh);
+            }
+        }
+
+        void AddGeometry(GeometryElement geometry)
+        {
+            foreach (var obj in geometry)
+            {
+                if (obj is Mesh mesh)
+                {
+                    AddMesh(mesh);
+                }
+                else if (obj is Solid solid)
+                {
+                    AddSolid(solid);
+                }
+                else if (obj is GeometryInstance instance)
+                {
+                    var instanceGeometry = instance.GetInstanceGeometry();
+                    if (instanceGeometry != null) AddGeometry(instanceGeometry);
                 }
             }
         }
+
+        AddGeometry(geo);
 
         if (vertices.Count == 0) return null;
 

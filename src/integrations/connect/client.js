@@ -22,6 +22,7 @@ export class NovaConnectClient {
     this.snapshot = null;
     this.elementsByCategory = {};
     this.geometryById = {};
+    this.peerConnected = false;
   }
 
   connect() {
@@ -101,8 +102,17 @@ export class NovaConnectClient {
   }
 
   async getGeometry(elementIds, options = {}) {
+    console.info('[NovaConnect] geometry.get request', {
+      count: elementIds.length,
+      sampleIds: elementIds.slice(0, 5),
+      detail: options.detail || 'mesh'
+    });
     const response = await this.request('geometry.get', { elementIds, detail: options.detail || 'mesh' }, { target: 'host' });
     const geometries = response.payload.geometries || [];
+    console.info('[NovaConnect] geometry.get response', {
+      requested: elementIds.length,
+      geometries: geometries.length
+    });
     geometries.forEach(item => {
       if (item.identity && item.identity.sourceId) this.geometryById[item.identity.sourceId] = item;
     });
@@ -156,6 +166,15 @@ export class NovaConnectClient {
     if (envelope.type === 'connection.established') {
       this.sessionId = envelope.sessionId || envelope.payload.sessionId || this.sessionId;
       this.projectId = envelope.projectId || envelope.payload.projectId || this.projectId;
+      this.peerConnected = !!envelope.payload.peerConnected;
+    }
+    if (envelope.type === 'peer.connected') {
+      this.peerConnected = true;
+      this.emit('peer.connected', envelope);
+    }
+    if (envelope.type === 'peer.disconnected') {
+      this.peerConnected = false;
+      this.emit('peer.disconnected', envelope);
     }
     if (envelope.type === 'project.snapshot') this.applyProjectSnapshot(envelope.payload || {});
     if (envelope.type === 'project.changed') this.emit('stale', envelope.payload);

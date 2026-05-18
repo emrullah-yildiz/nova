@@ -80,7 +80,21 @@ function installAppMethods(app, runtimeGlobal) {
     this._setNovaConnectResult({ ok: true, message: 'Connecting to Nova Connect hub...' });
     try {
       await client.connect();
-      this._setNovaConnectResult({ ok: true, message: 'Connected successfully to session ' + (client.sessionId || 'pending') + '.' });
+      try {
+        await client.getProjectSnapshot();
+        const categories = Object.keys(client.elementsByCategory || {});
+        this._setNovaConnectResult({
+          ok: true,
+          message: 'Connected to Revit session ' + (client.sessionId || 'pending') + '. Cached ' + categories.length + ' categories.'
+        });
+      } catch (snapshotError) {
+        const peerHint = client.peerConnected === false ? ' Hub is reachable, but no Revit host is paired for this session.' : '';
+        this._setNovaConnectResult({
+          ok: false,
+          message: 'Connected to hub, but Revit data is not available.' + peerHint,
+          detail: snapshotError.message || String(snapshotError)
+        });
+      }
     } catch (error) {
       this._setNovaConnectResult({ ok: false, message: error.message || 'Connection failed.' });
     }
