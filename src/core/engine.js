@@ -1549,7 +1549,21 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-  app.runGraph = function() {
+  app.runGraph = async function() {
+
+    // 0. Refresh Revit data on Run if connected to a live session
+
+    var revitClient = typeof NovaConnect !== 'undefined' ? NovaConnect : null;
+    if (revitClient && revitClient.status === 'connected') {
+      var revitBridge = typeof RevitBridge !== 'undefined' ? RevitBridge : null;
+      if (revitBridge && typeof revitBridge.refreshProject === 'function') {
+        try {
+          await revitBridge.refreshProject();
+        } catch (err) {
+          console.warn('[Revit] Could not refresh Revit data on Run:', err.message);
+        }
+      }
+    }
 
     this._graphDirty = false;
 
