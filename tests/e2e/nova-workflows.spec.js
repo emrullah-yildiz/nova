@@ -120,6 +120,70 @@ test.describe('Nova browser workflows', () => {
     await expect(page.locator('#wire-svg path')).not.toHaveCount(0);
   });
 
+  test('renders computed geometry through the viewer bridge without WebGL', async ({ page }) => {
+    await waitForApp(page);
+
+    await page.getByRole('button', { name: /New Project/i }).click();
+    await expect(page.locator('#workspace-page')).toBeVisible();
+
+    const result = await page.evaluate(() => {
+      app.newProject();
+
+      const point = app.addNodeToCanvas('point-bycoordinates', 140, 120);
+      point.controlValues.x = 2;
+      point.controlValues.y = -3;
+      point.controlValues.z = 4;
+
+      const originalInitialized = Viewer3D.isInitialized;
+      const originalGroup = Viewer3D.geometryGroup;
+      const originalClear = Viewer3D.clearGeometry;
+      const originalFitAll = Viewer3D.fitAll;
+      const originalAddToScene = Geo.addToScene;
+
+      const rendered = [];
+      let fitAllCalls = 0;
+      Viewer3D.isInitialized = true;
+      Viewer3D.geometryGroup = { children: [] };
+      Viewer3D.clearGeometry = () => {
+        Viewer3D.geometryGroup.children = [];
+      };
+      Viewer3D.fitAll = () => {
+        fitAllCalls += 1;
+      };
+      Geo.addToScene = (group, geoObj) => {
+        rendered.push({ type: geoObj._type, x: geoObj.x, y: geoObj.y, z: geoObj.z });
+        group.children.push({ geoObj });
+      };
+
+      try {
+        app._renderFromCompute();
+        return {
+          rendered,
+          sceneItems: app._sceneItems,
+          fitAllCalls,
+          childCount: Viewer3D.geometryGroup.children.length
+        };
+      } finally {
+        Viewer3D.isInitialized = originalInitialized;
+        Viewer3D.geometryGroup = originalGroup;
+        Viewer3D.clearGeometry = originalClear;
+        Viewer3D.fitAll = originalFitAll;
+        Geo.addToScene = originalAddToScene;
+      }
+    });
+
+    expect(result.rendered).toEqual([{ type: 'Point3', x: 2, y: -3, z: 4 }]);
+    expect(result.sceneItems).toEqual([
+      expect.objectContaining({
+        nodeId: expect.any(String),
+        type: 'Point3',
+        visible: true
+      })
+    ]);
+    expect(result.fitAllCalls).toBe(1);
+    expect(result.childCount).toBe(1);
+  });
+
   test('reports missing API key before attempting an AI provider call', async ({ page }) => {
     await waitForApp(page);
 
