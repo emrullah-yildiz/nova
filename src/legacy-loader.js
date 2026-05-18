@@ -4,28 +4,26 @@ import { NFLogger } from './core/logger.js';
 import './core/engine.js';
 import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/node-metadata.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
-import { CodeParser } from './runtime/parser.js';
-import { PythonRunner } from './runtime/pyrunner.js';
+import { installLineRenderPatch } from './ui/line-render-patch.js';
+import { installNodeLibrary } from './ui/node-library.js';
+import { installNodeRenderer } from './ui/node-renderer.js';
+import { installNodeSearchPopup } from './ui/node-search-popup.js';
+import { installWirePortalPatch } from './ui/wire-portal-patch.js';
 import { Viewer3D } from './viewer/viewer3d.js';
 import geometryLibSource from '../geometry-lib.js?raw';
-import lineRenderPatchSource from '../line-render-patch.js?raw';
 import geoAdvancedSource from '../geo-advanced.js?raw';
 import nurbsMathSource from '../nurbs-math.js?raw';
 import revitNodesSource from '../revit-nodes.js?raw';
 import parserSource from '../parser.js?raw';
 import appSource from '../app.js?raw';
-import nodeRendererSource from '../node-renderer.js?raw';
 import pyRunnerSource from '../pyrunner.js?raw';
 import geoSelectorSource from '../geo-selector.js?raw';
 import uiEnhancementsSource from '../ui-enhancements.js?raw';
 import saveLoadSource from '../save-load.js?raw';
-import nodeLibrarySource from '../node-library.js?raw';
 import loggerPatchSource from '../logger-patch.js?raw';
-import wirePortalPatchSource from '../wire-portal-patch.js?raw';
 import portHandlerSource from '../port-handler.js?raw';
 import nodeHelpSource from '../node-help.js?raw';
 import nodeHelpPanelSource from '../node-help-panel.js?raw';
-import nodeSearchPopupSource from '../node-search-popup.js?raw';
 
 if (typeof window !== 'undefined') {
   window.AIEngine = AIEngine;
@@ -43,24 +41,19 @@ if (typeof window !== 'undefined') {
 
 const legacyScripts = [
   { name: 'geometry-lib.js', source: geometryLibSource },
-  { name: 'line-render-patch.js', source: lineRenderPatchSource },
   { name: 'geo-advanced.js', source: geoAdvancedSource },
   { name: 'nurbs-math.js', source: nurbsMathSource },
   { name: 'revit-nodes.js', source: revitNodesSource },
   { name: 'parser.js', source: parserSource },
   { name: 'app.js', source: appSource },
-  { name: 'node-renderer.js', source: nodeRendererSource },
   { name: 'pyrunner.js', source: pyRunnerSource },
   { name: 'geo-selector.js', source: geoSelectorSource },
   { name: 'ui-enhancements.js', source: uiEnhancementsSource },
   { name: 'save-load.js', source: saveLoadSource },
-  { name: 'node-library.js', source: nodeLibrarySource },
   { name: 'logger-patch.js', source: loggerPatchSource },
-  { name: 'wire-portal-patch.js', source: wirePortalPatchSource },
   { name: 'port-handler.js', source: portHandlerSource },
   { name: 'node-help.js', source: nodeHelpSource },
-  { name: 'node-help-panel.js', source: nodeHelpPanelSource },
-  { name: 'node-search-popup.js', source: nodeSearchPopupSource }
+  { name: 'node-help-panel.js', source: nodeHelpPanelSource }
 ];
 
 function injectLegacyScript({ name, source }) {
@@ -73,6 +66,14 @@ function injectLegacyScript({ name, source }) {
 
 // Inject all scripts synchronously
 legacyScripts.forEach(injectLegacyScript);
+
+function installMigratedNodeEditorModules() {
+  installLineRenderPatch();
+  installNodeRenderer();
+  installNodeLibrary();
+  installWirePortalPatch();
+  installNodeSearchPopup();
+}
 
 // Ensure app.init() is called after all legacy scripts are loaded
 function initializeApp() {
@@ -99,8 +100,10 @@ function initializeApp() {
 // If DOM is already ready, initialize now
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
   // Small delay to ensure all synchronous scripts have executed
+  installMigratedNodeEditorModules();
   setTimeout(initializeApp, 0);
 } else {
   // Wait for DOM to be ready
+  document.addEventListener('DOMContentLoaded', installMigratedNodeEditorModules);
   document.addEventListener('DOMContentLoaded', initializeApp);
 }
