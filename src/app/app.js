@@ -107,11 +107,15 @@ const app = {
 
     const run = document.getElementById('menu-run');
 
-    run.classList.toggle('disabled', !ws || !has);
+    if (run) {
 
-    run.style.color = (ws && has) ? 'var(--accent-green)' : '';
+      run.classList.toggle('disabled', !ws || !has);
 
-    run.onclick = (ws && has) ? () => app.runGraph() : null;
+      run.style.color = (ws && has) ? 'var(--accent-green)' : '';
+
+      run.onclick = (ws && has) ? () => app.runGraph() : null;
+
+    }
 
     const cl = document.getElementById('mi-close');
 
@@ -287,7 +291,11 @@ const app = {
 
     this.updateMenuState();
 
-    if (p==='workspace') setTimeout(()=>this.renderWires(),50);
+    if (p==='workspace') {
+      this.syncWorkspaceLayout();
+      this.queueWorkspaceLayoutSync();
+      setTimeout(()=>this.renderWires(),50);
+    }
 
   },
 
@@ -345,7 +353,11 @@ const app = {
 
   },
 
-  toggleNodeLibrary() { const l=document.getElementById('node-library'); l.style.display=l.style.display==='none'?'':'none'; },
+  toggleNodeLibrary() {
+    const l=document.getElementById('node-library');
+    l.style.display=l.style.display==='none'?'':'none';
+    this.syncWorkspaceLayout();
+  },
 
   onLibDragStart(e,type) { e.dataTransfer.setData('text/plain',type); e.dataTransfer.effectAllowed='copy'; },
 
@@ -1116,6 +1128,8 @@ const app = {
 
     btn.classList.toggle('hidden',this.chatVisible);
 
+    this.syncWorkspaceLayout();
+
     this.syncCodeViewerLayout();
 
   },
@@ -1154,6 +1168,8 @@ const app = {
 
     this.applyChatSize();
 
+    this.syncWorkspaceLayout();
+
     this.syncCodeViewerLayout();
 
   },
@@ -1177,6 +1193,8 @@ const app = {
     this.chatDock='float';this.chatVisible=true;
 
     document.getElementById('chat-toggle-btn').classList.add('hidden');
+
+    this.syncWorkspaceLayout();
 
     this.syncCodeViewerLayout();
 
@@ -2178,6 +2196,86 @@ const app = {
 
   },
 
+  getNodeLibraryWidth() {
+
+    const root = getComputedStyle(document.documentElement);
+
+    const value = parseFloat(root.getPropertyValue('--lib-width'));
+
+    return Number.isFinite(value) ? value : 260;
+
+  },
+
+  syncWorkspaceLayout() {
+
+    const wp = document.getElementById('workspace-page');
+
+    const lib = document.getElementById('node-library');
+
+    const chatPanel = document.getElementById('ws-chat-panel');
+
+    if (!wp) return;
+
+    const libVisible = !lib || lib.style.display !== 'none';
+
+    const libWidth = libVisible ? this.getNodeLibraryWidth() : 0;
+
+    const chatActive = this.chatVisible && chatPanel && !chatPanel.classList.contains('chat-hidden') && this.chatDock !== 'float';
+
+    let canvasLeft = libWidth;
+
+    let canvasRight = 0;
+
+    let canvasBottom = 0;
+
+    if (chatActive) {
+
+      if (this.chatDock === 'right') {
+
+        canvasRight = this.chatWidth;
+
+      } else if (this.chatDock === 'left') {
+
+        canvasLeft += this.chatWidth;
+
+      } else if (this.chatDock === 'bottom') {
+
+        canvasBottom = this.chatHeight;
+
+      }
+
+    }
+
+    wp.style.setProperty('--workspace-left', libWidth + 'px');
+
+    wp.style.setProperty('--canvas-left', canvasLeft + 'px');
+
+    wp.style.setProperty('--canvas-right', canvasRight + 'px');
+
+    wp.style.setProperty('--canvas-bottom', canvasBottom + 'px');
+
+    this.renderWires();
+
+    if (typeof Viewer3D !== 'undefined' && Viewer3D.isInitialized && Viewer3D._onResize) {
+
+      Viewer3D._onResize();
+
+    }
+
+  },
+
+  queueWorkspaceLayoutSync() {
+
+    requestAnimationFrame(() => {
+
+      this.syncWorkspaceLayout();
+
+      setTimeout(() => this.syncWorkspaceLayout(), 0);
+
+    });
+
+  },
+
 
 
   // Resize AI panel by dragging its handle
@@ -2221,6 +2319,8 @@ const app = {
       p.style.height = this.chatHeight + 'px';
 
     }
+
+    this.syncWorkspaceLayout();
 
     this.syncCodeViewerLayout();
 

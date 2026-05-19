@@ -70,6 +70,14 @@ Nova
 
   --lib-width: 260px;
 
+  --workspace-left: var(--lib-width);
+
+  --canvas-left: var(--workspace-left);
+
+  --canvas-right: 0px;
+
+  --canvas-bottom: 0px;
+
 }
 
 
@@ -294,7 +302,7 @@ input:focus, textarea:focus { border-color: var(--accent-blue); }
 
 /* Canvas */
 
-.canvas-area { position: absolute; top: 0; left: var(--lib-width); right: 0; bottom: 0; background: var(--bg-primary); overflow: hidden; z-index: 1; }
+.canvas-area { position: absolute; top: 0; left: var(--canvas-left); right: var(--canvas-right); bottom: var(--canvas-bottom); background: var(--bg-primary); overflow: hidden; z-index: 1; }
 
 .canvas-grid-svg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
 
@@ -1043,9 +1051,9 @@ input[type="number"] {
 
 .ws-chat-panel.dock-right { top: 0; right: 0; bottom: 0; width: 360px; border-left: 1px solid var(--border-color); }
 
-.ws-chat-panel.dock-left { top: 0; left: var(--lib-width); bottom: 0; width: 360px; border-right: 1px solid var(--border-color); position: absolute; }
+.ws-chat-panel.dock-left { top: 0; left: var(--workspace-left); bottom: 0; width: 360px; border-right: 1px solid var(--border-color); position: absolute; }
 
-.ws-chat-panel.dock-bottom { left: var(--lib-width); right: 0; bottom: 0; height: 280px; border-top: 1px solid var(--border-color); }
+.ws-chat-panel.dock-bottom { left: var(--workspace-left); right: 0; bottom: 0; height: 280px; border-top: 1px solid var(--border-color); }
 
 .ws-chat-panel.floating {
 

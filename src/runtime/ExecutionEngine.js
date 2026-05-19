@@ -104,15 +104,25 @@ export class ExecutionEngine {
 
     // ── Patch node mutation methods ──
 
-    // Intercept node add
-    const origAddNode = app.addNode.bind(app);
-    app.addNode = (type, x, y) => {
-      const nd = origAddNode(type, x, y);
-      if (nd) {
-        this._onNodeAdded(nd);
-      }
-      return nd;
-    };
+    // Intercept node add. Current Nova uses addNodeToCanvas; keep addNode support
+    // for older callers.
+    if (typeof app.addNode === 'function') {
+      const origAddNode = app.addNode.bind(app);
+      app.addNode = (type, x, y) => {
+        const nd = origAddNode(type, x, y);
+        if (nd) this._onNodeAdded(nd);
+        return nd;
+      };
+    }
+
+    if (typeof app.addNodeToCanvas === 'function') {
+      const origAddNodeToCanvas = app.addNodeToCanvas.bind(app);
+      app.addNodeToCanvas = (type, x, y) => {
+        const nd = origAddNodeToCanvas(type, x, y);
+        if (nd) this._onNodeAdded(nd);
+        return nd;
+      };
+    }
 
     // Intercept node remove
     const origRemoveNode = app.removeNode.bind(app);
@@ -129,11 +139,13 @@ export class ExecutionEngine {
     };
 
     // Intercept wire remove
-    const origRemoveWire = app.removeWire.bind(app);
-    app.removeWire = (fromNode, fromPort, toNode, toPort) => {
-      origRemoveWire(fromNode, fromPort, toNode, toPort);
-      this._onWireRemoved(fromNode, fromPort, toNode, toPort);
-    };
+    if (typeof app.removeWire === 'function') {
+      const origRemoveWire = app.removeWire.bind(app);
+      app.removeWire = (fromNode, fromPort, toNode, toPort) => {
+        origRemoveWire(fromNode, fromPort, toNode, toPort);
+        this._onWireRemoved(fromNode, fromPort, toNode, toPort);
+      };
+    }
 
     // Intercept control value changes
     const origSetControlValue = app.setControlValue ? app.setControlValue.bind(app) : null;
@@ -207,16 +219,18 @@ export class ExecutionEngine {
     // ── Wire Cancel button (lazy lookup – buttons may not be in DOM yet) ──
     this._getButtons = () => {
       if (!this._cancelBtn) this._cancelBtn = document.getElementById('menu-cancel');
-      if (!this._runBtn) this._runBtn = document.getElementById('menu-run');
+      if (!this._runBtn) this._runBtn = document.getElementById('toolbar-run') || document.getElementById('menu-run');
       return { run: this._runBtn, cancel: this._cancelBtn };
     };
 
     // Lazy event binding — only wire click once
     const self = this;
     function cancelHandler() {
+      if (!self._running) return;
       self.cancel();
       const btns = self._getButtons();
-      if (btns.run) {
+      if (app && typeof app._hideCancelButton === 'function') app._hideCancelButton();
+      if (!app._hideCancelButton && btns.run) {
         btns.run.classList.remove('disabled');
         btns.run.textContent = '▶ Run';
       }
@@ -269,18 +283,26 @@ export class ExecutionEngine {
    */
   async run(options = {}) {
     if (this._running) {
-      // Cancel previous run and start fresh
-      this.cancellation.cancelAll();
-      await this.scheduler.drain();
+      return { completed: 0, failed: 0, errors: new Map(), running: true };
     }
     this._running = true;
     this._version++;
+    this._cancelRequested = false;
+
+    const app = this._app;
+    if (app && app.nodes) {
+      for (const nd of app.nodes) {
+        nd._cancelled = false;
+      }
+    }
 
     // Ensure buttons are looked up (lazy, in case DOM wasn't ready at attach time)
     this._getButtons();
 
+    if (app && typeof app._showCancelButton === 'function') app._showCancelButton();
+
     // Toggle UI buttons: show Cancel, hide Run
-    if (this._runBtn) {
+    if (!app._showCancelButton && this._runBtn) {
       this._runBtn.textContent = '▶ Running…';
       this._runBtn.classList.add('disabled');
     }
@@ -288,7 +310,6 @@ export class ExecutionEngine {
       this._cancelBtn.classList.remove('hidden');
     }
 
-    const app = this._app;
     if (!app) {
       this._running = false;
       return { completed: 0, failed: 0, errors: new Map() };
@@ -309,6 +330,7 @@ export class ExecutionEngine {
     const dirtySet = this.dirtyTracker.getDirty();
     if (dirtySet.size === 0) {
       this._running = false;
+      if (app && typeof app._hideCancelButton === 'function') app._hideCancelButton();
       return { completed: 0, failed: 0, errors: new Map() };
     }
 
@@ -320,6 +342,7 @@ export class ExecutionEngine {
 
     // Execute via scheduler
     const executeNodeFn = async (nodeId) => {
+      if (this._cancelRequested) throw new CancellationError('Execution cancelled by user');
       if (signal?.aborted) throw new CancellationError('Execution cancelled by external signal');
       if (!this.dirtyTracker.isDirty(nodeId) && this.cache.has(nodeId, this._version)) {
         return this.cache.get(nodeId, this._version).value;
@@ -343,7 +366,9 @@ export class ExecutionEngine {
         }
 
         // Compute the node value using the app's compute pipeline
-        const result = this._computeNode(nodeId, nd, token);
+        const result = await this._computeNode(nodeId, nd, token);
+        if (this._cancelRequested) throw new CancellationError('Execution cancelled by user');
+        token.throwIfCancelled();
 
         // Store in cache
         if (this._cacheEnabled) {
@@ -363,6 +388,7 @@ export class ExecutionEngine {
     };
 
     let result;
+    try {
     if (this.scheduler._streamEnabled) {
       // Streaming execution (large geometry sets)
       const streamResults = await this.scheduler.executeStreaming(
@@ -377,17 +403,25 @@ export class ExecutionEngine {
     }
 
     // Flush dirty tracker — all clean after successful run
-    this.dirtyTracker.flush();
+    if (!this._cancelRequested) this.dirtyTracker.flush();
 
     this._running = false;
 
+    if (app && typeof app._hideCancelButton === 'function') app._hideCancelButton();
+
     // Restore UI buttons after execution
-    if (this._runBtn) {
+    if (!app._hideCancelButton && this._runBtn) {
       this._runBtn.textContent = '▶ Run';
       this._runBtn.classList.remove('disabled');
     }
     if (this._cancelBtn) {
       this._cancelBtn.classList.add('hidden');
+    }
+
+    } finally {
+      this._running = false;
+      if (app && typeof app._hideCancelButton === 'function') app._hideCancelButton();
+      if (this._cancelBtn) this._cancelBtn.classList.add('hidden');
     }
 
     return result;
@@ -527,6 +561,7 @@ export class ExecutionEngine {
    * Cancel all in-flight operations and reset state.
    */
   cancel() {
+    this._cancelRequested = true;
     this.cancellation.cancelAll();
     this.dirtyTracker.reset();
     this._running = false;

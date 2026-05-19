@@ -1839,6 +1839,26 @@ export function installEngine(targetApp = getRuntimeApp()) {
     var runBtn = document.getElementById('toolbar-run');
     if (runBtn) { runBtn.textContent = '▶'; runBtn.style.color = 'var(--accent-green)'; runBtn.title = 'Run Graph'; runBtn.onclick = function() { app.runGraph(); }; }
   };
+  app._showCancelButton = function() {
+    var runBtn = document.getElementById('toolbar-run');
+    if (runBtn) {
+      runBtn.textContent = '■';
+      runBtn.style.color = 'var(--accent-red)';
+      runBtn.style.background = 'rgba(243,139,168,0.16)';
+      runBtn.title = 'Cancel';
+      runBtn.onclick = app.cancelExecution;
+    }
+  };
+  app._hideCancelButton = function() {
+    var runBtn = document.getElementById('toolbar-run');
+    if (runBtn) {
+      runBtn.textContent = '▶';
+      runBtn.style.color = 'var(--accent-green)';
+      runBtn.style.background = '';
+      runBtn.title = 'Run Graph';
+      runBtn.onclick = function() { app.runGraph(); };
+    }
+  };
   app.cancelExecution = function() {
     // Cancel V2 engine if available
     var v2 = app._executionEngineV2;
@@ -1984,6 +2004,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
     this.addAIMessage('workspace', '▶️ **Executed!** ' + this.nodes.length + ' nodes → 3D updated.');
+
+    app._hideCancelButton();
 
   };
 
