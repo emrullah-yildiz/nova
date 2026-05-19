@@ -17,3 +17,11 @@ export {
   createCoreNodeRegistry,
   registerCoreNodes
 } from './coreNodes.js';
+
+export {
+  createNodeTypeMapFromRegistry,
+  createRegistryFromNodeLibrary,
+  legacyNodeToRegistryDefinition,
+  registerLegacyNodeLibrary,
+  registryNodeToLegacyDefinition
+} from './legacyBridge.js';
