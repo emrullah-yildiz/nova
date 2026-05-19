@@ -3,6 +3,10 @@ import {
   coreNodes,
   createCoreNodeRegistry
 } from '../src/nodes/index.js';
+import {
+  NODE_LIBRARY,
+  NODE_TYPE_MAP
+} from '../src/core/nodes.js';
 
 const modernListNodeTypes = [
   'list.create',
@@ -42,8 +46,13 @@ const modernListNodeTypes = [
 
 describe('core node registry package', () => {
   it('declares pilot categories and nodes', () => {
-    expect(coreCategories.map(category => category.id)).toEqual(['input', 'list', 'math']);
-    expect(coreNodes.map(node => node.type)).toEqual([
+    const categoryIds = coreCategories.map(category => category.id);
+    const nodeTypes = coreNodes.map(node => node.type);
+
+    expect(categoryIds).toEqual(Array.from(new Set(categoryIds)));
+    expect(categoryIds).toEqual(expect.arrayContaining(['input', 'list', 'math']));
+    expect(categoryIds).toEqual(expect.arrayContaining(NODE_LIBRARY.categories.map(category => category.id)));
+    expect(nodeTypes).toEqual(expect.arrayContaining([
       'input.number',
       'input.text',
       ...modernListNodeTypes,
@@ -63,7 +72,8 @@ describe('core node registry package', () => {
       'math.remap',
       'math.round',
       'math.subtract'
-    ]);
+    ]));
+    expect(nodeTypes).toEqual(expect.arrayContaining(Object.keys(NODE_TYPE_MAP)));
   });
 
   it('creates a registry with core pilot nodes', () => {
@@ -74,7 +84,14 @@ describe('core node registry package', () => {
       category: 'math',
       lacing: { mode: 'shortest', preserveStructure: false }
     });
-    expect(registry.getCategory('list').nodes).toEqual(modernListNodeTypes);
+    expect(registry.getCategory('list').nodes).toEqual(expect.arrayContaining(modernListNodeTypes));
+    expect(registry.getNode('revit-send-geometry')).toMatchObject({
+      displayName: 'Revit.SendGeometry',
+      category: 'revit',
+      metadata: {
+        compatibility: true
+      }
+    });
   });
 
   it('executes pilot scalar node functions directly', () => {
@@ -170,9 +187,12 @@ describe('core node registry package', () => {
     const math = library.categories.find(category => category.id === 'math');
     const list = library.categories.find(category => category.id === 'list');
 
-    expect(list.nodes.map(node => node.type)).toEqual(modernListNodeTypes);
+    expect(list.nodes.map(node => node.type)).toEqual(expect.arrayContaining(modernListNodeTypes));
+    expect(library.categories.map(category => category.id)).toEqual(expect.arrayContaining(
+      NODE_LIBRARY.categories.map(category => category.id)
+    ));
 
-    expect(math.nodes).toEqual([
+    expect(math.nodes).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'math.absolute', name: 'Math.Absolute' }),
       expect.objectContaining({ type: 'math.add', name: 'Math.Add' }),
       expect.objectContaining({ type: 'math.ceiling', name: 'Math.Ceiling' }),
@@ -189,6 +209,6 @@ describe('core node registry package', () => {
       expect.objectContaining({ type: 'math.remap', name: 'Math.Remap' }),
       expect.objectContaining({ type: 'math.round', name: 'Math.Round' }),
       expect.objectContaining({ type: 'math.subtract', name: 'Math.Subtract' })
-    ]);
+    ]));
   });
 });
