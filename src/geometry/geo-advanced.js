@@ -1,7 +1,7 @@
 import { Geo } from './geometry-lib.js';
 
 // ============================================
-// Nova — Advanced Geometry Operations
+// NODEFLOW AI — Advanced Geometry Operations
 // Parametric surfaces, sweeps, pipes, isolines,
 // subdivisions, arrays, mirrors, thicken, trim
 // For Zaha Hadid-style parametric design

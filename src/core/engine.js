@@ -1,28 +1,16 @@
-// ============================================
-// NODEFLOW AI — Engine v1
-
-// Single source of truth for:
-
-// - Compute pipeline (node value calculation)
-
-// - 3D rendering (code → Geo → Three.js)
-
-// - Run pipeline (Run button → code → 3D → inspectors)
-
-// - View switching (2D ↔ 3D, isolated zoom)
-
-// - Wire rendering (animation only after Run)
-
-// - Data Inspector refresh
-
-//
-
-// REPLACES: geo-viewer-patch.js, code-renderer.js, list-node-patch.js
-
-// ============================================
-
-
-
+// ============================================
+// NODEFLOW AI — Engine v1
+// Single source of truth for:
+// - Compute pipeline (node value calculation)
+// - 3D rendering (code → Geo → Three.js)
+// - Run pipeline (Run button → code → 3D → inspectors)
+// - View switching (2D ↔ 3D, isolated zoom)
+// - Wire rendering (animation only after Run)
+// - Data Inspector refresh
+//
+// REPLACES: geo-viewer-patch.js, code-renderer.js, list-node-patch.js
+// ============================================
+
 /* eslint-disable no-redeclare, no-inner-declarations, no-empty, no-unused-vars */
 
 function getRuntimeApp() {
@@ -34,6 +22,7 @@ function getRuntimeApp() {
 export function installEngine(targetApp = getRuntimeApp()) {
   if (!targetApp) return false;
   const app = targetApp;
+
 
 
   // ═══════════════════════════════════════
@@ -2548,6 +2537,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
   if (typeof NFLogger !== 'undefined') NFLogger.info('engine', 'Engine v1 loaded');
+
 
   return true;
 }

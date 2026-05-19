@@ -1,36 +1,28 @@
 # Recommended Folder Structure
 
-This section documents the current module layout after the Phase 3 migration.
+This section defines a starting point for Phase 2 and Phase 3 refactoring.
 
-## Current Layout
+## Proposed layout
 
 - `src/`
-  - `src/app/` - application shell, persistence, and app-level patches
-  - `src/ui/` - UI components and DOM-related code
-  - `src/core/` - engine, graph compute logic, node metadata, and logging
-  - `src/ai/` - GPT client, AI assistant runtime, and integration glue
-  - `src/geometry/` - geometry kernel and math utilities
-  - `src/runtime/` - parser and Python runner modules
-  - `src/viewer/` - 3D viewport, rendering helpers, and geometry selector
-  - `src/integrations/` - external integration bridges such as Revit and Nova Connect
-    - `src/integrations/connect/` - neutral protocol, browser WebSocket client, and APS adapters
-    - `src/integrations/revit/` - Revit element bridge and compatibility node helpers
-- `integrations/revit-addin/` - Revit ribbon launcher skeleton for opening Nova from Revit
-- `scripts/connect-hub.cjs` - localhost Nova Connect WebSocket hub for live desktop bridge sessions
-- `scripts/connect-mock-revit-host.cjs` - mock Revit host for local protocol testing before the compiled Revit add-in exists
-- `tests/` - automated unit and browser workflow tests
-- `docs/` - process, architecture, and onboarding documentation
-- root legacy files - historical/no-build fallback files; keep source-of-truth changes in `src/`
+  - `src/ui/` — UI components and DOM-related code
+  - `src/core/` — engine, runtime, graph compute logic
+  - `src/ai/` — GPT integration and AI assistant logic
+  - `src/geometry/` — geometry kernel and math utilities
+  - `src/viewer/` — 3D viewport and rendering helpers
+- `tests/` — automated tests
+- `docs/` — process, architecture, and onboarding documentation
+- `assets/` — static assets, images, and external resources
 
-## Migration Guidance
+## Migration guidance
 
-1. Treat `src/main.js` as the application bootstrap and `src/` as the source of truth.
-2. Keep compatibility globals only where current browser markup or integrations still require them.
-3. Do not add new root-level runtime scripts, `?raw` runtime imports, or raw-loader shims.
-4. Use unit tests and Playwright workflows to validate behavior after module changes.
+1. Leave the existing prototype files in place while moving code incrementally.
+2. Create wrapper modules in `src/` that import the old files and expose a cleaner API.
+3. Keep `index.html` as the entry point until a build step is introduced.
+4. Use `tests/` to validate behavior after each extracted module is moved.
 
 ## Benefits
 
 - Easier code ownership and separation of concerns
 - More predictable test coverage boundaries
-- Clearer path to production hardening and enterprise packaging
+- Clearer path to a build system and enterprise packaging

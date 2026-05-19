@@ -22,7 +22,7 @@ Add quality tooling, automated tests, and developer hygiene so the repository be
 ## Phase 2 progress
 
 - Added `src/ui/node-library-utils.js` and `tests/node-library-utils.test.js` for UI suggestion logic
-- Added source and test lint targets for targeted validation
+- Added `lint:app` and `lint:legacy` scripts for targeted legacy and UI linting
 - Added ESLint globals for legacy runtime APIs used by app/UI modules
 - Added `docs/toolchain-plan.md` for the Source->Dist workflow
 - Updated the `build` script to reference the planned build workflow
@@ -35,7 +35,7 @@ Add quality tooling, automated tests, and developer hygiene so the repository be
 - Added `lint:tests` and `lint:src` to simplify repeated linting tasks
 - Added a first source module at `src/core/formula-eval.js`
 - Verified `npm test` passes for `tests/geometry.test.js`, `tests/formula-eval.test.js`, `tests/engine.test.js`, and `tests/engine-extended.test.js`
-- Verified the targeted lint and test commands pass for the current extracted modules
+- Verified `npm run lint` and `npm run lint:formula` pass for the current targeted files
 
 ## Phase 2 deliverables
 
