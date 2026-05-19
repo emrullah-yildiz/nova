@@ -672,7 +672,7 @@ input:focus, textarea:focus { border-color: var(--accent-blue); }
 
 }
 
-.prop-input:focus { border-color: var(--accent-blue); outline: none; }
+.prop-input:focus { border-color: var(--border-color); outline: none; }
 
 
 
@@ -722,11 +722,11 @@ input[type="number"] {
 
 }
 
-.prop-input.prop-input-x:focus { border-color: #f38ba8; }
+.prop-input.prop-input-x:focus { border-color: var(--border-color); }
 
-.prop-input.prop-input-y:focus { border-color: #a6e3a1; }
+.prop-input.prop-input-y:focus { border-color: var(--border-color); }
 
-.prop-input.prop-input-z:focus { border-color: #89b4fa; }
+.prop-input.prop-input-z:focus { border-color: var(--border-color); }
 
 
 
