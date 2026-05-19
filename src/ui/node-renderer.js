@@ -366,7 +366,18 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
           var valHtml;
           if (wire) {
             var srcNd = app.nodes.find(function(n) { return n.id === wire.fromNode; });
-            var srcVal = srcNd ? app.computeNodeValue(srcNd) : undefined;
+            var srcVal = undefined;
+
+            if (srcNd) {
+
+              app.computeNodeValue(srcNd);
+
+              if (srcNd._portValues && srcNd._portValues[wire.fromPort] !== undefined) srcVal = srcNd._portValues[wire.fromPort];
+
+              else srcVal = app.computeNodeValue(srcNd);
+
+            }
+
             valHtml = app.formatValue(srcVal);
           } else if (controlIds.indexOf(inp.id) >= 0) {
             var evalKey = '_eval_' + inp.id;
