@@ -372,11 +372,28 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
 
     }
 
+    var defaultLacingMode = def.lacing && def.lacing.mode ? def.lacing.mode : null;
 
-
-    if (propsControls.length > 0 || (def.controls || []).some(function(c) { return c.type === 'formula'; })) {
+    if (propsControls.length > 0 || (def.controls || []).some(function(c) { return c.type === 'formula'; }) || (defaultLacingMode && defaultLacingMode !== 'none')) {
 
       var allPropsControls = (def.controls || []).filter(function(c) { return c.type === 'formula' || c.type === 'dropdown'; });
+
+      if (defaultLacingMode && defaultLacingMode !== 'none') {
+
+        if (nd.controlValues['_lacingMode'] === undefined || nd.controlValues['_lacingMode'] === null || nd.controlValues['_lacingMode'] === '') {
+          nd.controlValues['_lacingMode'] = defaultLacingMode;
+        }
+
+        allPropsControls.push({
+          id: '_lacingMode',
+          type: 'dropdown',
+          default: defaultLacingMode,
+          label: 'Lacing',
+          options: ['none', 'shortest', 'longest', 'crossProduct'],
+          _system: true
+        });
+
+      }
 
       // Add custom props (step, min, max)
 

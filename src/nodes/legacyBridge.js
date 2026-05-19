@@ -46,6 +46,7 @@ export function legacyNodeToRegistryDefinition(node, category) {
     controls: cloneList(node.controls || []),
     preview: node.preview !== false,
     dynamicInputs: node.dynamicInputs === true,
+    lacing: node.lacing,
     codegen: node.codegen || {},
     metadata: {
       source: 'legacy-node-library',
@@ -72,6 +73,7 @@ export function registryNodeToLegacyDefinition(node) {
     controls: cloneList(node.controls),
     preview: node.preview,
     dynamicInputs: node.dynamicInputs,
+    lacing: node.lacing,
     codegen: { ...node.codegen }
   };
 }
