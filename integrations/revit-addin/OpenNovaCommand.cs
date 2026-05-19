@@ -16,7 +16,7 @@ public class OpenNovaCommand : IExternalCommand
         try
         {
             var uiApp = commandData.Application;
-            var pairingToken = "nova-local-" + Guid.NewGuid().ToString("N")[..8];
+            var pairingToken = NovaConnectSettings.PairingToken;
             var projectId = GetProjectId(uiApp);
 
             NovaConnectHubProcess.EnsureStarted(pairingToken);
