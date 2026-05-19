@@ -192,7 +192,10 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       var evalKey = '_eval_' + id;
 
-      if (nd.controlValues && nd.controlValues[evalKey] !== undefined && !isNaN(nd.controlValues[evalKey])) return nd.controlValues[evalKey];
+      if (nd.controlValues && nd.controlValues[evalKey] !== undefined && !isNaN(nd.controlValues[evalKey])) {
+        var n = Number(nd.controlValues[evalKey]);
+        return isNaN(n) ? def : n;
+      }
 
       var cv = nd.controlValues ? nd.controlValues[id] : undefined;
 
@@ -204,7 +207,10 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
           var result = FormulaEval.eval(cv);
 
-          if (result.error === null) return result.value;
+          if (result.error === null) {
+            var n2 = Number(result.value);
+            return isNaN(n2) ? def : n2;
+          }
 
         }
 
