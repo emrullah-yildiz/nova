@@ -10,3 +10,10 @@ export {
   defaultNodeRegistry,
   toLegacyNodeDefinition
 } from './registry.js';
+
+export {
+  coreCategories,
+  coreNodes,
+  createCoreNodeRegistry,
+  registerCoreNodes
+} from './coreNodes.js';
