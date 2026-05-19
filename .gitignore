@@ -22,4 +22,6 @@ Thumbs.db
 # Environment
 .env
 .env.local
-integrations/revit-addin/bin/Debug/net10.0-windows/Nova.RevitAddin.dll
+integrations/revit-addin/bin/
+integrations/revit-addin/obj/
+integrations/revit-addin/artifacts/

@@ -155,16 +155,7 @@ function installMenuButton(document, app) {
 
 function applyLaunchParameters(app, runtimeGlobal) {
   const launch = readLaunchParameters(runtimeGlobal);
-  
-  // Auto-connect if autoConnect parameter is set
-  if (launch.autoConnect) {
-    setTimeout(() => {
-      app.connectNovaConnect().catch(err => {
-        console.warn('[Nova Connect] Auto-connect failed:', err.message);
-      });
-    }, 500);
-  }
-  
+
   if (!launch.openPanel) return;
   app.novaConnectPanelOpen = true;
   if (runtimeGlobal.localStorage) {
@@ -177,8 +168,18 @@ function applyLaunchParameters(app, runtimeGlobal) {
   }
   app.novaConnectLastResult = {
     ok: true,
-    message: 'Opened from Revit. Click Connect to establish connection.'
+    message: launch.autoConnect
+      ? 'Opened from Revit. Auto-connecting to Nova Connect...'
+      : 'Opened from Revit. Click Connect to establish connection.'
   };
+
+  if (launch.autoConnect) {
+    setTimeout(() => {
+      app.connectNovaConnect().catch(err => {
+        console.warn('[Nova Connect] Auto-connect failed:', err.message);
+      });
+    }, 500);
+  }
 }
 
 function readLaunchParameters(runtimeGlobal) {

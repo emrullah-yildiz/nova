@@ -146,6 +146,43 @@ describe('Nova Connect panel (simplified)', () => {
     expect(app.novaConnectLastResult.message).toBe('Opened from Revit. Click Connect to establish connection.');
   });
 
+  it('auto-connects when launched from Revit with auto connect enabled', async () => {
+    const document = createDocumentStub();
+    const app = {};
+    const runtime = {
+      document,
+      location: {
+        search: '?novaConnectOpen=1&novaConnectAuto=1&novaConnectUrl=ws%3A%2F%2F127.0.0.1%3A8765&novaConnectToken=token-123&novaConnectProject=Sample'
+      },
+      localStorage: {
+        getItem: () => null,
+        setItem: () => {}
+      },
+      NodeFlow: {
+        NovaConnect: {
+          status: 'disconnected',
+          connect: async function() {
+            this.status = 'connected';
+            this.sessionId = 'local-revit-session';
+            return true;
+          },
+          elementsByCategory: {},
+          getProjectSnapshot: async function() {
+            this.elementsByCategory = { Walls: [{ id: 1 }] };
+            return { categories: { Walls: { elements: [{ id: 1 }] } } };
+          }
+        }
+      }
+    };
+
+    installNovaConnectPanel(app, runtime);
+
+    expect(app.novaConnectPanelOpen).toBe(true);
+    expect(app.novaConnectLastResult.message).toBe('Opened from Revit. Auto-connecting to Nova Connect...');
+    await new Promise(resolve => setTimeout(resolve, 550));
+    expect(app.novaConnectLastResult.message).toContain('Connected to Revit session');
+  });
+
   it('reports when the hub connects but no Revit host snapshot is available', async () => {
     const document = createDocumentStub();
     const app = {};
