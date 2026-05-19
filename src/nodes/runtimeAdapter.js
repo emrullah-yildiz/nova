@@ -17,7 +17,7 @@ export function createRegistryComputeInner(registry, options = {}) {
 
 export function executeRegistryNode(nodeDefinition, nodeInstance, getInput, getVal, context = {}) {
   const controls = resolveControls(nodeDefinition, nodeInstance, getVal);
-  const inputs = resolveInputs(nodeDefinition, getInput, getVal, controls);
+  const inputs = resolveInputs(nodeDefinition, nodeInstance, getInput, getVal, controls);
   const outputs = executeWithLacing(nodeDefinition, context, inputs, controls, nodeInstance);
 
   return applyNodeOutputs(nodeDefinition, nodeInstance, outputs);
@@ -61,10 +61,15 @@ export function resolveControls(nodeDefinition, nodeInstance, getVal) {
   return controls;
 }
 
-export function resolveInputs(nodeDefinition, getInput, getVal, controls = {}) {
+export function resolveInputs(nodeDefinition, nodeInstance, getInput, getVal, controls = {}) {
   const inputs = {};
+  const ports = nodeDefinition.dynamicInputs && nodeInstance && Array.isArray(nodeInstance._dynInputIds)
+    ? nodeInstance._dynInputIds.map(function(id) {
+      return nodeDefinition.inputs.find(input => input.id === id) || { id };
+    })
+    : nodeDefinition.inputs;
 
-  nodeDefinition.inputs.forEach(function(input) {
+  ports.forEach(function(input) {
     let value = typeof getInput === 'function' ? getInput(input.id) : undefined;
     if (value === undefined && controls[input.id] !== undefined) {
       value = controls[input.id];
