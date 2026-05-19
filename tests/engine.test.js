@@ -135,4 +135,78 @@ describe('Engine computeNodeValue', () => {
       else globalThis.RevitBridge = previousBridge;
     }
   });
+
+  it('reads cached Revit parameter values', () => {
+    const previousBridge = globalThis.RevitBridge;
+    globalThis.RevitBridge = {
+      getAllElements() {
+        return [
+          { id: 1, params: { Comments: 'A' } },
+          { id: 2, params: { Comments: 'B' } }
+        ];
+      },
+      getParameterValues(elements, parameterName) {
+        return elements.map(element => element.params[parameterName] ?? null);
+      }
+    };
+    app.nodes = [
+      { id: 'source', type: 'revit-all-elements-view', controlValues: {} },
+      {
+        id: 'params',
+        type: 'revit-get-parameter-values',
+        controlValues: { parameterName: 'Comments' }
+      }
+    ];
+    app.wires = [{ fromNode: 'source', fromPort: 'elements', toNode: 'params', toPort: 'elements' }];
+
+    try {
+      const result = app.computeNodeValue(app.nodes[1]);
+
+      expect(result).toEqual({ values: ['A', 'B'], count: 2 });
+    } finally {
+      if (previousBridge === undefined) delete globalThis.RevitBridge;
+      else globalThis.RevitBridge = previousBridge;
+    }
+  });
+
+  it('prefetches live Revit parameter writes for SetParameterValues nodes', async () => {
+    const previousBridge = globalThis.RevitBridge;
+    let requestedValue = null;
+    globalThis.RevitBridge = {
+      getAllElements() {
+        return [{ id: 10, identity: { sourceId: '10' }, params: { Comments: '' } }];
+      },
+      async setLiveParameterValues(elements, parameterName, value) {
+        requestedValue = value;
+        return elements.map(element => ({
+          elementId: element.identity.sourceId,
+          parameterName,
+          value,
+          ok: true
+        }));
+      }
+    };
+    app.nodes = [
+      { id: 'source', type: 'revit-all-elements-view', controlValues: {} },
+      {
+        id: 'set',
+        type: 'revit-set-parameter-values',
+        controlValues: { parameterName: 'Comments', value: 'Updated' }
+      }
+    ];
+    app.wires = [{ fromNode: 'source', fromPort: 'elements', toNode: 'set', toPort: 'elements' }];
+
+    try {
+      await app._prepareLiveRevitGeometries();
+      const result = app.computeNodeValue(app.nodes[1]);
+
+      expect(requestedValue).toBe('Updated');
+      expect(result.count).toBe(1);
+      expect(result.success).toBe(true);
+      expect(result.results[0].value).toBe('Updated');
+    } finally {
+      if (previousBridge === undefined) delete globalThis.RevitBridge;
+      else globalThis.RevitBridge = previousBridge;
+    }
+  });
 });

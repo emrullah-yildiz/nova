@@ -259,15 +259,30 @@ export function installEngine(targetApp = getRuntimeApp()) {
     var runtimeGlobal = typeof globalThis !== 'undefined' ? globalThis : {};
     var revitBridge = runtimeGlobal.RevitBridge || (runtimeGlobal.NodeFlow && runtimeGlobal.NodeFlow.RevitBridge) || null;
     var geometryNodes = this.nodes.filter(function(node) { return node.type === 'revit-element-geometries'; });
+    var getParamNodes = this.nodes.filter(function(node) { return node.type === 'revit-get-parameter-values'; });
+    var setParamNodes = this.nodes.filter(function(node) { return node.type === 'revit-set-parameter-values'; });
     geometryNodes.forEach(function(node) {
       delete node._liveGeometryResult;
       delete node._liveGeometryError;
     });
-    if (!revitBridge || typeof revitBridge.getLiveGeometries !== 'function') return;
+    getParamNodes.forEach(function(node) {
+      delete node._liveParameterGetResult;
+      delete node._liveParameterError;
+    });
+    setParamNodes.forEach(function(node) {
+      delete node._liveParameterSetResult;
+      delete node._liveParameterError;
+    });
+    if (!revitBridge) return;
+    var hasLiveGeometry = typeof revitBridge.getLiveGeometries === 'function';
+    var hasLiveGetParams = typeof revitBridge.getLiveParameterValues === 'function';
+    var hasLiveSetParams = typeof revitBridge.setLiveParameterValues === 'function';
+    if (!hasLiveGeometry && !hasLiveGetParams && !hasLiveSetParams) return;
     this.beginCompute();
     try {
       for (var i = 0; i < geometryNodes.length; i++) {
         var nd = geometryNodes[i];
+        if (!hasLiveGeometry) continue;
         var inputElems = this._getComputedInputValue(nd, 'elements');
         if (!inputElems) {
           nd._liveGeometryResult = { meshes: [], count: 0 };
@@ -280,6 +295,49 @@ export function installEngine(targetApp = getRuntimeApp()) {
         } catch (err) {
           nd._liveGeometryError = err;
           console.warn('[Revit] Could not fetch live geometry for Element.Geometries:', err.message || err);
+        }
+      }
+      for (var gi = 0; gi < getParamNodes.length; gi++) {
+        var getNode = getParamNodes[gi];
+        if (!hasLiveGetParams) continue;
+        var getElems = this._getComputedInputValue(getNode, 'elements');
+        var getParamName = this._getComputedInputValue(getNode, 'parameterName') || (getNode.controlValues && getNode.controlValues.parameterName) || '';
+        if (!getElems || !getParamName) {
+          getNode._liveParameterGetResult = { values: [], count: 0 };
+          continue;
+        }
+        if (!Array.isArray(getElems)) getElems = [getElems];
+        try {
+          var values = await revitBridge.getLiveParameterValues(getElems, String(getParamName));
+          if (Array.isArray(values)) getNode._liveParameterGetResult = { values: values, count: values.length };
+        } catch (getErr) {
+          getNode._liveParameterError = getErr;
+          console.warn('[Revit] Could not fetch live parameter values:', getErr.message || getErr);
+        }
+      }
+      for (var si = 0; si < setParamNodes.length; si++) {
+        var setNode = setParamNodes[si];
+        if (!hasLiveSetParams) continue;
+        var setElems = this._getComputedInputValue(setNode, 'elements');
+        var setParamName = this._getComputedInputValue(setNode, 'parameterName') || (setNode.controlValues && setNode.controlValues.parameterName) || '';
+        var setValue = this._getComputedInputValue(setNode, 'value');
+        if (setValue === undefined && setNode.controlValues) setValue = setNode.controlValues.value;
+        if (!setElems || !setParamName) {
+          setNode._liveParameterSetResult = { results: [], count: 0, success: false };
+          continue;
+        }
+        if (!Array.isArray(setElems)) setElems = [setElems];
+        try {
+          var results = await revitBridge.setLiveParameterValues(setElems, String(setParamName), setValue);
+          var successCount = Array.isArray(results) ? results.filter(function(result) { return result && result.ok; }).length : 0;
+          setNode._liveParameterSetResult = {
+            results: Array.isArray(results) ? results : [],
+            count: successCount,
+            success: Array.isArray(results) && results.length > 0 && successCount === results.length
+          };
+        } catch (setErr) {
+          setNode._liveParameterError = setErr;
+          console.warn('[Revit] Could not set live parameter values:', setErr.message || setErr);
         }
       }
     } finally {
@@ -941,6 +999,27 @@ export function installEngine(targetApp = getRuntimeApp()) {
         }
         var geoMeshes = RevitBridge.getGeometries(inputElems);
         nd._portValues = { meshes: geoMeshes, count: geoMeshes.length };
+        return nd._portValues;
+      }
+      case 'revit-get-parameter-values': {
+        if (nd._liveParameterGetResult) {
+          nd._portValues = nd._liveParameterGetResult;
+          return nd._portValues;
+        }
+        var getParamElems = getInput('elements');
+        var getParamName = getInput('parameterName') || ctrl.parameterName || '';
+        if (!getParamElems || !getParamName) { nd._portValues = { values: [], count: 0 }; return nd._portValues; }
+        if (!Array.isArray(getParamElems)) getParamElems = [getParamElems];
+        var paramValues = RevitBridge.getParameterValues(getParamElems, String(getParamName));
+        nd._portValues = { values: paramValues, count: paramValues.length };
+        return nd._portValues;
+      }
+      case 'revit-set-parameter-values': {
+        if (nd._liveParameterSetResult) {
+          nd._portValues = nd._liveParameterSetResult;
+          return nd._portValues;
+        }
+        nd._portValues = { results: [], count: 0, success: false };
         return nd._portValues;
       }
 

@@ -41,7 +41,7 @@ export class NovaConnectClient {
         this.send('hello', {
           role: 'viewer',
           pairingToken: this.pairingToken,
-          capabilities: ['elements.query', 'geometry.get', 'geometry.create']
+          capabilities: ['elements.query', 'geometry.get', 'geometry.create', 'parameter.get', 'parameter.set']
         }, { target: 'hub' });
         this.emit('status', this.status);
         resolve(true);
@@ -117,6 +117,27 @@ export class NovaConnectClient {
       if (item.identity && item.identity.sourceId) this.geometryById[item.identity.sourceId] = item;
     });
     return geometries;
+  }
+
+  async getParameterValues(elementIds, parameterName, options = {}) {
+    const response = await this.request('parameter.get', { elementIds, parameterName }, {
+      target: 'host',
+      timeoutMs: options.timeoutMs
+    });
+    return response.payload.values || [];
+  }
+
+  async setParameterValues(elementIds, parameterName, values, options = {}) {
+    const response = await this.request('parameter.set', {
+      elementIds,
+      parameterName,
+      values,
+      approval: normalizeWriteApproval(options.approval || { approved: true, message: 'Set Revit parameter values from Nova graph.' })
+    }, {
+      target: 'host',
+      timeoutMs: options.timeoutMs
+    });
+    return response.payload.results || [];
   }
 
   async sendGeometry(geometry, identity = {}, options = {}) {
