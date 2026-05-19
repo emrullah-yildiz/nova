@@ -261,6 +261,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
     var geometryNodes = this.nodes.filter(function(node) { return node.type === 'revit-element-geometries'; });
     var getParamNodes = this.nodes.filter(function(node) { return node.type === 'revit-get-parameter-values'; });
     var setParamNodes = this.nodes.filter(function(node) { return node.type === 'revit-set-parameter-values'; });
+    var sendGeometryNodes = this.nodes.filter(function(node) { return node.type === 'revit-send-geometry'; });
     geometryNodes.forEach(function(node) {
       delete node._liveGeometryResult;
       delete node._liveGeometryError;
@@ -273,11 +274,16 @@ export function installEngine(targetApp = getRuntimeApp()) {
       delete node._liveParameterSetResult;
       delete node._liveParameterError;
     });
+    sendGeometryNodes.forEach(function(node) {
+      delete node._liveSendGeometryResult;
+      delete node._liveSendGeometryError;
+    });
     if (!revitBridge) return;
     var hasLiveGeometry = typeof revitBridge.getLiveGeometries === 'function';
     var hasLiveGetParams = typeof revitBridge.getLiveParameterValues === 'function';
     var hasLiveSetParams = typeof revitBridge.setLiveParameterValues === 'function';
-    if (!hasLiveGeometry && !hasLiveGetParams && !hasLiveSetParams) return;
+    var hasSendGeometry = typeof revitBridge.sendGeometry === 'function';
+    if (!hasLiveGeometry && !hasLiveGetParams && !hasLiveSetParams && !hasSendGeometry) return;
     this.beginCompute();
     try {
       for (var i = 0; i < geometryNodes.length; i++) {
@@ -338,6 +344,47 @@ export function installEngine(targetApp = getRuntimeApp()) {
         } catch (setErr) {
           setNode._liveParameterError = setErr;
           console.warn('[Revit] Could not set live parameter values:', setErr.message || setErr);
+        }
+      }
+      for (var sgi = 0; sgi < sendGeometryNodes.length; sgi++) {
+        var sendNode = sendGeometryNodes[sgi];
+        if (!hasSendGeometry) continue;
+        var sendGeometry = this._getComputedInputValue(sendNode, 'geometry');
+        if (!sendGeometry) {
+          sendNode._liveSendGeometryResult = {
+            result: { ok: false, message: 'No geometry input.' },
+            elementId: '',
+            success: false
+          };
+          continue;
+        }
+        var sendCategory = this._getComputedInputValue(sendNode, 'category') || (sendNode.controlValues && sendNode.controlValues.category) || 'Generic Models';
+        var sendName = this._getComputedInputValue(sendNode, 'name') || (sendNode.controlValues && sendNode.controlValues.name) || 'Nova Geometry';
+        var sendFamilyTemplatePath = this._getComputedInputValue(sendNode, 'familyTemplatePath') || (sendNode.controlValues && sendNode.controlValues.familyTemplatePath) || '';
+        try {
+          var sendResult = await revitBridge.sendGeometry(sendGeometry, {}, {
+            category: String(sendCategory),
+            name: String(sendName),
+            familyTemplatePath: String(sendFamilyTemplatePath),
+            approval: {
+              approved: true,
+              message: 'Create native Revit DirectShape from Nova geometry.'
+            }
+          });
+          var sendElementId = sendResult && sendResult.data ? (sendResult.data.directShapeId || sendResult.data.elementId || '') : '';
+          sendNode._liveSendGeometryResult = {
+            result: sendResult,
+            elementId: sendElementId,
+            success: !!(sendResult && sendResult.ok)
+          };
+        } catch (sendErr) {
+          sendNode._liveSendGeometryError = sendErr;
+          sendNode._liveSendGeometryResult = {
+            result: { ok: false, message: sendErr.message || String(sendErr) },
+            elementId: '',
+            success: false
+          };
+          console.warn('[Revit] Could not send geometry to Revit:', sendErr.message || sendErr);
         }
       }
     } finally {
@@ -1020,6 +1067,18 @@ export function installEngine(targetApp = getRuntimeApp()) {
           return nd._portValues;
         }
         nd._portValues = { results: [], count: 0, success: false };
+        return nd._portValues;
+      }
+      case 'revit-send-geometry': {
+        if (nd._liveSendGeometryResult) {
+          nd._portValues = nd._liveSendGeometryResult;
+          return nd._portValues;
+        }
+        nd._portValues = {
+          result: { ok: false, message: 'Run the graph with a live Revit connection to create geometry.' },
+          elementId: '',
+          success: false
+        };
         return nd._portValues;
       }
 

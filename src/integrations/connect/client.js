@@ -146,6 +146,9 @@ export class NovaConnectClient {
       : createGeometryEnvelope(geometry, identity, options);
     const response = await this.request('geometry.create', {
       geometry: envelope,
+      category: options.category || 'Generic Models',
+      name: options.name || 'Nova Geometry',
+      familyTemplatePath: options.familyTemplatePath || '',
       approval: normalizeWriteApproval(options.approval),
       requireUserApproval: options.requireUserApproval !== false
     }, { target: 'host' });

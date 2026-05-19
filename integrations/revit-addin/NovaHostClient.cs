@@ -799,7 +799,6 @@ public class NovaHostClient : IDisposable
             return;
         }
 
-        // Extract geometry from payload
         JsonElement createPayload = default;
         if (payload.ValueKind == JsonValueKind.Object) createPayload = payload;
 
@@ -812,7 +811,25 @@ public class NovaHostClient : IDisposable
             return;
         }
 
-        // Build points
+        var categoryName = "Generic Models";
+        if (createPayload.TryGetProperty("category", out var categoryProp))
+        {
+            categoryName = categoryProp.GetString() ?? categoryName;
+        }
+
+        var elementName = "Nova Geometry";
+        if (createPayload.TryGetProperty("name", out var nameProp))
+        {
+            elementName = nameProp.GetString() ?? elementName;
+        }
+
+        var familyTemplatePath = "";
+        if (createPayload.TryGetProperty("familyTemplatePath", out var templateProp))
+        {
+            familyTemplatePath = templateProp.GetString() ?? "";
+        }
+
+        var vertexScale = ReadGeometryScaleToRevitFeet(geometryProp);
         var points = new List<XYZ>();
         foreach (var v in vertsProp.EnumerateArray())
         {
@@ -823,27 +840,40 @@ public class NovaHostClient : IDisposable
                 if (idx < 3) arr[idx] = coord.GetDouble();
                 idx++;
             }
-            points.Add(new XYZ(arr[0], arr[1], arr[2]));
+            points.Add(new XYZ(arr[0] * vertexScale, arr[1] * vertexScale, arr[2] * vertexScale));
+        }
+
+        var faces = new List<List<int>>();
+        foreach (var face in facesProp.EnumerateArray())
+        {
+            var indices = new List<int>();
+            foreach (var indexProp in face.EnumerateArray())
+            {
+                if (indexProp.TryGetInt32(out var index))
+                {
+                    indices.Add(index);
+                }
+            }
+            if (indices.Count >= 3) faces.Add(indices);
+        }
+
+        var categoryId = ResolveDirectShapeCategory(categoryName);
+        var shape = BuildDirectShapeMesh(points, faces);
+        if (shape.Count == 0)
+        {
+            ReplyError(requestId, "Geometry payload did not contain a valid mesh");
+            return;
         }
 
         using (var tx = new Transaction(doc, "Nova Create DirectShape"))
         {
             tx.Start();
 
-            var ds = DirectShape.CreateElement(doc, new ElementId(BuiltInCategory.OST_GenericModel));
-            ds.Name = "Nova Geometry";
-
-            // Create a simple box solid as a placeholder for the received geometry
-            var profile = new List<CurveLoop>();
-            var loop = new CurveLoop();
-            loop.Append(Line.CreateBound(new XYZ(0, 0, 0), new XYZ(10, 0, 0)));
-            loop.Append(Line.CreateBound(new XYZ(10, 0, 0), new XYZ(10, 10, 0)));
-            loop.Append(Line.CreateBound(new XYZ(10, 10, 0), new XYZ(0, 10, 0)));
-            loop.Append(Line.CreateBound(new XYZ(0, 10, 0), new XYZ(0, 0, 0)));
-            profile.Add(loop);
-            var solidBox = GeometryCreationUtilities.CreateExtrusionGeometry(profile, XYZ.BasisZ, 10);
-
-            ds.SetShape(new List<GeometryObject> { solidBox });
+            var ds = DirectShape.CreateElement(doc, categoryId);
+            ds.Name = string.IsNullOrWhiteSpace(elementName) ? "Nova Geometry" : elementName;
+            ds.ApplicationId = "Nova";
+            ds.ApplicationDataId = Guid.NewGuid().ToString("N");
+            ds.SetShape(shape);
 
             tx.Commit();
 
@@ -853,11 +883,83 @@ public class NovaHostClient : IDisposable
                 data = new
                 {
                     directShapeId = ds.Id.Value.ToString(),
-                    category = "Generic Models"
+                    category = categoryName,
+                    name = ds.Name,
+                    familyTemplatePath
                 },
-                message = "DirectShape geometry accepted."
+                message = string.IsNullOrWhiteSpace(familyTemplatePath)
+                    ? "DirectShape geometry created."
+                    : "DirectShape geometry created. Family template path was received but DirectShape creation does not require a family template."
             });
         }
+    }
+
+    private static double ReadGeometryScaleToRevitFeet(JsonElement geometryProp)
+    {
+        if (geometryProp.TryGetProperty("units", out var unitsProp) &&
+            unitsProp.ValueKind == JsonValueKind.Object &&
+            unitsProp.TryGetProperty("scaleToMeters", out var scaleProp) &&
+            scaleProp.TryGetDouble(out var scaleToMeters))
+        {
+            return scaleToMeters / 0.3048;
+        }
+        return 1.0 / 0.3048;
+    }
+
+    private static ElementId ResolveDirectShapeCategory(string categoryName)
+    {
+        var normalized = (categoryName ?? "").Trim().ToLowerInvariant();
+        var category = normalized switch
+        {
+            "mass" or "massing" => BuiltInCategory.OST_Mass,
+            "furniture" => BuiltInCategory.OST_Furniture,
+            "walls" or "wall" => BuiltInCategory.OST_Walls,
+            "floors" or "floor" => BuiltInCategory.OST_Floors,
+            "roofs" or "roof" => BuiltInCategory.OST_Roofs,
+            "ceilings" or "ceiling" => BuiltInCategory.OST_Ceilings,
+            "columns" or "column" => BuiltInCategory.OST_Columns,
+            "structural framing" or "framing" => BuiltInCategory.OST_StructuralFraming,
+            "mechanical equipment" => BuiltInCategory.OST_MechanicalEquipment,
+            "plumbing fixtures" => BuiltInCategory.OST_PlumbingFixtures,
+            "electrical fixtures" => BuiltInCategory.OST_ElectricalFixtures,
+            "electrical equipment" => BuiltInCategory.OST_ElectricalEquipment,
+            _ => BuiltInCategory.OST_GenericModel
+        };
+        return new ElementId(category);
+    }
+
+    private static List<GeometryObject> BuildDirectShapeMesh(List<XYZ> points, List<List<int>> faces)
+    {
+        var builder = new TessellatedShapeBuilder();
+        builder.OpenConnectedFaceSet(true);
+
+        foreach (var indices in faces)
+        {
+            var facePoints = new List<XYZ>();
+            foreach (var index in indices)
+            {
+                if (index >= 0 && index < points.Count)
+                {
+                    facePoints.Add(points[index]);
+                }
+            }
+            if (facePoints.Count < 3) continue;
+
+            try
+            {
+                builder.AddFace(new TessellatedFace(facePoints, ElementId.InvalidElementId));
+            }
+            catch
+            {
+                // Skip malformed faces and keep the rest of the mesh.
+            }
+        }
+
+        builder.CloseConnectedFaceSet();
+        builder.Target = TessellatedShapeBuilderTarget.AnyGeometry;
+        builder.Fallback = TessellatedShapeBuilderFallback.Mesh;
+        builder.Build();
+        return builder.GetBuildResult().GetGeometricalObjects().ToList();
     }
 
 
