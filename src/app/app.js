@@ -2510,7 +2510,17 @@ const app = {
 
       });
 
-
+      // Re-render nodes that have property controls to show/hide wired green border
+      if (this._refreshRenderedNode) {
+        var refreshTargets = {};
+        graph.wires.forEach(function(w) {
+          var nd = this.nodes.find(function(n) { return n.id === w.toNode; });
+          if (nd && this._inputHasPropertyControl && this._inputHasPropertyControl(nd.id, w.toPort)) {
+            refreshTargets[nd.id] = true;
+          }
+        }.bind(this));
+        Object.keys(refreshTargets).forEach(function(id) { this._refreshRenderedNode(id); }.bind(this));
+      }
 
       this.updatePortDots();
 
