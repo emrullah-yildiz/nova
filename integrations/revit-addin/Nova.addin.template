@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Command">
+    <Name>Nova Connect</Name>
+    <Assembly>{{ASSEMBLY_PATH}}</Assembly>
+    <AddInId>7F742056-0C3A-4F5D-9440-AED68D8AF0F9</AddInId>
+    <FullClassName>Nova.RevitAddin.OpenNovaCommand</FullClassName>
+    <VendorId>NOVA</VendorId>
+    <VendorDescription>Nova visual scripting integration</VendorDescription>
+  </AddIn>
+</RevitAddIns>
