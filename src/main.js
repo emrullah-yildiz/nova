@@ -127,6 +127,9 @@ function installBeforeAppInit() {
   installWirePortalPatch();
   installNodeSearchPopup();
   installLoggerPatch(app);
+  // Install V1 engine first (compute pipeline, wire rendering, etc.)
+  // V2 ExecutionEngine will then patch V1 methods for caching and dirty tracking
+  installEngine(app);
 }
 
 function installAfterAppInit() {

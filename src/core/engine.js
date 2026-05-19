@@ -1136,6 +1136,28 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
+      // ── Slow Compute (test cancellation) ──
+      case 'slow-compute': {
+        var delayMs = parseInt(ctrl.delayMs) || 5000;
+        var inputVal = getInput('value');
+        // Return a Promise that resolves after delayMs, giving the event loop
+        // time to process the Cancel button click and abort the operation.
+        return new Promise(function(resolve) {
+          var checkInterval = setInterval(function() {
+            if (nd._cancelled) {
+              clearInterval(checkInterval);
+              resolve(undefined);
+              return;
+            }
+            if (Date.now() - startTime >= delayMs) {
+              clearInterval(checkInterval);
+              resolve(inputVal !== undefined ? inputVal : parseFloat(ctrl.value) || 0);
+            }
+          }, 100);
+          var startTime = Date.now();
+        });
+      }
+
       // ── Python / Code ──
 
       case 'custom-python': case 'custom-code': {
@@ -2460,10 +2482,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
   return true;
 }
 
-if (typeof document !== 'undefined') {
-  document.addEventListener('DOMContentLoaded', function() {
-    installEngine();
-  });
-}
+// Note: auto-install is intentionally removed — main.js handles
+// initialization order (installEngine → initializeApp → ExecutionEngine.attach)
+// A second auto-run here would overwrite V2 engine patches.
 
 export default installEngine;

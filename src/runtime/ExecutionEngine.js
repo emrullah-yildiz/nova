@@ -518,6 +518,14 @@ export class ExecutionEngine {
     this.cancellation.cancelAll();
     this.dirtyTracker.reset();
     this._running = false;
+
+    // Mark all nodes as cancelled so async slow-compute Promises resolve quickly
+    const app = this._app;
+    if (app && app.nodes) {
+      for (const nd of app.nodes) {
+        nd._cancelled = true;
+      }
+    }
   }
 
   /**
