@@ -31,40 +31,8 @@ export const mathNodes = [
   execute(context, inputs) {
     const a = inputs.a ?? 0;
     const b = inputs.b ?? 0;
-
-    const toNumber = (v) => Number(v ?? 0);
-
-    const add = (x, y) => toNumber(x) + toNumber(y);
-
-    const isArrayA = Array.isArray(a);
-    const isArrayB = Array.isArray(b);
-
-    // List + List
-    if (isArrayA && isArrayB) {
-      const length = Math.min(a.length, b.length);
-
-      return {
-        result: Array.from({ length }, (_, i) => add(a[i], b[i]))
-      };
-    }
-
-    // List + Scalar
-    if (isArrayA) {
-      return {
-        result: a.map(v => add(v, b))
-      };
-    }
-
-    // Scalar + List
-    if (isArrayB) {
-      return {
-        result: b.map(v => add(a, v))
-      };
-    }
-
-    // Scalar + Scalar
     return {
-      result: add(a, b)
+      result: Number(a) + Number(b)
     };
   },
 

@@ -96,7 +96,10 @@ test.describe('Nova browser workflows', () => {
       return { sumId: sum.id, initialStyle };
     });
 
-    const inputA = page.locator(`#${setup.sumId} .node-props-body .prop-row`, { hasText: 'A' }).locator('.prop-input');
+    const inputA = page
+      .locator(`#${setup.sumId} .node-props-body .prop-row`)
+      .filter({ has: page.locator('.prop-label', { hasText: /^A$/ }) })
+      .locator('.prop-input');
     expect(setup.initialStyle).not.toContain('var(--accent-teal)');
     await expect(inputA).toHaveValue('25');
 
@@ -113,7 +116,8 @@ test.describe('Nova browser workflows', () => {
     await page.mouse.up();
 
     const disconnectedInputA = page
-      .locator(`#${setup.sumId} .node-props-body .prop-row`, { hasText: 'A' })
+      .locator(`#${setup.sumId} .node-props-body .prop-row`)
+      .filter({ has: page.locator('.prop-label', { hasText: /^A$/ }) })
       .locator('.prop-input');
 
     await expect(disconnectedInputA).toHaveValue('0');
@@ -123,6 +127,33 @@ test.describe('Nova browser workflows', () => {
 
     const remainingWires = await page.evaluate(() => app.wires.length);
     expect(remainingWires).toBe(0);
+  });
+
+  test('lets users choose a lacing mode from node properties', async ({ page }) => {
+    await waitForApp(page);
+
+    const setup = await page.evaluate(() => {
+      app.newProject();
+      const sum = app.addNodeToCanvas('math-add', 340, 100);
+      sum._propsOpen = true;
+      sum.propsPanelOpen = true;
+      if (app._refreshRenderedNode) app._refreshRenderedNode(sum.id);
+      return { sumId: sum.id };
+    });
+
+    const lacingSelect = page
+      .locator(`#${setup.sumId} .node-props-body .prop-row`, { hasText: 'Lacing' })
+      .locator('select.prop-input');
+
+    await expect(lacingSelect).toHaveValue('shortest');
+    await lacingSelect.selectOption('longest');
+
+    const storedLacingMode = await page.evaluate((sumId) => {
+      const node = app.nodes.find(item => item.id === sumId);
+      return node && node.controlValues._lacingMode;
+    }, setup.sumId);
+
+    expect(storedLacingMode).toBe('longest');
   });
 
   test('reports missing API key before attempting an AI provider call', async ({ page }) => {
