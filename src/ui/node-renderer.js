@@ -6,6 +6,8 @@
 // Number/Slider/Integer properties, dropdown controls
 // ═══════════════════════════════════════════════════
 
+import { getWiredControlDisplay, removeControlInputWires } from './property-wire-controls.js';
+
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
   if (typeof globalThis !== 'undefined' && globalThis.app) return globalThis.app;
@@ -17,6 +19,31 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
   if (targetApp.__nodeRendererInstalled) return true;
   targetApp.__nodeRendererInstalled = true;
   var app = targetApp;
+
+  app._disconnectControlInputWire = function(nodeId, controlId) {
+    var result = removeControlInputWires(this.wires, nodeId, controlId);
+    if (!result.removed) return false;
+    this.wires = result.wires;
+    if (this.invalidateCompute) this.invalidateCompute();
+    if (typeof Viewer3D !== 'undefined') Viewer3D._needsRebuild = true;
+    if (this.renderWires) this.renderWires();
+    return true;
+  };
+
+  app._onPropertyControlInput = function(nodeId, controlId, value) {
+    this._disconnectControlInputWire(nodeId, controlId);
+    this.onCtrl(nodeId, controlId, value);
+  };
+
+  app._onPropertyFormulaInput = function(nodeId, controlId, value, inputEl) {
+    this._disconnectControlInputWire(nodeId, controlId);
+    this._onFormulaInput(nodeId, controlId, value, inputEl);
+  };
+
+  app._spinPropertyControl = function(nodeId, controlId, direction, btnEl) {
+    this._disconnectControlInputWire(nodeId, controlId);
+    this._spinCtrlDyn(nodeId, controlId, direction, btnEl);
+  };
 
   // ── Override renderNode — single universal renderer ──
   app.renderNode = function(nd) {
@@ -181,7 +208,11 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
           var inp = allInputs.find(function(i) { return i.id === ctrl.id; });
           var val = nd.controlValues[ctrl.id];
           if (val === undefined || val === null) val = ctrl.default || '';
-          var wire = inp ? app.wires.find(function(w) { return w.toNode === nd.id && w.toPort === ctrl.id; }) : null;
+          var wiredControl = inp
+            ? getWiredControlDisplay(app, nd, ctrl.id, val)
+            : { wired: false, displayValue: val, isList: false };
+
+          var wire = wiredControl.wire;
           var axisClass = ctrl.axis ? ' prop-' + ctrl.axis : '';
           var inputClass = ctrl.axis ? ' prop-input-' + ctrl.axis : '';
 
@@ -196,7 +227,9 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
             }
           }
 
-          var wireStyle = wire ? 'border-color:var(--accent-teal);color:var(--accent-teal);' : '';
+          displayVal = wiredControl.displayValue;
+
+          var wireStyle = wiredControl.wired ? 'border-color:var(--accent-teal);color:var(--accent-teal);' : '';
           var isFormula = ctrl.type === 'formula';
           var isDropdown = ctrl.type === 'dropdown';
 
@@ -205,7 +238,7 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
 
           if (isDropdown) {
             h += '<select class="prop-input" style="font-size:10px;height:24px" ';
-            h += 'onchange="app.onCtrl(\'' + nd.id + '\',\'' + ctrl.id + '\',this.value);if(app.invalidateCompute)app.invalidateCompute()" ';
+            h += 'onchange="app._onPropertyControlInput(\'' + nd.id + '\',\'' + ctrl.id + '\',this.value)" ';
             h += 'onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">';
             (ctrl.options || []).forEach(function(opt) {
               h += '<option value="' + opt + '"' + (String(displayVal) === String(opt) ? ' selected' : '') + '>' + opt + '</option>';
@@ -213,11 +246,11 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
             h += '</select>';
           } else if (isFormula) {
             var rawVal = String(displayVal);
-            var evalResult = (typeof FormulaEval !== 'undefined') ? FormulaEval.eval(rawVal) : { value: parseFloat(rawVal) || 0, isFormula: false };
+            var evalResult = (!wiredControl.isList && typeof FormulaEval !== 'undefined') ? FormulaEval.eval(rawVal) : { value: parseFloat(rawVal) || 0, isFormula: false };
             h += '<div style="flex:1;display:flex;flex-direction:column;gap:1px;min-width:0">';
             h += '<input type="text" class="prop-input' + inputClass + '" value="' + rawVal + '" ';
             h += 'style="' + wireStyle + 'font-family:var(--font-mono);font-size:10px;height:24px;box-sizing:border-box" ';
-            h += 'oninput="app._onFormulaInput(\'' + nd.id + '\',\'' + ctrl.id + '\',this.value,this)" ';
+            h += 'oninput="app._onPropertyFormulaInput(\'' + nd.id + '\',\'' + ctrl.id + '\',this.value,this)" ';
             h += 'onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">';
             if (evalResult.isFormula) h += '<div id="' + nd.id + '-feval-' + ctrl.id + '" style="font-size:8px;color:var(--accent-green);padding-left:2px;font-family:var(--font-mono)">= ' + evalResult.value.toFixed(4).replace(/\.?0+$/, '') + '</div>';
             else h += '<div id="' + nd.id + '-feval-' + ctrl.id + '" style="font-size:8px;min-height:0"></div>';
@@ -227,7 +260,7 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
             h += '<div class="num-spin-wrap" style="flex:1">';
             h += '<input type="number" class="prop-input' + inputClass + '" value="' + displayVal + '" step="0.1" ';
             h += 'style="' + wireStyle + 'height:24px;box-sizing:border-box" ';
-            h += 'oninput="app.onCtrl(\'' + nd.id + '\',\'' + ctrl.id + '\',this.value)" ';
+            h += 'oninput="app._onPropertyControlInput(\'' + nd.id + '\',\'' + ctrl.id + '\',this.value)" ';
             h += 'onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">';
             h += '<div class="num-spin-btns">';
             h += '<button class="num-spin-btn" onclick="event.stopPropagation();app._spinCtrlDyn(\'' + nd.id + '\',\'' + ctrl.id + '\',1,this)" onmousedown="event.stopPropagation()">▲</button>';
@@ -315,7 +348,9 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
 
   // ── Spin buttons ──
   app._spinCtrlDyn = function(nid, cid, direction, btnEl) {
-    var nd = this.nodes.find(function(n) { return n.id === nid; }); if (!nd) return;
+    var nd = this.nodes.find(function(n) { return n.id === nid; }); if (!nd) return;
+
+    if (this._disconnectControlInputWire) this._disconnectControlInputWire(nid, cid);
     var step = nd.controlValues['_step'] !== undefined ? parseFloat(nd.controlValues['_step']) : 1;
     if (nd.type === 'integer-input') step = Math.max(1, Math.round(step));
     var cur = parseFloat(nd.controlValues[cid]) || 0;
