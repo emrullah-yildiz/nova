@@ -209,4 +209,49 @@ describe('Engine computeNodeValue', () => {
       else globalThis.RevitBridge = previousBridge;
     }
   });
+
+  it('prefetches live Revit geometry sends for SendGeometry nodes', async () => {
+    const previousBridge = globalThis.RevitBridge;
+    const mesh = { _type: 'Mesh3', vertices: [], faces: [] };
+    let sendOptions = null;
+    globalThis.RevitBridge = {
+      async sendGeometry(geometry, identity, options) {
+        sendOptions = options;
+        return {
+          ok: geometry === mesh,
+          data: { directShapeId: '9001' }
+        };
+      }
+    };
+    app.nodes = [
+      { id: 'mesh', type: 'custom-code', controlValues: {}, _pyResults: { mesh } },
+      {
+        id: 'send',
+        type: 'revit-send-geometry',
+        controlValues: {
+          category: 'Generic Models',
+          name: 'Nova Test',
+          familyTemplatePath: 'C:\\Templates\\Generic Model.rft'
+        }
+      }
+    ];
+    app.wires = [{ fromNode: 'mesh', fromPort: 'mesh', toNode: 'send', toPort: 'geometry' }];
+
+    try {
+      await app._prepareLiveRevitGeometries();
+      const result = app.computeNodeValue(app.nodes[1]);
+
+      expect(sendOptions.category).toBe('Generic Models');
+      expect(sendOptions.name).toBe('Nova Test');
+      expect(sendOptions.familyTemplatePath).toBe('C:\\Templates\\Generic Model.rft');
+      expect(result).toEqual({
+        result: { ok: true, data: { directShapeId: '9001' } },
+        elementId: '9001',
+        success: true
+      });
+    } finally {
+      if (previousBridge === undefined) delete globalThis.RevitBridge;
+      else globalThis.RevitBridge = previousBridge;
+    }
+  });
 });
