@@ -605,16 +605,55 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
       // ── Math (v1+v2 unified — uses getVal for formula/control fallback) ──
+      // Array-aware arithmetic: broadcasts scalars, adds element-wise for arrays
 
-      case 'math-add': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined) ? a + b : undefined; }
+      case 'math-add': {
+        var a = getVal('a',undefined), b = getVal('b',undefined);
+        if (a === undefined || b === undefined) return undefined;
+        if (Array.isArray(a) && Array.isArray(b)) {
+          var addArr = []; for (var ai = 0; ai < Math.min(a.length, b.length); ai++) addArr.push(a[ai] + b[ai]);
+          return addArr;
+        }
+        if (Array.isArray(a)) { var addArrA = []; for (var ai2 = 0; ai2 < a.length; ai2++) addArrA.push(a[ai2] + b); return addArrA; }
+        if (Array.isArray(b)) { var addArrB = []; for (var bi2 = 0; bi2 < b.length; bi2++) addArrB.push(a + b[bi2]); return addArrB; }
+        return a + b;
+      }
 
-      case 'math-subtract': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined) ? a - b : undefined; }
+      case 'math-subtract': {
+        var a = getVal('a',undefined), b = getVal('b',undefined);
+        if (a === undefined || b === undefined) return undefined;
+        if (Array.isArray(a) && Array.isArray(b)) { var subArr = []; for (var si = 0; si < Math.min(a.length, b.length); si++) subArr.push(a[si] - b[si]); return subArr; }
+        if (Array.isArray(a)) { var subArrA = []; for (var si2 = 0; si2 < a.length; si2++) subArrA.push(a[si2] - b); return subArrA; }
+        if (Array.isArray(b)) { var subArrB = []; for (var si3 = 0; si3 < b.length; si3++) subArrB.push(a - b[si3]); return subArrB; }
+        return a - b;
+      }
 
-      case 'math-multiply': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined) ? a * b : undefined; }
+      case 'math-multiply': {
+        var a = getVal('a',undefined), b = getVal('b',undefined);
+        if (a === undefined || b === undefined) return undefined;
+        if (Array.isArray(a) && Array.isArray(b)) { var mulArr = []; for (var mi = 0; mi < Math.min(a.length, b.length); mi++) mulArr.push(a[mi] * b[mi]); return mulArr; }
+        if (Array.isArray(a)) { var mulArrA = []; for (var mi2 = 0; mi2 < a.length; mi2++) mulArrA.push(a[mi2] * b); return mulArrA; }
+        if (Array.isArray(b)) { var mulArrB = []; for (var mi3 = 0; mi3 < b.length; mi3++) mulArrB.push(a * b[mi3]); return mulArrB; }
+        return a * b;
+      }
 
-      case 'math-divide': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined && b !== 0) ? a / b : undefined; }
+      case 'math-divide': {
+        var a = getVal('a',undefined), b = getVal('b',undefined);
+        if (a === undefined || b === undefined || b === 0) return undefined;
+        if (Array.isArray(a) && Array.isArray(b)) { var divArr = []; for (var di = 0; di < Math.min(a.length, b.length); di++) divArr.push(b[di] !== 0 ? a[di] / b[di] : undefined); return divArr; }
+        if (Array.isArray(a)) { var divArrA = []; for (var di2 = 0; di2 < a.length; di2++) divArrA.push(a[di2] / b); return divArrA; }
+        if (Array.isArray(b)) { var divArrB = []; for (var di3 = 0; di3 < b.length; di3++) divArrB.push(b[di3] !== 0 ? a / b[di3] : undefined); return divArrB; }
+        return a / b;
+      }
 
-      case 'math-power': { var base = getVal('base',undefined), exp = getVal('exp',undefined); return (base !== undefined && exp !== undefined) ? Math.pow(base, exp) : undefined; }
+      case 'math-power': {
+        var base = getVal('base',undefined), exp = getVal('exp',undefined);
+        if (base === undefined || exp === undefined) return undefined;
+        if (Array.isArray(base) && Array.isArray(exp)) { var powArr = []; for (var pi = 0; pi < Math.min(base.length, exp.length); pi++) powArr.push(Math.pow(base[pi], exp[pi])); return powArr; }
+        if (Array.isArray(base)) { var powArrA = []; for (var pi2 = 0; pi2 < base.length; pi2++) powArrA.push(Math.pow(base[pi2], exp)); return powArrA; }
+        if (Array.isArray(exp)) { var powArrB = []; for (var pi3 = 0; pi3 < exp.length; pi3++) powArrB.push(Math.pow(base, exp[pi3])); return powArrB; }
+        return Math.pow(base, exp);
+      }
 
 
 
