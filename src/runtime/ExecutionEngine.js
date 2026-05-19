@@ -204,39 +204,48 @@ export class ExecutionEngine {
       this._version++;
     };
 
-    // ── Wire Cancel button ──
-    this._cancelBtn = document.getElementById('menu-cancel');
-    this._runBtn = document.getElementById('menu-run');
-    if (this._cancelBtn) {
-      this._cancelBtn.addEventListener('click', () => {
-        this.cancel();
-        if (this._runBtn) {
-          this._runBtn.classList.remove('disabled');
-          this._runBtn.textContent = '▶ Run';
-        }
-        if (this._cancelBtn) {
-          this._cancelBtn.classList.add('hidden');
-        }
+    // ── Wire Cancel button (lazy lookup – buttons may not be in DOM yet) ──
+    this._getButtons = () => {
+      if (!this._cancelBtn) this._cancelBtn = document.getElementById('menu-cancel');
+      if (!this._runBtn) this._runBtn = document.getElementById('menu-run');
+      return { run: this._runBtn, cancel: this._cancelBtn };
+    };
+
+    // Lazy event binding — only wire click once
+    const self = this;
+    function cancelHandler() {
+      self.cancel();
+      const btns = self._getButtons();
+      if (btns.run) {
+        btns.run.classList.remove('disabled');
+        btns.run.textContent = '▶ Run';
+      }
+      if (btns.cancel) {
+        btns.cancel.classList.add('hidden');
+      }
+      if (app && typeof app.addAIMessage === 'function') {
         app.addAIMessage('workspace', '⏹ **Execution cancelled** by user.');
-      });
+      }
+    }
+    // Bind cancel handler to button once found
+    Object.defineProperty(this, '_cancelHandler', { value: cancelHandler, writable: false });
+
+    // Try to find cancel button and attach handler now; if not found, will be found on next run()
+    const btns = this._getButtons();
+    if (btns.cancel) {
+      btns.cancel.addEventListener('click', cancelHandler);
     }
 
     // Add cancelExecution method to app for external access (e.g. toolbar button)
     app.cancelExecution = () => {
-      this.cancel();
-      if (this._runBtn) {
-        this._runBtn.classList.remove('disabled');
-        this._runBtn.textContent = '▶ Run';
-      }
-      if (this._cancelBtn) {
-        this._cancelBtn.classList.add('hidden');
-      }
+      cancelHandler();
     };
 
     if (typeof app._graphDirty !== 'undefined') {
       app._graphDirty = true;
     }
 
+    console.log('[ExecutionEngine v2] Attached to app — cancel button will appear on Run()');
     return this;
   }
 
@@ -266,6 +275,9 @@ export class ExecutionEngine {
     }
     this._running = true;
     this._version++;
+
+    // Ensure buttons are looked up (lazy, in case DOM wasn't ready at attach time)
+    this._getButtons();
 
     // Toggle UI buttons: show Cancel, hide Run
     if (this._runBtn) {

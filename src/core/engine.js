@@ -1830,7 +1830,31 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
+  // ── Cancel button helpers — canvas toolbar only ──
+  app._showCancelButton = function() {
+    var runBtn = document.getElementById('toolbar-run');
+    if (runBtn) { runBtn.textContent = '■'; runBtn.style.color = 'var(--accent-red)'; runBtn.title = 'Cancel'; runBtn.onclick = app.cancelExecution; }
+  };
+  app._hideCancelButton = function() {
+    var runBtn = document.getElementById('toolbar-run');
+    if (runBtn) { runBtn.textContent = '▶'; runBtn.style.color = 'var(--accent-green)'; runBtn.title = 'Run Graph'; runBtn.onclick = function() { app.runGraph(); }; }
+  };
+  app.cancelExecution = function() {
+    // Cancel V2 engine if available
+    var v2 = app._executionEngineV2;
+    if (v2 && typeof v2.cancel === 'function') {
+      v2.cancel();
+    }
+    app._hideCancelButton();
+    if (typeof app.addAIMessage === 'function') {
+      app.addAIMessage('workspace', '⏹ **Execution cancelled** by user.');
+    }
+  };
+
   app.runGraph = async function() {
+
+    // Show cancel button
+    app._showCancelButton();
 
     // 0. Refresh Revit data on Run if connected to a live session
 

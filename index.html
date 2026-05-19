@@ -118,9 +118,6 @@
 
       <button class="menu-item" onclick="NFLogger.downloadLogs()" title="Download session logs as JSON" style="font-size:12px;opacity:0.7;">📥 Logs</button>
 
-      <button class="menu-item disabled" id="menu-run" style="font-weight:600;">▶ Run</button>
-      <button class="menu-item hidden" id="menu-cancel" style="font-weight:600;color:var(--accent-red);">⏹ Cancel</button>
-
     </div>
 
   </div>
@@ -222,7 +219,7 @@
 
         <div class="canvas-tool-sep"></div>
 
-        <button class="canvas-tool-btn" title="Run Graph" onclick="app.runGraph()" style="color:var(--accent-green);">▶</button>
+        <button class="canvas-tool-btn" id="toolbar-run" title="Run Graph" onclick="app.runGraph()" style="color:var(--accent-green);">▶</button>
 
       </div>
 
