@@ -47,7 +47,12 @@ NODE_LIBRARY.categories.push({ id: 'custom', name: 'Custom / AI', color: '#94e2d
 ] });
 
 // ═══════════════════════════════════════
-// 3. INPUT
+// 3. TESTING / DEBUG (hidden from normal categories)
+NODE_LIBRARY.categories.push({ id: 'testing', name: 'Testing', color: '#f5c2e7', icon: '⚡', nodes: [
+  { type: 'slow-compute', name: 'Slow Compute (test cancel)', icon: '⏱', inputs: [{ id: 'value', name: 'Value', type: 'number' }], outputs: [{ id: 'result', name: 'Result', type: 'number' }], controls: [{ id: 'delayMs', type: 'formula', default: '5000', label: 'Delay (ms)' }], preview: true, codegen: { python: '{{result}} = {{value}}', csharp: '' } }
+] });
+
+// 4. INPUT
 // ═══════════════════════════════════════
 NODE_LIBRARY.categories.push({ id: 'input', name: 'Input', color: '#cba6f7', icon: '⊙', nodes: [
   { type: 'boolean-input', name: 'Boolean', icon: '◑', inputs: [], outputs: [{ id: 'value', name: 'Value', type: 'boolean' }], controls: [{ id: 'val', type: 'dropdown', options: ['True','False'], default: 'True', label: 'Value' }], preview: true, codegen: { python: '{{value}} = {{ctrl.val}}', csharp: 'bool {{value}} = {{ctrl.val_lower}};' } },

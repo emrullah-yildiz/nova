@@ -1136,6 +1136,28 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
+      // ── Slow Compute (test cancellation) ──
+      case 'slow-compute': {
+        var delayMs = parseInt(ctrl.delayMs) || 5000;
+        var inputVal = getInput('value');
+        // Return a Promise that resolves after delayMs, giving the event loop
+        // time to process the Cancel button click and abort the operation.
+        return new Promise(function(resolve) {
+          var checkInterval = setInterval(function() {
+            if (nd._cancelled) {
+              clearInterval(checkInterval);
+              resolve(undefined);
+              return;
+            }
+            if (Date.now() - startTime >= delayMs) {
+              clearInterval(checkInterval);
+              resolve(inputVal !== undefined ? inputVal : parseFloat(ctrl.value) || 0);
+            }
+          }, 100);
+          var startTime = Date.now();
+        });
+      }
+
       // ── Python / Code ──
 
       case 'custom-python': case 'custom-code': {
@@ -1808,7 +1830,31 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
+  // ── Cancel button helpers — canvas toolbar only ──
+  app._showCancelButton = function() {
+    var runBtn = document.getElementById('toolbar-run');
+    if (runBtn) { runBtn.textContent = '■'; runBtn.style.color = 'var(--accent-red)'; runBtn.title = 'Cancel'; runBtn.onclick = app.cancelExecution; }
+  };
+  app._hideCancelButton = function() {
+    var runBtn = document.getElementById('toolbar-run');
+    if (runBtn) { runBtn.textContent = '▶'; runBtn.style.color = 'var(--accent-green)'; runBtn.title = 'Run Graph'; runBtn.onclick = function() { app.runGraph(); }; }
+  };
+  app.cancelExecution = function() {
+    // Cancel V2 engine if available
+    var v2 = app._executionEngineV2;
+    if (v2 && typeof v2.cancel === 'function') {
+      v2.cancel();
+    }
+    app._hideCancelButton();
+    if (typeof app.addAIMessage === 'function') {
+      app.addAIMessage('workspace', '⏹ **Execution cancelled** by user.');
+    }
+  };
+
   app.runGraph = async function() {
+
+    // Show cancel button
+    app._showCancelButton();
 
     // 0. Refresh Revit data on Run if connected to a live session
 
@@ -2460,10 +2506,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
   return true;
 }
 
-if (typeof document !== 'undefined') {
-  document.addEventListener('DOMContentLoaded', function() {
-    installEngine();
-  });
-}
+// Note: auto-install is intentionally removed — main.js handles
+// initialization order (installEngine → initializeApp → ExecutionEngine.attach)
+// A second auto-run here would overwrite V2 engine patches.
 
 export default installEngine;

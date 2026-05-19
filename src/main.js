@@ -26,6 +26,7 @@ import { installPortHandler } from './ui/port-handler.js';
 import { installNodeHelp } from './ui/node-help.js';
 import { installNodeHelpPanel } from './ui/node-help-panel.js';
 import { installRevitNodes, RevitBridge, RevitElement } from './integrations/revit/revit-nodes.js';
+import { ExecutionEngine } from './runtime/ExecutionEngine.js';
 import { createNovaConnectClient, NovaConnectClient } from './integrations/connect/client.js';
 import * as NovaConnectProtocol from './integrations/connect/protocol.js';
 import {
@@ -126,6 +127,9 @@ function installBeforeAppInit() {
   installWirePortalPatch();
   installNodeSearchPopup();
   installLoggerPatch(app);
+  // Install V1 engine first (compute pipeline, wire rendering, etc.)
+  // V2 ExecutionEngine will then patch V1 methods for caching and dirty tracking
+  installEngine(app);
 }
 
 function installAfterAppInit() {
@@ -136,6 +140,16 @@ function installAfterAppInit() {
   installNodeHelpPanel(app);
   installNovaConnectPanel(app);
   installGeoSelector(app);
+
+  // Mount the Execution Engine v2 — enables dirty tracking, caching,
+  // parallel scheduling, cancellation, and streaming for large geometry.
+  try {
+    const engine = new ExecutionEngine({ concurrency: 4 });
+    engine.attach(app);
+    window.__executionEngineV2 = engine;
+  } catch (err) {
+    console.warn('[ExecutionEngine] Could not mount v2 engine (non-critical):', err);
+  }
 }
 
 function startAppShell() {
