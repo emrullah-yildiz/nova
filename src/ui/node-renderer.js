@@ -44,6 +44,36 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
     this._disconnectControlInputWire(nodeId, controlId);
     this._spinCtrlDyn(nodeId, controlId, direction, btnEl);
   };
+
+  app._inputHasPropertyControl = function(nodeId, inputId) {
+    var nd = this.nodes.find(function(node) { return node.id === nodeId; });
+    if (!nd || !nd.def) return false;
+    var hasInput = (nd.def.inputs || []).some(function(input) { return input.id === inputId; });
+    var hasControl = (nd.def.controls || []).some(function(control) { return control.id === inputId; });
+    return hasInput && hasControl;
+  };
+
+  app._refreshRenderedNode = function(nodeId) {
+    var nd = this.nodes.find(function(node) { return node.id === nodeId; });
+    var el = document.getElementById(nodeId);
+    if (!nd || !el) return false;
+    el.remove();
+    this.renderNode(nd);
+    if (this.updatePortDots) this.updatePortDots();
+    if (this.renderWires) this.renderWires();
+    return true;
+  };
+
+  if (!app.__propertyWireAddWireWrapped && app.addWire) {
+    var baseAddWire = app.addWire.bind(app);
+    app.addWire = function(fromNode, fromPort, toNode, toPort) {
+      baseAddWire(fromNode, fromPort, toNode, toPort);
+      if (this._inputHasPropertyControl && this._inputHasPropertyControl(toNode, toPort)) {
+        this._refreshRenderedNode(toNode);
+      }
+    };
+    app.__propertyWireAddWireWrapped = true;
+  };
 
   // ── Override renderNode — single universal renderer ──
   app.renderNode = function(nd) {
