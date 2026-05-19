@@ -25,3 +25,11 @@ export {
   registerLegacyNodeLibrary,
   registryNodeToLegacyDefinition
 } from './legacyBridge.js';
+
+export {
+  applyNodeOutputs,
+  createRegistryComputeInner,
+  executeRegistryNode,
+  resolveControls,
+  resolveInputs
+} from './runtimeAdapter.js';
