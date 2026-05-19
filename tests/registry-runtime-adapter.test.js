@@ -88,6 +88,37 @@ describe('registry runtime adapter', () => {
     expect(nodes[2]._portValues).toEqual({ result: [11, 22, 23] });
   });
 
+  it('groups cross product results by the first list input', () => {
+    const registry = createCoreNodeRegistry();
+    const nodes = [
+      { id: 'list-a', type: 'test.source', controlValues: {}, _portValues: { list: [1, 2] } },
+      { id: 'list-b', type: 'test.source', controlValues: {}, _portValues: { list: [10, 20, 30] } },
+      { id: 'sum', type: 'math.add', controlValues: { a: '0', b: '0', _lacingMode: 'crossProduct' } }
+    ];
+    const wires = [
+      { fromNode: 'list-a', fromPort: 'list', toNode: 'sum', toPort: 'a' },
+      { fromNode: 'list-b', fromPort: 'list', toNode: 'sum', toPort: 'b' }
+    ];
+    const ctx = createComputeContext(nodes, wires, {
+      computeInner: createRegistryComputeInner(registry, {
+        fallbackComputeInner(node) {
+          return node._portValues ? node._portValues.list : undefined;
+        }
+      })
+    });
+
+    expect(computeNodeValue(ctx, nodes[2])).toEqual([
+      [11, 21, 31],
+      [12, 22, 32]
+    ]);
+    expect(nodes[2]._portValues).toEqual({
+      result: [
+        [11, 21, 31],
+        [12, 22, 32]
+      ]
+    });
+  });
+
   it('supports multi-output registered nodes', () => {
     const registry = createCoreNodeRegistry();
     registry.registerCategory({ id: 'test', name: 'Test' });

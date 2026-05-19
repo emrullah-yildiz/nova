@@ -92,6 +92,81 @@ describe('Engine computeNodeValue', () => {
     expect(app.computeNodeValue(app.nodes[0])).toBe(9);
   });
 
+  it('applies shortest lacing in legacy math nodes', () => {
+    app.nodes = [
+      { id: 'a1', type: 'number-input', controlValues: { val: '1' } },
+      { id: 'a2', type: 'number-input', controlValues: { val: '2' } },
+      { id: 'a3', type: 'number-input', controlValues: { val: '3' } },
+      { id: 'b1', type: 'number-input', controlValues: { val: '10' } },
+      { id: 'b2', type: 'number-input', controlValues: { val: '20' } },
+      { id: 'list-a', type: 'list-create', controlValues: {}, _dynInputIds: ['item0', 'item1', 'item2'] },
+      { id: 'list-b', type: 'list-create', controlValues: {}, _dynInputIds: ['item0', 'item1'] },
+      { id: 'sum', type: 'math-add', controlValues: { a: '0', b: '0', _lacingMode: 'shortest' } }
+    ];
+    app.wires = [
+      { fromNode: 'a1', fromPort: 'value', toNode: 'list-a', toPort: 'item0' },
+      { fromNode: 'a2', fromPort: 'value', toNode: 'list-a', toPort: 'item1' },
+      { fromNode: 'a3', fromPort: 'value', toNode: 'list-a', toPort: 'item2' },
+      { fromNode: 'b1', fromPort: 'value', toNode: 'list-b', toPort: 'item0' },
+      { fromNode: 'b2', fromPort: 'value', toNode: 'list-b', toPort: 'item1' },
+      { fromNode: 'list-a', fromPort: 'list', toNode: 'sum', toPort: 'a' },
+      { fromNode: 'list-b', fromPort: 'list', toNode: 'sum', toPort: 'b' }
+    ];
+
+    expect(app.computeNodeValue(app.nodes[7])).toEqual([11, 22]);
+  });
+
+  it('applies longest lacing overrides in legacy math nodes', () => {
+    app.nodes = [
+      { id: 'a1', type: 'number-input', controlValues: { val: '1' } },
+      { id: 'a2', type: 'number-input', controlValues: { val: '2' } },
+      { id: 'a3', type: 'number-input', controlValues: { val: '3' } },
+      { id: 'b1', type: 'number-input', controlValues: { val: '10' } },
+      { id: 'b2', type: 'number-input', controlValues: { val: '20' } },
+      { id: 'list-a', type: 'list-create', controlValues: {}, _dynInputIds: ['item0', 'item1', 'item2'] },
+      { id: 'list-b', type: 'list-create', controlValues: {}, _dynInputIds: ['item0', 'item1'] },
+      { id: 'sum', type: 'math-add', controlValues: { a: '0', b: '0', _lacingMode: 'longest' } }
+    ];
+    app.wires = [
+      { fromNode: 'a1', fromPort: 'value', toNode: 'list-a', toPort: 'item0' },
+      { fromNode: 'a2', fromPort: 'value', toNode: 'list-a', toPort: 'item1' },
+      { fromNode: 'a3', fromPort: 'value', toNode: 'list-a', toPort: 'item2' },
+      { fromNode: 'b1', fromPort: 'value', toNode: 'list-b', toPort: 'item0' },
+      { fromNode: 'b2', fromPort: 'value', toNode: 'list-b', toPort: 'item1' },
+      { fromNode: 'list-a', fromPort: 'list', toNode: 'sum', toPort: 'a' },
+      { fromNode: 'list-b', fromPort: 'list', toNode: 'sum', toPort: 'b' }
+    ];
+
+    expect(app.computeNodeValue(app.nodes[7])).toEqual([11, 22, 23]);
+  });
+
+  it('groups cross product lacing by the first input list in legacy math nodes', () => {
+    app.nodes = [
+      { id: 'a1', type: 'number-input', controlValues: { val: '1' } },
+      { id: 'a2', type: 'number-input', controlValues: { val: '2' } },
+      { id: 'b1', type: 'number-input', controlValues: { val: '10' } },
+      { id: 'b2', type: 'number-input', controlValues: { val: '20' } },
+      { id: 'b3', type: 'number-input', controlValues: { val: '30' } },
+      { id: 'list-a', type: 'list-create', controlValues: {}, _dynInputIds: ['item0', 'item1'] },
+      { id: 'list-b', type: 'list-create', controlValues: {}, _dynInputIds: ['item0', 'item1', 'item2'] },
+      { id: 'sum', type: 'math-add', controlValues: { a: '0', b: '0', _lacingMode: 'crossProduct' } }
+    ];
+    app.wires = [
+      { fromNode: 'a1', fromPort: 'value', toNode: 'list-a', toPort: 'item0' },
+      { fromNode: 'a2', fromPort: 'value', toNode: 'list-a', toPort: 'item1' },
+      { fromNode: 'b1', fromPort: 'value', toNode: 'list-b', toPort: 'item0' },
+      { fromNode: 'b2', fromPort: 'value', toNode: 'list-b', toPort: 'item1' },
+      { fromNode: 'b3', fromPort: 'value', toNode: 'list-b', toPort: 'item2' },
+      { fromNode: 'list-a', fromPort: 'list', toNode: 'sum', toPort: 'a' },
+      { fromNode: 'list-b', fromPort: 'list', toNode: 'sum', toPort: 'b' }
+    ];
+
+    expect(app.computeNodeValue(app.nodes[7])).toEqual([
+      [11, 21, 31],
+      [12, 22, 32]
+    ]);
+  });
+
   it('renders every list item in the data inspector', () => {
     const html = app.formatValue(Array.from({ length: 20 }, (_, index) => index));
 
