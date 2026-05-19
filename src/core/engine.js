@@ -1,16 +1,29 @@
-// ============================================
-// NODEFLOW AI — Engine v1
-// Single source of truth for:
-// - Compute pipeline (node value calculation)
-// - 3D rendering (code → Geo → Three.js)
-// - Run pipeline (Run button → code → 3D → inspectors)
-// - View switching (2D ↔ 3D, isolated zoom)
-// - Wire rendering (animation only after Run)
-// - Data Inspector refresh
-//
-// REPLACES: geo-viewer-patch.js, code-renderer.js, list-node-patch.js
-// ============================================
-
+// ============================================
+
+// NODEFLOW AI — Engine v1
+
+// Single source of truth for:
+
+// - Compute pipeline (node value calculation)
+
+// - 3D rendering (code → Geo → Three.js)
+
+// - Run pipeline (Run button → code → 3D → inspectors)
+
+// - View switching (2D ↔ 3D, isolated zoom)
+
+// - Wire rendering (animation only after Run)
+
+// - Data Inspector refresh
+
+//
+
+// REPLACES: geo-viewer-patch.js, code-renderer.js, list-node-patch.js
+
+// ============================================
+
+
+
 /* eslint-disable no-redeclare, no-inner-declarations, no-empty, no-unused-vars */
 
 function getRuntimeApp() {
@@ -1385,11 +1398,13 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       }
 
-      // Multi-output: check _portValues
+      // Multi-output: check _portValues - iterate arrays of geometry objects
 
       if (nd._portValues) {
 
         Object.keys(nd._portValues).forEach(function(key) {
+
+          if (key === 'count' || key === 'length' || key === 'index') return; // skip metadata
 
           var pv = nd._portValues[key];
 
@@ -1398,6 +1413,28 @@ export function installEngine(targetApp = getRuntimeApp()) {
             Geo.addToScene(Viewer3D.geometryGroup, pv);
 
             rendered++;
+
+          } else if (Array.isArray(pv)) {
+
+            var arrStart = Viewer3D.geometryGroup.children.length;
+
+            pv.forEach(function(v) {
+
+              if (v && (v._type || v instanceof Geo.Point3)) {
+
+                Geo.addToScene(Viewer3D.geometryGroup, v);
+
+                rendered++;
+
+              }
+
+            });
+
+            if (Viewer3D.geometryGroup.children.length > arrStart) {
+
+              app._sceneItems.push({ varName: nd.def.name + '.' + key, nodeId: nd.id, type: 'Array[' + (Viewer3D.geometryGroup.children.length - arrStart) + ']', visible: true, idxStart: arrStart, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
+
+            }
 
           }
 
@@ -1981,563 +2018,262 @@ export function installEngine(targetApp = getRuntimeApp()) {
   // RUN EDITED CODE — parse code → build node graph
 
   // ═══════════════════════════════════════
-
   app.runEditedCode = function() {
-
     var codeEl = document.getElementById('cv-code');
-
     if (!codeEl) return;
-
     try {
-
       var graph = CodeParser.parseToGraph(codeEl.value);
-
       if (graph.nodes.length === 0) { this.addAIMessage('workspace', '⚠️ No operations found.'); return; }
-
       this.nodes.forEach(function(nd) { var el = document.getElementById(nd.id); if (el) el.remove(); });
-
       this.nodes = []; this.wires = []; this.selectedNodes = []; this.nextNodeId = graph.nextId;
-
       document.getElementById('wire-svg').innerHTML = '';
-
       var created = [], self = this;
-
       graph.nodes.forEach(function(gn) {
-
         var def = NODE_TYPE_MAP[gn.type]; if (!def) return;
-
         self.nodeZCounter++;
-
         var nd = { id: gn.id, type: gn.type, x: gn.x, y: gn.y, def: Object.assign({}, def), controlValues: {}, dataPanelOpen: false, zIndex: self.nodeZCounter };
-
         def.controls.forEach(function(c) { nd.controlValues[c.id] = c.default; });
-
         Object.keys(gn.controls).forEach(function(k) { if (k !== '_dynInputs') nd.controlValues[k] = gn.controls[k]; });
-
         if (gn.type === 'custom-python' && gn.rawCode) nd.controlValues.code = gn.rawCode;
-
         if (gn.type === 'custom-python' && gn.controls._dynInputs) nd._dynInputs = gn.controls._dynInputs;
-
         if (gn.outputVars && gn.outputVars.length > 0) nd._dynOutputs = gn.outputVars;
-
         self.nodes.push(nd); self.renderNode(nd); created.push(nd.def.name);
-
       });
-
       graph.wires.forEach(function(w) { self.wires.push(w); });
-
       this.updatePortDots(); setTimeout(function() { self.renderWires(); }, 50); this.updateMenuState();
-
       // Log parsed graph state
-
       if (typeof NFLogger !== 'undefined') {
-
         var nids = {}; self.nodes.forEach(function(n) { nids[n.id] = true; });
-
         var wkeys = self.wires.map(function(w) { return w.fromNode + ':' + w.fromPort + '>' + w.toNode + ':' + w.toPort; });
-
         var orphans = wkeys.filter(function(wk) { var p = wk.split('>'); return !nids[p[0].split(':')[0]] || !nids[p[1].split(':')[0]]; });
-
         NFLogger.info('code-to-node', 'Parsed graph', { nodes: self.nodes.map(function(n) { return { id: n.id, type: n.type, x: Math.round(n.x), y: Math.round(n.y) }; }), wires: wkeys, orphanWires: orphans });
-
       }
-
       this.addAIMessage('workspace', '✅ **Built graph!** ' + created.length + ' nodes, ' + graph.wires.length + ' wires.');
-
     } catch(err) { this.addAIMessage('workspace', '❌ Parse error: ' + err.message); }
-
   };
-
-
 
   var origApprove = app.approveCode.bind(app);
-
   app.approveCode = function() {
-
     origApprove();
-
     setTimeout(function() { app.runGraph(); }, 300);
-
   };
 
-
-
   // ═══════════════════════════════════════
-
   // RUN EDITED CODE — code viewer → parse → build graph
-
   // ═══════════════════════════════════════
-
-
-
   app.runEditedCode = function() {
-
     var codeEl = document.getElementById('cv-code');
-
     if (!codeEl) return;
-
     var code = codeEl.value;
-
     try {
-
       var graph = CodeParser.parseToGraph(code);
-
       if (graph.nodes.length === 0) { this.addAIMessage('workspace', '⚠️ Could not parse any operations.'); return; }
-
       this.nodes.forEach(function(nd) { var el = document.getElementById(nd.id); if (el) el.remove(); });
-
       this.nodes = []; this.wires = []; this.selectedNodes = []; this.nextNodeId = graph.nextId;
-
       document.getElementById('wire-svg').innerHTML = '';
-
       var created = [];
-
       var self = this;
-
       graph.nodes.forEach(function(gn) {
-
         var def = NODE_TYPE_MAP[gn.type]; if (!def) return;
-
         self.nodeZCounter++;
-
         var nd = { id: gn.id, type: gn.type, x: gn.x, y: gn.y, def: Object.assign({}, def), controlValues: {}, dataPanelOpen: false, zIndex: self.nodeZCounter };
-
         def.controls.forEach(function(c) { nd.controlValues[c.id] = c.default; });
-
         Object.keys(gn.controls).forEach(function(k) { if (k !== '_dynInputs') nd.controlValues[k] = gn.controls[k]; });
-
         if (gn.type === 'custom-python' && gn.rawCode) nd.controlValues.code = gn.rawCode;
-
         if (gn.type === 'custom-python' && gn.controls._dynInputs) nd._dynInputs = gn.controls._dynInputs;
-
         if (gn.outputVars && gn.outputVars.length > 0) nd._dynOutputs = gn.outputVars;
-
         self.nodes.push(nd); self.renderNode(nd); created.push(nd.def.name);
-
       });
-
       graph.wires.forEach(function(w) { self.wires.push(w); });
-
       this.updatePortDots();
-
       setTimeout(function() { self.renderWires(); }, 50);
-
       this.updateMenuState();
-
       var typeCount = {};
-
       created.forEach(function(n) { typeCount[n] = (typeCount[n] || 0) + 1; });
-
       var summary = Object.keys(typeCount).map(function(k) { return '**' + k + '** ×' + typeCount[k]; }).join(', ');
-
       this.addAIMessage('workspace', '✅ **Built graph!** ' + created.length + ' nodes: ' + summary);
-
     } catch(err) {
-
       this.addAIMessage('workspace', '❌ Parse error: ' + err.message);
-
     }
-
   };
 
-
-
   // ═══════════════════════════════════════
-
   // AUTO LAYOUT — arrange nodes in clean columns
-
   // ═══════════════════════════════════════
-
-
-
   app.autoLayout = function() {
-
     if (this.nodes.length === 0) return;
-
-
-
     var MARGIN_X = 60;
-
     var MARGIN_Y = 15;
-
     var self = this;
-
-
-
     // 1. Build adjacency: which nodes feed into which
-
     var incoming = {}; // nodeId → [sourceNodeIds]
-
     var outgoing = {}; // nodeId → [targetNodeIds]
-
     this.nodes.forEach(function(n) { incoming[n.id] = []; outgoing[n.id] = []; });
-
     this.wires.forEach(function(w) {
-
       if (incoming[w.toNode] && outgoing[w.fromNode]) {
-
         incoming[w.toNode].push(w.fromNode);
-
         outgoing[w.fromNode].push(w.toNode);
-
       }
-
     });
-
-
-
     // 2. Assign depth (column) via topological sort
-
     var depth = {};
-
     var visited = {};
-
     function assignDepth(nodeId) {
-
       if (visited[nodeId]) return depth[nodeId] || 0;
-
       visited[nodeId] = true;
-
       var maxParentDepth = -1;
-
       incoming[nodeId].forEach(function(srcId) {
-
         var d = assignDepth(srcId);
-
         if (d > maxParentDepth) maxParentDepth = d;
-
       });
-
       depth[nodeId] = maxParentDepth + 1;
-
       return depth[nodeId];
-
     }
-
     this.nodes.forEach(function(n) { assignDepth(n.id); });
-
-
-
     // 3. Group by column
-
     var columns = {};
-
     var maxCol = 0;
-
     this.nodes.forEach(function(n) {
-
       var col = depth[n.id] || 0;
-
       if (!columns[col]) columns[col] = [];
-
       columns[col].push(n);
-
       if (col > maxCol) maxCol = col;
-
     });
-
-
-
     // 4. Measure node heights (from DOM)
-
     var nodeHeights = {};
-
     this.nodes.forEach(function(n) {
-
       var el = document.getElementById(n.id);
-
       nodeHeights[n.id] = el ? el.offsetHeight || 100 : 100;
-
     });
-
-
-
     // 5. Position nodes column by column
-
     var startX = 60;
-
     var maxColWidth = 0;
-
     var currentX = startX;
-
-
-
     for (var col = 0; col <= maxCol; col++) {
-
       var colNodes = columns[col] || [];
-
       if (colNodes.length === 0) continue;
-
-
-
       // Find widest node in column
-
       var colWidth = 0;
-
       colNodes.forEach(function(n) {
-
         var el = document.getElementById(n.id);
-
         var w = el ? el.offsetWidth || 180 : 180;
-
         if (w > colWidth) colWidth = w;
-
       });
-
-
-
       // Sort vertically: try to keep nodes near their connected sources
-
       colNodes.sort(function(a, b) {
-
         var aAvg = 0, bAvg = 0, aCnt = 0, bCnt = 0;
-
         incoming[a.id].forEach(function(src) {
-
           var srcNd = self.nodes.find(function(n) { return n.id === src; });
-
           if (srcNd) { aAvg += srcNd.y; aCnt++; }
-
         });
-
         incoming[b.id].forEach(function(src) {
-
           var srcNd = self.nodes.find(function(n) { return n.id === src; });
-
           if (srcNd) { bAvg += srcNd.y; bCnt++; }
-
         });
-
         aAvg = aCnt > 0 ? aAvg / aCnt : a.y;
-
         bAvg = bCnt > 0 ? bAvg / bCnt : b.y;
-
         return aAvg - bAvg;
-
       });
-
-
-
       // Place vertically with no overlap
-
       var currentY = 60;
-
       colNodes.forEach(function(n) {
-
         n.x = currentX;
-
         n.y = currentY;
-
         var el = document.getElementById(n.id);
-
         if (el) {
-
           el.style.left = n.x + 'px';
-
           el.style.top = n.y + 'px';
-
         }
-
         currentY += (nodeHeights[n.id] || 100) + MARGIN_Y;
-
       });
-
-
-
       currentX += colWidth + MARGIN_X;
-
     }
-
-
-
     // 6. Remove orphan wires pointing to non-existent nodes
-
     var nodeIds = {};
-
     this.nodes.forEach(function(n) { nodeIds[n.id] = true; });
-
     var before = this.wires.length;
-
     this.wires = this.wires.filter(function(w) { return nodeIds[w.fromNode] && nodeIds[w.toNode]; });
-
     if (this.wires.length < before && typeof NFLogger !== 'undefined') NFLogger.warn('layout', 'Removed ' + (before - this.wires.length) + ' orphan wires');
-
     this.updatePortDots();
-
-
-
     // 7. De-overlap nodes
-
     var posMap = {};
-
     this.nodes.forEach(function(n) {
-
       var key = Math.round(n.x / 20) + ',' + Math.round(n.y / 20);
-
       while (posMap[key]) {
-
         n.y += (nodeHeights[n.id] || 100) + MARGIN_Y;
-
         key = Math.round(n.x / 20) + ',' + Math.round(n.y / 20);
-
       }
-
       posMap[key] = n.id;
-
       var el = document.getElementById(n.id);
-
       if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
-
     });
-
-
-
     // 8. Ensure no node is off-screen
-
     var minX = Infinity, minY = Infinity;
-
     this.nodes.forEach(function(n) { if (n.x < minX) minX = n.x; if (n.y < minY) minY = n.y; });
-
     if (minX < 60 || minY < 60) {
-
       var ox = minX < 60 ? 60 - minX : 0;
-
       var oy = minY < 60 ? 60 - minY : 0;
-
       this.nodes.forEach(function(n) {
-
         n.x += ox; n.y += oy;
-
         var el = document.getElementById(n.id);
-
         if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
-
       });
-
     }
-
-
-
     // 7. Re-render wires and zoom to fit all nodes
-
     setTimeout(function() { self.renderWires(); }, 50);
-
-
-
     // Calculate bounding box of all nodes
-
     var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
     this.nodes.forEach(function(n) {
-
       var el = document.getElementById(n.id);
-
       var w = el ? el.offsetWidth || 180 : 180;
-
       var h = el ? el.offsetHeight || 100 : 100;
-
       if (n.x < minX) minX = n.x;
-
       if (n.y < minY) minY = n.y;
-
       if (n.x + w > maxX) maxX = n.x + w;
-
       if (n.y + h > maxY) maxY = n.y + h;
-
     });
-
-
-
     var area = document.getElementById('canvas-area');
-
     if (area && maxX > minX && maxY > minY) {
-
       var areaW = area.clientWidth - 300; // leave room for chat panel
-
       var areaH = area.clientHeight - 100;
-
       var graphW = maxX - minX + 80;
-
       var graphH = maxY - minY + 80;
-
       var zoomX = areaW / graphW;
-
       var zoomY = areaH / graphH;
-
       var newZoom = Math.min(zoomX, zoomY, 1); // don't zoom in past 100%
-
       newZoom = Math.max(0.25, Math.min(1, newZoom));
-
       this.zoom = newZoom;
-
       this.panX = (areaW / 2) - ((minX + maxX) / 2) * newZoom;
-
       this.panY = (areaH / 2) - ((minY + maxY) / 2) * newZoom + 40;
-
       this.applyTransform();
-
       var zi = document.getElementById('zoom-indicator');
-
       if (zi) zi.textContent = Math.round(this.zoom * 100) + '%';
-
     }
-
   };
-
-
-
   // Call auto-layout after runEditedCode builds the graph
-
   var origRunEditedForLayout = app.runEditedCode.bind(app);
-
   app.runEditedCode = function() {
-
     origRunEditedForLayout();
-
     setTimeout(function() { app.autoLayout(); app.fitAll(); }, 100);
-
   };
-
-
-
   // Add Auto Layout to right-click context menu
-
   var origCtxAction = app.ctxAction.bind(app);
-
   app.ctxAction = function(a) {
-
     if (a === 'layout') { this.hideContextMenu(); this.autoLayout(); return; }
-
     origCtxAction(a);
-
   };
-
-
-
   // Patch context menu to include Auto Layout option
-
   var origShowContextMenu = app.showContextMenu.bind(app);
-
   app.showContextMenu = function(x, y) {
-
     var m = document.getElementById('context-menu');
-
     m.innerHTML = '<button class="context-menu-item" onclick="app.ctxAction(\'add\')"><span class="cmi-icon">+</span> Add Node…</button>' +
-
       '<div class="menu-separator"></div>' +
-
       '<button class="context-menu-item" onclick="app.ctxAction(\'fit\')"><span class="cmi-icon">⊞</span> Zoom to Fit</button>' +
-
       '<button class="context-menu-item" onclick="app.ctxAction(\'layout\')"><span class="cmi-icon">⊞</span> Auto Layout</button>';
-
     m.style.left = x + 'px'; m.style.top = y + 'px'; m.classList.add('visible');
-
   };
-
-
 
   if (typeof NFLogger !== 'undefined') NFLogger.info('engine', 'Engine v1 loaded');
-
 
   return true;
 }
