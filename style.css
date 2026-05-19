@@ -1077,6 +1077,10 @@ input[type="number"] {
 
 .chat-toggle-btn.hidden { display: none; }
 
+.menu-item.hidden { display: none; }
+#menu-cancel:hover { background: rgba(243,139,168,0.15); }
+#menu-cancel { transition: opacity 0.2s; }
+
 
 
 .dock-selector { display: none; position: fixed; background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 6px; gap: 4px; box-shadow: var(--shadow-lg); z-index: 9999; flex-wrap: wrap; width: 120px; }
