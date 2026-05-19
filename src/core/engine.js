@@ -24,6 +24,8 @@
 
 
 
+import { createLacingFrames, hasListInput, mapLacingFrames } from './lacing.js';
+
 /* eslint-disable no-redeclare, no-inner-declarations, no-empty, no-unused-vars */
 
 function getRuntimeApp() {
@@ -47,6 +49,24 @@ export function installEngine(targetApp = getRuntimeApp()) {
   // ═══════════════════════════════════════
 
 
+
+  function executeBinaryLacedMath(nd, a, b, operation) {
+    if (a === undefined || b === undefined) return undefined;
+
+    var inputDefinitions = [{ id: 'a' }, { id: 'b' }];
+    var inputs = { a: a, b: b };
+    var mode = nd.controlValues && nd.controlValues._lacingMode
+      ? nd.controlValues._lacingMode
+      : (nd.def && nd.def.lacing && nd.def.lacing.mode) || 'shortest';
+
+    if (mode === 'none' || !hasListInput(inputDefinitions, inputs)) {
+      return operation(a, b);
+    }
+
+    return mapLacingFrames(createLacingFrames(inputDefinitions, inputs, mode), function(frame) {
+      return operation(frame.a, frame.b);
+    });
+  }
 
   var CACHE_UNDEFINED = Symbol('CACHE_UNDEFINED');
 
@@ -609,41 +629,22 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       case 'math-add': {
         var a = getVal('a',undefined), b = getVal('b',undefined);
-        if (a === undefined || b === undefined) return undefined;
-        if (Array.isArray(a) && Array.isArray(b)) {
-          var addArr = []; for (var ai = 0; ai < Math.min(a.length, b.length); ai++) addArr.push(a[ai] + b[ai]);
-          return addArr;
-        }
-        if (Array.isArray(a)) { var addArrA = []; for (var ai2 = 0; ai2 < a.length; ai2++) addArrA.push(a[ai2] + b); return addArrA; }
-        if (Array.isArray(b)) { var addArrB = []; for (var bi2 = 0; bi2 < b.length; bi2++) addArrB.push(a + b[bi2]); return addArrB; }
-        return a + b;
+        return executeBinaryLacedMath(nd, a, b, function(x, y) { return x + y; });
       }
 
       case 'math-subtract': {
         var a = getVal('a',undefined), b = getVal('b',undefined);
-        if (a === undefined || b === undefined) return undefined;
-        if (Array.isArray(a) && Array.isArray(b)) { var subArr = []; for (var si = 0; si < Math.min(a.length, b.length); si++) subArr.push(a[si] - b[si]); return subArr; }
-        if (Array.isArray(a)) { var subArrA = []; for (var si2 = 0; si2 < a.length; si2++) subArrA.push(a[si2] - b); return subArrA; }
-        if (Array.isArray(b)) { var subArrB = []; for (var si3 = 0; si3 < b.length; si3++) subArrB.push(a - b[si3]); return subArrB; }
-        return a - b;
+        return executeBinaryLacedMath(nd, a, b, function(x, y) { return x - y; });
       }
 
       case 'math-multiply': {
         var a = getVal('a',undefined), b = getVal('b',undefined);
-        if (a === undefined || b === undefined) return undefined;
-        if (Array.isArray(a) && Array.isArray(b)) { var mulArr = []; for (var mi = 0; mi < Math.min(a.length, b.length); mi++) mulArr.push(a[mi] * b[mi]); return mulArr; }
-        if (Array.isArray(a)) { var mulArrA = []; for (var mi2 = 0; mi2 < a.length; mi2++) mulArrA.push(a[mi2] * b); return mulArrA; }
-        if (Array.isArray(b)) { var mulArrB = []; for (var mi3 = 0; mi3 < b.length; mi3++) mulArrB.push(a * b[mi3]); return mulArrB; }
-        return a * b;
+        return executeBinaryLacedMath(nd, a, b, function(x, y) { return x * y; });
       }
 
       case 'math-divide': {
         var a = getVal('a',undefined), b = getVal('b',undefined);
-        if (a === undefined || b === undefined || b === 0) return undefined;
-        if (Array.isArray(a) && Array.isArray(b)) { var divArr = []; for (var di = 0; di < Math.min(a.length, b.length); di++) divArr.push(b[di] !== 0 ? a[di] / b[di] : undefined); return divArr; }
-        if (Array.isArray(a)) { var divArrA = []; for (var di2 = 0; di2 < a.length; di2++) divArrA.push(a[di2] / b); return divArrA; }
-        if (Array.isArray(b)) { var divArrB = []; for (var di3 = 0; di3 < b.length; di3++) divArrB.push(b[di3] !== 0 ? a / b[di3] : undefined); return divArrB; }
-        return a / b;
+        return executeBinaryLacedMath(nd, a, b, function(x, y) { return y !== 0 ? x / y : undefined; });
       }
 
       case 'math-power': {
