@@ -541,6 +541,12 @@ const app = {
 
       }
 
+      // No wire connected — fall back to control value if control exists with matching id
+      const ctrl = nd.controlValues;
+      if (ctrl && ctrl[portId] !== undefined && ctrl[portId] !== null && ctrl[portId] !== '') {
+        return parseFloat(ctrl[portId]) || 0;
+      }
+
       return undefined;
 
     };
