@@ -128,7 +128,11 @@ export function installPortHandler(targetApp = getRuntimeApp(), runtimeGlobal = 
             // Remove wire immediately
             this.wires.splice(existingIdx, 1);
             this.updatePortDots();
-            _refreshNode(nid);
+            if (this._refreshRenderedNode && this._inputHasPropertyControl && this._inputHasPropertyControl(nid, pid)) {
+              this._refreshRenderedNode(nid);
+            } else {
+              _refreshNode(nid);
+            }
             this.connectingWire = { fromNode: srcNode, fromPort: srcPort, fromDir: 'output',
               startX: srcX, startY: srcY, endX: mouseX, endY: mouseY };
           }

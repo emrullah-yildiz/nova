@@ -73,6 +73,58 @@ test.describe('Nova browser workflows', () => {
     await expect(page.locator('#node-canvas .node')).toHaveCount(4);
   });
 
+  test('shows wired property border only while an input wire is connected', async ({ page }) => {
+    await waitForApp(page);
+
+    const setup = await page.evaluate(() => {
+      app.newProject();
+
+      const source = app.addNodeToCanvas('number-input', 80, 100);
+      const sum = app.addNodeToCanvas('math-add', 340, 100);
+
+      source.controlValues.val = 25;
+      sum._propsOpen = true;
+      sum.propsPanelOpen = true;
+      if (app._refreshRenderedNode) app._refreshRenderedNode(sum.id);
+
+      const initialInput = document.querySelector(`#${sum.id} .node-props-body .prop-row .prop-input`);
+      const initialStyle = initialInput.getAttribute('style') || '';
+
+      app.addWire(source.id, 'value', sum.id, 'a');
+      if (app._refreshRenderedNode) app._refreshRenderedNode(sum.id);
+
+      return { sumId: sum.id, initialStyle };
+    });
+
+    const inputA = page.locator(`#${setup.sumId} .node-props-body .prop-row`, { hasText: 'A' }).locator('.prop-input');
+    expect(setup.initialStyle).not.toContain('var(--accent-teal)');
+    await expect(inputA).toHaveValue('25');
+
+    const connectedStyle = await inputA.evaluate((input) => input.getAttribute('style') || '');
+    expect(connectedStyle).toContain('var(--accent-teal)');
+
+    const inputPortA = page.locator(`#${setup.sumId} .port-dot[data-port="a"][data-dir="input"]`);
+    const portBox = await inputPortA.boundingBox();
+    expect(portBox).not.toBeNull();
+
+    await page.mouse.move(portBox.x + portBox.width / 2, portBox.y + portBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(portBox.x - 160, portBox.y - 80);
+    await page.mouse.up();
+
+    const disconnectedInputA = page
+      .locator(`#${setup.sumId} .node-props-body .prop-row`, { hasText: 'A' })
+      .locator('.prop-input');
+
+    await expect(disconnectedInputA).toHaveValue('0');
+
+    const disconnectedStyle = await disconnectedInputA.evaluate((input) => input.getAttribute('style') || '');
+    expect(disconnectedStyle).not.toContain('var(--accent-teal)');
+
+    const remainingWires = await page.evaluate(() => app.wires.length);
+    expect(remainingWires).toBe(0);
+  });
+
   test('reports missing API key before attempting an AI provider call', async ({ page }) => {
     await waitForApp(page);
 
