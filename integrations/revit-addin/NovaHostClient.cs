@@ -823,12 +823,6 @@ public class NovaHostClient : IDisposable
             elementName = nameProp.GetString() ?? elementName;
         }
 
-        var familyTemplatePath = "";
-        if (createPayload.TryGetProperty("familyTemplatePath", out var templateProp))
-        {
-            familyTemplatePath = templateProp.GetString() ?? "";
-        }
-
         var vertexScale = ReadGeometryScaleToRevitFeet(geometryProp);
         var points = new List<XYZ>();
         foreach (var v in vertsProp.EnumerateArray())
@@ -884,12 +878,9 @@ public class NovaHostClient : IDisposable
                 {
                     directShapeId = ds.Id.Value.ToString(),
                     category = categoryName,
-                    name = ds.Name,
-                    familyTemplatePath
+                    name = ds.Name
                 },
-                message = string.IsNullOrWhiteSpace(familyTemplatePath)
-                    ? "DirectShape geometry created."
-                    : "DirectShape geometry created. Family template path was received but DirectShape creation does not require a family template."
+                message = "DirectShape geometry created."
             });
         }
     }

@@ -360,12 +360,10 @@ export function installEngine(targetApp = getRuntimeApp()) {
         }
         var sendCategory = this._getComputedInputValue(sendNode, 'category') || (sendNode.controlValues && sendNode.controlValues.category) || 'Generic Models';
         var sendName = this._getComputedInputValue(sendNode, 'name') || (sendNode.controlValues && sendNode.controlValues.name) || 'Nova Geometry';
-        var sendFamilyTemplatePath = this._getComputedInputValue(sendNode, 'familyTemplatePath') || (sendNode.controlValues && sendNode.controlValues.familyTemplatePath) || '';
         try {
           var sendResult = await revitBridge.sendGeometry(sendGeometry, {}, {
             category: String(sendCategory),
             name: String(sendName),
-            familyTemplatePath: String(sendFamilyTemplatePath),
             approval: {
               approved: true,
               message: 'Create native Revit DirectShape from Nova geometry.'

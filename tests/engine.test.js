@@ -230,8 +230,7 @@ describe('Engine computeNodeValue', () => {
         type: 'revit-send-geometry',
         controlValues: {
           category: 'Generic Models',
-          name: 'Nova Test',
-          familyTemplatePath: 'C:\\Templates\\Generic Model.rft'
+          name: 'Nova Test'
         }
       }
     ];
@@ -243,7 +242,6 @@ describe('Engine computeNodeValue', () => {
 
       expect(sendOptions.category).toBe('Generic Models');
       expect(sendOptions.name).toBe('Nova Test');
-      expect(sendOptions.familyTemplatePath).toBe('C:\\Templates\\Generic Model.rft');
       expect(result).toEqual({
         result: { ok: true, data: { directShapeId: '9001' } },
         elementId: '9001',
