@@ -148,7 +148,6 @@ export class NovaConnectClient {
       geometry: envelope,
       category: options.category || 'Generic Models',
       name: options.name || 'Nova Geometry',
-      familyTemplatePath: options.familyTemplatePath || '',
       approval: normalizeWriteApproval(options.approval),
       requireUserApproval: options.requireUserApproval !== false
     }, { target: 'host' });
