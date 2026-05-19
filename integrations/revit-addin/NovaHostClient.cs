@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.WebSockets;
 using System.Text;
@@ -98,7 +99,7 @@ public class NovaHostClient : IDisposable
         {
             role = "host",
             pairingToken = _pairingToken,
-            capabilities = new[] { "project.snapshot", "elements.query", "geometry.get", "geometry.create" }
+            capabilities = new[] { "project.snapshot", "elements.query", "geometry.get", "geometry.create", "parameter.get", "parameter.set" }
         });
         await SendAsync(hello, ct).ConfigureAwait(false);
 
@@ -194,6 +195,14 @@ public class NovaHostClient : IDisposable
 
                     case "geometry.create":
                         HandleGeometryCreate(requestId, root);
+                        break;
+
+                    case "parameter.get":
+                        HandleParameterGet(requestId, root);
+                        break;
+
+                    case "parameter.set":
+                        HandleParameterSet(requestId, root);
                         break;
                 }
             }
@@ -432,6 +441,305 @@ public class NovaHostClient : IDisposable
         {
             var text = value.GetString();
             return long.TryParse(text, out elementId);
+        }
+        return false;
+    }
+
+    private static List<long> ReadElementIds(JsonElement request)
+    {
+        var elementIds = new List<long>();
+        JsonElement payload = default;
+        if (request.TryGetProperty("payload", out var p)) payload = p;
+
+        if (payload.ValueKind != JsonValueKind.Object ||
+            !payload.TryGetProperty("elementIds", out var idsProp) ||
+            idsProp.ValueKind != JsonValueKind.Array)
+        {
+            return elementIds;
+        }
+
+        foreach (var idVal in idsProp.EnumerateArray())
+        {
+            if (TryReadElementId(idVal, out var parsedId))
+            {
+                elementIds.Add(parsedId);
+            }
+        }
+
+        return elementIds;
+    }
+
+    private static string ReadParameterName(JsonElement request)
+    {
+        JsonElement payload = default;
+        if (request.TryGetProperty("payload", out var p)) payload = p;
+        if (payload.ValueKind == JsonValueKind.Object &&
+            payload.TryGetProperty("parameterName", out var nameProp))
+        {
+            return nameProp.GetString() ?? "";
+        }
+        return "";
+    }
+
+    private void HandleParameterGet(string? requestId, JsonElement request)
+    {
+        var doc = _uiApp.ActiveUIDocument?.Document;
+        if (doc == null)
+        {
+            ReplyError(requestId, "No active Revit document");
+            return;
+        }
+
+        var elementIds = ReadElementIds(request);
+        var parameterName = ReadParameterName(request);
+        if (string.IsNullOrWhiteSpace(parameterName))
+        {
+            ReplyError(requestId, "Parameter name is required");
+            return;
+        }
+
+        var values = new List<Dictionary<string, object?>>();
+        foreach (var rawId in elementIds)
+        {
+            var element = doc.GetElement(new ElementId(rawId));
+            var param = element?.LookupParameter(parameterName);
+            values.Add(new Dictionary<string, object?>
+            {
+                ["elementId"] = rawId,
+                ["parameterName"] = parameterName,
+                ["found"] = param != null,
+                ["readOnly"] = param?.IsReadOnly ?? false,
+                ["storageType"] = param?.StorageType.ToString() ?? "",
+                ["value"] = param == null ? null : ReadParameterValue(param)
+            });
+        }
+
+        Reply(requestId, "parameter.get.result", new
+        {
+            values,
+            count = values.Count
+        });
+    }
+
+    private void HandleParameterSet(string? requestId, JsonElement request)
+    {
+        var doc = _uiApp.ActiveUIDocument?.Document;
+        if (doc == null)
+        {
+            ReplyError(requestId, "No active Revit document");
+            return;
+        }
+
+        JsonElement payload = default;
+        if (request.TryGetProperty("payload", out var p)) payload = p;
+
+        var approved = payload.ValueKind == JsonValueKind.Object &&
+            payload.TryGetProperty("approval", out var approval) &&
+            approval.TryGetProperty("approved", out var ap) &&
+            ap.GetBoolean();
+
+        if (!approved)
+        {
+            Reply(requestId, "parameter.set.result", new
+            {
+                results = Array.Empty<object>(),
+                count = 0,
+                ok = false,
+                code = "WRITE_APPROVAL_REQUIRED",
+                message = "Revit parameter writes require explicit user approval."
+            });
+            return;
+        }
+
+        var elementIds = ReadElementIds(request);
+        var parameterName = ReadParameterName(request);
+        if (string.IsNullOrWhiteSpace(parameterName))
+        {
+            ReplyError(requestId, "Parameter name is required");
+            return;
+        }
+
+        JsonElement valuesProp = default;
+        var hasValues = payload.ValueKind == JsonValueKind.Object &&
+            payload.TryGetProperty("values", out valuesProp);
+
+        if (!hasValues)
+        {
+            ReplyError(requestId, "Parameter values are required");
+            return;
+        }
+
+        var results = new List<Dictionary<string, object?>>();
+        using (var tx = new Transaction(doc, "Nova Set Parameter Values"))
+        {
+            tx.Start();
+
+            for (var i = 0; i < elementIds.Count; i++)
+            {
+                var rawId = elementIds[i];
+                var element = doc.GetElement(new ElementId(rawId));
+                var param = element?.LookupParameter(parameterName);
+                var value = SelectParameterSetValue(valuesProp, i);
+
+                if (element == null)
+                {
+                    results.Add(ParameterSetResult(rawId, parameterName, false, "Element not found", null));
+                    continue;
+                }
+                if (param == null)
+                {
+                    results.Add(ParameterSetResult(rawId, parameterName, false, "Parameter not found", null));
+                    continue;
+                }
+                if (param.IsReadOnly)
+                {
+                    results.Add(ParameterSetResult(rawId, parameterName, false, "Parameter is read-only", ReadParameterValue(param)));
+                    continue;
+                }
+
+                try
+                {
+                    if (TrySetParameterValue(param, value, out var normalizedValue, out var message))
+                    {
+                        results.Add(ParameterSetResult(rawId, parameterName, true, message, normalizedValue));
+                    }
+                    else
+                    {
+                        results.Add(ParameterSetResult(rawId, parameterName, false, message, ReadParameterValue(param)));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    results.Add(ParameterSetResult(rawId, parameterName, false, ex.Message, ReadParameterValue(param)));
+                }
+            }
+
+            tx.Commit();
+        }
+
+        var successCount = results.Count(result => result.TryGetValue("ok", out var ok) && ok is bool b && b);
+        Reply(requestId, "parameter.set.result", new
+        {
+            results,
+            count = successCount,
+            ok = successCount == results.Count
+        });
+    }
+
+    private static JsonElement SelectParameterSetValue(JsonElement valuesProp, int index)
+    {
+        if (valuesProp.ValueKind != JsonValueKind.Array) return valuesProp;
+        var values = valuesProp.EnumerateArray().ToList();
+        if (values.Count == 0) return default;
+        return index < values.Count ? values[index] : values[^1];
+    }
+
+    private static Dictionary<string, object?> ParameterSetResult(long elementId, string parameterName, bool ok, string message, object? value)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["elementId"] = elementId,
+            ["parameterName"] = parameterName,
+            ["ok"] = ok,
+            ["message"] = message,
+            ["value"] = value
+        };
+    }
+
+    private static object? ReadParameterValue(Parameter param)
+    {
+        return param.StorageType switch
+        {
+            StorageType.String => param.AsString() ?? param.AsValueString() ?? "",
+            StorageType.Integer => param.AsInteger(),
+            StorageType.Double => Math.Round(param.AsDouble(), 6),
+            StorageType.ElementId => param.AsElementId().Value.ToString(CultureInfo.InvariantCulture),
+            _ => null
+        };
+    }
+
+    private static bool TrySetParameterValue(Parameter param, JsonElement value, out object? normalizedValue, out string message)
+    {
+        normalizedValue = null;
+        message = "Parameter updated";
+
+        switch (param.StorageType)
+        {
+            case StorageType.String:
+                normalizedValue = JsonValueToString(value);
+                param.Set((string?)normalizedValue ?? "");
+                return true;
+
+            case StorageType.Integer:
+                if (TryReadIntegerValue(value, out var intValue))
+                {
+                    normalizedValue = intValue;
+                    param.Set(intValue);
+                    return true;
+                }
+                message = "Value cannot be converted to an integer";
+                return false;
+
+            case StorageType.Double:
+                if (TryReadDoubleValue(value, out var doubleValue))
+                {
+                    normalizedValue = doubleValue;
+                    param.Set(doubleValue);
+                    return true;
+                }
+                message = "Value cannot be converted to a number";
+                return false;
+
+            case StorageType.ElementId:
+                if (TryReadElementId(value, out var elementId))
+                {
+                    normalizedValue = elementId.ToString(CultureInfo.InvariantCulture);
+                    param.Set(new ElementId(elementId));
+                    return true;
+                }
+                message = "Value cannot be converted to an element id";
+                return false;
+
+            default:
+                message = "Unsupported parameter storage type";
+                return false;
+        }
+    }
+
+    private static string JsonValueToString(JsonElement value)
+    {
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString() ?? "",
+            JsonValueKind.Number => value.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            JsonValueKind.Null => "",
+            JsonValueKind.Undefined => "",
+            _ => value.GetRawText()
+        };
+    }
+
+    private static bool TryReadIntegerValue(JsonElement value, out int result)
+    {
+        result = 0;
+        if (value.ValueKind == JsonValueKind.Number) return value.TryGetInt32(out result);
+        if (value.ValueKind == JsonValueKind.True) { result = 1; return true; }
+        if (value.ValueKind == JsonValueKind.False) { result = 0; return true; }
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            return int.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out result);
+        }
+        return false;
+    }
+
+    private static bool TryReadDoubleValue(JsonElement value, out double result)
+    {
+        result = 0;
+        if (value.ValueKind == JsonValueKind.Number) return value.TryGetDouble(out result);
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            return double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out result);
         }
         return false;
     }

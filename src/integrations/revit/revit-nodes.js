@@ -252,6 +252,53 @@ RevitBridge = {
     if (!element || !element.params) return null;
     return element.params[paramName] !== undefined ? element.params[paramName] : null;
   },
+  getParameterValues(elements, paramName) {
+    if (!elements) return [];
+    if (!Array.isArray(elements)) elements = [elements];
+    return elements.map(function(element) {
+      return RevitBridge.getParam(element, paramName);
+    });
+  },
+  async getLiveParameterValues(elements, paramName, options) {
+    if (!elements || !Array.isArray(elements)) return [];
+    var client = getConnectClient();
+    if (!client || client.status !== 'connected' || typeof client.getParameterValues !== 'function') {
+      return this.getParameterValues(elements, paramName);
+    }
+    var ids = elements.map(function(el) {
+      return RevitBridge.getElementIdentity(el);
+    }).filter(function(id) { return id !== undefined && id !== null && String(id).length > 0; });
+    if (ids.length === 0 || !paramName) return [];
+    var records = await client.getParameterValues(ids, paramName, options || {});
+    return records.map(function(record) { return record ? record.value : null; });
+  },
+  async setLiveParameterValues(elements, paramName, value, options) {
+    if (!elements || !Array.isArray(elements) || !paramName) return [];
+    var client = getConnectClient();
+    if (!client || client.status !== 'connected' || typeof client.setParameterValues !== 'function') {
+      return elements.map(function(element) {
+        return {
+          elementId: RevitBridge.getElementIdentity(element),
+          parameterName: paramName,
+          ok: false,
+          message: 'Connect to a local Revit host before setting parameter values.'
+        };
+      });
+    }
+    var ids = elements.map(function(el) {
+      return RevitBridge.getElementIdentity(el);
+    }).filter(function(id) { return id !== undefined && id !== null && String(id).length > 0; });
+    if (ids.length === 0) return [];
+    var values = Array.isArray(value) ? value : ids.map(function() { return value; });
+    var results = await client.setParameterValues(ids, paramName, values, options || {});
+    results.forEach(function(result, index) {
+      if (!result || !result.ok) return;
+      var element = elements[index];
+      if (element && element.params) element.params[paramName] = result.value;
+      if (element && element.raw && element.raw.params) element.raw.params[paramName] = result.value;
+    });
+    return results;
+  },
   filterByParam(elements, paramName, op, value) {
     return elements.filter(function(el) {
       var pv;
