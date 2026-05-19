@@ -510,7 +510,7 @@ public class NovaHostClient : IDisposable
                 ["found"] = param != null,
                 ["readOnly"] = param?.IsReadOnly ?? false,
                 ["storageType"] = param?.StorageType.ToString() ?? "",
-                ["value"] = param == null ? null : ReadParameterValue(param)
+                ["value"] = param == null ? null : ReadParameterValue(doc, param)
             });
         }
 
@@ -593,7 +593,7 @@ public class NovaHostClient : IDisposable
                 }
                 if (param.IsReadOnly)
                 {
-                    results.Add(ParameterSetResult(rawId, parameterName, false, "Parameter is read-only", ReadParameterValue(param)));
+                    results.Add(ParameterSetResult(rawId, parameterName, false, "Parameter is read-only", ReadParameterValue(doc, param)));
                     continue;
                 }
 
@@ -605,12 +605,12 @@ public class NovaHostClient : IDisposable
                     }
                     else
                     {
-                        results.Add(ParameterSetResult(rawId, parameterName, false, message, ReadParameterValue(param)));
+                        results.Add(ParameterSetResult(rawId, parameterName, false, message, ReadParameterValue(doc, param)));
                     }
                 }
                 catch (Exception ex)
                 {
-                    results.Add(ParameterSetResult(rawId, parameterName, false, ex.Message, ReadParameterValue(param)));
+                    results.Add(ParameterSetResult(rawId, parameterName, false, ex.Message, ReadParameterValue(doc, param)));
                 }
             }
 
@@ -646,16 +646,39 @@ public class NovaHostClient : IDisposable
         };
     }
 
-    private static object? ReadParameterValue(Parameter param)
+    private static object? ReadParameterValue(Document doc, Parameter param)
     {
         return param.StorageType switch
         {
             StorageType.String => param.AsString() ?? param.AsValueString() ?? "",
             StorageType.Integer => param.AsInteger(),
             StorageType.Double => Math.Round(param.AsDouble(), 6),
-            StorageType.ElementId => param.AsElementId().Value.ToString(CultureInfo.InvariantCulture),
+            StorageType.ElementId => ReadElementIdParameterValue(doc, param),
             _ => null
         };
+    }
+
+    private static string ReadElementIdParameterValue(Document doc, Parameter param)
+    {
+        var elementId = param.AsElementId();
+        if (elementId == ElementId.InvalidElementId)
+        {
+            return "";
+        }
+
+        var referencedElement = doc.GetElement(elementId);
+        if (referencedElement != null && !string.IsNullOrWhiteSpace(referencedElement.Name))
+        {
+            return referencedElement.Name;
+        }
+
+        var displayValue = param.AsValueString();
+        if (!string.IsNullOrWhiteSpace(displayValue))
+        {
+            return displayValue;
+        }
+
+        return elementId.Value.ToString(CultureInfo.InvariantCulture);
     }
 
     private static bool TrySetParameterValue(Parameter param, JsonElement value, out object? normalizedValue, out string message)
@@ -1019,6 +1042,9 @@ public class NovaHostClient : IDisposable
                         break;
                     case StorageType.Double:
                         dict[name] = Math.Round(param.AsDouble(), 4);
+                        break;
+                    case StorageType.ElementId:
+                        dict[name] = ReadElementIdParameterValue(element.Document, param);
                         break;
                 }
             }
