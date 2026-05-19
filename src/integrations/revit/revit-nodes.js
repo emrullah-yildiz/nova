@@ -5,6 +5,7 @@ import {
   createIdentity,
   normalizeElementRecord
 } from '../connect/protocol.js';
+import { createRevitElementRef } from '../../core/values.js';
 
 function getRuntimeGlobal() {
   if (typeof window !== 'undefined') return window;
@@ -59,6 +60,10 @@ RevitElement.prototype.get = function(key, fallback) {
   if (key === 'levelName') return this.levelName;
   if (this.params && this.params[key] !== undefined) return this.params[key];
   return fallback !== undefined ? fallback : null;
+};
+
+RevitElement.prototype.toElementRef = function() {
+  return createRevitElementRef(this);
 };
 
 export function installRevitNodes(runtimeGlobal = getRuntimeGlobal()) {

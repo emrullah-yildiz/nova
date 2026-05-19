@@ -2,6 +2,7 @@ import { FormulaEval } from './core/formula-eval.js';
 import { AIEngine } from './ai/ai-engine.js';
 import { NFLogger } from './core/logger.js';
 import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/node-metadata.js';
+import * as NovaValues from './core/values.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
 import { GPTClient, SettingsDialog } from './ai/gpt-client.js';
 import { Geo } from './geometry/index.js';
@@ -46,6 +47,7 @@ const NodeFlow = {
   NODE_LIBRARY,
   NODE_TYPE_MAP,
   TYPE_COLORS,
+  NovaValues,
   Geo,
   buildNodeReference,
   enrichNodeDefinitions,
@@ -97,6 +99,7 @@ if (typeof window !== 'undefined') {
   window.NODE_LIBRARY = NODE_LIBRARY;
   window.NODE_TYPE_MAP = NODE_TYPE_MAP;
   window.TYPE_COLORS = TYPE_COLORS;
+  window.NovaValues = NovaValues;
   window.Geo = Geo;
   window.buildNodeReference = buildNodeReference;
   window.enrichNodeDefinitions = enrichNodeDefinitions;
