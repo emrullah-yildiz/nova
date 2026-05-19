@@ -81,7 +81,7 @@ function installAppMethods(app, runtimeGlobal) {
     try {
       await client.connect();
       try {
-        await client.getProjectSnapshot();
+        await fetchProjectSnapshotWithRetry(client);
         const categories = Object.keys(client.elementsByCategory || {});
         this._setNovaConnectResult({
           ok: true,
@@ -137,6 +137,24 @@ function installAppMethods(app, runtimeGlobal) {
         (result.detail ? '<pre>' + escapeHtml(result.detail) + '</pre>' : '') +
       '</div>' : '');
   };
+}
+
+async function fetchProjectSnapshotWithRetry(client) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      return await client.getProjectSnapshot();
+    } catch (error) {
+      lastError = error;
+      if (!/No host is connected|NO_HOST/i.test(error.message || String(error))) throw error;
+      await delay(500);
+    }
+  }
+  throw lastError;
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function installMenuButton(document, app) {

@@ -400,15 +400,16 @@ public class NovaHostClient : IDisposable
             try
             {
                 var geo = element.get_Geometry(opt);
-                if (geo == null) continue;
-
-                var envelope = ExtractGeometryEnvelope(geo, rawId);
+                var envelope = geo == null
+                    ? ExtractBoundingBoxEnvelope(element, rawId)
+                    : ExtractGeometryEnvelope(geo, rawId, element);
                 if (envelope != null)
                     geometries.Add(envelope);
             }
             catch
             {
-                // Skip elements that can't produce geometry
+                var fallback = ExtractBoundingBoxEnvelope(element, rawId);
+                if (fallback != null) geometries.Add(fallback);
             }
         }
 
@@ -529,7 +530,7 @@ public class NovaHostClient : IDisposable
     }
 
 
-    private Dictionary<string, object>? ExtractGeometryEnvelope(GeometryElement geo, long elementId)
+    private Dictionary<string, object>? ExtractGeometryEnvelope(GeometryElement geo, long elementId, Element element)
     {
         var vertices = new List<List<double>>();
         var faces = new List<List<int>>();
@@ -585,8 +586,57 @@ public class NovaHostClient : IDisposable
 
         AddGeometry(geo);
 
-        if (vertices.Count == 0) return null;
+        if (vertices.Count == 0) return ExtractBoundingBoxEnvelope(element, elementId);
 
+        return CreateMeshEnvelope(elementId, vertices, faces, "revit-geometry");
+    }
+
+    private Dictionary<string, object>? ExtractBoundingBoxEnvelope(Element element, long elementId)
+    {
+        var box = element.get_BoundingBox(null);
+        if (box == null) return null;
+
+        var min = box.Min;
+        var max = box.Max;
+        if (min == null || max == null) return null;
+        if (Math.Abs(max.X - min.X) < 0.0001 &&
+            Math.Abs(max.Y - min.Y) < 0.0001 &&
+            Math.Abs(max.Z - min.Z) < 0.0001)
+        {
+            return null;
+        }
+
+        var vertices = new List<List<double>>
+        {
+            new() { min.X, min.Y, min.Z },
+            new() { max.X, min.Y, min.Z },
+            new() { max.X, max.Y, min.Z },
+            new() { min.X, max.Y, min.Z },
+            new() { min.X, min.Y, max.Z },
+            new() { max.X, min.Y, max.Z },
+            new() { max.X, max.Y, max.Z },
+            new() { min.X, max.Y, max.Z }
+        };
+
+        var faces = new List<List<int>>
+        {
+            new() { 0, 1, 2 }, new() { 0, 2, 3 },
+            new() { 4, 6, 5 }, new() { 4, 7, 6 },
+            new() { 0, 4, 5 }, new() { 0, 5, 1 },
+            new() { 1, 5, 6 }, new() { 1, 6, 2 },
+            new() { 2, 6, 7 }, new() { 2, 7, 3 },
+            new() { 3, 7, 4 }, new() { 3, 4, 0 }
+        };
+
+        return CreateMeshEnvelope(elementId, vertices, faces, "revit-bounding-box");
+    }
+
+    private static Dictionary<string, object> CreateMeshEnvelope(
+        long elementId,
+        List<List<double>> vertices,
+        List<List<int>> faces,
+        string extraction)
+    {
         return new Dictionary<string, object>
         {
             ["_type"] = "GeometryEnvelope",
@@ -610,7 +660,10 @@ public class NovaHostClient : IDisposable
                 ["sourceId"] = elementId.ToString()
             },
             ["materials"] = new List<object>(),
-            ["metadata"] = new Dictionary<string, object>()
+            ["metadata"] = new Dictionary<string, object>
+            {
+                ["extraction"] = extraction
+            }
         };
     }
 
