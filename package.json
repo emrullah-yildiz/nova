@@ -7,8 +7,10 @@
   "scripts": {
     "start": "vite --host 127.0.0.1",
     "dev": "vite",
+    "dev:api": "node scripts/enterprise-api.mjs",
     "build": "vite build",
     "preview": "vite preview",
+    "release:check": "npm run test && npm run build && npm audit --audit-level=moderate",
     "lint": "eslint tests/ --ext .js --ignore-path .gitignore",
     "lint:app": "eslint src/ --ext .js --ignore-path .gitignore",
     "lint:tests": "eslint tests/ --ext .js --ignore-path .gitignore",
