@@ -165,8 +165,12 @@ export class ExecutionEngine {
       // Use V2 caching if enabled
       if (this._cacheEnabled && nd) {
         const cached = this.cache.get(nd.id, this._version);
-        if (cached.found) return cached.value;
+        if (cached.found) {
+          nd._debug = { ...(nd._debug || {}), cache: 'hit' };
+          return cached.value;
+        }
         const result = origCompute(nd);
+        nd._debug = { ...(nd._debug || {}), cache: 'miss' };
         this.cache.set(nd.id, result, this._version);
         return result;
       }
@@ -206,6 +210,7 @@ export class ExecutionEngine {
           app.endCompute();
         }
         app._graphDirty = false;
+        if (typeof app.refreshNodeWarningBadges === 'function') app.refreshNodeWarningBadges();
         // Re-render wires with animation
         if (typeof app.renderWires === 'function') {
           app.renderWires();
@@ -706,6 +711,11 @@ export class ExecutionEngine {
     const app = this._app;
     if (!app || !app.computeNodeValue) return undefined;
 
+    const now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+    const startedAt = now();
+    nd._debug = { ...(nd._debug || {}), cache: 'miss', error: null };
+
+    try {
     // Use V1 compute pipeline for all node types
     const result = app.computeNodeValue(nd);
     nd._lastComputedValue = result;
@@ -716,6 +726,16 @@ export class ExecutionEngine {
     }
 
     return result;
+    } catch (err) {
+      const errorValue = app.createErrorValue ? app.createErrorValue(err, nodeId) : { type: 'ErrorValue', message: err.message || String(err) };
+      nd._lastComputedValue = errorValue;
+      nd._portValues = { error: errorValue };
+      nd._debug = { ...(nd._debug || {}), error: errorValue, cache: 'miss' };
+      return errorValue;
+    } finally {
+      const endedAt = now();
+      if (app._recordNodeTiming) app._recordNodeTiming(nd, endedAt - startedAt, nd._debug && nd._debug.cache);
+    }
   }
 
   /**

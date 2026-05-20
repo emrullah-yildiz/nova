@@ -360,11 +360,15 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
     if (app.currentPage !== 'workspace') return;
     if (['INPUT', 'TEXTAREA', 'SELECT'].indexOf(e.target.tagName) >= 0) return;
     var key = e.key.toLowerCase();
-    if (key === 'p' || key === 'd') {
+    if (key === 'p' || key === 'd' || key === 'w') {
       var selIds = (app.selectedNodes && app.selectedNodes.length > 0) ? app.selectedNodes : app.nodes.map(function(n) { return n.id; });
       if (selIds.length === 0) return;
       e.preventDefault();
-      selIds.forEach(function(nid) { var nd = app.nodes.find(function(n) { return n.id === nid; }); if (!nd) return; if (key === 'p') app.toggleProps(nid); else app.toggleInspector(nid); });
+      if (key === 'w') {
+        if (app.toggleWarningPanels) app.toggleWarningPanels(selIds);
+      } else {
+        selIds.forEach(function(nid) { var nd = app.nodes.find(function(n) { return n.id === nid; }); if (!nd) return; if (key === 'p') app.toggleProps(nid); else app.toggleInspector(nid); });
+      }
     }
     if (key === 'l' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); if (app.autoLayout) app.autoLayout(); }
   });

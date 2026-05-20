@@ -89,9 +89,43 @@ export function installEngine(targetApp = getRuntimeApp()) {
   app._hasRun = false;
   app._isRunningGraph = false;
   app._lastRunVersion = 0;
+  app._debugHostLogs = [];
 
   app._manualNoDataHTML = function() {
     return '<span style="color:var(--text-muted)">Run to inspect data</span>';
+  };
+
+  app._escapeHTML = function(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  };
+
+  app.createErrorValue = function(error, nodeId) {
+    return {
+      type: 'ErrorValue',
+      nodeId: nodeId || '',
+      message: error && error.message ? error.message : String(error || 'Unknown error'),
+      stack: error && error.stack ? error.stack : ''
+    };
+  };
+
+  app._recordHostRequest = function(entry) {
+    var log = Object.assign({ at: new Date().toISOString() }, entry || {});
+    this._debugHostLogs.push(log);
+    if (this._debugHostLogs.length > 200) this._debugHostLogs.shift();
+    return log;
+  };
+
+  app._recordNodeTiming = function(nd, durationMs, cacheStatus) {
+    if (!nd) return;
+    nd._debug = Object.assign({}, nd._debug || {}, {
+      timingMs: durationMs,
+      cache: cacheStatus || (nd._debug && nd._debug.cache) || 'computed',
+      lastRunVersion: this._lastRunVersion || 0
+    });
   };
 
   app.getLastRunNodeValue = function(nd, portId) {
@@ -1117,7 +1151,10 @@ export function installEngine(targetApp = getRuntimeApp()) {
         var hostId = ctrl.host || 'revit';
         var queryText = getInput('query') || ctrl.category || '';
         var query = hostId === 'rhino' ? { layer: queryText } : { category: queryText };
+        var hostStarted = Date.now();
         var hostElems = getHostAdapter(hostId).getElements(query);
+        var hostLog = app._recordHostRequest({ nodeId: nd.id, host: hostId, operation: 'getElements', query: query, durationMs: Date.now() - hostStarted, ok: true, count: hostElems && hostElems.length || 0 });
+        nd._debug = Object.assign({}, nd._debug || {}, { hostLog: hostLog });
         nd._portValues = { elements: hostElems, count: hostElems.length || 0, host: hostId };
         return nd._portValues;
       }
@@ -1125,13 +1162,18 @@ export function installEngine(targetApp = getRuntimeApp()) {
         var geoHostId = ctrl.host || 'revit';
         var refs = getInput('refs');
         if (!refs) { nd._portValues = { geometry: [], count: 0 }; return nd._portValues; }
+        var geoStarted = Date.now();
         var hostGeo = getHostAdapter(geoHostId).getGeometry(Array.isArray(refs) ? refs : [refs], { level: ctrl.level || 'Bounds' });
         if (hostGeo && typeof hostGeo.then === 'function') {
           return hostGeo.then(function(result) {
+            var geoLog = app._recordHostRequest({ nodeId: nd.id, host: geoHostId, operation: 'getGeometry', level: ctrl.level || 'Bounds', durationMs: Date.now() - geoStarted, ok: true, count: result && result.length || 0 });
+            nd._debug = Object.assign({}, nd._debug || {}, { hostLog: geoLog });
             nd._portValues = { geometry: result || [], count: result && result.length || 0 };
             return nd._portValues;
           });
         }
+        var geoLogSync = app._recordHostRequest({ nodeId: nd.id, host: geoHostId, operation: 'getGeometry', level: ctrl.level || 'Bounds', durationMs: Date.now() - geoStarted, ok: true, count: hostGeo && hostGeo.length || 0 });
+        nd._debug = Object.assign({}, nd._debug || {}, { hostLog: geoLogSync });
         nd._portValues = { geometry: hostGeo || [], count: hostGeo && hostGeo.length || 0 };
         return nd._portValues;
       }
@@ -1141,7 +1183,10 @@ export function installEngine(targetApp = getRuntimeApp()) {
         var paramNames = getInput('names') || ctrl.names || '';
         if (!paramRefs || !paramNames) { nd._portValues = { values: [], count: 0 }; return nd._portValues; }
         var names = String(paramNames).split(',').map(function(name) { return name.trim(); }).filter(Boolean);
+        var paramStarted = Date.now();
         var hostValues = getHostAdapter(paramHostId).getParameterValues(Array.isArray(paramRefs) ? paramRefs : [paramRefs], names);
+        var paramLog = app._recordHostRequest({ nodeId: nd.id, host: paramHostId, operation: 'getParameterValues', names: names, durationMs: Date.now() - paramStarted, ok: true });
+        nd._debug = Object.assign({}, nd._debug || {}, { hostLog: paramLog });
         nd._portValues = { values: hostValues, count: Array.isArray(hostValues) ? hostValues.length : Object.keys(hostValues || {}).length };
         return nd._portValues;
       }
@@ -1153,13 +1198,18 @@ export function installEngine(targetApp = getRuntimeApp()) {
         if (setValues === undefined) setValues = ctrl.values;
         if (!setRefs || !setNamesRaw) { nd._portValues = { results: [], count: 0, success: false }; return nd._portValues; }
         var setNames = String(setNamesRaw).split(',').map(function(name) { return name.trim(); }).filter(Boolean);
+        var setStarted = Date.now();
         var setResult = getHostAdapter(setHostId).setParameterValues(Array.isArray(setRefs) ? setRefs : [setRefs], setNames, setValues);
         if (setResult && typeof setResult.then === 'function') {
           return setResult.then(function(results) {
+            var setLog = app._recordHostRequest({ nodeId: nd.id, host: setHostId, operation: 'setParameterValues', names: setNames, durationMs: Date.now() - setStarted, ok: true, count: results && results.length || 0 });
+            nd._debug = Object.assign({}, nd._debug || {}, { hostLog: setLog });
             nd._portValues = { results: results || [], count: results && results.length || 0, success: !!(results && results.length && results.every(function(item) { return item && item.ok; })) };
             return nd._portValues;
           });
         }
+        var setLogSync = app._recordHostRequest({ nodeId: nd.id, host: setHostId, operation: 'setParameterValues', names: setNames, durationMs: Date.now() - setStarted, ok: true, count: setResult && setResult.length || 0 });
+        nd._debug = Object.assign({}, nd._debug || {}, { hostLog: setLogSync });
         nd._portValues = { results: setResult || [], count: setResult && setResult.length || 0, success: !!(setResult && setResult.length && setResult.every(function(item) { return item && item.ok; })) };
         return nd._portValues;
       }
@@ -1167,13 +1217,18 @@ export function installEngine(targetApp = getRuntimeApp()) {
         var sendHostId = ctrl.host || 'revit';
         var hostGeometry = getInput('geometry');
         var hostOptions = getInput('options') || { name: ctrl.name || 'Nova Geometry', category: ctrl.category || 'Generic Models' };
+        var sendStarted = Date.now();
         var sendResult = getHostAdapter(sendHostId).sendGeometry(hostGeometry, hostOptions || {});
         if (sendResult && typeof sendResult.then === 'function') {
           return sendResult.then(function(result) {
+            var sendLog = app._recordHostRequest({ nodeId: nd.id, host: sendHostId, operation: 'sendGeometry', options: hostOptions, durationMs: Date.now() - sendStarted, ok: !!(result && result.ok) });
+            nd._debug = Object.assign({}, nd._debug || {}, { hostLog: sendLog });
             nd._portValues = { result: result, success: !!(result && result.ok) };
             return nd._portValues;
           });
         }
+        var sendLogSync = app._recordHostRequest({ nodeId: nd.id, host: sendHostId, operation: 'sendGeometry', options: hostOptions, durationMs: Date.now() - sendStarted, ok: !!(sendResult && sendResult.ok) });
+        nd._debug = Object.assign({}, nd._debug || {}, { hostLog: sendLogSync });
         nd._portValues = { result: sendResult, success: !!(sendResult && sendResult.ok) };
         return nd._portValues;
       }
@@ -1416,6 +1471,49 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
   };
 
+  app._fmtTreeValue = function(value, depth, label) {
+    depth = depth || 0;
+    var esc = app._escapeHTML || function(v) { return String(v); };
+    var muted = 'var(--text-muted)';
+    var pad = Math.min(depth * 10, 40);
+
+    if (value === undefined) return '<span style="color:' + muted + '">-</span>';
+    if (value === null) return '<span style="color:' + muted + '">null</span>';
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') return app.formatValue(value);
+    if (value && value.type === 'ErrorValue') {
+      return '<details class="debug-tree error-value" open style="margin-left:' + pad + 'px;color:var(--accent-red)"><summary>Error: ' + esc(value.message) + '</summary>' +
+        (value.nodeId ? '<div style="margin-left:12px;color:' + muted + '">Node: ' + esc(value.nodeId) + '</div>' : '') +
+        (value.stack ? '<pre style="white-space:pre-wrap;margin:4px 0 0 12px;color:' + muted + ';font-size:10px">' + esc(value.stack.split('\n').slice(0, 4).join('\n')) + '</pre>' : '') +
+        '</details>';
+    }
+    if (value && (value._type === 'RevitElement' || value.type === 'ElementRef' || value.type === 'GeometryRef')) {
+      var elementLabel = value.name || value.category || value.type || value._type || 'Element';
+      var elementId = value.id !== undefined ? ' [' + value.id + ']' : '';
+      var params = value.parameters || value.params || value.metadata || {};
+      var rows = Object.keys(params || {}).slice(0, 40).map(function(k) {
+        return '<div style="margin-left:' + (pad + 12) + 'px"><span style="color:' + muted + '">' + esc(k) + ':</span> ' + app._fmtTreeValue(params[k], depth + 1) + '</div>';
+      }).join('');
+      return '<details class="debug-tree" open style="margin-left:' + pad + 'px"><summary><span style="color:#89dceb">' + esc(elementLabel) + esc(elementId) + '</span></summary>' + rows + '</details>';
+    }
+    if (Array.isArray(value)) {
+      var maxItems = 30;
+      var items = value.slice(0, maxItems).map(function(item, index) {
+        return '<div style="margin-left:' + (pad + 12) + 'px"><span style="color:' + muted + '">[' + index + ']</span> ' + app._fmtTreeValue(item, depth + 1) + '</div>';
+      }).join('');
+      if (value.length > maxItems) items += '<div style="margin-left:' + (pad + 12) + 'px;color:' + muted + '">... ' + (value.length - maxItems) + ' more</div>';
+      return '<details class="debug-tree data-list-view" ' + (depth < 1 ? 'open' : '') + ' style="margin-left:' + pad + 'px"><summary>List (' + value.length + ')</summary><div class="data-list-body">' + items + '</div></details>';
+    }
+    if (typeof value === 'object') {
+      var objectKeys = Object.keys(value).filter(function(k) { return typeof value[k] !== 'function'; }).slice(0, 40);
+      var title = label || value.type || value._type || 'Object';
+      var body = objectKeys.map(function(k) {
+        return '<div style="margin-left:' + (pad + 12) + 'px"><span style="color:' + muted + '">' + esc(k) + ':</span> ' + app._fmtTreeValue(value[k], depth + 1) + '</div>';
+      }).join('');
+      return '<details class="debug-tree" ' + (depth < 1 ? 'open' : '') + ' style="margin-left:' + pad + 'px"><summary>' + esc(title) + '</summary>' + body + '</details>';
+    }
+    return '<span style="color:var(--text-secondary)">' + esc(String(value)) + '</span>';
+  };
+
 
 
   app.formatValue = function(val) {
@@ -1423,6 +1521,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
     if (val === undefined) return '<span style="color:var(--text-muted)">—</span>';
 
     if (val === null) return '<span style="color:var(--text-muted)">null</span>';
+
+    if (val && (val.type === 'ErrorValue' || val.type === 'ElementRef' || val.type === 'GeometryRef' || val._type === 'RevitElement')) return app._fmtTreeValue(val);
 
     if (val && val._type === 'RevitElement') return '<span style="color:#89dceb" title="' + val.name + ' | ' + val.typeName + '">🏗 ' + val.category + ' [' + val.id + ']</span>';
     if (val && val._type) return '<span style="color:var(--accent-teal)">' + val.toString() + '</span>';
@@ -1433,7 +1533,9 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     if (typeof val === 'string') return '<span style="color:var(--accent-yellow)">"' + val + '"</span>';
 
-    if (Array.isArray(val)) return app._fmtListUniversal(val);
+    if (Array.isArray(val)) return app._fmtTreeValue(val);
+
+    if (val && typeof val === 'object') return app._fmtTreeValue(val);
 
     return '<span style="color:var(--text-secondary)">' + String(val) + '</span>';
 
@@ -2101,6 +2203,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
     this._graphDirty = false;
 
     this.renderWires();
+    if (this.refreshNodeWarningBadges) this.refreshNodeWarningBadges();
 
 
 
