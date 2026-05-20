@@ -47,15 +47,15 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
         if (!dot) return;
         var hasWire = app.wires.some(function(w) { return w.toNode === nd.id && w.toPort === inp.id; });
         var hasCtrl = controlIds.indexOf(inp.id) >= 0 && nd.controlValues[inp.id] !== undefined && nd.controlValues[inp.id] !== null && nd.controlValues[inp.id] !== '';
-        dot.classList.toggle('has-data', hasWire || hasCtrl);
+        dot.classList.toggle('has-data', !!app._hasRun && (hasWire || hasCtrl));
       });
-      var computed = app.computeNodeValue(nd);
+      var computed = app.getLastRunNodeValue ? app.getLastRunNodeValue(nd) : undefined;
       var hasOutput = computed !== undefined && computed !== null;
       nd.def.outputs.forEach(function(out) {
         var dot = el.querySelector('.port-dot[data-port="' + out.id + '"][data-dir="output"]');
         if (!dot) return;
         var portVal = hasOutput;
-        if (nd._portValues && nd._portValues[out.id] !== undefined) portVal = true;
+        if (nd._lastRunPortValues && nd._lastRunPortValues[out.id] !== undefined) portVal = true;
         dot.classList.toggle('has-data', portVal);
       });
     });
@@ -134,6 +134,8 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
 
   function live3DUpdate() {
     if (typeof Viewer3D === 'undefined' || !Viewer3D.isInitialized || !Viewer3D.geometryGroup) return;
+    if (app._manualRunMode && !app._hasRun) return;
+    if (app._manualRunMode && app._graphDirty) return;
     while (Viewer3D.geometryGroup.children.length > 0) Viewer3D.geometryGroup.remove(Viewer3D.geometryGroup.children[0]);
     app.beginCompute();
     var rendered = 0;
@@ -142,7 +144,7 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
       if (nd._preview3d === false) return;
       if (val && val._type) { Geo.addToScene(Viewer3D.geometryGroup, val); rendered++; }
       else if (Array.isArray(val)) { val.forEach(function(v) { if (v && (v._type || v instanceof Geo.Point3)) { Geo.addToScene(Viewer3D.geometryGroup, v); rendered++; } }); }
-      if (nd._portValues) { Object.keys(nd._portValues).forEach(function(key) { var pv = nd._portValues[key]; if (pv && pv._type) { Geo.addToScene(Viewer3D.geometryGroup, pv); rendered++; } }); }
+      if (nd._lastRunPortValues) { Object.keys(nd._lastRunPortValues).forEach(function(key) { var pv = nd._lastRunPortValues[key]; if (pv && pv._type) { Geo.addToScene(Viewer3D.geometryGroup, pv); rendered++; } }); }
     });
     app.endCompute();
     if (rendered > 0 && Viewer3D._lastLiveCount === 0) Viewer3D.fitAll();

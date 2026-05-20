@@ -188,6 +188,7 @@ const app = {
   closeProject() {
 
     this.nodes=[]; this.wires=[]; this.selectedNodes=[];
+    this._hasRun=false; this._isRunningGraph=false; this._lastRunVersion=0;
 
     this.nextNodeId=1; this.nodeZCounter=10; this.zoom=1; this.panX=0; this.panY=0;
 
@@ -204,6 +205,7 @@ const app = {
   newProject() {
 
     this.nodes=[]; this.wires=[]; this.selectedNodes=[];
+    this._hasRun=false; this._isRunningGraph=false; this._lastRunVersion=0;
 
     this.nextNodeId=1; this.nodeZCounter=10; this.zoom=1; this.panX=0; this.panY=0;
 
@@ -2701,6 +2703,16 @@ app.setView = function(mode) {
     if (!Viewer3D.isInitialized) Viewer3D.init(viewport);
 
     Viewer3D.show();
+
+    if (app._manualRunMode && !app._hasRun) {
+      if (Viewer3D.clearGeometry) Viewer3D.clearGeometry();
+      Viewer3D._needsRebuild = false;
+      return;
+    }
+
+    if (app._manualRunMode && app._graphDirty) {
+      return;
+    }
 
     // Only rebuild 3D if the graph has changed since last build.
 
