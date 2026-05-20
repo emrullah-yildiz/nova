@@ -5,7 +5,20 @@ import { NODE_META, buildNodeReference, enrichNodeDefinitions } from './core/nod
 import * as NovaValues from './core/values.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from './core/nodes.js';
 import { GPTClient, SettingsDialog } from './ai/gpt-client.js';
-import { Geo } from './geometry/index.js';
+import {
+  Geo,
+  GEOMETRY_LEVELS,
+  GeometryCache,
+  GeometryStore,
+  ProgressiveLoading,
+  compressMesh,
+  createGeometryRef as createPipelineGeometryRef,
+  createPreviewMesh,
+  decompressMesh,
+  geometryCacheKey,
+  geometryStore,
+  meshBounds
+} from './geometry/index.js';
 import { Viewer3D } from './viewer/viewer3d.js';
 import { installEngine } from './core/engine.js';
 import app, { initializeApp } from './app/app.js';
@@ -28,6 +41,10 @@ import { installNodeHelpPanel } from './ui/node-help-panel.js';
 import { installRevitNodes, RevitBridge, RevitElement } from './integrations/revit/revit-nodes.js';
 import { ExecutionEngine } from './runtime/ExecutionEngine.js';
 import { createNovaConnectClient, NovaConnectClient } from './integrations/connect/client.js';
+import { hostRegistry, HostRegistry } from './hosts/HostRegistry.js';
+import { HostAdapter } from './hosts/HostAdapter.js';
+import { RevitAdapter } from './hosts/revit/RevitAdapter.js';
+import { RhinoAdapter } from './hosts/rhino/RhinoAdapter.js';
 import * as NovaConnectProtocol from './integrations/connect/protocol.js';
 import {
   ApsDesignAutomationAdapter,
@@ -50,6 +67,17 @@ const NodeFlow = {
   TYPE_COLORS,
   NovaValues,
   Geo,
+  GEOMETRY_LEVELS,
+  GeometryCache,
+  GeometryStore,
+  ProgressiveLoading,
+  compressMesh,
+  createPipelineGeometryRef,
+  createPreviewMesh,
+  decompressMesh,
+  geometryCacheKey,
+  geometryStore,
+  meshBounds,
   buildNodeReference,
   enrichNodeDefinitions,
   GPTClient,
@@ -83,6 +111,11 @@ const NodeFlow = {
   },
   RevitElement,
   NovaConnect,
+  hostRegistry,
+  HostRegistry,
+  HostAdapter,
+  RevitAdapter,
+  RhinoAdapter,
   NovaConnectClient,
   NovaConnectProtocol,
   ApsDocsAdapter,
@@ -102,6 +135,8 @@ if (typeof window !== 'undefined') {
   window.TYPE_COLORS = TYPE_COLORS;
   window.NovaValues = NovaValues;
   window.Geo = Geo;
+  window.GEOMETRY_LEVELS = GEOMETRY_LEVELS;
+  window.GeometryStore = geometryStore;
   window.buildNodeReference = buildNodeReference;
   window.enrichNodeDefinitions = enrichNodeDefinitions;
   window.FormulaEval = FormulaEval;
@@ -109,6 +144,7 @@ if (typeof window !== 'undefined') {
   window.SettingsDialog = SettingsDialog;
   window.Viewer3D = Viewer3D;
   window.NovaConnect = NovaConnect;
+  window.HostRegistry = hostRegistry;
   window.NovaConnectProtocol = NovaConnectProtocol;
   window.ApsDocsAdapter = ApsDocsAdapter;
   window.ApsDerivativeAdapter = ApsDerivativeAdapter;
@@ -118,8 +154,14 @@ if (typeof window !== 'undefined') {
 function installBeforeAppInit() {
   const installedRevitBridge = installRevitNodes();
   NodeFlow.RevitBridge = installedRevitBridge;
+  hostRegistry.clear();
+  hostRegistry.register(new RevitAdapter({ getBridge: () => NodeFlow.RevitBridge }));
+  hostRegistry.register(new RhinoAdapter());
+  hostRegistry.setActive('revit');
   if (typeof window !== 'undefined') {
     window.NodeFlow = NodeFlow;
+    window.HostRegistry = hostRegistry;
+    window.GeometryStore = geometryStore;
   }
   installLineRenderPatch();
   installNodeRenderer();

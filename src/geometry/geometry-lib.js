@@ -606,12 +606,35 @@ const Geo = {
   },
 
   // ══════════════════════════════════════
-  // RENDERING HELPER — add any Geo object to a Three.js group
-  // ══════════════════════════════════════
-  addToScene(group, geoObj, color) {
-    if (!group || !geoObj) return;
-    if (geoObj.toMesh) {
-      group.add(geoObj.toMesh(color));
+  // RENDERING HELPER — add any Geo object to a Three.js group
+  // ══════════════════════════════════════
+  addToScene(group, geoObj, color) {
+    if (!group || !geoObj) return;
+    if (geoObj.type === 'GeometryRef' && geoObj.bounds) {
+      const min = geoObj.bounds.min || [0, 0, 0];
+      const max = geoObj.bounds.max || [0, 0, 0];
+      const sx = Math.max(0.01, Number(max[0]) - Number(min[0]));
+      const sy = Math.max(0.01, Number(max[1]) - Number(min[1]));
+      const sz = Math.max(0.01, Number(max[2]) - Number(min[2]));
+      const box = new THREE.BoxGeometry(sx, sz, sy);
+      const edges = new THREE.EdgesGeometry(box);
+      const material = new THREE.LineBasicMaterial({
+        color: color || 0x74c7ec,
+        transparent: true,
+        opacity: 0.72
+      });
+      const line = new THREE.LineSegments(edges, material);
+      line.position.set(
+        (Number(min[0]) + Number(max[0])) / 2,
+        (Number(min[2]) + Number(max[2])) / 2,
+        (Number(min[1]) + Number(max[1])) / 2
+      );
+      line.userData.geometryRef = geoObj;
+      group.add(line);
+      return;
+    }
+    if (geoObj.toMesh) {
+      group.add(geoObj.toMesh(color));
     } else if (geoObj._type === 'Point3') {
       const g = new THREE.SphereGeometry(0.3, 8, 8);
       const m = new THREE.MeshPhongMaterial({ color: color || 0x89b4fa, emissive: color || 0x89b4fa, emissiveIntensity: 0.3 });
