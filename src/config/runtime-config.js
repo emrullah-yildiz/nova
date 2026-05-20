@@ -14,8 +14,8 @@ export function getRuntimeConfig(runtimeGlobal = getRuntimeGlobal()) {
   const env = getImportMetaEnv();
   return Object.freeze({
     ...DEFAULT_CONFIG,
-    ...fromEnv(env),
-    ...injected
+    ...compactObject(fromEnv(env)),
+    ...compactObject(injected)
   });
 }
 
@@ -51,6 +51,12 @@ function getImportMetaEnv() {
 function getRuntimeGlobal() {
   if (typeof window !== 'undefined') return window;
   return globalThis;
+}
+
+function compactObject(value = {}) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined && entry !== null && entry !== '')
+  );
 }
 
 export const RuntimeConfig = getRuntimeConfig();

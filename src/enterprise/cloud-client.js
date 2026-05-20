@@ -3,7 +3,7 @@ import { getRuntimeConfig, resolveApiUrl } from '../config/runtime-config.js';
 export class NovaCloudClient {
   constructor(options = {}) {
     this.config = options.config || getRuntimeConfig();
-    this.fetchImpl = options.fetchImpl || (typeof fetch !== 'undefined' ? fetch : null);
+    this.fetchImpl = options.fetchImpl || getFetchImpl();
     this.token = options.token || readStoredToken();
   }
 
@@ -105,6 +105,12 @@ function readStoredToken() {
   } catch (error) {
     return '';
   }
+}
+
+function getFetchImpl() {
+  if (typeof window !== 'undefined' && typeof window.fetch === 'function') return window.fetch.bind(window);
+  if (typeof fetch === 'function') return fetch;
+  return null;
 }
 
 function storeToken(token) {
