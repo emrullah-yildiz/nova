@@ -129,6 +129,8 @@ const app = {
 
     });
 
+    if (this._updateHistoryMenuState) this._updateHistoryMenuState();
+
   },
 
 
@@ -187,7 +189,7 @@ const app = {
 
   closeProject() {
 
-    this.nodes=[]; this.wires=[]; this.selectedNodes=[];
+    this.nodes=[]; this.wires=[]; this.selectedNodes=[]; this._undoStack=[]; this._redoStack=[]; this._lastHistorySnapshot=null;
     this._hasRun=false; this._isRunningGraph=false; this._lastRunVersion=0;
 
     this.nextNodeId=1; this.nodeZCounter=10; this.zoom=1; this.panX=0; this.panY=0;
@@ -204,7 +206,7 @@ const app = {
 
   newProject() {
 
-    this.nodes=[]; this.wires=[]; this.selectedNodes=[];
+    this.nodes=[]; this.wires=[]; this.selectedNodes=[]; this._undoStack=[]; this._redoStack=[]; this._lastHistorySnapshot=null;
     this._hasRun=false; this._isRunningGraph=false; this._lastRunVersion=0;
 
     this.nextNodeId=1; this.nodeZCounter=10; this.zoom=1; this.panX=0; this.panY=0;
