@@ -52,7 +52,7 @@ function createLargeGeometryRefs(count) {
     };
 
     return createGeometryRef({
-      host: index % 2 === 0 ? 'revit' : 'rhino',
+      host: 'nova',
       id: `object-${index}`,
       versionId: 'synthetic-v1',
       bounds,
