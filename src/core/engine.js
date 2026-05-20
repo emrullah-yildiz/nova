@@ -25,6 +25,7 @@
 
 
 import { createLacingFrames, hasListInput, mapLacingFrames } from './lacing.js';
+import { hostRegistry } from '../hosts/HostRegistry.js';
 
 /* eslint-disable no-redeclare, no-inner-declarations, no-empty, no-unused-vars */
 
@@ -32,6 +33,12 @@ function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
   if (typeof globalThis !== 'undefined' && globalThis.app) return globalThis.app;
   return null;
+}
+
+function getHostAdapter(hostId) {
+  var runtimeGlobal = typeof globalThis !== 'undefined' ? globalThis : {};
+  var registry = runtimeGlobal.HostRegistry || (runtimeGlobal.NodeFlow && runtimeGlobal.NodeFlow.hostRegistry) || hostRegistry;
+  return registry.require(hostId || registry.activeHostId || 'revit');
 }
 
 export function installEngine(targetApp = getRuntimeApp()) {
@@ -1069,6 +1076,77 @@ export function installEngine(targetApp = getRuntimeApp()) {
       case 'prof-rect': { var c = getInput('center')||new Geo.Point3(0,0,0), hw = (getInput('width')||10)/2, hd = (getInput('depth')||6)/2; return [new Geo.Point3(c.x-hw,c.y-hd,c.z), new Geo.Point3(c.x+hw,c.y-hd,c.z), new Geo.Point3(c.x+hw,c.y+hd,c.z), new Geo.Point3(c.x-hw,c.y+hd,c.z)]; }
 
       // ── Revit typed element nodes ──
+      case 'host-get-elements': {
+        var hostId = ctrl.host || 'revit';
+        var queryText = getInput('query') || ctrl.category || '';
+        var query = hostId === 'rhino' ? { layer: queryText } : { category: queryText };
+        var hostElems = getHostAdapter(hostId).getElements(query);
+        nd._portValues = { elements: hostElems, count: hostElems.length || 0, host: hostId };
+        return nd._portValues;
+      }
+      case 'host-get-geometry': {
+        var geoHostId = ctrl.host || 'revit';
+        var refs = getInput('refs');
+        if (!refs) { nd._portValues = { geometry: [], count: 0 }; return nd._portValues; }
+        var hostGeo = getHostAdapter(geoHostId).getGeometry(Array.isArray(refs) ? refs : [refs], { level: ctrl.level || 'Bounds' });
+        if (hostGeo && typeof hostGeo.then === 'function') {
+          return hostGeo.then(function(result) {
+            nd._portValues = { geometry: result || [], count: result && result.length || 0 };
+            return nd._portValues;
+          });
+        }
+        nd._portValues = { geometry: hostGeo || [], count: hostGeo && hostGeo.length || 0 };
+        return nd._portValues;
+      }
+      case 'host-get-parameter-values': {
+        var paramHostId = ctrl.host || 'revit';
+        var paramRefs = getInput('refs');
+        var paramNames = getInput('names') || ctrl.names || '';
+        if (!paramRefs || !paramNames) { nd._portValues = { values: [], count: 0 }; return nd._portValues; }
+        var names = String(paramNames).split(',').map(function(name) { return name.trim(); }).filter(Boolean);
+        var hostValues = getHostAdapter(paramHostId).getParameterValues(Array.isArray(paramRefs) ? paramRefs : [paramRefs], names);
+        nd._portValues = { values: hostValues, count: Array.isArray(hostValues) ? hostValues.length : Object.keys(hostValues || {}).length };
+        return nd._portValues;
+      }
+      case 'host-set-parameter-values': {
+        var setHostId = ctrl.host || 'revit';
+        var setRefs = getInput('refs');
+        var setNamesRaw = getInput('names') || ctrl.names || '';
+        var setValues = getInput('values');
+        if (setValues === undefined) setValues = ctrl.values;
+        if (!setRefs || !setNamesRaw) { nd._portValues = { results: [], count: 0, success: false }; return nd._portValues; }
+        var setNames = String(setNamesRaw).split(',').map(function(name) { return name.trim(); }).filter(Boolean);
+        var setResult = getHostAdapter(setHostId).setParameterValues(Array.isArray(setRefs) ? setRefs : [setRefs], setNames, setValues);
+        if (setResult && typeof setResult.then === 'function') {
+          return setResult.then(function(results) {
+            nd._portValues = { results: results || [], count: results && results.length || 0, success: !!(results && results.length && results.every(function(item) { return item && item.ok; })) };
+            return nd._portValues;
+          });
+        }
+        nd._portValues = { results: setResult || [], count: setResult && setResult.length || 0, success: !!(setResult && setResult.length && setResult.every(function(item) { return item && item.ok; })) };
+        return nd._portValues;
+      }
+      case 'host-send-geometry': {
+        var sendHostId = ctrl.host || 'revit';
+        var hostGeometry = getInput('geometry');
+        var hostOptions = getInput('options') || { name: ctrl.name || 'Nova Geometry', category: ctrl.category || 'Generic Models' };
+        var sendResult = getHostAdapter(sendHostId).sendGeometry(hostGeometry, hostOptions || {});
+        if (sendResult && typeof sendResult.then === 'function') {
+          return sendResult.then(function(result) {
+            nd._portValues = { result: result, success: !!(result && result.ok) };
+            return nd._portValues;
+          });
+        }
+        nd._portValues = { result: sendResult, success: !!(sendResult && sendResult.ok) };
+        return nd._portValues;
+      }
+      case 'rhino-objects-by-layer': {
+        var layer = getInput('layer') || ctrl.layer || 'Default';
+        var objects = getHostAdapter('rhino').getElements({ layer: layer });
+        nd._portValues = { objects: objects, count: objects.length || 0 };
+        return nd._portValues;
+      }
+
       case 'revit-all-elements-view': {
         var allElems = RevitBridge.getAllElements();
         nd._portValues = { elements: allElems, count: allElems.length };

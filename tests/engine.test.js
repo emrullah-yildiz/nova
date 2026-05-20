@@ -1,4 +1,5 @@
 import { FormulaEval } from '../src/core/formula-eval.js';
+import { hostRegistry } from '../src/hosts/HostRegistry.js';
 
 function createElementStub() {
   return {
@@ -241,6 +242,36 @@ describe('Engine computeNodeValue', () => {
     } finally {
       if (previousBridge === undefined) delete globalThis.RevitBridge;
       else globalThis.RevitBridge = previousBridge;
+    }
+  });
+
+  it('computes host-agnostic Host.GetElements through the active adapter', () => {
+    const previous = hostRegistry.get('test-host');
+    hostRegistry.register({
+      id: 'test-host',
+      getElements(query) {
+        return [{ id: 'a', category: query.category }];
+      }
+    });
+
+    app.nodes = [
+      {
+        id: 'host',
+        type: 'host-get-elements',
+        controlValues: { host: 'test-host', category: 'Walls' }
+      }
+    ];
+    app.wires = [];
+
+    try {
+      expect(app.computeNodeValue(app.nodes[0])).toEqual({
+        elements: [{ id: 'a', category: 'Walls' }],
+        count: 1,
+        host: 'test-host'
+      });
+    } finally {
+      hostRegistry.unregister('test-host');
+      if (previous) hostRegistry.register(previous);
     }
   });
 

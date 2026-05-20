@@ -191,14 +191,26 @@ const PythonRunner = {
             getProjectName: function() { return 'No Project'; },
             getParam: function(el, name) { return el && el.params ? el.params[name] || null : null; },
             filterByParam: function(els, p, op, v) { return (__runtimeGlobal__.RevitBridge || this).filterByParam(els, p, op, v); }
-          };
+          };
+
+          const HostRegistry = __runtimeGlobal__.HostRegistry || (__runtimeGlobal__.NodeFlow && __runtimeGlobal__.NodeFlow.hostRegistry) || {
+            get: function() {
+              return {
+                getElements: function() { return []; },
+                getGeometry: function() { return []; },
+                sendGeometry: function() { return { ok: false, message: 'No host registry is available.' }; },
+                getParameterValues: function() { return []; },
+                setParameterValues: function() { return []; }
+              };
+            }
+          };
 
           ${jsCode}
 
           // Collect all variables as outputs — use typeof check to avoid TDZ errors
           var __out__ = {};
           ${(function() {
-            var builtins = ['__inputs__','__out__','__range__','__len__','__print__','__reversed__','__sorted__','__sum__','__round__','__dist__','__factorial__','__radians__','__degrees__','__int__','__float__','__list__','Geo','RevitBridge','_Geo','i','j','k','_','s','v','r','m','d','n','a','b','c'];
+            var builtins = ['__inputs__','__out__','__range__','__len__','__print__','__reversed__','__sorted__','__sum__','__round__','__dist__','__factorial__','__radians__','__degrees__','__int__','__float__','__list__','Geo','RevitBridge','HostRegistry','_Geo','i','j','k','_','s','v','r','m','d','n','a','b','c'];
             var varNames = (jsCode.match(/(?:^|[;\n{} ])([a-zA-Z_][a-zA-Z0-9_]*)\s*=/gm) || [])
               .map(function(m) { return m.replace(/^[;\n{} ]+/, '').replace(/\s*=$/, '').trim(); })
               .filter(function(v) { return v && builtins.indexOf(v) < 0; });

@@ -96,23 +96,44 @@ export function createElementRef({ host, id, category = '', name = '', metadata 
   });
 }
 
-export function createGeometryRef({ host, id, bounds = null, load, metadata = {} }) {
+export function createGeometryRef({ host, id, bounds = null, load, loadLevel, versionId = '', nativeRef = null, levels = {}, metadata = {} }) {
   if (!host) throw new TypeError('GeometryRef requires a host.');
   if (id === undefined || id === null) throw new TypeError('GeometryRef requires an id.');
   if (load !== undefined && typeof load !== 'function') {
     throw new TypeError('GeometryRef load must be a function when provided.');
   }
+  if (loadLevel !== undefined && typeof loadLevel !== 'function') {
+    throw new TypeError('GeometryRef loadLevel must be a function when provided.');
+  }
 
   let cachedLoad;
+  const levelCache = new Map();
   return defineValue(VALUE_TYPES.GEOMETRY_REF, {
     host,
     id: String(id),
     bounds,
-    metadata,
+    versionId,
+    nativeRef,
+    metadata: {
+      versionId,
+      nativeRef,
+      levels,
+      ...metadata
+    },
     async load() {
       if (!load) return undefined;
       if (!cachedLoad) cachedLoad = Promise.resolve(load());
       return cachedLoad;
+    },
+    async loadLevel(level) {
+      if (levelCache.has(level)) return levelCache.get(level);
+      let value;
+      if (loadLevel) value = await loadLevel(level);
+      else if (level === 'Bounds') value = bounds;
+      else if (levels && levels[level] !== undefined) value = typeof levels[level] === 'function' ? await levels[level]() : levels[level];
+      else value = await this.load();
+      levelCache.set(level, value);
+      return value;
     }
   });
 }
@@ -155,6 +176,10 @@ export function createRevitGeometryRef(element, meshId, options = {}) {
     id: meshId || `${element && element.category || 'element'}:${elementId}:mesh`,
     bounds: options.bounds || null,
     load: options.load,
+    loadLevel: options.loadLevel,
+    versionId: options.versionId || element && (element.versionId || element.identity && element.identity.versionId) || '',
+    nativeRef: options.nativeRef || element && (element.identity || element.raw && element.raw.identity) || null,
+    levels: options.levels || {},
     metadata: {
       elementId: elementId !== undefined && elementId !== null ? String(elementId) : '',
       category: element && element.category || '',
