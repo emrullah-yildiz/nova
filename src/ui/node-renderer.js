@@ -122,7 +122,7 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
 
 
 
-    var h = '';
+    var h = '<button class="node-warning-badge" title="" style="display:none" onclick="event.stopPropagation();app.openNodeWarningDropdown(\'' + nd.id + '\')">!</button>';
 
 
 
@@ -571,6 +571,8 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
 
     }
 
+    h += _warningPanel(nd);
+
     el.innerHTML = h;
 
     // ── Event listeners ──
@@ -581,6 +583,7 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
       d.addEventListener('mousedown', function(e) { e.stopPropagation(); e.preventDefault(); app.onPortDown(e, d.dataset.node, d.dataset.port, d.dataset.dir); });
     });
     canvas.appendChild(el);
+    if (app.refreshNodeWarningBadges) setTimeout(function() { app.refreshNodeWarningBadges(); }, 0);
   };
 
   // ── Toggle Properties (universal) ──
@@ -670,6 +673,142 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
   };
 
   // ── Universal Inspector Builder ──
+  function _collectInspectorWarnings(nd) {
+    if (!nd || !app._hasRun) return [];
+    var warnings = [];
+    var controlIds = nd.def && nd.def.controls ? nd.def.controls.map(function(c) { return c.id; }) : [];
+    function typeOfValue(value) {
+      if (value === undefined) return 'missing';
+      if (value === null) return 'null';
+      if (Array.isArray(value)) return 'list';
+      if (typeof value === 'number') return 'number';
+      if (typeof value === 'boolean') return 'boolean';
+      if (typeof value === 'string') return 'string';
+      if (value && value.type === 'GeometryRef') return 'geometry';
+      if (value && value.type === 'ElementRef') return 'element';
+      if (value && value._type) {
+        var t = String(value._type).toLowerCase();
+        if (t.indexOf('point') >= 0) return 'point';
+        if (t.indexOf('vector') >= 0) return 'vector';
+        if (t.indexOf('mesh') >= 0 || t.indexOf('solid') >= 0 || t.indexOf('surface') >= 0) return 'mesh';
+        if (t.indexOf('line') >= 0) return 'line';
+        if (t.indexOf('curve') >= 0 || t.indexOf('circle') >= 0 || t.indexOf('arc') >= 0) return 'curve';
+      }
+      return typeof value === 'object' ? 'object' : typeof value;
+    }
+    function matches(expected, actual, value) {
+      if (!expected || expected === 'any' || actual === 'missing' || actual === 'null') return true;
+      if (expected === actual) return true;
+      if (expected === 'number' && actual === 'string' && value !== '' && !isNaN(Number(value))) return true;
+      if (expected === 'mesh' || expected === 'surface' || expected === 'solid') return actual === 'mesh' || actual === 'geometry';
+      if (expected === 'curve') return actual === 'curve' || actual === 'line';
+      return false;
+    }
+    function inputValue(inp) {
+      var wire = app.wires.find(function(w) { return w.toNode === nd.id && w.toPort === inp.id; });
+      if (wire) {
+        var srcNd = app.nodes.find(function(n) { return n.id === wire.fromNode; });
+        if (!srcNd) return { wired: true, value: undefined };
+        if (srcNd._lastRunPortValues && srcNd._lastRunPortValues[wire.fromPort] !== undefined) return { wired: true, value: srcNd._lastRunPortValues[wire.fromPort] };
+        return { wired: true, value: app.computeNodeValue(srcNd) };
+      }
+      if (controlIds.indexOf(inp.id) >= 0) return { wired: false, value: nd.controlValues['_eval_' + inp.id] !== undefined ? nd.controlValues['_eval_' + inp.id] : nd.controlValues[inp.id] };
+      return { wired: false, value: undefined };
+    }
+    (nd.def && nd.def.inputs || []).forEach(function(inp) {
+      if (!inp.type || inp.type === 'any') return;
+      var input = inputValue(inp);
+      if (!input.wired && input.value === undefined) return;
+      var actual = typeOfValue(input.value);
+      if (!matches(inp.type, actual, input.value)) warnings.push({ port: inp.name || inp.id, expected: inp.type, actual: actual, message: (inp.name || inp.id) + ' expects ' + inp.type + ' but received ' + actual + '.' });
+    });
+    if (nd._lastRunValue === undefined && nd.def && nd.def.outputs && nd.def.outputs.length > 0) warnings.push({ port: 'Output', expected: 'value', actual: 'undefined', message: 'Node produced no output on the last Run.' });
+    return warnings;
+  }
+
+  app._collectInspectorWarnings = _collectInspectorWarnings;
+
+  app.refreshNodeWarningBadges = function() {
+    (this.nodes || []).forEach(function(nd) {
+      var el = document.getElementById(nd.id);
+      if (!el) return;
+      var warnings = _collectInspectorWarnings(nd);
+      el.classList.toggle('node-has-warning', warnings.length > 0);
+      var badge = el.querySelector('.node-warning-badge');
+      if (badge) {
+        badge.style.display = warnings.length ? 'flex' : 'none';
+        badge.title = warnings.map(function(w) { return w.message; }).join('\n');
+      }
+      var panel = el.querySelector('.node-warning-section');
+      if (!warnings.length && panel) {
+        panel.remove();
+      } else if (warnings.length) {
+        var panelHtml = _warningPanel(nd);
+        if (panel) panel.outerHTML = panelHtml;
+        else el.insertAdjacentHTML('beforeend', panelHtml);
+      }
+    });
+  };
+
+  function _warningPanel(nd) {
+    var warnings = app._collectInspectorWarnings ? app._collectInspectorWarnings(nd) : [];
+    if (!warnings.length) return '';
+    if (!nd._inspStates) nd._inspStates = { inputs: true, output: true };
+    var warnOpen = nd._inspStates.warning === true;
+    var r = '<div class="node-warning-section' + (warnOpen ? ' open' : '') + '" id="' + nd.id + '-warning-section">';
+    r += '<button class="node-warning-toggle" onclick="event.stopPropagation();app.openNodeWarningDropdown(\'' + nd.id + '\')">';
+    r += '<span class="warning-chevron">▸</span> Warning<span class="insp-debug-badge">' + warnings.length + '</span>';
+    r += '</button>';
+    r += '<div class="node-warning-body">';
+    r += '<div class="node-warning-content" id="' + nd.id + '-warning-content">';
+    r += '<div class="insp-warning-popover">';
+    r += '<div class="insp-warning-title">Input warnings</div>';
+    warnings.forEach(function(warning) {
+      r += '<div class="insp-warning-item"><strong>' + warning.port + '</strong><br><span>' + warning.message + '</span></div>';
+    });
+    r += '</div>';
+    r += '</div></div></div>';
+    return r;
+  }
+
+  app.openNodeWarningDropdown = function(nodeId) {
+    var nd = this.nodes.find(function(n) { return n.id === nodeId; });
+    if (!nd) return;
+    var warnings = this._collectInspectorWarnings ? this._collectInspectorWarnings(nd) : [];
+    if (!warnings.length) return;
+    if (!nd._inspStates) nd._inspStates = { inputs: true, output: true };
+    var shouldOpenWarning = nd._inspStates.warning !== true;
+    nd._inspStates.warning = shouldOpenWarning;
+    var section = document.getElementById(nodeId + '-warning-section');
+    if (!section) {
+      var el = document.getElementById(nodeId);
+      if (el) el.remove();
+      this.renderNode(nd);
+      section = document.getElementById(nodeId + '-warning-section');
+    }
+    if (section) section.classList.toggle('open', shouldOpenWarning);
+  };
+
+  app.toggleWarningPanels = function(nodeIds) {
+    var ids = nodeIds && nodeIds.length ? nodeIds : (this.nodes || []).map(function(n) { return n.id; });
+    if (this.refreshNodeWarningBadges) this.refreshNodeWarningBadges();
+    var warningNodes = ids.map(function(id) {
+      return app.nodes.find(function(n) { return n.id === id; });
+    }).filter(function(nd) {
+      return nd && app._collectInspectorWarnings && app._collectInspectorWarnings(nd).length > 0;
+    });
+    if (!warningNodes.length) return;
+    var shouldOpen = warningNodes.some(function(nd) {
+      return !(nd._inspStates && nd._inspStates.warning === true);
+    });
+    warningNodes.forEach(function(nd) {
+      if (!nd._inspStates) nd._inspStates = { inputs: true, output: true };
+      nd._inspStates.warning = shouldOpen;
+      var section = document.getElementById(nd.id + '-warning-section');
+      if (section) section.classList.toggle('open', shouldOpen);
+    });
+  };
+
   function _universalInspector(nd) {
       var r = '';
       if (app._manualRunMode && !app._hasRun) {
@@ -677,6 +816,81 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
       }
       var controlIds = nd.def.controls ? nd.def.controls.map(function(c) { return c.id; }) : [];
       if (!nd._inspStates) nd._inspStates = { inputs: true, output: true };
+
+      function valueTypeOf(value) {
+        if (value === undefined) return 'missing';
+        if (value === null) return 'null';
+        if (Array.isArray(value)) return 'list';
+        if (typeof value === 'number') return 'number';
+        if (typeof value === 'boolean') return 'boolean';
+        if (typeof value === 'string') return 'string';
+        if (value && value.type === 'GeometryRef') return 'geometry';
+        if (value && value.type === 'ElementRef') return 'element';
+        if (value && value._type) {
+          var t = String(value._type).toLowerCase();
+          if (t.indexOf('point') >= 0) return 'point';
+          if (t.indexOf('vector') >= 0) return 'vector';
+          if (t.indexOf('mesh') >= 0 || t.indexOf('solid') >= 0 || t.indexOf('surface') >= 0) return 'mesh';
+          if (t.indexOf('line') >= 0) return 'line';
+          if (t.indexOf('curve') >= 0 || t.indexOf('circle') >= 0 || t.indexOf('arc') >= 0) return 'curve';
+          if (t.indexOf('revit') >= 0) return 'element';
+          return t;
+        }
+        if (typeof value === 'object') return 'object';
+        return typeof value;
+      }
+
+      function typeMatches(expected, actual, value) {
+        if (!expected || expected === 'any' || actual === 'missing' || actual === 'null') return true;
+        if (expected === actual) return true;
+        if (expected === 'number' && actual === 'string' && value !== '' && !isNaN(Number(value))) return true;
+        if (expected === 'list') return actual === 'list';
+        if (expected === 'mesh') return actual === 'mesh' || actual === 'geometry';
+        if (expected === 'surface') return actual === 'mesh' || actual === 'surface' || actual === 'geometry';
+        if (expected === 'solid') return actual === 'mesh' || actual === 'solid' || actual === 'geometry';
+        if (expected === 'curve') return actual === 'curve' || actual === 'line';
+        if (expected === 'point') return actual === 'point';
+        if (expected === 'vector') return actual === 'vector';
+        if (expected === 'string') return actual === 'string';
+        if (expected === 'boolean') return actual === 'boolean';
+        return false;
+      }
+
+      function inputValueFor(inp) {
+        var wire = app.wires.find(function(w) { return w.toNode === nd.id && w.toPort === inp.id; });
+        if (wire) {
+          var srcNd = app.nodes.find(function(n) { return n.id === wire.fromNode; });
+          if (!srcNd) return { wired: true, value: undefined };
+          if (srcNd._lastRunPortValues && srcNd._lastRunPortValues[wire.fromPort] !== undefined) return { wired: true, value: srcNd._lastRunPortValues[wire.fromPort] };
+          return { wired: true, value: app.computeNodeValue(srcNd) };
+        }
+        if (controlIds.indexOf(inp.id) >= 0) {
+          return { wired: false, value: nd.controlValues['_eval_' + inp.id] !== undefined ? nd.controlValues['_eval_' + inp.id] : nd.controlValues[inp.id] };
+        }
+        return { wired: false, value: undefined };
+      }
+
+      function collectWarnings() {
+        var warnings = [];
+        (nd.def.inputs || []).forEach(function(inp) {
+          if (!inp.type || inp.type === 'any') return;
+          var input = inputValueFor(inp);
+          if (!input.wired && input.value === undefined) return;
+          var actual = valueTypeOf(input.value);
+          if (!typeMatches(inp.type, actual, input.value)) {
+            warnings.push({
+              port: inp.name || inp.id,
+              expected: inp.type,
+              actual: actual,
+              message: (inp.name || inp.id) + ' expects ' + inp.type + ' but received ' + actual + '.'
+            });
+          }
+        });
+        if (nd._lastRunValue === undefined && nd.def.outputs && nd.def.outputs.length > 0) {
+          warnings.push({ port: 'Output', expected: 'value', actual: 'undefined', message: 'Node produced no output on the last Run.' });
+        }
+        return warnings;
+      }
 
       // Inputs (collapsible)
       if (nd.def.inputs && nd.def.inputs.length > 0) {
@@ -749,6 +963,21 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
         }
         r += '</div>';
       }
+
+      /*
+        if (nd._inspStates.warning === undefined) nd._inspStates.warning = false;
+        var warnOpen = nd._inspStates.warning;
+        r += '<div id="' + nd.id + '-warning-section" class="insp-group-toggle insp-warning-toggle' + (warnOpen ? ' open' : '') + '" onclick="app._toggleInspGroup(\'' + nd.id + '\',\'warning\')">';
+        r += '<span class="insp-group-chevron">▸</span> Warning<span class="insp-debug-badge">' + warnings.length + '</span></div>';
+        r += '<div class="insp-group-body" style="display:' + (warnOpen ? 'block' : 'none') + '">';
+        r += '<div class="insp-warning-popover">';
+        r += '<div class="insp-warning-title">Input warnings</div>';
+        warnings.forEach(function(warning) {
+          r += '<div class="insp-warning-item"><strong>' + warning.port + '</strong><br><span>' + warning.message + '</span></div>';
+        });
+        r += '</div>';
+        r += '</div>';
+      */
 
       return r || '<span style="color:var(--text-muted);font-style:italic">No data</span>';
   }
