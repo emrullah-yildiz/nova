@@ -3,6 +3,10 @@ function getRuntimeGlobal() {
   return globalThis;
 }
 
+function getRuntimeConfig(runtimeGlobal) {
+  return runtimeGlobal.NovaConfig || runtimeGlobal.__NOVA_CONFIG__ || {};
+}
+
 const PANEL_ID = 'nova-connect-panel';
 const STYLE_ID = 'nova-connect-panel-style';
 const STORAGE_KEY = 'nova_connect_settings';
@@ -43,8 +47,9 @@ function installAppMethods(app, runtimeGlobal) {
   app._readNovaConnectSettings = function() {
     const stored = readJson(runtimeGlobal.localStorage && runtimeGlobal.localStorage.getItem(STORAGE_KEY));
     const launch = readLaunchParameters(runtimeGlobal);
+    const config = getRuntimeConfig(runtimeGlobal);
     return {
-      url: launch.url || stored.url || 'ws://127.0.0.1:8765',
+      url: launch.url || stored.url || config.websocketUrl || 'ws://127.0.0.1:8765',
       token: launch.token || stored.token || '',
       projectId: launch.projectId || stored.projectId || ''
     };
@@ -58,7 +63,7 @@ function installAppMethods(app, runtimeGlobal) {
   app._collectNovaConnectSettings = function() {
     const document = runtimeGlobal.document;
     return {
-      url: valueOf(document, 'nova-connect-url', 'ws://127.0.0.1:8765'),
+      url: valueOf(document, 'nova-connect-url', getRuntimeConfig(runtimeGlobal).websocketUrl || 'ws://127.0.0.1:8765'),
       token: valueOf(document, 'nova-connect-token', ''),
       projectId: valueOf(document, 'nova-connect-project', '')
     };

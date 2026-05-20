@@ -53,6 +53,8 @@ import {
 } from './integrations/connect/aps-adapters.js';
 import { installNovaConnectPanel } from './integrations/connect/connect-panel.js';
 import { installGeoSelector } from './viewer/geo-selector.js';
+import { RuntimeConfig, getRuntimeConfig } from './config/runtime-config.js';
+import { NovaCloudClient, createNovaCloudClient } from './enterprise/cloud-client.js';
 
 const NovaConnect = createNovaConnectClient();
 let installedRevitBridge = RevitBridge;
@@ -103,6 +105,10 @@ const NodeFlow = {
   installNovaConnectPanel,
   installRevitNodes,
   installGeoSelector,
+  RuntimeConfig,
+  getRuntimeConfig,
+  NovaCloudClient,
+  createNovaCloudClient,
   get RevitBridge() {
     return (typeof window !== 'undefined' && window.RevitBridge) || installedRevitBridge;
   },
@@ -144,6 +150,8 @@ if (typeof window !== 'undefined') {
   window.SettingsDialog = SettingsDialog;
   window.Viewer3D = Viewer3D;
   window.NovaConnect = NovaConnect;
+  window.NovaConfig = RuntimeConfig;
+  window.NovaCloudClient = NovaCloudClient;
   window.HostRegistry = hostRegistry;
   window.NovaConnectProtocol = NovaConnectProtocol;
   window.ApsDocsAdapter = ApsDocsAdapter;

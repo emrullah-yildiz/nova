@@ -5,10 +5,11 @@ import {
   normalizeElementRecord,
   validateEnvelope
 } from './protocol.js';
+import { resolveWebSocketUrl } from '../../config/runtime-config.js';
 
 export class NovaConnectClient {
   constructor(options = {}) {
-    this.url = options.url || 'ws://127.0.0.1:8765';
+    this.url = options.url || resolveWebSocketUrl();
     this.source = options.source || 'nova-browser';
     this.sessionId = options.sessionId || '';
     this.projectId = options.projectId || '';

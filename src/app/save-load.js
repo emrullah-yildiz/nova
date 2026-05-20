@@ -144,6 +144,56 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   };
 
   // ══════════════════════════════════════
+  app.getNovaCloudClient = function() {
+    if (app._novaCloudClient) return app._novaCloudClient;
+    const factory = typeof window !== 'undefined' && window.NodeFlow && window.NodeFlow.createNovaCloudClient
+      ? window.NodeFlow.createNovaCloudClient
+      : null;
+    app._novaCloudClient = factory ? factory() : null;
+    return app._novaCloudClient;
+  };
+
+  app.loginNovaCloudDemo = async function(email = 'owner@demo.nova') {
+    const client = app.getNovaCloudClient();
+    if (!client) throw new Error('Nova Cloud client is not available.');
+    const session = await client.devLogin({ email, organizationSlug: 'demo' });
+    app._novaCloudUser = session.user;
+    return session;
+  };
+
+  app.saveToCloud = async function(name = app._projectName || 'Untitled') {
+    const client = app.getNovaCloudClient();
+    if (!client) throw new Error('Nova Cloud client is not available.');
+    if (!client.isAuthenticated()) await app.loginNovaCloudDemo();
+    const graph = app.serializeGraph();
+    let project;
+    if (app._cloudProjectId) {
+      project = await client.saveProjectGraph(app._cloudProjectId, { graph, message: 'Saved from Nova web' });
+    } else {
+      project = await client.createProject({ name, graph });
+      app._cloudProjectId = project.id;
+    }
+    app._projectName = project.name || name;
+    app.addAIMessage('workspace', 'Saved **' + app._projectName + '** to Nova Cloud.');
+    return project;
+  };
+
+  app.openCloudProject = async function(projectId) {
+    const client = app.getNovaCloudClient();
+    if (!client) throw new Error('Nova Cloud client is not available.');
+    if (!client.isAuthenticated()) await app.loginNovaCloudDemo();
+    const project = await client.getProject(projectId);
+    const versions = project.versions || [];
+    const version = versions.find(item => item.id === project.currentVersionId) || versions[versions.length - 1];
+    if (!version || !version.graph) throw new Error('Cloud project has no graph version.');
+    if (app.currentPage !== 'workspace') app.newProject();
+    app.deserializeGraph(version.graph);
+    app._cloudProjectId = project.id;
+    app._projectName = project.name;
+    app.addAIMessage('workspace', 'Opened cloud project **' + project.name + '**.');
+    return project;
+  };
+
   // OPEN FROM FILE (.nodeflow JSON)
   // ══════════════════════════════════════
   app.openFromFile = function() {
