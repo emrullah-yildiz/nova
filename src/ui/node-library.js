@@ -524,6 +524,109 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
     return created.length + ' nodes created';
   };
 
+  app._testLargeGeometryPipeline = function() {
+    this.newProject();
+    var self = this;
+    var created = [];
+
+    function add(type, x, y) {
+      var nd = self.addNodeToCanvas(type, x, y);
+      if (nd) created.push(nd);
+      return nd;
+    }
+
+    function setCtrl(nd, key, value) {
+      if (!nd) return;
+      nd.controlValues[key] = value;
+    }
+
+    function customize(nd, options) {
+      if (!nd) return;
+      options = options || {};
+      if (options.name) nd.def.name = options.name;
+      if (options.outputs) nd.def.outputs = options.outputs;
+      if (options.inputs) nd.def.inputs = options.inputs;
+      var el = document.getElementById(nd.id);
+      if (el) {
+        el.remove();
+        self.renderNode(nd);
+      }
+    }
+
+    var title = add('custom-comment', 40, 40);
+    setCtrl(title, 'text', 'Pure mesh stress template: generate 10,000 Nova geometry refs, show bounds first, then preview meshes. Full mesh sample is left unconnected for on-demand loading.');
+    customize(title);
+
+    var boundsGenerator = add('custom-python', 80, 165);
+    setCtrl(boundsGenerator, 'code', [
+      '_count = 10000',
+      'bounds_refs = []',
+      'for i in range(_count):',
+      '    _x = i % 100',
+      '    _y = int(i / 100) % 100',
+      '    _z = int(i / 10000)',
+      '    bounds_refs.append({"type":"GeometryRef","host":"nova","id":"mesh-" + i,"versionId":"synthetic-v1","bounds":{"min":[_x,_y,_z],"max":[_x+0.8,_y+0.8,_z+0.8]},"metadata":{"geometryKind":"mesh","level":"Bounds"}})'
+    ].join('\n'));
+    customize(boundsGenerator, {
+      name: 'Mesh.BoundsRefs 10k',
+      outputs: [{ id: 'output0', name: 'Bounds Refs', type: 'list' }]
+    });
+
+    var previewGenerator = add('custom-python', 395, 165);
+    setCtrl(previewGenerator, 'code', [
+      'preview_meshes = []',
+      'for ref in input0:',
+      '    _min = ref.bounds.min',
+      '    _max = ref.bounds.max',
+      '    _cx = (_min[0] + _max[0]) / 2',
+      '    _cy = (_min[1] + _max[1]) / 2',
+      '    _cz = (_min[2] + _max[2]) / 2',
+      '    preview_meshes.append(Geo.createBox(Geo.Point3(_cx,_cy,_cz), 0.8, 0.8, 0.8))'
+    ].join('\n'));
+    customize(previewGenerator, {
+      name: 'Mesh.PreviewMeshes',
+      inputs: [{ id: 'input0', name: 'Bounds Refs', type: 'list' }],
+      outputs: [{ id: 'output0', name: 'Preview Meshes', type: 'list' }]
+    });
+
+    var fullGenerator = add('custom-python', 395, 440);
+    setCtrl(fullGenerator, 'code', [
+      '# Connect Bounds Refs to this input only when you want the heavier mesh sample.',
+      'full_mesh_sample = []',
+      'for ref in input0.slice(0, 100):',
+      '    _min = ref.bounds.min',
+      '    _max = ref.bounds.max',
+      '    _cx = (_min[0] + _max[0]) / 2',
+      '    _cy = (_min[1] + _max[1]) / 2',
+      '    _cz = (_min[2] + _max[2]) / 2',
+      '    _box = Geo.createBox(Geo.Point3(_cx,_cy,_cz), 0.8, 0.8, 0.8)',
+      '    full_mesh_sample.append(Geo.subdivide(_box, 1))'
+    ].join('\n'));
+    customize(fullGenerator, {
+      name: 'Mesh.FullMeshSample',
+      inputs: [{ id: 'input0', name: 'Bounds Refs', type: 'list' }],
+      outputs: [{ id: 'output0', name: 'Full Mesh Sample', type: 'list' }]
+    });
+
+    var fullNote = add('custom-comment', 705, 440);
+    setCtrl(fullNote, 'text', 'Full mesh is intentionally unconnected. Wire Bounds Refs into Mesh.FullMeshSample and then to a Watch when you want to test the expensive path.');
+    customize(fullNote);
+
+    var boundsWatch = add('output-watch', 705, 115);
+    var previewWatch = add('output-watch', 705, 260);
+
+    if (boundsGenerator && previewGenerator) self.addWire(boundsGenerator.id, 'output0', previewGenerator.id, 'input0');
+    if (boundsGenerator && boundsWatch) self.addWire(boundsGenerator.id, 'output0', boundsWatch.id, 'value');
+    if (previewGenerator && previewWatch) self.addWire(previewGenerator.id, 'output0', previewWatch.id, 'value');
+
+    self.updatePortDots();
+    if (typeof updatePortDataStates === 'function') updatePortDataStates();
+    setTimeout(function() { self.renderWires(); }, 100);
+    if (self.autoLayout) setTimeout(function() { self.autoLayout(); }, 200);
+    self.addAIMessage('workspace', 'Large Mesh Geometry template loaded.\n\nThis is host-free: it creates synthetic Nova mesh geometry refs, then converts them to preview meshes. The full mesh sample node is available but intentionally unconnected for on-demand testing.');
+    return created.length + ' nodes created';
+  };
+
   // Landing page template cards
   var origRenderTemplates = app.renderTemplates ? app.renderTemplates.bind(app) : null;
   app.renderTemplates = function() {
@@ -535,6 +638,7 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
       { fn: '_testListNodes', color: 'var(--accent-peach)', icon: '☰', name: 'List Nodes Test', desc: '16 list operations with Range source' },
       { fn: '_testSurfaceNodes', color: 'var(--accent-teal)', icon: '◇', name: 'Surface Nodes Test', desc: 'All 5 surface nodes with geometry' }
     ];
+    templates.push({ fn: '_testLargeGeometryPipeline', color: 'var(--accent-blue)', icon: '10k', name: 'Large Mesh Geometry', desc: '10k mesh refs, preview meshes, full mesh on demand' });
     templates.forEach(function(t) {
       var card = document.createElement('div'); card.className = 'template-card'; card.style.setProperty('--card-accent', t.color);
       card.onclick = function() { app[t.fn](); };
