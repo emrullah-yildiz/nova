@@ -159,6 +159,9 @@ export class ExecutionEngine {
     // ── Patch computeNodeValue for cache integration ──
     const origCompute = app.computeNodeValue.bind(app);
     app.computeNodeValue = (nd) => {
+      if (app._manualRunMode && !app._isRunningGraph) {
+        return typeof app.getLastRunNodeValue === 'function' ? app.getLastRunNodeValue(nd) : undefined;
+      }
       // Use V2 caching if enabled
       if (this._cacheEnabled && nd) {
         const cached = this.cache.get(nd.id, this._version);
@@ -173,6 +176,10 @@ export class ExecutionEngine {
     // ── Patch runGraph ──
     const origRunGraph = app.runGraph.bind(app);
     app.runGraph = async () => {
+      if (Array.isArray(app.wires)) {
+        app._lastRunWires = app.wires.map(w => `${w.fromNode}:${w.fromPort}>${w.toNode}:${w.toPort}`);
+      }
+      app._graphDirty = false;
       // Run V2 execution
       const result = await this.run();
       // Fall through to legacy rendering for backward compat
@@ -198,6 +205,7 @@ export class ExecutionEngine {
           });
           app.endCompute();
         }
+        app._graphDirty = false;
         // Re-render wires with animation
         if (typeof app.renderWires === 'function') {
           app.renderWires();
@@ -286,6 +294,7 @@ export class ExecutionEngine {
       return { completed: 0, failed: 0, errors: new Map(), running: true };
     }
     this._running = true;
+    if (this._app) this._app._isRunningGraph = true;
     this._version++;
     this._cancelRequested = false;
 
@@ -405,6 +414,10 @@ export class ExecutionEngine {
     // Flush dirty tracker — all clean after successful run
     if (!this._cancelRequested) this.dirtyTracker.flush();
 
+    if (!this._cancelRequested && app && typeof app._commitRunSnapshot === 'function') {
+      app._commitRunSnapshot();
+    }
+
     this._running = false;
 
     if (app && typeof app._hideCancelButton === 'function') app._hideCancelButton();
@@ -420,6 +433,7 @@ export class ExecutionEngine {
 
     } finally {
       this._running = false;
+      if (app) app._isRunningGraph = false;
       if (app && typeof app._hideCancelButton === 'function') app._hideCancelButton();
       if (this._cancelBtn) this._cancelBtn.classList.add('hidden');
     }
@@ -694,6 +708,7 @@ export class ExecutionEngine {
 
     // Use V1 compute pipeline for all node types
     const result = app.computeNodeValue(nd);
+    nd._lastComputedValue = result;
 
     // Handle multi-output nodes
     if (nd._portValues) {

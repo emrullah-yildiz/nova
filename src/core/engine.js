@@ -84,6 +84,39 @@ export function installEngine(targetApp = getRuntimeApp()) {
   app._computeCache = null;
 
   app._computeDepth = 0;
+  var isVitestRuntime = typeof process !== 'undefined' && process.env && process.env.VITEST;
+  app._manualRunMode = typeof document !== 'undefined' && !isVitestRuntime;
+  app._hasRun = false;
+  app._isRunningGraph = false;
+  app._lastRunVersion = 0;
+
+  app._manualNoDataHTML = function() {
+    return '<span style="color:var(--text-muted)">Run to inspect data</span>';
+  };
+
+  app.getLastRunNodeValue = function(nd, portId) {
+    if (!nd || !this._hasRun) return undefined;
+    if (portId && nd._lastRunPortValues && nd._lastRunPortValues[portId] !== undefined) {
+      return nd._lastRunPortValues[portId];
+    }
+    return nd._lastRunValue;
+  };
+
+  app._commitRunSnapshot = function() {
+    this._hasRun = true;
+    this._lastRunVersion = (this._lastRunVersion || 0) + 1;
+    this.nodes.forEach(function(nd) {
+      nd._lastRunValue = nd._lastComputedValue;
+      if (nd._portValues) {
+        nd._lastRunPortValues = Object.assign({}, nd._portValues);
+      } else if (!nd._lastRunPortValues) {
+        nd._lastRunPortValues = undefined;
+      }
+      if (nd._pyResults) {
+        nd._lastRunPyResults = Object.assign({}, nd._pyResults);
+      }
+    });
+  };
 
 
 
@@ -136,6 +169,10 @@ export function installEngine(targetApp = getRuntimeApp()) {
   app.computeNodeValue = function(nd) {
 
     var self = this;
+
+    if (self._manualRunMode && !self._isRunningGraph) {
+      return self.getLastRunNodeValue(nd);
+    }
 
     var cache = self._computeCache;
 
@@ -1637,6 +1674,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
       if (nd._preview3d === false) return;
 
       var val = self.computeNodeValue(nd);
+      nd._lastComputedValue = val;
 
 
 
@@ -1950,6 +1988,9 @@ export function installEngine(targetApp = getRuntimeApp()) {
   };
 
   app.runGraph = async function() {
+    this._isRunningGraph = true;
+
+    try {
 
     // Show cancel button
     app._showCancelButton();
@@ -1992,6 +2033,14 @@ export function installEngine(targetApp = getRuntimeApp()) {
     await this._prepareLiveRevitGeometries();
 
     this._renderFromCompute();
+
+    this.beginCompute();
+    this.nodes.forEach(function(nd) {
+      nd._lastComputedValue = app.computeNodeValue(nd);
+      if (nd._portValues) nd._lastRunPortValues = Object.assign({}, nd._portValues);
+    });
+    this.endCompute();
+    this._commitRunSnapshot();
 
 
 
@@ -2084,6 +2133,10 @@ export function installEngine(targetApp = getRuntimeApp()) {
     this.addAIMessage('workspace', '▶️ **Executed!** ' + this.nodes.length + ' nodes → 3D updated.');
 
     app._hideCancelButton();
+
+    } finally {
+      this._isRunningGraph = false;
+    }
 
   };
 

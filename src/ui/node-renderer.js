@@ -182,7 +182,7 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
 
         h += '<div class="node-port input ' + ipt + '">';
 
-        h += '<span class="port-dot ' + ipt + (inpHasData ? ' has-data' : '') + '" data-port="' + inp.id + '" data-dir="input" data-node="' + nd.id + '"></span>';
+        h += '<span class="port-dot ' + ipt + (app._hasRun && inpHasData ? ' has-data' : '') + '" data-port="' + inp.id + '" data-dir="input" data-node="' + nd.id + '"></span>';
 
         h += '<span class="port-label">' + inp.name + '</span>';
 
@@ -672,6 +672,9 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
   // ── Universal Inspector Builder ──
   function _universalInspector(nd) {
       var r = '';
+      if (app._manualRunMode && !app._hasRun) {
+        return '<div class="insp-row"><span style="color:var(--text-muted)">Run to inspect data</span></div>';
+      }
       var controlIds = nd.def.controls ? nd.def.controls.map(function(c) { return c.id; }) : [];
       if (!nd._inspStates) nd._inspStates = { inputs: true, output: true };
 
@@ -692,7 +695,8 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
 
               app.computeNodeValue(srcNd);
 
-              if (srcNd._portValues && srcNd._portValues[wire.fromPort] !== undefined) srcVal = srcNd._portValues[wire.fromPort];
+              if (srcNd._lastRunPortValues && srcNd._lastRunPortValues[wire.fromPort] !== undefined) srcVal = srcNd._lastRunPortValues[wire.fromPort];
+              else if (srcNd._portValues && srcNd._portValues[wire.fromPort] !== undefined && app._isRunningGraph) srcVal = srcNd._portValues[wire.fromPort];
 
               else srcVal = app.computeNodeValue(srcNd);
 
@@ -739,7 +743,7 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
           r += '<div class="insp-row"><span class="insp-key"><span class="insp-icon">▸</span> ' + nd.def.outputs[0].name + '</span>' + app.formatValue(computed) + '</div>';
         } else {
           nd.def.outputs.forEach(function(out) {
-            var portVal = (nd._portValues && nd._portValues[out.id] !== undefined) ? nd._portValues[out.id] : undefined;
+            var portVal = (nd._lastRunPortValues && nd._lastRunPortValues[out.id] !== undefined) ? nd._lastRunPortValues[out.id] : ((app._isRunningGraph && nd._portValues && nd._portValues[out.id] !== undefined) ? nd._portValues[out.id] : undefined);
             r += '<div class="insp-row"><span class="insp-key"><span class="insp-icon">▸</span> ' + out.name + '</span>' + app.formatValue(portVal) + '</div>';
           });
         }
