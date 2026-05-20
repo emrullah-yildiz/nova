@@ -41,18 +41,36 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
   };
 
   app._onPropertyControlInput = function(nodeId, controlId, value) {
-    this._disconnectControlInputWire(nodeId, controlId);
-    this.onCtrl(nodeId, controlId, value);
+    if (this._pushHistory) this._pushHistory();
+    this._historySuspended = true;
+    try {
+      this._disconnectControlInputWire(nodeId, controlId);
+      this.onCtrl(nodeId, controlId, value);
+    } finally {
+      this._historySuspended = false;
+    }
   };
 
   app._onPropertyFormulaInput = function(nodeId, controlId, value, inputEl) {
-    this._disconnectControlInputWire(nodeId, controlId);
-    this._onFormulaInput(nodeId, controlId, value, inputEl);
+    if (this._pushHistory) this._pushHistory();
+    this._historySuspended = true;
+    try {
+      this._disconnectControlInputWire(nodeId, controlId);
+      this._onFormulaInput(nodeId, controlId, value, inputEl);
+    } finally {
+      this._historySuspended = false;
+    }
   };
 
   app._spinPropertyControl = function(nodeId, controlId, direction, btnEl) {
-    this._disconnectControlInputWire(nodeId, controlId);
-    this._spinCtrlDyn(nodeId, controlId, direction, btnEl);
+    if (this._pushHistory) this._pushHistory();
+    this._historySuspended = true;
+    try {
+      this._disconnectControlInputWire(nodeId, controlId);
+      this._spinCtrlDyn(nodeId, controlId, direction, btnEl);
+    } finally {
+      this._historySuspended = false;
+    }
   };
 
   app._inputHasPropertyControl = function(nodeId, inputId) {

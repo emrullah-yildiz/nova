@@ -115,6 +115,7 @@ export function installPortHandler(targetApp = getRuntimeApp(), runtimeGlobal = 
               startX: srcX, startY: srcY, endX: mouseX, endY: mouseY };
           } else {
             // RECONNECT: disconnect wire, hold from source
+            if (this._pushHistory) this._pushHistory();
             app._dragState = {
               type: 'reconnect',
               fromNode: srcNode, fromPort: srcPort, fromDir: 'output',
@@ -215,6 +216,7 @@ export function installPortHandler(targetApp = getRuntimeApp(), runtimeGlobal = 
 
     if (tgt && tgt.classList.contains('port-dot') && tgt.dataset.dir === 'output') {
       // Dropped on output port — reconnect all affected wires
+      if (app._pushHistory) app._pushHistory();
       var newNode = tgt.dataset.node, newPort = tgt.dataset.port;
       ds.affectedWireIndices.forEach(function(i) {
         if (app.wires[i]) {
@@ -225,6 +227,7 @@ export function installPortHandler(targetApp = getRuntimeApp(), runtimeGlobal = 
       app.updatePortDots();
     } else if (dragged) {
       // Dropped on empty — destroy affected wires (reverse order to keep indices valid)
+      if (app._pushHistory) app._pushHistory();
       var sorted = ds.affectedWireIndices.slice().sort(function(a,b){return b-a;});
       sorted.forEach(function(i) { app.wires.splice(i, 1); });
       app.updatePortDots();

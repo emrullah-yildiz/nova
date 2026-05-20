@@ -353,6 +353,197 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
   // Refresh library sidebar after all scripts loaded
   setTimeout(function() { if (app.renderNodeLibrary) app.renderNodeLibrary(); _outputTypeMap = null; }, 300);
 
+  app.copySelectedNodes = function() {
+    var selected = (this.selectedNodes || []).map(function(id) {
+      return app.nodes.find(function(n) { return n.id === id; });
+    }).filter(Boolean);
+    if (!selected.length) return false;
+    var selectedIds = selected.map(function(nd) { return nd.id; });
+    this._nodeClipboard = {
+      pasteCount: 0,
+      ids: selectedIds,
+      nodes: selected.map(function(nd) {
+        return {
+          type: nd.type,
+          x: nd.x,
+          y: nd.y,
+          def: JSON.parse(JSON.stringify(nd.def)),
+          controlValues: JSON.parse(JSON.stringify(nd.controlValues || {})),
+          dataPanelOpen: !!nd.dataPanelOpen,
+          propsPanelOpen: !!nd.propsPanelOpen,
+          inspectorOpen: !!nd.inspectorOpen
+        };
+      }),
+      wires: (this.wires || []).filter(function(w) {
+        return selectedIds.indexOf(w.toNode) >= 0;
+      }).map(function(w) {
+        return {
+          fromNode: w.fromNode,
+          fromPort: w.fromPort,
+          toNode: w.toNode,
+          toPort: w.toPort,
+          toCopied: selectedIds.indexOf(w.toNode) >= 0
+        };
+      })
+    };
+    return true;
+  };
+
+  app.pasteCopiedNodes = function() {
+    var clip = this._nodeClipboard;
+    if (!clip || !clip.nodes || !clip.nodes.length) return false;
+    if (this._pushHistory) this._pushHistory();
+    this._historySuspended = true;
+    clip.pasteCount = (clip.pasteCount || 0) + 1;
+    var offset = 40 * clip.pasteCount;
+    var idMap = {};
+    var pasted = [];
+    clip.nodes.forEach(function(src, index) {
+      var id = 'node-' + app.nextNodeId++;
+      app.nodeZCounter++;
+      var nd = {
+        id: id,
+        type: src.type,
+        x: Math.round(src.x + offset),
+        y: Math.round(src.y + offset),
+        def: JSON.parse(JSON.stringify(src.def)),
+        controlValues: JSON.parse(JSON.stringify(src.controlValues || {})),
+        dataPanelOpen: src.dataPanelOpen,
+        propsPanelOpen: src.propsPanelOpen,
+        inspectorOpen: src.inspectorOpen,
+        _propsOpen: src.propsPanelOpen,
+        _inspOpen: src.inspectorOpen,
+        zIndex: app.nodeZCounter
+      };
+      idMap[clip.ids[index]] = id;
+      app.nodes.push(nd);
+      app.renderNode(nd);
+      pasted.push(nd);
+    });
+    clip.wires.forEach(function(w) {
+      var fromNode = idMap[w.fromNode] || w.fromNode;
+      var toNode = idMap[w.toNode] || w.toNode;
+      if (!toNode) return;
+      if (!app.nodes.some(function(n) { return n.id === fromNode; })) return;
+      if (!app.nodes.some(function(n) { return n.id === toNode; })) return;
+      if (!w.toCopied && app.wires.some(function(existing) { return existing.toNode === toNode && existing.toPort === w.toPort; })) return;
+      if (app.addWire) app.addWire(fromNode, w.fromPort, toNode, w.toPort);
+      else app.wires.push({ fromNode: fromNode, fromPort: w.fromPort, toNode: toNode, toPort: w.toPort });
+    });
+    app.deselectAll();
+    pasted.forEach(function(nd) { app.selectNode(nd.id, true); });
+    if (app.invalidateCompute) app.invalidateCompute();
+    if (typeof Viewer3D !== 'undefined') Viewer3D._needsRebuild = true;
+    if (app.updatePortDots) app.updatePortDots();
+    if (app.renderWires) {
+      app.renderWires();
+      setTimeout(function() { app.renderWires(); }, 50);
+    }
+    app._historySuspended = false;
+    if (app.updateMenuState) app.updateMenuState();
+    if (app._updateHistoryMenuState) app._updateHistoryMenuState();
+    return true;
+  };
+
+  app._historySnapshot = function() {
+    return {
+      nodes: JSON.parse(JSON.stringify(this.nodes || [])),
+      wires: JSON.parse(JSON.stringify(this.wires || [])),
+      selectedNodes: (this.selectedNodes || []).slice(),
+      nextNodeId: this.nextNodeId,
+      nodeZCounter: this.nodeZCounter,
+      hasRun: !!this._hasRun,
+      lastRunVersion: this._lastRunVersion || 0
+    };
+  };
+
+  app._restoreHistorySnapshot = function(snapshot) {
+    if (!snapshot) return;
+    this._historyRestoring = true;
+    this.nodes = JSON.parse(JSON.stringify(snapshot.nodes || []));
+    this.wires = JSON.parse(JSON.stringify(snapshot.wires || []));
+    this.selectedNodes = [];
+    this.nextNodeId = snapshot.nextNodeId || 1;
+    this.nodeZCounter = snapshot.nodeZCounter || 10;
+    this._hasRun = !!snapshot.hasRun;
+    this._lastRunVersion = snapshot.lastRunVersion || 0;
+    var canvas = document.getElementById('node-canvas');
+    if (canvas) canvas.innerHTML = '';
+    var svg = document.getElementById('wire-svg');
+    if (svg) svg.innerHTML = '';
+    this.nodes.forEach(function(nd) { app.renderNode(nd); });
+    (snapshot.selectedNodes || []).forEach(function(id) {
+      if (app.nodes.some(function(nd) { return nd.id === id; })) app.selectNode(id, true);
+    });
+    if (this.updatePortDots) this.updatePortDots();
+    if (this.renderWires) {
+      this.renderWires();
+      setTimeout(function() { app.renderWires(); }, 50);
+    }
+    if (this.invalidateCompute) this.invalidateCompute();
+    if (typeof Viewer3D !== 'undefined') Viewer3D._needsRebuild = true;
+    this._historyRestoring = false;
+    if (this.updateMenuState) this.updateMenuState();
+    if (this._updateHistoryMenuState) this._updateHistoryMenuState();
+  };
+
+  app._pushHistory = function() {
+    if (this._historyRestoring || this._historySuspended) return false;
+    if (!this._undoStack) this._undoStack = [];
+    if (!this._redoStack) this._redoStack = [];
+    var snapshot = this._historySnapshot();
+    var encoded = JSON.stringify(snapshot);
+    if (this._lastHistorySnapshot === encoded) return false;
+    this._undoStack.push(snapshot);
+    if (this._undoStack.length > 100) this._undoStack.shift();
+    this._redoStack = [];
+    this._lastHistorySnapshot = encoded;
+    if (this._updateHistoryMenuState) this._updateHistoryMenuState();
+    return true;
+  };
+
+  app._updateHistoryMenuState = function() {
+    var undo = document.getElementById('mi-undo');
+    var redo = document.getElementById('mi-redo');
+    var ws = this.currentPage === 'workspace';
+    if (undo) undo.classList.toggle('disabled', !ws || !(this._undoStack && this._undoStack.length));
+    if (redo) redo.classList.toggle('disabled', !ws || !(this._redoStack && this._redoStack.length));
+  };
+
+  app.undo = function() {
+    if (!this._undoStack || !this._undoStack.length) return false;
+    if (!this._redoStack) this._redoStack = [];
+    this._redoStack.push(this._historySnapshot());
+    var snapshot = this._undoStack.pop();
+    this._lastHistorySnapshot = JSON.stringify(snapshot);
+    this._restoreHistorySnapshot(snapshot);
+    return true;
+  };
+
+  app.redo = function() {
+    if (!this._redoStack || !this._redoStack.length) return false;
+    if (!this._undoStack) this._undoStack = [];
+    this._undoStack.push(this._historySnapshot());
+    var snapshot = this._redoStack.pop();
+    this._lastHistorySnapshot = JSON.stringify(snapshot);
+    this._restoreHistorySnapshot(snapshot);
+    return true;
+  };
+
+  app._wrapHistoryMethod = function(name) {
+    if (!this[name] || this['__historyWrapped_' + name]) return;
+    var original = this[name].bind(this);
+    this['__historyWrapped_' + name] = true;
+    this[name] = function() {
+      app._pushHistory();
+      return original.apply(app, arguments);
+    };
+  };
+
+  ['addNodeToCanvas','removeNode','addWire','onCtrl','_addDynInput','_removeDynInput','_spinCtrlDyn','_spinSliderDyn','onNodeDragStart'].forEach(function(name) {
+    app._wrapHistoryMethod(name);
+  });
+
   // ═══════════════════════════════════════
   // KEYBOARD SHORTCUTS
   // ═══════════════════════════════════════
@@ -360,6 +551,24 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
     if (app.currentPage !== 'workspace') return;
     if (['INPUT', 'TEXTAREA', 'SELECT'].indexOf(e.target.tagName) >= 0) return;
     var key = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && key === 'z') {
+      e.preventDefault();
+      if (app.undo) app.undo();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && key === 'y') {
+      e.preventDefault();
+      if (app.redo) app.redo();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && key === 'c') {
+      if (app.copySelectedNodes && app.copySelectedNodes()) e.preventDefault();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && key === 'v') {
+      if (app.pasteCopiedNodes && app.pasteCopiedNodes()) e.preventDefault();
+      return;
+    }
     if (key === 'p' || key === 'd' || key === 'w') {
       var selIds = (app.selectedNodes && app.selectedNodes.length > 0) ? app.selectedNodes : app.nodes.map(function(n) { return n.id; });
       if (selIds.length === 0) return;

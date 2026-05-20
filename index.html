@@ -25,6 +25,7 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="./nova-config.js"></script>
 
 </head>
 
@@ -70,9 +71,9 @@
 
       <div class="menu-dropdown">
 
-        <button class="menu-dropdown-item disabled">Undo</button>
+        <button class="menu-dropdown-item disabled" id="mi-undo" onclick="app.undo()">Undo <span class="shortcut">Ctrl+Z</span></button>
 
-        <button class="menu-dropdown-item disabled">Redo</button>
+        <button class="menu-dropdown-item disabled" id="mi-redo" onclick="app.redo()">Redo <span class="shortcut">Ctrl+Y</span></button>
 
         <div class="menu-separator"></div>
 
