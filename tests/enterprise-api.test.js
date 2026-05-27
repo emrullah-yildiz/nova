@@ -21,11 +21,49 @@ async function request(baseUrl, path, options = {}) {
   const text = await response.text();
   return {
     status: response.status,
+    headers: response.headers,
     body: text ? JSON.parse(text) : null
   };
 }
 
 describe('enterprise API server', () => {
+  it('sets baseline security and CORS headers', async () => {
+    const { server } = createEnterpriseApiServer({ corsOrigin: 'https://app.nova.example' });
+    const port = await listen(server);
+    const baseUrl = 'http://127.0.0.1:' + port;
+
+    try {
+      const health = await request(baseUrl, '/health');
+
+      expect(health.status).toBe(200);
+      expect(health.headers.get('access-control-allow-origin')).toBe('https://app.nova.example');
+      expect(health.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(health.headers.get('x-frame-options')).toBe('DENY');
+      expect(health.headers.get('referrer-policy')).toBe('no-referrer');
+      expect(health.headers.get('permissions-policy')).toContain('camera=()');
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
+  it('can disable dev login for production deployments', async () => {
+    const { server } = createEnterpriseApiServer({ allowDevLogin: false });
+    const port = await listen(server);
+    const baseUrl = 'http://127.0.0.1:' + port;
+
+    try {
+      const login = await request(baseUrl, '/api/auth/dev-login', {
+        method: 'POST',
+        body: { email: 'owner@demo.nova', organizationSlug: 'demo' }
+      });
+
+      expect(login.status).toBe(404);
+      expect(login.body.error.message).toMatch(/Route not found/);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
   it('reloads persisted projects after API restart', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nova-enterprise-api-'));
     const persistenceFilePath = path.join(dir, 'store.json');

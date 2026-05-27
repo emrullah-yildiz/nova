@@ -12,7 +12,7 @@ The application combines a node-based design canvas, a 3D viewport, a custom geo
 - Graph execution, geometry utilities, node registry, AI workflow, and UI modules are organized under `src/`.
 - Vitest and Playwright coverage are present.
 - GitHub Actions gates linting, unit tests, browser workflow tests, build, and dependency audit.
-- Enterprise backend work is planned but not yet implemented.
+- Enterprise backend foundation is present for API contracts, auth/RBAC, project persistence, AI mediation, Connect pairing, and audit logging. It is still a pilot baseline, not a full production SaaS backend.
 
 ## Run Locally
 
@@ -40,14 +40,20 @@ npm run dev
 npm run build
 ```
 
-5. Run browser workflow checks:
+5. Start the local enterprise API:
+
+```bash
+npm run dev:api
+```
+
+6. Run browser workflow checks:
 
 ```bash
 npx playwright install chromium
 npm run test:e2e
 ```
 
-6. Open `http://127.0.0.1:8080` in your browser if the server does not automatically open.
+7. Open `http://127.0.0.1:8080` in your browser if the server does not automatically open.
 
 ## Project Structure
 
@@ -69,11 +75,12 @@ npm run test:e2e
 Current enterprise planning documents:
 
 - `docs/backend-architecture.md`
+- `docs/web-enterprise-production.md`
 - `docs/enterprise-mvp-requirements.md`
 - `docs/public-release-checklist.md`
 - `docs/revit-plugin-architecture.md`
 
-Enterprise readiness work should focus on the trusted backend boundary, secure AI proxying, project persistence, identity/RBAC, audit logging, and hardened Nova Connect pairing.
+Enterprise readiness work should continue toward managed Postgres/Redis persistence, production OIDC verification, deployment observability, and hardened Nova Connect relay infrastructure.
 
 ## Public Release
 

@@ -17,6 +17,9 @@ Required fields:
 Optional API environment:
 
 - `NOVA_ENTERPRISE_STORE_FILE`: local JSON snapshot path for development or single-node demos that need data to survive API restarts.
+- `NOVA_ALLOW_DEV_LOGIN`: set to `false` outside local development.
+- `NOVA_SESSION_SECRET`: long random secret used to sign API sessions.
+- `NOVA_CORS_ORIGIN`: browser app origin allowed to call the API.
 
 ## Local Baseline Commands
 
@@ -27,6 +30,8 @@ npm run dev
 ```
 
 The API starts on `http://127.0.0.1:8787` and bootstraps a demo organization with `owner@demo.nova`.
+
+Use `docs/enterprise-api.env.example` as the deployment environment template.
 
 ## Enterprise API Baseline
 
@@ -63,6 +68,17 @@ Current endpoints:
 ## Production Hardening Still Required
 
 Before enterprise rollout, wire the OIDC callback to the production identity provider and JWKS validation, disable dev login outside local environments, move JSON persistence to a managed database, enforce HTTPS/WSS in deployment, add persistent audit retention, and deploy the connector relay on managed infrastructure.
+
+## Deployment Baseline
+
+The API can run as a standalone container for smoke tests and internal demos:
+
+```powershell
+docker build -f Dockerfile.api -t nova-enterprise-api .
+docker run --rm -p 8787:8787 --env-file .env nova-enterprise-api
+```
+
+Production-like deployments should set `NOVA_ALLOW_DEV_LOGIN=false`, provide a strong `NOVA_SESSION_SECRET`, restrict `NOVA_CORS_ORIGIN` to the deployed browser app origin, and terminate TLS at the ingress or platform load balancer. The API also sends baseline security headers on every response: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, and `Cross-Origin-Resource-Policy`.
 
 ## Authentication And RBAC Baseline
 

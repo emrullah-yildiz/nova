@@ -26,14 +26,16 @@ export function createEnterpriseApiServer(options = {}) {
   if (options.bootstrapDemo !== false && store.organizations.size === 0) store.bootstrapDemoTenant();
   const corsOrigin = options.corsOrigin || '*';
   const aiProvider = options.aiProvider || createMockAiProvider();
+  const allowDevLogin = options.allowDevLogin !== false;
 
   const server = http.createServer(async (req, res) => {
     setCorsHeaders(res, corsOrigin);
+    setSecurityHeaders(res);
     if (req.method === 'OPTIONS') return sendJson(res, 204, null);
 
     try {
       const url = new URL(req.url, 'http://localhost');
-      const route = matchRoute(req.method, url.pathname);
+      const route = matchRoute(req.method, url.pathname, { allowDevLogin });
       if (!route) throw createHttpError(404, 'Route not found.');
       const body = await readJsonBody(req);
       const context = route.public ? null : authenticateRequest(store, req);
@@ -53,7 +55,7 @@ export function createEnterpriseApiServer(options = {}) {
   return { server, store };
 }
 
-function matchRoute(method, path) {
+function matchRoute(method, path, options = {}) {
   const routes = [
     ['GET', /^\/health$/, true, 200, ({ store }) => ({
       ok: true,
@@ -61,6 +63,7 @@ function matchRoute(method, path) {
       organizations: store.organizations.size
     })],
     ['POST', /^\/api\/auth\/dev-login$/, true, 200, ({ store, body }) => {
+      if (options.allowDevLogin === false) throw createHttpError(404, 'Route not found.');
       validateDevLoginBody(body);
       const organization = Array.from(store.organizations.values()).find(item => item.slug === (body.organizationSlug || 'demo')) ||
         Array.from(store.organizations.values())[0];
@@ -158,6 +161,14 @@ function setCorsHeaders(res, origin) {
   res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+}
+
+function setSecurityHeaders(res) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
 }
 
 function sendJson(res, status, payload) {
