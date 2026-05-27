@@ -14,6 +14,7 @@ export class EnterpriseStore {
   constructor(options = {}) {
     this.now = options.now || (() => Date.now());
     this.authService = options.authService || null;
+    this.persistence = options.persistence || null;
     this.organizations = new Map();
     this.users = new Map();
     this.projects = new Map();
@@ -21,6 +22,7 @@ export class EnterpriseStore {
     this.aiRequests = new Map();
     this.aiUsageBuckets = new Map();
     this.auditEvents = [];
+    if (this.persistence) this.restoreSnapshot(this.persistence.readSnapshot());
   }
 
   bootstrapDemoTenant() {
@@ -51,6 +53,7 @@ export class EnterpriseStore {
       }
     };
     this.organizations.set(organization.id, organization);
+    this.persist();
     return clone(organization);
   }
 
@@ -64,6 +67,7 @@ export class EnterpriseStore {
       createdAt: this.now()
     };
     this.users.set(user.id, user);
+    this.persist();
     return clone(user);
   }
 
@@ -492,7 +496,35 @@ export class EnterpriseStore {
       createdAt: this.now()
     };
     this.auditEvents.push(event);
+    this.persist();
     return clone(event);
+  }
+
+  exportSnapshot() {
+    return {
+      schemaVersion: 1,
+      organizations: Array.from(this.organizations.values()).map(clone),
+      users: Array.from(this.users.values()).map(clone),
+      projects: Array.from(this.projects.values()).map(clone),
+      connectorSessions: Array.from(this.connectorSessions.values()).map(clone),
+      aiRequests: Array.from(this.aiRequests.values()).map(clone),
+      auditEvents: this.auditEvents.map(clone)
+    };
+  }
+
+  restoreSnapshot(snapshot = null) {
+    if (!snapshot) return;
+    this.organizations = mapById(snapshot.organizations);
+    this.users = mapById(snapshot.users);
+    this.projects = mapById(snapshot.projects);
+    this.connectorSessions = mapById(snapshot.connectorSessions);
+    this.aiRequests = mapById(snapshot.aiRequests);
+    this.auditEvents = safeArray(snapshot.auditEvents).map(clone);
+  }
+
+  persist() {
+    if (!this.persistence) return;
+    this.persistence.writeSnapshot(this.exportSnapshot());
   }
 }
 
@@ -539,6 +571,14 @@ function publicUser(user, organizationId, role) {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function mapById(items) {
+  return new Map(safeArray(items).filter(item => item && item.id).map(item => [item.id, clone(item)]));
+}
+
+function safeArray(value) {
+  return Array.isArray(value) ? value : [];
 }
 
 function createId(prefix) {
