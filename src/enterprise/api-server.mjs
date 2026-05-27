@@ -2,6 +2,8 @@ import http from 'node:http';
 import { AuthService } from './auth.mjs';
 import { EnterpriseStore, ROLES, createHttpError } from './domain.mjs';
 import { JsonFilePersistence } from './persistence.mjs';
+import { PostgresPersistence } from '../../server/db/postgres-persistence.mjs';
+import { runMigrations } from '../../server/db/run-migrations.mjs';
 import {
   validateAiChatBody,
   validateConnectorPairBody,
@@ -20,10 +22,10 @@ export function createEnterpriseApiServer(options = {}) {
     sessionSecret: options.sessionSecret,
     oidcVerifier: options.oidcVerifier
   });
-  const persistence = options.persistence || (options.persistenceFilePath ? new JsonFilePersistence(options.persistenceFilePath) : null);
+  const persistence = options.persistence || resolvePersistence(options);
   const store = options.store || new EnterpriseStore({ authService, persistence });
   if (!store.authService) store.authService = authService;
-  if (options.bootstrapDemo !== false && store.organizations.size === 0) store.bootstrapDemoTenant();
+  if (options.bootstrapDemo !== false && store.organizations.size === 0 && !options.databaseUrl) store.bootstrapDemoTenant();
   const corsOrigin = options.corsOrigin || '*';
   const aiProvider = options.aiProvider || createMockAiProvider();
   const allowDevLogin = options.allowDevLogin !== false;
@@ -216,4 +218,14 @@ function createMockAiProvider() {
       };
     }
   };
+}
+
+function resolvePersistence(options) {
+  if (options.databaseUrl) {
+    return new PostgresPersistence({ connectionString: options.databaseUrl });
+  }
+  if (options.persistenceFilePath) {
+    return new JsonFilePersistence(options.persistenceFilePath);
+  }
+  return null;
 }

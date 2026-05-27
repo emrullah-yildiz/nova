@@ -121,9 +121,55 @@ The existing `scripts/connect-hub.cjs` is a useful prototype. Production work sh
 
 ## Persistence Boundary
 
-The current `EnterpriseStore` exposes a snapshot boundary that serializes organizations, users, projects, connector sessions, AI requests, and audit events. `JsonFilePersistence` uses that boundary for local development and restart-safe demos.
+The `EnterpriseStore` exposes a snapshot boundary that serializes organizations, users, projects, connector sessions, AI requests, and audit events. Two adapters implement this boundary:
 
-This is a bridge, not the final persistence layer. Production should replace the JSON adapter with a Postgres repository implementation while keeping the domain rules and route authorization behavior intact. Redis remains the target for short-lived session, pairing, and rate-limit state.
+- **`JsonFilePersistence`** — writes a single JSON snapshot file. Suitable for local development and restart-safe demos. Not suitable for production (no concurrent writer coordination, no indexes, no backup policy).
+
+- **`PostgresPersistence`** — reads and writes the same snapshot shape from Postgres tables. Uses a managed connection pool and atomic transactions for write operations. The snapshot adapter pattern preserves the existing domain logic and route authorization behavior while switching the storage backend.
+
+### Migration System
+
+Migrations live in `server/db/migrations/` as numbered SQL files. The `runMigrations` runner tracks applied migrations in a `_migrations` table. Usage:
+
+```bash
+# Apply all pending migrations
+NOVA_DATABASE_URL=postgres://... node scripts/run-migrations.mjs
+
+# Check migration status
+NOVA_DATABASE_URL=postgres://... node scripts/run-migrations.mjs status
+
+# Or via npm scripts
+npm run migrate
+npm run db:migrate
+```
+
+### Database Tables
+
+The initial schema (`001_initial_schema.sql`) creates:
+
+- `organizations` — tenants with JSONB settings (AI policy, retention, SSO config)
+- `users` — user accounts with email and external subject for SSO mapping
+- `organization_members` — role assignments (Owner/Admin/Editor/Viewer) within a tenant
+- `projects` — project metadata, scoped to an organization
+- `project_members` — project-level role assignments
+- `project_versions` — immutable graph snapshots with JSONB graph data
+- `graph_runs` — execution records (status, duration, error summary)
+- `ai_requests` — AI proxy requests with provider, model, messages, and usage
+- `connect_sessions` — Nova Connect pairing sessions with expiry
+- `audit_events` — immutable security and activity log
+- `rate_limit_buckets` — per-minute AI rate limit counters
+
+### Selecting Persistence at Runtime
+
+The API server auto-detects the persistence backend from environment variables:
+
+1. If `NOVA_DATABASE_URL` is set → uses `PostgresPersistence` (production path)
+2. If `NOVA_ENTERPRISE_STORE_FILE` is set → uses `JsonFilePersistence` (local dev)
+3. Otherwise → uses in-memory store with no persistence across restarts
+
+Production deployments should set `NOVA_DATABASE_URL` and run `npm run migrate` at deploy time. The Docker container runs migrations automatically on startup when `NOVA_DATABASE_URL` is present.
+
+Redis remains the target for short-lived session, pairing, and rate-limit state in a future iteration.
 
 ## Security Controls
 

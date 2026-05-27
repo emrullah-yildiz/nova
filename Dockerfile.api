@@ -7,12 +7,15 @@ ENV NOVA_API_HOST=0.0.0.0
 ENV NOVA_API_PORT=8787
 ENV NOVA_ALLOW_DEV_LOGIN=false
 
+# Install runtime dependencies (includes pg for Postgres support)
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY scripts ./scripts
 COPY src ./src
+COPY server ./server
 
 EXPOSE 8787
 
-CMD ["npm", "run", "dev:api"]
+# Run migrations on startup if NOVA_DATABASE_URL is set, then start API
+CMD ["node", "scripts/start.mjs"]
