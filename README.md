@@ -70,6 +70,11 @@ Current enterprise planning documents:
 
 - `docs/backend-architecture.md`
 - `docs/enterprise-mvp-requirements.md`
+- `docs/public-release-checklist.md`
 - `docs/revit-plugin-architecture.md`
 
 Enterprise readiness work should focus on the trusted backend boundary, secure AI proxying, project persistence, identity/RBAC, audit logging, and hardened Nova Connect pairing.
+
+## Public Release
+
+Before making the repository public, use `docs/public-release-checklist.md` to verify repository hygiene, secret scanning, documentation accuracy, CI gates, licensing, and GitHub repository settings.
