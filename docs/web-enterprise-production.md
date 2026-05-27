@@ -34,6 +34,7 @@ The first backend implementation is intentionally dependency-light and in-memory
 - Enterprise AI proxy requests with organization policy, rate limits, and audit events.
 - Audit events for auth, project, connector, host, and AI operations.
 - Authorization checks that reject cross-organization project access.
+- Request validation for graph saves, connector pairing, AI chat messages, and host operations.
 
 Current endpoints:
 

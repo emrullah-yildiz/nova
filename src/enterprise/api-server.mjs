@@ -1,5 +1,14 @@
 import http from 'node:http';
 import { EnterpriseStore, createHttpError } from './domain.mjs';
+import {
+  validateAiChatBody,
+  validateConnectorPairBody,
+  validateConnectorSessionBody,
+  validateCreateProjectBody,
+  validateDevLoginBody,
+  validateHostOperationBody,
+  validateSaveGraphBody
+} from './validation.mjs';
 
 export function createEnterpriseApiServer(options = {}) {
   const store = options.store || new EnterpriseStore();
@@ -41,6 +50,7 @@ function matchRoute(method, path) {
       organizations: store.organizations.size
     })],
     ['POST', /^\/api\/auth\/dev-login$/, true, 200, ({ store, body }) => {
+      validateDevLoginBody(body);
       const organization = Array.from(store.organizations.values()).find(item => item.slug === (body.organizationSlug || 'demo')) ||
         Array.from(store.organizations.values())[0];
       return store.createAuthSession({
@@ -50,16 +60,19 @@ function matchRoute(method, path) {
     }],
     ['GET', /^\/api\/me$/, false, 200, ({ context }) => ({ user: context.user })],
     ['GET', /^\/api\/projects$/, false, 200, ({ store, context }) => ({ projects: store.listProjects(context) })],
-    ['POST', /^\/api\/projects$/, false, 201, ({ store, context, body }) => store.createProject(context, body || {})],
+    ['POST', /^\/api\/projects$/, false, 201, ({ store, context, body }) => store.createProject(context, validateCreateProjectBody(body || {}))],
     ['GET', /^\/api\/projects\/([^/]+)$/, false, 200, ({ store, context, params }) => store.getProject(context, params[0])],
-    ['PUT', /^\/api\/projects\/([^/]+)\/graph$/, false, 200, ({ store, context, params, body }) => store.updateProjectGraph(context, params[0], body || {})],
+    ['PUT', /^\/api\/projects\/([^/]+)\/graph$/, false, 200, ({ store, context, params, body }) => store.updateProjectGraph(context, params[0], validateSaveGraphBody(body || {}))],
     ['GET', /^\/api\/projects\/([^/]+)\/versions$/, false, 200, ({ store, context, params }) => ({ versions: store.listProjectVersions(context, params[0]) })],
     ['POST', /^\/api\/projects\/([^/]+)\/versions\/([^/]+)\/restore$/, false, 200, ({ store, context, params }) => store.restoreProjectVersion(context, params[0], params[1])],
-    ['POST', /^\/api\/connectors\/sessions$/, false, 201, ({ store, context, body }) => store.createConnectorSession(context, body || {})],
-    ['POST', /^\/api\/connectors\/sessions\/([^/]+)\/pair$/, false, 200, ({ store, context, params, body }) => store.pairConnector(context, params[0], body && body.pairingCode)],
+    ['POST', /^\/api\/connectors\/sessions$/, false, 201, ({ store, context, body }) => store.createConnectorSession(context, validateConnectorSessionBody(body || {}))],
+    ['POST', /^\/api\/connectors\/sessions\/([^/]+)\/pair$/, false, 200, ({ store, context, params, body }) => {
+      const payload = validateConnectorPairBody(body || {});
+      return store.pairConnector(context, params[0], payload.pairingCode);
+    }],
     ['POST', /^\/api\/ai\/chat$/, false, 200, handleAiChat],
     ['GET', /^\/api\/audit$/, false, 200, ({ store, context }) => ({ events: store.listAuditEvents(context) })],
-    ['POST', /^\/api\/host-operations$/, false, 201, ({ store, context, body }) => store.recordHostOperation(context, body || {})]
+    ['POST', /^\/api\/host-operations$/, false, 201, ({ store, context, body }) => store.recordHostOperation(context, validateHostOperationBody(body || {}))]
   ];
 
   for (const [routeMethod, pattern, isPublic, status, handler] of routes) {
@@ -72,12 +85,13 @@ function matchRoute(method, path) {
 }
 
 async function handleAiChat({ store, context, body, aiProvider }) {
-  const request = store.createAiRequest(context, body || {});
+  const payload = validateAiChatBody(body || {});
+  const request = store.createAiRequest(context, payload);
   try {
     const completion = await aiProvider.complete({
       provider: request.provider,
       model: request.model,
-      messages: body.messages,
+      messages: payload.messages,
       projectId: request.projectId,
       context
     });
