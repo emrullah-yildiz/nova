@@ -6,6 +6,13 @@ export function validateDevLoginBody(body = {}) {
   return body;
 }
 
+export function validateOidcCallbackBody(body = {}) {
+  requirePlainObject(body, 'request body');
+  requireString(body.idToken, 'idToken', 20000);
+  optionalString(body.organizationSlug, 'organizationSlug', 120);
+  return body;
+}
+
 export function validateCreateProjectBody(body = {}) {
   optionalString(body.name, 'name', 160);
   optionalGraph(body.graph, 'graph');
@@ -29,6 +36,13 @@ export function validateConnectorSessionBody(body = {}) {
 export function validateConnectorPairBody(body = {}) {
   requirePlainObject(body, 'request body');
   requireString(body.pairingCode, 'pairingCode', 64);
+  return body;
+}
+
+export function validateProjectMemberBody(body = {}) {
+  requirePlainObject(body, 'request body');
+  requireString(body.userId, 'userId', 80);
+  requireString(body.role, 'role', 40);
   return body;
 }
 

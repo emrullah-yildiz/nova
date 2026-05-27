@@ -1,4 +1,5 @@
 import { EnterpriseStore, ROLES } from '../src/enterprise/domain.mjs';
+import { AuthService } from '../src/enterprise/auth.mjs';
 
 function createContext(store, organizationId, role = ROLES.OWNER, email = 'user@example.com') {
   const user = store.createUser({ email, displayName: email });
@@ -7,7 +8,35 @@ function createContext(store, organizationId, role = ROLES.OWNER, email = 'user@
   return store.authenticate(session.token);
 }
 
+function createUserContext(store, organizationId, role, email) {
+  const user = store.createUser({ email, displayName: email });
+  store.addMembership({ organizationId, userId: user.id, role });
+  const session = store.createAuthSession({ email, organizationId });
+  return { user, context: store.authenticate(session.token) };
+}
+
 describe('enterprise domain', () => {
+  it('uses signed auth sessions and rejects tampered or expired tokens', () => {
+    let now = 1000;
+    const authService = new AuthService({
+      now: () => now,
+      sessionSecret: 'test-session-secret',
+      sessionTtlMs: 100
+    });
+    const store = new EnterpriseStore({ now: () => now, authService });
+    const org = store.createOrganization({ name: 'A' });
+    const user = store.createUser({ email: 'signed@example.com' });
+    store.addMembership({ organizationId: org.id, userId: user.id, role: ROLES.OWNER });
+
+    const session = store.createAuthSession({ email: user.email, organizationId: org.id });
+    expect(session.token).toContain('.');
+    expect(store.authenticate(session.token).user.email).toBe(user.email);
+
+    expect(() => store.authenticate(session.token + 'x')).toThrow(/Invalid bearer/);
+    now = 1200;
+    expect(() => store.authenticate(session.token)).toThrow(/Invalid bearer/);
+  });
+
   it('stores projects inside an organization and blocks cross-organization access', () => {
     const store = new EnterpriseStore();
     const orgA = store.createOrganization({ name: 'A' });
@@ -49,6 +78,35 @@ describe('enterprise domain', () => {
     store.createProject(admin, { name: 'Allowed' });
     expect(store.listAuditEvents(admin).length).toBeGreaterThan(0);
     expect(() => store.listAuditEvents(viewer)).toThrow(/Admin access/);
+  });
+
+  it('enforces project membership roles for reads, writes, and membership changes', () => {
+    const store = new EnterpriseStore();
+    const org = store.createOrganization({ name: 'A' });
+    const owner = createUserContext(store, org.id, ROLES.OWNER, 'owner@example.com');
+    const editor = createUserContext(store, org.id, ROLES.VIEWER, 'editor@example.com');
+    const viewer = createUserContext(store, org.id, ROLES.VIEWER, 'viewer@example.com');
+    const outsider = createUserContext(store, org.id, ROLES.VIEWER, 'outsider@example.com');
+    const project = store.createProject(owner.context, { name: 'RBAC Project' });
+
+    expect(store.listProjects(outsider.context)).toHaveLength(0);
+    expect(() => store.getProject(outsider.context, project.id)).toThrow(/Project access/);
+
+    store.addProjectMember(owner.context, project.id, { userId: editor.user.id, role: ROLES.EDITOR });
+    store.addProjectMember(owner.context, project.id, { userId: viewer.user.id, role: ROLES.VIEWER });
+
+    expect(store.getProject(viewer.context, project.id).id).toBe(project.id);
+    expect(() => store.updateProjectGraph(viewer.context, project.id, {
+      graph: { nodes: [], wires: [] }
+    })).toThrow(/Project write/);
+
+    expect(store.updateProjectGraph(editor.context, project.id, {
+      graph: { nodes: [{ id: 'editable' }], wires: [] }
+    }).versions).toHaveLength(2);
+    expect(() => store.addProjectMember(editor.context, project.id, {
+      userId: outsider.user.id,
+      role: ROLES.VIEWER
+    })).toThrow(/Project admin/);
   });
 
   it('creates connector pairing sessions and rejects expired sessions', () => {

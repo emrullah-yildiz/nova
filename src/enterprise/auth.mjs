@@ -1,0 +1,69 @@
+import crypto from 'node:crypto';
+import { createHttpError } from './domain.mjs';
+
+const DEFAULT_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+
+export class AuthService {
+  constructor(options = {}) {
+    this.now = options.now || (() => Date.now());
+    this.sessionSecret = options.sessionSecret || 'nova-dev-session-secret';
+    this.oidcVerifier = options.oidcVerifier || null;
+    this.sessionTtlMs = options.sessionTtlMs || DEFAULT_SESSION_TTL_MS;
+  }
+
+  createSessionToken({ userId, organizationId, role }) {
+    const payload = {
+      sub: userId,
+      org: organizationId,
+      role,
+      iat: this.now(),
+      exp: this.now() + this.sessionTtlMs
+    };
+    return signPayload(payload, this.sessionSecret);
+  }
+
+  verifySessionToken(token) {
+    if (!token) throw createHttpError(401, 'Missing bearer token.');
+    const payload = verifySignedPayload(token, this.sessionSecret);
+    if (payload.exp && payload.exp < this.now()) throw createHttpError(401, 'Session expired.');
+    return payload;
+  }
+
+  async verifyOidcLogin({ idToken, organizationSlug }) {
+    if (!this.oidcVerifier) throw createHttpError(501, 'OIDC verifier is not configured.');
+    const identity = await this.oidcVerifier({ idToken, organizationSlug });
+    if (!identity || !identity.email) throw createHttpError(401, 'OIDC identity is invalid.');
+    return {
+      email: identity.email,
+      displayName: identity.displayName || identity.email,
+      externalSubject: identity.externalSubject || identity.sub || '',
+      organizationSlug
+    };
+  }
+}
+
+export function signPayload(payload, secret) {
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = crypto.createHmac('sha256', secret).update(encodedPayload).digest('base64url');
+  return encodedPayload + '.' + signature;
+}
+
+export function verifySignedPayload(token, secret) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 2) throw createHttpError(401, 'Invalid bearer token.');
+  const [encodedPayload, signature] = parts;
+  const expected = crypto.createHmac('sha256', secret).update(encodedPayload).digest('base64url');
+  if (!timingSafeEqual(signature, expected)) throw createHttpError(401, 'Invalid bearer token.');
+  try {
+    return JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
+  } catch (error) {
+    throw createHttpError(401, 'Invalid bearer token.');
+  }
+}
+
+function timingSafeEqual(a, b) {
+  const left = Buffer.from(String(a || ''));
+  const right = Buffer.from(String(b || ''));
+  if (left.length !== right.length) return false;
+  return crypto.timingSafeEqual(left, right);
+}

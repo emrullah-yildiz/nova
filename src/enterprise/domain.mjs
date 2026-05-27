@@ -13,6 +13,7 @@ const ADMIN_ROLES = new Set([ROLES.OWNER, ROLES.ADMIN]);
 export class EnterpriseStore {
   constructor(options = {}) {
     this.now = options.now || (() => Date.now());
+    this.authService = options.authService || null;
     this.organizations = new Map();
     this.users = new Map();
     this.projects = new Map();
@@ -87,24 +88,33 @@ export class EnterpriseStore {
     const user = Array.from(this.users.values()).find(item => item.email === email);
     if (!user) throw createHttpError(401, 'Unknown user.');
     const membership = this.requireMembership(user.id, organizationId);
-    const tokenPayload = {
-      sub: user.id,
-      org: organizationId,
-      role: membership.role,
-      iat: this.now()
-    };
+    const token = this.authService
+      ? this.authService.createSessionToken({ userId: user.id, organizationId, role: membership.role })
+      : Buffer.from(JSON.stringify({ sub: user.id, org: organizationId, role: membership.role, iat: this.now() })).toString('base64url');
     this.audit({ organizationId, userId: user.id, type: 'auth.login', targetId: user.id });
     return {
-      token: Buffer.from(JSON.stringify(tokenPayload)).toString('base64url'),
+      token,
       user: publicUser(user, organizationId, membership.role)
     };
+  }
+
+  createOrUpdateExternalUser({ email, displayName, externalSubject = '' }) {
+    const existing = Array.from(this.users.values()).find(user => user.email === email || (externalSubject && user.externalSubject === externalSubject));
+    if (existing) {
+      existing.displayName = displayName || existing.displayName;
+      existing.externalSubject = externalSubject || existing.externalSubject;
+      return clone(existing);
+    }
+    return this.createUser({ email, displayName, externalSubject });
   }
 
   authenticate(token) {
     if (!token) throw createHttpError(401, 'Missing bearer token.');
     let payload;
     try {
-      payload = JSON.parse(Buffer.from(token, 'base64url').toString('utf8'));
+      payload = this.authService
+        ? this.authService.verifySessionToken(token)
+        : JSON.parse(Buffer.from(token, 'base64url').toString('utf8'));
     } catch (error) {
       throw createHttpError(401, 'Invalid bearer token.');
     }
@@ -121,7 +131,7 @@ export class EnterpriseStore {
   listProjects(context) {
     this.requireContext(context);
     return Array.from(this.projects.values())
-      .filter(project => project.organizationId === context.organizationId)
+      .filter(project => project.organizationId === context.organizationId && this.canReadProject(context, project))
       .map(project => projectSummary(project));
   }
 
@@ -134,7 +144,7 @@ export class EnterpriseStore {
       createdBy: context.userId,
       createdAt: this.now(),
       updatedAt: this.now(),
-      sharedWith: [],
+      members: [{ userId: context.userId, role: ROLES.OWNER }],
       currentVersionId: '',
       versions: []
     };
@@ -156,9 +166,27 @@ export class EnterpriseStore {
     return clone(project);
   }
 
-  updateProjectGraph(context, projectId, { graph, message = 'Graph saved' }) {
-    this.requireWrite(context);
+  addProjectMember(context, projectId, { userId, role }) {
     const project = this.requireProjectAccess(context, projectId);
+    this.requireProjectAdmin(context, project);
+    this.requireUser(userId);
+    if (!Object.values(ROLES).includes(role)) throw createHttpError(400, 'Invalid role.');
+    const existing = (project.members || []).find(member => member.userId === userId);
+    if (existing) existing.role = role;
+    else project.members.push({ userId, role });
+    this.audit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      type: 'project.membership.upserted',
+      targetId: project.id,
+      metadata: { memberUserId: userId, role }
+    });
+    return clone(project);
+  }
+
+  updateProjectGraph(context, projectId, { graph, message = 'Graph saved' }) {
+    const project = this.requireProjectAccess(context, projectId);
+    this.requireProjectWrite(context, project);
     const version = this.createProjectVersion(project, context, graph || emptyGraph(), message);
     project.currentVersionId = version.id;
     project.updatedAt = this.now();
@@ -183,8 +211,8 @@ export class EnterpriseStore {
   }
 
   restoreProjectVersion(context, projectId, versionId) {
-    this.requireWrite(context);
     const project = this.requireProjectAccess(context, projectId);
+    this.requireProjectWrite(context, project);
     const version = project.versions.find(item => item.id === versionId);
     if (!version) throw createHttpError(404, 'Project version not found.');
     const restored = this.createProjectVersion(project, context, version.graph, 'Restored ' + versionId);
@@ -202,7 +230,7 @@ export class EnterpriseStore {
 
   createConnectorSession(context, { host = 'revit', projectId = '', connectorVersion = '0.1.0' } = {}) {
     this.requireWrite(context);
-    if (projectId) this.requireProjectAccess(context, projectId);
+    if (projectId) this.requireProjectWrite(context, this.requireProjectAccess(context, projectId));
     const session = {
       id: createId('con'),
       organizationId: context.organizationId,
@@ -255,7 +283,7 @@ export class EnterpriseStore {
 
   recordHostOperation(context, { projectId = '', host = 'revit', operation, ok = true, metadata = {} }) {
     this.requireContext(context);
-    if (projectId) this.requireProjectAccess(context, projectId);
+    if (projectId) this.requireProjectWrite(context, this.requireProjectAccess(context, projectId));
     return this.audit({
       organizationId: context.organizationId,
       userId: context.userId,
@@ -376,7 +404,38 @@ export class EnterpriseStore {
     const project = this.projects.get(projectId);
     if (!project) throw createHttpError(404, 'Project not found.');
     if (project.organizationId !== context.organizationId) throw createHttpError(403, 'Cross-organization access denied.');
+    if (!this.canReadProject(context, project)) throw createHttpError(403, 'Project access denied.');
     return project;
+  }
+
+  requireProjectWrite(context, project) {
+    this.requireContext(context);
+    if (!this.canWriteProject(context, project)) throw createHttpError(403, 'Project write access required.');
+  }
+
+  requireProjectAdmin(context, project) {
+    this.requireContext(context);
+    if (!this.canAdminProject(context, project)) throw createHttpError(403, 'Project admin access required.');
+  }
+
+  canReadProject(context, project) {
+    if (ADMIN_ROLES.has(context.role)) return true;
+    return !!this.getProjectRole(context, project);
+  }
+
+  canWriteProject(context, project) {
+    if (ADMIN_ROLES.has(context.role)) return true;
+    return WRITE_ROLES.has(this.getProjectRole(context, project));
+  }
+
+  canAdminProject(context, project) {
+    if (ADMIN_ROLES.has(context.role)) return true;
+    return ADMIN_ROLES.has(this.getProjectRole(context, project));
+  }
+
+  getProjectRole(context, project) {
+    const member = (project.members || []).find(item => item.userId === context.userId);
+    return member ? member.role : '';
   }
 
   requireConnectorAccess(context, sessionId) {

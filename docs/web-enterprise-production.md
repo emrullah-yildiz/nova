@@ -33,16 +33,19 @@ The first backend implementation is intentionally dependency-light and in-memory
 - Connector sessions with pairing codes and expiration.
 - Enterprise AI proxy requests with organization policy, rate limits, and audit events.
 - Audit events for auth, project, connector, host, and AI operations.
-- Authorization checks that reject cross-organization project access.
+- OIDC-ready callback flow with signed, expiring API sessions.
+- Authorization checks that reject cross-organization project access and enforce project membership.
 - Request validation for graph saves, connector pairing, AI chat messages, and host operations.
 
 Current endpoints:
 
 - `POST /api/auth/dev-login`
+- `POST /api/auth/oidc/callback`
 - `GET /api/me`
 - `GET /api/projects`
 - `POST /api/projects`
 - `GET /api/projects/:id`
+- `POST /api/projects/:id/members`
 - `PUT /api/projects/:id/graph`
 - `GET /api/projects/:id/versions`
 - `POST /api/projects/:id/versions/:versionId/restore`
@@ -54,6 +57,14 @@ Current endpoints:
 
 ## Production Hardening Still Required
 
-Before enterprise rollout, replace the dev auth/session model with a real OIDC/SAML integration, move data to a managed database, enforce HTTPS/WSS in deployment, add persistent audit retention, and deploy the connector relay on managed infrastructure.
+Before enterprise rollout, wire the OIDC callback to the production identity provider and JWKS validation, disable dev login outside local environments, move data to a managed database, enforce HTTPS/WSS in deployment, add persistent audit retention, and deploy the connector relay on managed infrastructure.
+
+## Authentication And RBAC Baseline
+
+`POST /api/auth/dev-login` remains a local development shortcut only. Production deployments should use `POST /api/auth/oidc/callback` with an injected OIDC verifier that validates the provider token, resolves the organization slug, and maps the external subject to a Nova user.
+
+API sessions are signed and expiring when the API server is configured with `AuthService`. All protected routes authenticate the bearer token, resolve organization membership, and then enforce project membership where a project is involved.
+
+Organization Owner/Admin users can administer all projects in the tenant. Project Owner/Admin users can manage project membership. Project Editors can save graph versions and create connector sessions for projects they belong to. Project Viewers can read projects and versions but cannot save versions, create connector sessions, record host operations, or change membership.
 
 Use `npm run release:check` as the initial release gate.
