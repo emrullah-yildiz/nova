@@ -1,19 +1,21 @@
 # Merge Readiness Checklist
 
-Use this checklist before an AI agent or contributor merges a branch. The goal is to keep code, tests, and documentation moving together.
+Use this checklist before an AI agent or contributor merges a branch. The goal is to keep code, tests, and documentation moving together so the repository does not accumulate stale plans or unverified behavior.
 
-## Branch And Scope
+## 1. Branch And Scope
 
 - [ ] Confirm the branch starts from the intended base branch.
+- [ ] Confirm the branch name matches the work being merged.
 - [ ] Check `git status --short` and identify all changed, deleted, and untracked files.
 - [ ] Make sure generated files, build artifacts, logs, and local machine files are not included.
 - [ ] Make sure unrelated user changes are not reverted or mixed into the merge.
 
-## Documentation Freshness
+## 2. Documentation Freshness
 
 - [ ] Update `README.md` when setup, project structure, scripts, or major product behavior changes.
-- [ ] Update relevant docs when API routes, service boundaries, security assumptions, integrations, or data models change.
-- [ ] Remove or update stale roadmap docs when they contradict current behavior.
+- [ ] Update `docs/README.md` when adding, removing, or renaming documentation.
+- [ ] Update architecture docs when service boundaries, security assumptions, integrations, or data models change.
+- [ ] Remove historical roadmap docs once they are superseded by current docs.
 - [ ] Search for broken references after deleting or renaming docs.
 
 Suggested reference search:
@@ -22,7 +24,7 @@ Suggested reference search:
 rg "old-doc-name|old-heading|old-path" README.md docs src .github package.json
 ```
 
-## Test Coverage
+## 3. Test Coverage
 
 - [ ] Add or update unit tests for changed pure logic, data transformations, protocol helpers, and validation rules.
 - [ ] Add or update browser workflow tests when user-visible behavior changes.
@@ -30,7 +32,7 @@ rg "old-doc-name|old-heading|old-path" README.md docs src .github package.json
 - [ ] If tests are not added, document why the change is docs-only, config-only, or otherwise low risk.
 - [ ] Do not leave skipped tests unless the reason is explicit and temporary.
 
-## Security And Enterprise Checks
+## 4. Security And Enterprise Checks
 
 - [ ] Confirm no secrets, API keys, tokens, or local credentials are committed.
 - [ ] Confirm user-provided or AI-provided content is treated as untrusted.
@@ -38,9 +40,11 @@ rg "old-doc-name|old-heading|old-path" README.md docs src .github package.json
 - [ ] Confirm Revit or Connect write paths require explicit approval and audit logging.
 - [ ] Confirm new dependencies are necessary and pass audit.
 
-## Validation Commands
+## 5. Validation Commands
 
 Run the smallest relevant checks first. For runtime or backend changes, run the full gate before merge.
+
+Common Windows commands:
 
 ```powershell
 npm.cmd run lint:all
@@ -48,6 +52,12 @@ npm.cmd test
 npm.cmd run test:e2e
 npm.cmd run build
 npm.cmd audit --audit-level=moderate
+```
+
+Browser workflow tests require Chromium once per machine:
+
+```powershell
+npx.cmd playwright install chromium
 ```
 
 Minimum expectations:
@@ -58,7 +68,7 @@ Minimum expectations:
 - Backend/API change: lint, unit tests, integration tests when present, build, audit.
 - Dependency change: audit and lockfile review.
 
-## Final Diff Review
+## 6. Final Diff Review
 
 - [ ] Review `git diff --stat`.
 - [ ] Review changed docs for outdated wording, old branch names, and dead links.
@@ -73,6 +83,16 @@ git diff --stat
 git status --short
 rg "TODO|FIXME|skip\\(|\\.only\\(" src tests docs
 ```
+
+## 7. PR Or Merge Summary
+
+Before merge, summarize:
+
+- What changed.
+- Which docs were updated or intentionally left unchanged.
+- Which tests were added or updated.
+- Which validation commands were run.
+- Any known gaps, follow-up issues, or unrun checks.
 
 ## Merge Blockers
 

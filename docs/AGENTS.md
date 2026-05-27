@@ -16,14 +16,14 @@ These instructions apply to the entire repository.
 
 ## Architecture
 
-- The app is migrating from legacy global browser scripts to explicit `src/` modules.
-- New or migrated code should live under `src/` and expose `window.*` compatibility bridges only when legacy consumers still need them.
-- Keep root legacy files intact when they are still needed by the file-protocol fallback in `index.html`.
-- Reduce `src/legacy-loader.js` raw-script injection incrementally, one contained runtime slice at a time.
-- Follow the current migration notes in:
-  - `docs/toolchain-plan.md`
-  - `docs/phase-3.md`
-  - `docs/enterprise-readiness-strategy.md`
+- The app now boots through explicit `src/` module imports from `src/main.js`.
+- New code should live under `src/` for browser/runtime modules or under `server/` when the enterprise backend scaffold is introduced.
+- Keep temporary `window.*` compatibility bridges only when existing browser consumers still need them.
+- Enterprise backend and product planning lives in:
+  - `docs/backend-architecture.md`
+  - `docs/enterprise-mvp-requirements.md`
+  - `docs/revit-plugin-architecture.md`
+- Before merging a branch, use `docs/merge-readiness-checklist.md` to verify docs, tests, validation commands, and merge blockers.
 
 ## Coding Style
 
