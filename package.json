@@ -19,7 +19,9 @@
     "lint:all": "eslint . --ext .js --ignore-path .gitignore",
     "format": "prettier --write .",
     "test": "vitest run",
-    "test:e2e": "node scripts/run-e2e.cjs"
+    "test:e2e": "node scripts/run-e2e.cjs",
+    "migrate": "node scripts/run-migrations.mjs",
+    "db:migrate": "node scripts/run-migrations.mjs"
   },
   "keywords": [
     "visual-scripting",
@@ -41,6 +43,7 @@
     "vitest": "^4.1.6"
   },
   "dependencies": {
+    "pg": "^8.21.0",
     "ws": "^8.20.1"
   }
 }
