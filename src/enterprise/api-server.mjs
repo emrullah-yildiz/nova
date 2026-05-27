@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { AuthService } from './auth.mjs';
 import { EnterpriseStore, ROLES, createHttpError } from './domain.mjs';
+import { JsonFilePersistence } from './persistence.mjs';
 import {
   validateAiChatBody,
   validateConnectorPairBody,
@@ -19,7 +20,8 @@ export function createEnterpriseApiServer(options = {}) {
     sessionSecret: options.sessionSecret,
     oidcVerifier: options.oidcVerifier
   });
-  const store = options.store || new EnterpriseStore({ authService });
+  const persistence = options.persistence || (options.persistenceFilePath ? new JsonFilePersistence(options.persistenceFilePath) : null);
+  const store = options.store || new EnterpriseStore({ authService, persistence });
   if (!store.authService) store.authService = authService;
   if (options.bootstrapDemo !== false && store.organizations.size === 0) store.bootstrapDemoTenant();
   const corsOrigin = options.corsOrigin || '*';

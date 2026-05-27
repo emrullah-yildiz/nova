@@ -119,6 +119,12 @@ MVP requirements:
 
 The existing `scripts/connect-hub.cjs` is a useful prototype. Production work should either harden it directly or move it under a backend-owned package with tests.
 
+## Persistence Boundary
+
+The current `EnterpriseStore` exposes a snapshot boundary that serializes organizations, users, projects, connector sessions, AI requests, and audit events. `JsonFilePersistence` uses that boundary for local development and restart-safe demos.
+
+This is a bridge, not the final persistence layer. Production should replace the JSON adapter with a Postgres repository implementation while keeping the domain rules and route authorization behavior intact. Redis remains the target for short-lived session, pairing, and rate-limit state.
+
 ## Security Controls
 
 Required before enterprise MVP:

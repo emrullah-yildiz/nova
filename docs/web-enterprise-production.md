@@ -14,6 +14,10 @@ Required fields:
 - `connectorPairingUrl`: API endpoint used to create local connector pairing sessions.
 - `appVersion`: release/build identifier shown in diagnostics.
 
+Optional API environment:
+
+- `NOVA_ENTERPRISE_STORE_FILE`: local JSON snapshot path for development or single-node demos that need data to survive API restarts.
+
 ## Local Baseline Commands
 
 ```powershell
@@ -26,7 +30,7 @@ The API starts on `http://127.0.0.1:8787` and bootstraps a demo organization wit
 
 ## Enterprise API Baseline
 
-The first backend implementation is intentionally dependency-light and in-memory. It establishes the contracts that later map to a managed database and SSO provider:
+The first backend implementation is intentionally dependency-light. It establishes the contracts that later map to a managed database and SSO provider:
 
 - Organizations and users with roles: Owner, Admin, Editor, Viewer.
 - Cloud projects with graph version history.
@@ -36,6 +40,7 @@ The first backend implementation is intentionally dependency-light and in-memory
 - OIDC-ready callback flow with signed, expiring API sessions.
 - Authorization checks that reject cross-organization project access and enforce project membership.
 - Request validation for graph saves, connector pairing, AI chat messages, and host operations.
+- Optional JSON file persistence for local development and restart-safe demos.
 
 Current endpoints:
 
@@ -57,7 +62,7 @@ Current endpoints:
 
 ## Production Hardening Still Required
 
-Before enterprise rollout, wire the OIDC callback to the production identity provider and JWKS validation, disable dev login outside local environments, move data to a managed database, enforce HTTPS/WSS in deployment, add persistent audit retention, and deploy the connector relay on managed infrastructure.
+Before enterprise rollout, wire the OIDC callback to the production identity provider and JWKS validation, disable dev login outside local environments, move JSON persistence to a managed database, enforce HTTPS/WSS in deployment, add persistent audit retention, and deploy the connector relay on managed infrastructure.
 
 ## Authentication And RBAC Baseline
 
@@ -66,5 +71,16 @@ Before enterprise rollout, wire the OIDC callback to the production identity pro
 API sessions are signed and expiring when the API server is configured with `AuthService`. All protected routes authenticate the bearer token, resolve organization membership, and then enforce project membership where a project is involved.
 
 Organization Owner/Admin users can administer all projects in the tenant. Project Owner/Admin users can manage project membership. Project Editors can save graph versions and create connector sessions for projects they belong to. Project Viewers can read projects and versions but cannot save versions, create connector sessions, record host operations, or change membership.
+
+## Persistence Baseline
+
+The API can load and save an enterprise store snapshot when `NOVA_ENTERPRISE_STORE_FILE` is set:
+
+```powershell
+$env:NOVA_ENTERPRISE_STORE_FILE=".nova-data/enterprise-store.json"
+npm run dev:api
+```
+
+This mode is useful for local development and single-node demos. It is not the production data layer for enterprise customers because it has no concurrent writer coordination, no query indexes, no backup policy, and no database-level access controls. Public enterprise deployments still need managed Postgres for organizations, users, projects, versions, AI requests, connector sessions, and audit events.
 
 Use `npm run release:check` as the initial release gate.

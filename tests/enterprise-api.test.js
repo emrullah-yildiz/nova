@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { createEnterpriseApiServer } from '../src/enterprise/api-server.mjs';
 
 function listen(server) {
@@ -23,6 +26,45 @@ async function request(baseUrl, path, options = {}) {
 }
 
 describe('enterprise API server', () => {
+  it('reloads persisted projects after API restart', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nova-enterprise-api-'));
+    const persistenceFilePath = path.join(dir, 'store.json');
+
+    try {
+      const first = createEnterpriseApiServer({ persistenceFilePath });
+      const firstPort = await listen(first.server);
+      const firstBaseUrl = 'http://127.0.0.1:' + firstPort;
+      const login = await request(firstBaseUrl, '/api/auth/dev-login', {
+        method: 'POST',
+        body: { email: 'owner@demo.nova', organizationSlug: 'demo' }
+      });
+      const project = await request(firstBaseUrl, '/api/projects', {
+        method: 'POST',
+        token: login.body.token,
+        body: { name: 'Restart Project', graph: { nodes: [{ id: 'persisted' }], wires: [] } }
+      });
+      await new Promise(resolve => first.server.close(resolve));
+
+      const second = createEnterpriseApiServer({ persistenceFilePath });
+      const secondPort = await listen(second.server);
+      const secondBaseUrl = 'http://127.0.0.1:' + secondPort;
+      const secondLogin = await request(secondBaseUrl, '/api/auth/dev-login', {
+        method: 'POST',
+        body: { email: 'owner@demo.nova', organizationSlug: 'demo' }
+      });
+      const loaded = await request(secondBaseUrl, '/api/projects/' + project.body.id, {
+        token: secondLogin.body.token
+      });
+
+      expect(loaded.status).toBe(200);
+      expect(loaded.body.name).toBe('Restart Project');
+      expect(loaded.body.versions[0].graph.nodes[0].id).toBe('persisted');
+      await new Promise(resolve => second.server.close(resolve));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('accepts OIDC-ready login callbacks and returns signed sessions', async () => {
     const { server } = createEnterpriseApiServer({
       sessionSecret: 'api-test-session-secret',
