@@ -5,6 +5,7 @@ export function createEnterpriseApiServer(options = {}) {
   const store = options.store || new EnterpriseStore();
   if (options.bootstrapDemo !== false && store.organizations.size === 0) store.bootstrapDemoTenant();
   const corsOrigin = options.corsOrigin || '*';
+  const aiProvider = options.aiProvider || createMockAiProvider();
 
   const server = http.createServer(async (req, res) => {
     setCorsHeaders(res, corsOrigin);
@@ -16,7 +17,7 @@ export function createEnterpriseApiServer(options = {}) {
       if (!route) throw createHttpError(404, 'Route not found.');
       const body = await readJsonBody(req);
       const context = route.public ? null : authenticateRequest(store, req);
-      const result = await route.handler({ store, context, params: route.params, body, url });
+      const result = await route.handler({ store, context, params: route.params, body, url, aiProvider });
       sendJson(res, route.status || 200, result);
     } catch (error) {
       sendJson(res, error.status || 500, {
@@ -56,6 +57,7 @@ function matchRoute(method, path) {
     ['POST', /^\/api\/projects\/([^/]+)\/versions\/([^/]+)\/restore$/, false, 200, ({ store, context, params }) => store.restoreProjectVersion(context, params[0], params[1])],
     ['POST', /^\/api\/connectors\/sessions$/, false, 201, ({ store, context, body }) => store.createConnectorSession(context, body || {})],
     ['POST', /^\/api\/connectors\/sessions\/([^/]+)\/pair$/, false, 200, ({ store, context, params, body }) => store.pairConnector(context, params[0], body && body.pairingCode)],
+    ['POST', /^\/api\/ai\/chat$/, false, 200, handleAiChat],
     ['GET', /^\/api\/audit$/, false, 200, ({ store, context }) => ({ events: store.listAuditEvents(context) })],
     ['POST', /^\/api\/host-operations$/, false, 201, ({ store, context, body }) => store.recordHostOperation(context, body || {})]
   ];
@@ -67,6 +69,38 @@ function matchRoute(method, path) {
     return { public: isPublic, status, handler, params: match.slice(1) };
   }
   return null;
+}
+
+async function handleAiChat({ store, context, body, aiProvider }) {
+  const request = store.createAiRequest(context, body || {});
+  try {
+    const completion = await aiProvider.complete({
+      provider: request.provider,
+      model: request.model,
+      messages: body.messages,
+      projectId: request.projectId,
+      context
+    });
+    const content = completion && completion.content ? completion.content : '';
+    const completed = store.completeAiRequest(context, request.id, {
+      content,
+      usage: completion && completion.usage
+    });
+    return {
+      id: completed.id,
+      provider: completed.provider,
+      model: completed.model,
+      status: completed.status,
+      message: {
+        role: 'assistant',
+        content
+      },
+      usage: completed.usage
+    };
+  } catch (error) {
+    store.failAiRequest(context, request.id, error.message || 'AI provider failed.');
+    throw error;
+  }
 }
 
 function authenticateRequest(store, req) {
@@ -109,4 +143,21 @@ function readJsonBody(req) {
     });
     req.on('error', reject);
   });
+}
+
+function createMockAiProvider() {
+  return {
+    async complete({ messages = [], model }) {
+      const lastUserMessage = [...messages].reverse().find(message => message && message.role === 'user');
+      const text = lastUserMessage ? String(lastUserMessage.content || '') : '';
+      return {
+        content: 'Mock enterprise AI response for ' + (text || 'empty request') + '.',
+        usage: {
+          model,
+          inputMessages: messages.length,
+          outputCharacters: text.length
+        }
+      };
+    }
+  };
 }
