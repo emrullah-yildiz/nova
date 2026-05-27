@@ -17,10 +17,11 @@ import {
 } from './validation.mjs';
 
 export function createEnterpriseApiServer(options = {}) {
+  const oidcVerifier = options.oidcVerifier || null;
   const authService = options.authService || new AuthService({
     now: options.now,
     sessionSecret: options.sessionSecret,
-    oidcVerifier: options.oidcVerifier
+    oidcVerifier
   });
   const persistence = options.persistence || resolvePersistence(options);
   const store = options.store || new EnterpriseStore({ authService, persistence });
@@ -227,5 +228,10 @@ function resolvePersistence(options) {
   if (options.persistenceFilePath) {
     return new JsonFilePersistence(options.persistenceFilePath);
   }
+  return null;
+}
+
+function resolveOidcVerifier(options) {
+  if (options.oidcVerifier) return options.oidcVerifier;
   return null;
 }
