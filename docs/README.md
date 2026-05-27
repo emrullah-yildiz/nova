@@ -6,9 +6,12 @@ This folder contains current planning and repository guidance only. Historical p
 
 - `AGENTS.md` - repository working instructions for coding agents and contributors.
 - `backend-architecture.md` - target backend architecture for enterprise readiness.
+- `enterprise-api.env.example` - example environment for API deployment configuration.
 - `enterprise-mvp-requirements.md` - product, security, and scalability requirements for the enterprise MVP.
 - `merge-readiness-checklist.md` - checks to run before an AI agent or contributor merges a branch.
+- `public-release-checklist.md` - repository-publication checklist for source release.
 - `revit-plugin-architecture.md` - Nova Connect and Revit integration architecture.
+- `web-enterprise-production.md` - current enterprise API/runtime baseline and production hardening notes.
 
 ## Documentation Policy
 
