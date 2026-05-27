@@ -17,6 +17,8 @@ export class EnterpriseStore {
     this.users = new Map();
     this.projects = new Map();
     this.connectorSessions = new Map();
+    this.aiRequests = new Map();
+    this.aiUsageBuckets = new Map();
     this.auditEvents = [];
   }
 
@@ -36,7 +38,15 @@ export class EnterpriseStore {
       settings: {
         ssoRequired: false,
         connectorMinimumVersion: '0.1.0',
-        dataRetentionDays: 365
+        dataRetentionDays: 365,
+        ai: {
+          allowedProviders: ['mock'],
+          allowedModels: {
+            mock: ['nova-mock-enterprise']
+          },
+          promptLogging: false,
+          maxRequestsPerMinute: 20
+        }
       }
     };
     this.organizations.set(organization.id, organization);
@@ -255,6 +265,84 @@ export class EnterpriseStore {
     });
   }
 
+  createAiRequest(context, {
+    projectId = '',
+    provider = 'mock',
+    model = 'nova-mock-enterprise',
+    messages = [],
+    metadata = {}
+  } = {}) {
+    this.requireContext(context);
+    if (projectId) this.requireProjectAccess(context, projectId);
+    const organization = this.requireOrganization(context.organizationId);
+    const aiSettings = organization.settings.ai || {};
+    const allowedProviders = aiSettings.allowedProviders || [];
+    const allowedModels = aiSettings.allowedModels || {};
+    if (!allowedProviders.includes(provider)) throw createHttpError(403, 'AI provider is not allowed for this organization.');
+    if (allowedModels[provider] && !allowedModels[provider].includes(model)) throw createHttpError(403, 'AI model is not allowed for this organization.');
+    if (!Array.isArray(messages) || messages.length === 0) throw createHttpError(400, 'AI request messages are required.');
+    this.requireAiRateLimit(context, aiSettings.maxRequestsPerMinute || 20);
+
+    const request = {
+      id: createId('air'),
+      organizationId: context.organizationId,
+      userId: context.userId,
+      projectId,
+      provider,
+      model,
+      status: 'pending',
+      messageCount: messages.length,
+      messages: aiSettings.promptLogging ? clone(messages) : [],
+      metadata,
+      createdAt: this.now(),
+      completedAt: null,
+      responsePreview: '',
+      usage: null
+    };
+    this.aiRequests.set(request.id, request);
+    this.audit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      type: 'ai.request.created',
+      targetId: request.id,
+      metadata: { projectId, provider, model, messageCount: messages.length, promptLogged: !!aiSettings.promptLogging }
+    });
+    return clone(request);
+  }
+
+  completeAiRequest(context, requestId, { content = '', usage = null } = {}) {
+    this.requireContext(context);
+    const request = this.requireAiRequestAccess(context, requestId);
+    request.status = 'completed';
+    request.completedAt = this.now();
+    request.responsePreview = String(content || '').slice(0, 280);
+    request.usage = usage;
+    this.audit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      type: 'ai.request.completed',
+      targetId: request.id,
+      metadata: { projectId: request.projectId, provider: request.provider, model: request.model }
+    });
+    return clone(request);
+  }
+
+  failAiRequest(context, requestId, message) {
+    this.requireContext(context);
+    const request = this.requireAiRequestAccess(context, requestId);
+    request.status = 'failed';
+    request.completedAt = this.now();
+    request.responsePreview = String(message || '').slice(0, 280);
+    this.audit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      type: 'ai.request.failed',
+      targetId: request.id,
+      metadata: { projectId: request.projectId, provider: request.provider, model: request.model }
+    });
+    return clone(request);
+  }
+
   createProjectVersion(project, context, graph, message) {
     const version = {
       id: createId('ver'),
@@ -297,6 +385,22 @@ export class EnterpriseStore {
     if (!session) throw createHttpError(404, 'Connector session not found.');
     if (session.organizationId !== context.organizationId) throw createHttpError(403, 'Cross-organization access denied.');
     return session;
+  }
+
+  requireAiRequestAccess(context, requestId) {
+    this.requireContext(context);
+    const request = this.aiRequests.get(requestId);
+    if (!request) throw createHttpError(404, 'AI request not found.');
+    if (request.organizationId !== context.organizationId) throw createHttpError(403, 'Cross-organization access denied.');
+    return request;
+  }
+
+  requireAiRateLimit(context, maxRequestsPerMinute) {
+    const minute = Math.floor(this.now() / 60000);
+    const key = [context.organizationId, context.userId, minute].join(':');
+    const count = this.aiUsageBuckets.get(key) || 0;
+    if (count >= maxRequestsPerMinute) throw createHttpError(429, 'AI rate limit exceeded.');
+    this.aiUsageBuckets.set(key, count + 1);
   }
 
   requireOrganization(id) {

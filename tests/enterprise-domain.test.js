@@ -66,4 +66,54 @@ describe('enterprise domain', () => {
     now = expired.expiresAt + 1;
     expect(() => store.pairConnector(ctx, expired.id, expired.pairingCode)).toThrow(/expired/);
   });
+
+  it('records AI requests without storing prompts by default', () => {
+    const store = new EnterpriseStore();
+    const org = store.createOrganization({ name: 'A' });
+    const ctx = createContext(store, org.id);
+    const project = store.createProject(ctx, { name: 'AI Project' });
+
+    const request = store.createAiRequest(ctx, {
+      projectId: project.id,
+      provider: 'mock',
+      model: 'nova-mock-enterprise',
+      messages: [{ role: 'user', content: 'Create a tower' }]
+    });
+    const completed = store.completeAiRequest(ctx, request.id, {
+      content: 'Done',
+      usage: { inputMessages: 1 }
+    });
+
+    expect(request.status).toBe('pending');
+    expect(request.messages).toHaveLength(0);
+    expect(completed.status).toBe('completed');
+    expect(store.listAuditEvents(ctx).some(event => event.type === 'ai.request.completed')).toBe(true);
+  });
+
+  it('enforces AI provider policy and per-minute rate limits', () => {
+    let now = 0;
+    const store = new EnterpriseStore({ now: () => now });
+    const org = store.createOrganization({ name: 'A' });
+    const context = createContext(store, org.id);
+    const organization = store.requireOrganization(org.id);
+    organization.settings.ai.maxRequestsPerMinute = 1;
+
+    expect(() => store.createAiRequest(context, {
+      provider: 'openai',
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'Blocked' }]
+    })).toThrow(/provider/);
+
+    store.createAiRequest(context, {
+      messages: [{ role: 'user', content: 'First' }]
+    });
+    expect(() => store.createAiRequest(context, {
+      messages: [{ role: 'user', content: 'Second' }]
+    })).toThrow(/rate limit/);
+
+    now = 60000;
+    expect(store.createAiRequest(context, {
+      messages: [{ role: 'user', content: 'Next minute' }]
+    }).status).toBe('pending');
+  });
 });

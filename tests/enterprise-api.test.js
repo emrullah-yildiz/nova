@@ -57,6 +57,49 @@ describe('enterprise API server', () => {
       });
       expect(connector.status).toBe(201);
       expect(connector.body.pairingCode).toMatch(/^[A-F0-9]+$/);
+
+      const ai = await request(baseUrl, '/api/ai/chat', {
+        method: 'POST',
+        token,
+        body: {
+          projectId: project.body.id,
+          provider: 'mock',
+          model: 'nova-mock-enterprise',
+          messages: [{ role: 'user', content: 'Generate a lobby concept' }]
+        }
+      });
+      expect(ai.status).toBe(200);
+      expect(ai.body.status).toBe('completed');
+      expect(ai.body.message.content).toContain('Generate a lobby concept');
+
+      const audit = await request(baseUrl, '/api/audit', { token });
+      expect(audit.body.events.some(event => event.type === 'ai.request.completed')).toBe(true);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
+  it('returns policy errors for blocked enterprise AI providers', async () => {
+    const { server } = createEnterpriseApiServer();
+    const port = await listen(server);
+    const baseUrl = 'http://127.0.0.1:' + port;
+
+    try {
+      const login = await request(baseUrl, '/api/auth/dev-login', {
+        method: 'POST',
+        body: { email: 'owner@demo.nova', organizationSlug: 'demo' }
+      });
+      const ai = await request(baseUrl, '/api/ai/chat', {
+        method: 'POST',
+        token: login.body.token,
+        body: {
+          provider: 'openai',
+          model: 'gpt-4o',
+          messages: [{ role: 'user', content: 'Should be blocked by policy' }]
+        }
+      });
+      expect(ai.status).toBe(403);
+      expect(ai.body.error.message).toMatch(/provider/);
     } finally {
       await new Promise(resolve => server.close(resolve));
     }

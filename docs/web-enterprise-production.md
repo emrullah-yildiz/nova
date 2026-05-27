@@ -31,7 +31,8 @@ The first backend implementation is intentionally dependency-light and in-memory
 - Organizations and users with roles: Owner, Admin, Editor, Viewer.
 - Cloud projects with graph version history.
 - Connector sessions with pairing codes and expiration.
-- Audit events for auth, project, connector, and host operations.
+- Enterprise AI proxy requests with organization policy, rate limits, and audit events.
+- Audit events for auth, project, connector, host, and AI operations.
 - Authorization checks that reject cross-organization project access.
 
 Current endpoints:
@@ -46,6 +47,7 @@ Current endpoints:
 - `POST /api/projects/:id/versions/:versionId/restore`
 - `POST /api/connectors/sessions`
 - `POST /api/connectors/sessions/:id/pair`
+- `POST /api/ai/chat`
 - `GET /api/audit`
 - `POST /api/host-operations`
 

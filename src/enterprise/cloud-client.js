@@ -69,6 +69,13 @@ export class NovaCloudClient {
     });
   }
 
+  async chatWithAi({ projectId = '', provider = 'mock', model = 'nova-mock-enterprise', messages, metadata = {} }) {
+    return this.request('/api/ai/chat', {
+      method: 'POST',
+      body: { projectId, provider, model, messages, metadata }
+    });
+  }
+
   async recordHostOperation(payload) {
     return this.request('/api/host-operations', {
       method: 'POST',
