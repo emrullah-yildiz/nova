@@ -69,7 +69,7 @@ describe('enterprise API server', () => {
     const persistenceFilePath = path.join(dir, 'store.json');
 
     try {
-      const first = createEnterpriseApiServer({ persistenceFilePath });
+      const first = createEnterpriseApiServer({ persistenceFilePath, allowDevLogin: true });
       const firstPort = await listen(first.server);
       const firstBaseUrl = 'http://127.0.0.1:' + firstPort;
       const login = await request(firstBaseUrl, '/api/auth/dev-login', {
@@ -83,7 +83,7 @@ describe('enterprise API server', () => {
       });
       await new Promise(resolve => first.server.close(resolve));
 
-      const second = createEnterpriseApiServer({ persistenceFilePath });
+      const second = createEnterpriseApiServer({ persistenceFilePath, allowDevLogin: true });
       const secondPort = await listen(second.server);
       const secondBaseUrl = 'http://127.0.0.1:' + secondPort;
       const secondLogin = await request(secondBaseUrl, '/api/auth/dev-login', {
@@ -161,7 +161,7 @@ describe('enterprise API server', () => {
   });
 
   it('authenticates, stores projects, versions graphs, and creates connector sessions', async () => {
-    const { server } = createEnterpriseApiServer();
+    const { server } = createEnterpriseApiServer({ allowDevLogin: true });
     const port = await listen(server);
     const baseUrl = 'http://127.0.0.1:' + port;
 
@@ -217,7 +217,7 @@ describe('enterprise API server', () => {
   });
 
   it('returns policy errors for blocked enterprise AI providers', async () => {
-    const { server } = createEnterpriseApiServer();
+    const { server } = createEnterpriseApiServer({ allowDevLogin: true });
     const port = await listen(server);
     const baseUrl = 'http://127.0.0.1:' + port;
 
@@ -243,7 +243,7 @@ describe('enterprise API server', () => {
   });
 
   it('rejects malformed enterprise API payloads before domain operations run', async () => {
-    const { server } = createEnterpriseApiServer();
+    const { server } = createEnterpriseApiServer({ allowDevLogin: true });
     const port = await listen(server);
     const baseUrl = 'http://127.0.0.1:' + port;
 

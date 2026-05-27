@@ -12,7 +12,7 @@ async function start() {
   const corsOrigin = process.env.NOVA_CORS_ORIGIN || '*';
   const persistenceFilePath = process.env.NOVA_ENTERPRISE_STORE_FILE || '';
   const databaseUrl = process.env.NOVA_DATABASE_URL || '';
-  const allowDevLogin = process.env.NOVA_ALLOW_DEV_LOGIN !== 'false';
+  const allowDevLogin = process.env.NOVA_ALLOW_DEV_LOGIN === 'true';
   const sessionSecret = process.env.NOVA_SESSION_SECRET || undefined;
   const oidcIssuer = process.env.NOVA_OIDC_ISSUER || '';
   const oidcClientId = process.env.NOVA_OIDC_CLIENT_ID || '';
