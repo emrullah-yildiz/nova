@@ -29,7 +29,7 @@ export function createEnterpriseApiServer(options = {}) {
   if (options.bootstrapDemo !== false && store.organizations.size === 0 && !options.databaseUrl) store.bootstrapDemoTenant();
   const corsOrigin = options.corsOrigin || '*';
   const aiProvider = options.aiProvider || createMockAiProvider();
-  const allowDevLogin = options.allowDevLogin !== false;
+  const allowDevLogin = options.allowDevLogin === true;
 
   const server = http.createServer(async (req, res) => {
     setCorsHeaders(res, corsOrigin);
