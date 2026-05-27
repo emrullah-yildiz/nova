@@ -23,6 +23,63 @@ async function request(baseUrl, path, options = {}) {
 }
 
 describe('enterprise API server', () => {
+  it('accepts OIDC-ready login callbacks and returns signed sessions', async () => {
+    const { server } = createEnterpriseApiServer({
+      sessionSecret: 'api-test-session-secret',
+      oidcVerifier: async ({ idToken, organizationSlug }) => {
+        expect(idToken).toBe('valid-id-token');
+        expect(organizationSlug).toBe('demo');
+        return {
+          email: 'sso.user@example.com',
+          displayName: 'SSO User',
+          externalSubject: 'oidc|sso-user'
+        };
+      }
+    });
+    const port = await listen(server);
+    const baseUrl = 'http://127.0.0.1:' + port;
+
+    try {
+      const login = await request(baseUrl, '/api/auth/oidc/callback', {
+        method: 'POST',
+        body: { idToken: 'valid-id-token', organizationSlug: 'demo' }
+      });
+      expect(login.status).toBe(200);
+      expect(login.body.token).toContain('.');
+      expect(login.body.user.role).toBe('Viewer');
+
+      const me = await request(baseUrl, '/api/me', { token: login.body.token });
+      expect(me.status).toBe(200);
+      expect(me.body.user.email).toBe('sso.user@example.com');
+
+      const blockedWrite = await request(baseUrl, '/api/projects', {
+        method: 'POST',
+        token: login.body.token,
+        body: { name: 'Viewer Write' }
+      });
+      expect(blockedWrite.status).toBe(403);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
+  it('rejects OIDC callbacks when the verifier is not configured', async () => {
+    const { server } = createEnterpriseApiServer();
+    const port = await listen(server);
+    const baseUrl = 'http://127.0.0.1:' + port;
+
+    try {
+      const login = await request(baseUrl, '/api/auth/oidc/callback', {
+        method: 'POST',
+        body: { idToken: 'valid-id-token', organizationSlug: 'demo' }
+      });
+      expect(login.status).toBe(501);
+      expect(login.body.error.message).toMatch(/OIDC verifier/);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
   it('authenticates, stores projects, versions graphs, and creates connector sessions', async () => {
     const { server } = createEnterpriseApiServer();
     const port = await listen(server);

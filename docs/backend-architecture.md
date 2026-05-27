@@ -73,23 +73,22 @@ Key rules:
 
 ## API Surface
 
-MVP REST endpoints:
+Current enterprise API endpoints:
 
-- `POST /auth/login`
-- `POST /auth/logout`
-- `GET /me`
-- `GET /organizations/:organizationId/projects`
-- `POST /organizations/:organizationId/projects`
-- `GET /projects/:projectId`
-- `PATCH /projects/:projectId`
-- `GET /projects/:projectId/versions`
-- `POST /projects/:projectId/versions`
-- `GET /projects/:projectId/versions/:versionId`
-- `POST /projects/:projectId/runs`
-- `POST /ai/chat`
-- `POST /connect/sessions`
-- `POST /connect/sessions/:sessionId/pair`
-- `GET /audit/events`
+- `POST /api/auth/dev-login`
+- `POST /api/auth/oidc/callback`
+- `GET /api/me`
+- `GET /api/projects`
+- `POST /api/projects`
+- `GET /api/projects/:projectId`
+- `POST /api/projects/:projectId/members`
+- `PUT /api/projects/:projectId/graph`
+- `GET /api/projects/:projectId/versions`
+- `POST /api/projects/:projectId/versions/:versionId/restore`
+- `POST /api/ai/chat`
+- `POST /api/connectors/sessions`
+- `POST /api/connectors/sessions/:sessionId/pair`
+- `GET /api/audit`
 
 All project, AI, Connect, and audit endpoints must be tenant-scoped and authorize against organization/project roles.
 
@@ -124,8 +123,8 @@ The existing `scripts/connect-hub.cjs` is a useful prototype. Production work sh
 
 Required before enterprise MVP:
 
-- OIDC-ready authentication.
-- RBAC for organization and project access.
+- OIDC-ready authentication with signed, expiring sessions.
+- RBAC for organization and project access, including project membership for reads/writes.
 - Request schema validation.
 - Output encoding and XSS cleanup in the frontend.
 - CSP and security headers.
