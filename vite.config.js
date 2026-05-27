@@ -5,7 +5,10 @@ export default defineConfig({
   base: './',
   server: {
     port: 8080,
-    open: false
+    open: false,
+    watch: {
+      ignored: ['**/coverage/**', '**/test-results/**', '**/dist/**']
+    }
   },
   build: {
     outDir: 'dist',

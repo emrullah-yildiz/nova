@@ -26,7 +26,7 @@ test.describe('Nova browser workflows', () => {
   test('creates, runs, saves, and reloads a basic graph', async ({ page }) => {
     await waitForApp(page);
 
-    const result = await page.evaluate(() => {
+    const result = await page.evaluate(async () => {
       localStorage.clear();
       app.newProject();
 
@@ -41,6 +41,7 @@ test.describe('Nova browser workflows', () => {
       app.addWire(a.id, 'value', sum.id, 'a');
       app.addWire(b.id, 'value', sum.id, 'b');
       app.addWire(sum.id, 'result', watch.id, 'value');
+      await app.runGraph();
       app.saveToLocal('E2E Workflow');
 
       const computed = app.computeNodeValue(watch);
@@ -48,6 +49,7 @@ test.describe('Nova browser workflows', () => {
 
       app.newProject();
       app.openFromLocal('E2E Workflow');
+      await app.runGraph();
 
       const reloadedWatch = app.nodes.find((node) => node.type === 'output-watch');
 
@@ -76,7 +78,7 @@ test.describe('Nova browser workflows', () => {
   test('shows wired property border only while an input wire is connected', async ({ page }) => {
     await waitForApp(page);
 
-    const setup = await page.evaluate(() => {
+    const setup = await page.evaluate(async () => {
       app.newProject();
 
       const source = app.addNodeToCanvas('number-input', 80, 100);
@@ -91,6 +93,7 @@ test.describe('Nova browser workflows', () => {
       const initialStyle = initialInput.getAttribute('style') || '';
 
       app.addWire(source.id, 'value', sum.id, 'a');
+      await app.runGraph();
       if (app._refreshRenderedNode) app._refreshRenderedNode(sum.id);
 
       return { sumId: sum.id, initialStyle };

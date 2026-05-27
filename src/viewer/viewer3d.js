@@ -7,11 +7,18 @@ export const Viewer3D = {
   axisHelper: null,
   geometryGroup: null,
   isInitialized: false,
+  isUnavailable: false,
   isVisible: false,
   animFrameId: null,
 
   init(container) {
     if (this.isInitialized) return;
+    if (typeof THREE === 'undefined' || typeof THREE.OrbitControls === 'undefined') {
+      this.isUnavailable = true;
+      this.isInitialized = true;
+      console.warn('[NodeFlow] 3D viewer disabled: Three.js is not available');
+      return;
+    }
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x1e1e2e);
     this.scene.fog = new THREE.FogExp2(0x1e1e2e, 0.002);
@@ -59,7 +66,7 @@ export const Viewer3D = {
     this.isVisible = true;
     if (this.renderer) this.renderer.domElement.style.display = 'block';
     this.animate();
-    this._onResize();
+    if (this._onResize) this._onResize();
   },
 
   hide() {
@@ -69,7 +76,7 @@ export const Viewer3D = {
   },
 
   animate() {
-    if (!this.isVisible) return;
+    if (!this.isVisible || this.isUnavailable || !this.controls || !this.renderer) return;
     this.animFrameId = requestAnimationFrame(() => this.animate());
     this.controls.update();
     this.renderer.render(this.scene, this.camera);

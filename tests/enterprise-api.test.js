@@ -104,4 +104,60 @@ describe('enterprise API server', () => {
       await new Promise(resolve => server.close(resolve));
     }
   });
+
+  it('rejects malformed enterprise API payloads before domain operations run', async () => {
+    const { server } = createEnterpriseApiServer();
+    const port = await listen(server);
+    const baseUrl = 'http://127.0.0.1:' + port;
+
+    try {
+      const login = await request(baseUrl, '/api/auth/dev-login', {
+        method: 'POST',
+        body: { email: 'owner@demo.nova', organizationSlug: 'demo' }
+      });
+      const token = login.body.token;
+
+      const project = await request(baseUrl, '/api/projects', {
+        method: 'POST',
+        token,
+        body: { name: 'Validation Project', graph: { nodes: [], wires: [] } }
+      });
+
+      const invalidGraph = await request(baseUrl, '/api/projects/' + project.body.id + '/graph', {
+        method: 'PUT',
+        token,
+        body: { graph: { nodes: [] } }
+      });
+      expect(invalidGraph.status).toBe(400);
+      expect(invalidGraph.body.error.message).toMatch(/wires/);
+
+      const invalidAi = await request(baseUrl, '/api/ai/chat', {
+        method: 'POST',
+        token,
+        body: {
+          messages: [{ role: 'tool', content: 'Nope' }]
+        }
+      });
+      expect(invalidAi.status).toBe(400);
+      expect(invalidAi.body.error.message).toMatch(/role/);
+
+      const invalidConnectorPair = await request(baseUrl, '/api/connectors/sessions/con_missing/pair', {
+        method: 'POST',
+        token,
+        body: {}
+      });
+      expect(invalidConnectorPair.status).toBe(400);
+      expect(invalidConnectorPair.body.error.message).toMatch(/pairingCode/);
+
+      const invalidHostOperation = await request(baseUrl, '/api/host-operations', {
+        method: 'POST',
+        token,
+        body: { host: 'revit' }
+      });
+      expect(invalidHostOperation.status).toBe(400);
+      expect(invalidHostOperation.body.error.message).toMatch(/operation/);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
 });
