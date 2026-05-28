@@ -1376,7 +1376,17 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     }
 
+    // Snapshot the panel's visibility state so user toggles survive the
+    // rebuild. The panel reads viewer._sceneItems; each item is keyed by
+    // a stable nodeId:varName id assigned by Viewer3D.addTaggedGeo.
+    var prevVisibility = {};
+    if (Viewer3D && Array.isArray(Viewer3D._sceneItems)) {
+      Viewer3D._sceneItems.forEach(function(it) { prevVisibility[it.id] = it.visible; });
+    }
+
     Viewer3D.clearGeometry();
+    if (Viewer3D && Array.isArray(Viewer3D._sceneItems)) Viewer3D._sceneItems = [];
+    if (Viewer3D) Viewer3D._selectedItem = null;
 
 
 
@@ -1388,11 +1398,24 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     var self = this;
 
+    var canTag = Viewer3D && typeof Viewer3D.addTaggedGeo === 'function';
+
+    function pushTagged(value, nd, varName) {
+      if (!canTag) return null;
+      var label = nd && nd.def ? nd.def.name : (nd && nd.id ? nd.id : '');
+      if (varName) label += '.' + varName;
+      var item = Viewer3D.addTaggedGeo(value, nd.id, varName || '', label);
+      if (item) rendered++;
+      return item;
+    }
+
 
 
     this.nodes.forEach(function(nd) {
 
-      if (nd._preview3d === false) return;
+      // Always tag the items so the panel can keep showing them. Items for
+      // nodes flagged hidden (or panel-toggled hidden) are marked invisible
+      // below; the user can toggle them back on without another Run.
 
       var val = self.computeNodeValue(nd);
       nd._lastComputedValue = val;
@@ -1403,38 +1426,34 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       if (val && val._type) {
 
-        Geo.addToScene(Viewer3D.geometryGroup, val);
-
-        var startIdx = Viewer3D.geometryGroup.children.length - 1;
-
-        app._sceneItems.push({ varName: nd.def.name, nodeId: nd.id, type: val._solidType || val._type, visible: true, idx: startIdx });
-
-        rendered++;
+        if (canTag) {
+          pushTagged(val, nd, '');
+        } else {
+          Geo.addToScene(Viewer3D.geometryGroup, val);
+          var startIdx = Viewer3D.geometryGroup.children.length - 1;
+          app._sceneItems.push({ varName: nd.def.name, nodeId: nd.id, type: val._solidType || val._type, visible: true, idx: startIdx });
+          rendered++;
+        }
 
       }
 
       // Array of geometry
 
-      else if (Array.isArray(val)) {
+      else if (Array.isArray(val) && val.length > 0 && val[0] && (val[0]._type || val[0] instanceof Geo.Point3)) {
 
-        var startIdx = Viewer3D.geometryGroup.children.length;
-
-        val.forEach(function(v) {
-
-          if (v && (v._type || v instanceof Geo.Point3)) {
-
-            Geo.addToScene(Viewer3D.geometryGroup, v);
-
-            rendered++;
-
+        if (canTag) {
+          pushTagged(val, nd, '');
+        } else {
+          var startIdx = Viewer3D.geometryGroup.children.length;
+          val.forEach(function(v) {
+            if (v && (v._type || v instanceof Geo.Point3)) {
+              Geo.addToScene(Viewer3D.geometryGroup, v);
+              rendered++;
+            }
+          });
+          if (Viewer3D.geometryGroup.children.length > startIdx) {
+            app._sceneItems.push({ varName: nd.def.name, nodeId: nd.id, type: 'Array[' + (Viewer3D.geometryGroup.children.length - startIdx) + ']', visible: true, idxStart: startIdx, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
           }
-
-        });
-
-        if (Viewer3D.geometryGroup.children.length > startIdx) {
-
-          app._sceneItems.push({ varName: nd.def.name, nodeId: nd.id, type: 'Array[' + (Viewer3D.geometryGroup.children.length - startIdx) + ']', visible: true, idxStart: startIdx, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
-
         }
 
       }
@@ -1451,30 +1470,28 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
           if (pv && pv._type) {
 
-            Geo.addToScene(Viewer3D.geometryGroup, pv);
+            if (canTag) {
+              pushTagged(pv, nd, key);
+            } else {
+              Geo.addToScene(Viewer3D.geometryGroup, pv);
+              rendered++;
+            }
 
-            rendered++;
+          } else if (Array.isArray(pv) && pv.length > 0 && pv[0] && (pv[0]._type || pv[0] instanceof Geo.Point3)) {
 
-          } else if (Array.isArray(pv)) {
-
-            var arrStart = Viewer3D.geometryGroup.children.length;
-
-            pv.forEach(function(v) {
-
-              if (v && (v._type || v instanceof Geo.Point3)) {
-
-                Geo.addToScene(Viewer3D.geometryGroup, v);
-
-                rendered++;
-
+            if (canTag) {
+              pushTagged(pv, nd, key);
+            } else {
+              var arrStart = Viewer3D.geometryGroup.children.length;
+              pv.forEach(function(v) {
+                if (v && (v._type || v instanceof Geo.Point3)) {
+                  Geo.addToScene(Viewer3D.geometryGroup, v);
+                  rendered++;
+                }
+              });
+              if (Viewer3D.geometryGroup.children.length > arrStart) {
+                app._sceneItems.push({ varName: nd.def.name + '.' + key, nodeId: nd.id, type: 'Array[' + (Viewer3D.geometryGroup.children.length - arrStart) + ']', visible: true, idxStart: arrStart, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
               }
-
-            });
-
-            if (Viewer3D.geometryGroup.children.length > arrStart) {
-
-              app._sceneItems.push({ varName: nd.def.name + '.' + key, nodeId: nd.id, type: 'Array[' + (Viewer3D.geometryGroup.children.length - arrStart) + ']', visible: true, idxStart: arrStart, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
-
             }
 
           }
@@ -1484,6 +1501,29 @@ export function installEngine(targetApp = getRuntimeApp()) {
       }
 
     });
+
+    // Apply visibility: items inherit the previous panel-toggle state
+    // (so user selections survive the rebuild) and any item whose owning
+    // node is currently flagged hidden (nd._preview3d === false) starts
+    // hidden — but the item itself stays in the panel so the user can
+    // toggle it back on without another Run.
+    if (canTag && Array.isArray(Viewer3D._sceneItems)) {
+      var nodesById = {};
+      self.nodes.forEach(function(n) { nodesById[n.id] = n; });
+      Viewer3D._sceneItems.forEach(function(it) {
+        var owner = nodesById[it.nodeId];
+        var hideFromNode = owner && owner._preview3d === false;
+        var hideFromPanel = prevVisibility[it.id] === false;
+        if (hideFromNode || hideFromPanel) {
+          it.visible = false;
+          if (it.group) it.group.visible = false;
+        }
+      });
+    }
+
+    if (canTag && typeof Viewer3D._renderGeoList === 'function') {
+      Viewer3D._renderGeoList();
+    }
 
 
 
