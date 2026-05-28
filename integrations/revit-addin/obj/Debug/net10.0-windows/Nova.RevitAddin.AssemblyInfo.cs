@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Nova.RevitAddin")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+90c48996615258ac9c59d62072c744307ef54ee3")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+47a0d5ccd167e98bc919971865e601c0f313549d")]
 [assembly: System.Reflection.AssemblyProductAttribute("Nova.RevitAddin")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Nova.RevitAddin")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
