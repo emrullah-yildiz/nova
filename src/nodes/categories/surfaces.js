@@ -17,6 +17,13 @@ function toInteger(value, fallback = 0) {
 function toList(value) {
   return Array.isArray(value) ? value : [];
 }
+function toVector(value, fallback = new Geo.Vector3(0, 0, 1)) {
+  if (value instanceof Geo.Vector3) return value;
+  if (value && typeof value === 'object' && value.x !== undefined) {
+    return new Geo.Vector3(value.x || 0, value.y || 0, value.z || 0);
+  }
+  return fallback;
+}
 
 export const surfacesNodes = [
   // ─── Creation ────────────────────────────────────────────
@@ -329,6 +336,61 @@ export const surfacesNodes = [
         ]
       },
       sampleCode: '{{surface}} = Geo.ruledSurface({{curve1}}, {{curve2}})'
+    }
+  },
+  {
+    type: 'Surface.ByCurveExtrude',
+    name: 'Surface.ByCurveExtrude',
+    category: 'surfaces',
+    subGroup: 'Creation',
+    icon: '⬆',
+    aliases: ['op-extrude', 'solid-byextrusion'],
+    description: 'Sweeps a curve along a direction vector to produce the swept side-wall surface mesh. The result is an open ribbon (no top or bottom cap) — use Surface.ByPatch on the start/end profiles separately if a closed solid is needed.',
+    inputs: [
+      { id: 'curve', name: 'Curve', type: 'any', description: 'Profile curve to sweep along the direction' },
+      { id: 'vector', name: 'Direction', type: 'vector', description: 'Direction vector (length sets the extrusion distance)' }
+    ],
+    outputs: [{ id: 'surface', name: 'Surface', type: 'mesh', description: 'Resulting extruded side-wall surface' }],
+    controls: [],
+    execute(context, inputs) {
+      if (inputs.curve == null) return { surface: undefined };
+      return { surface: Geo.extrude(inputs.curve, toVector(inputs.vector)) };
+    },
+    codegen: {
+      python: '{{surface}} = Geo.extrude({{curve}}, {{vector}})',
+      csharp: 'var {{surface}} = Geo.extrude({{curve}}, {{vector}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Curve', description: 'Profile curve' },
+        { name: 'Direction', description: 'Extrusion vector' }
+      ],
+      outputs: [{ name: 'Surface', description: 'Extruded side-wall surface' }],
+      example: {
+        title: 'Extrude a unit circle one unit along Z',
+        nodes: [
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 1 } },
+          { type: 'Circle.ByCenterRadius', x: 240, y: 30 },
+          { type: 'Input.Number', x: 0, y: 160, controls: { val: 0 } },
+          { type: 'Input.Number', x: 0, y: 230, controls: { val: 0 } },
+          { type: 'Input.Number', x: 0, y: 300, controls: { val: 1 } },
+          { type: 'Vector.ByCoordinates', x: 240, y: 230 },
+          { type: 'Surface.ByCurveExtrude', x: 480, y: 120 },
+          { type: 'output-watch', x: 720, y: 120 }
+        ],
+        wires: [
+          [0, 'point', 2, 'center'],
+          [1, 'value', 2, 'radius'],
+          [3, 'value', 6, 'x'],
+          [4, 'value', 6, 'y'],
+          [5, 'value', 6, 'z'],
+          [2, 'circle', 7, 'curve'],
+          [6, 'vector', 7, 'vector'],
+          [7, 'surface', 8, 'value']
+        ]
+      },
+      sampleCode: '{{surface}} = Geo.extrude({{curve}}, {{vector}})'
     }
   },
   // ─── Query ───────────────────────────────────────────────

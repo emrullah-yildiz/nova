@@ -320,61 +320,8 @@ export const solidsNodes = [
   },
 
   // ─── Solid (generation methods) ──────────────────────────
-  {
-    type: 'Solid.ByExtrusion',
-    name: 'Solid.ByExtrusion',
-    category: 'solids',
-    subGroup: 'Solid',
-    icon: '⬆',
-    aliases: ['op-extrude'],
-    description: 'Extrudes a curve (closed or open) along a direction vector to produce a solid or surface. The vector\'s length sets the extrusion distance; useful for walls, posts and bar-stock.',
-    inputs: [
-      { id: 'curve', name: 'Curve', type: 'any', description: 'Profile curve (closed for a solid)' },
-      { id: 'vector', name: 'Direction', type: 'vector', description: 'Extrusion vector (length sets distance)' }
-    ],
-    outputs: [{ id: 'solid', name: 'Solid', type: 'mesh', description: 'Resulting extruded mesh' }],
-    controls: [],
-    execute(context, inputs) {
-      if (inputs.curve == null) return { solid: undefined };
-      return { solid: Geo.extrude(inputs.curve, toVector(inputs.vector)) };
-    },
-    codegen: {
-      python: '{{solid}} = Geo.extrude({{curve}}, {{vector}})',
-      csharp: 'var {{solid}} = Geo.extrude({{curve}}, {{vector}});'
-    },
-    help: {
-      inputs: [
-        { name: 'Curve', description: 'Profile curve' },
-        { name: 'Direction', description: 'Extrusion vector' }
-      ],
-      outputs: [{ name: 'Solid', description: 'Extruded mesh' }],
-      example: {
-        title: 'Extrude a unit circle profile by Z=1',
-        nodes: [
-          { type: 'Point.Origin', x: 0, y: 0 },
-          { type: 'Input.Number', x: 0, y: 80, controls: { val: 1 } },
-          { type: 'Circle.ByCenterRadius', x: 240, y: 30 },
-          { type: 'Input.Number', x: 0, y: 160, controls: { val: 0 } },
-          { type: 'Input.Number', x: 0, y: 230, controls: { val: 0 } },
-          { type: 'Input.Number', x: 0, y: 300, controls: { val: 1 } },
-          { type: 'Vector.ByCoordinates', x: 240, y: 230 },
-          { type: 'Solid.ByExtrusion', x: 480, y: 120 },
-          { type: 'output-watch', x: 720, y: 120 }
-        ],
-        wires: [
-          [0, 'point', 2, 'center'],
-          [1, 'value', 2, 'radius'],
-          [3, 'value', 6, 'x'],
-          [4, 'value', 6, 'y'],
-          [5, 'value', 6, 'z'],
-          [2, 'circle', 7, 'curve'],
-          [6, 'vector', 7, 'vector'],
-          [7, 'solid', 8, 'value']
-        ]
-      },
-      sampleCode: '{{solid}} = Geo.extrude({{curve}}, {{vector}})'
-    }
-  },
+  // (Surface.ByCurveExtrude lives in surfaces.js — it produces an open
+  // side-wall ribbon, not a closed solid, so it belongs with surfaces.)
   {
     type: 'Solid.ByLoft',
     name: 'Solid.ByLoft',

@@ -325,11 +325,11 @@ export const NODE_META = {
   // OPERATION NODES
   // ═══════════════════════════════════════
   'op-extrude': {
-    description: 'Extrude a 2D curve/profile along a direction vector to create a 3D solid.',
-    python: 'solid = Geo.extrude(curve, vector)',
+    description: 'Sweep a 2D curve along a direction vector to create an open side-wall surface (no caps).',
+    python: 'surface = Geo.extrude(curve, vector)',
     csharp: '// Geo.extrude(curve, vec)',
     example: 'wall = Geo.extrude(floor_outline, Geo.Vector3(0, 0, 3))',
-    whenToUse: 'Creating walls from outlines, columns from profiles, any linear extension of a 2D shape.'
+    whenToUse: 'Building wall sweeps from outlines, fence ribbons, any linear extension of a 2D curve.'
   },
   'op-revolve': {
     description: 'Revolve a profile around an axis to create a solid of revolution.',
