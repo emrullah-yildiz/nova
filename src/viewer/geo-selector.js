@@ -372,8 +372,9 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
     }
     panel.style.display = 'flex';
 
-    // ── Position the panel based on AI chat dock location ──
-    // Default: top-right. If chat is docked right and visible, move panel to left of chat.
+    // ── Position the panel: default top-left of the viewport. If the AI
+    // chat is docked on the left and visible, push the panel to the right
+    // of the chat so they don't overlap.
     var chatDock = (typeof app !== 'undefined') ? app.chatDock : 'right';
     var chatVisible = (typeof app !== 'undefined') ? app.chatVisible : false;
     var chatWidth = (typeof app !== 'undefined') ? app.chatWidth : 360;
@@ -383,14 +384,14 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
     panel.style.right = '';
     panel.style.top = '12px';
 
-    if (chatDock === 'right' && chatVisible) {
-      // Chat is on the right — place panel just before the chat panel
-      panel.style.right = (chatWidth + 16) + 'px';
-      panel.style.left = '';
+    if (chatDock === 'left' && chatVisible) {
+      // Chat is on the left — place panel just after the chat panel
+      panel.style.left = (chatWidth + 16) + 'px';
+      panel.style.right = '';
     } else {
-      // Chat is on left, bottom, float, or hidden — panel goes to top-right
-      panel.style.right = '12px';
-      panel.style.left = '';
+      // Chat is on the right, bottom, float, or hidden — panel pins left
+      panel.style.left = '12px';
+      panel.style.right = '';
     }
 
     var html = '<div class="geolist-header">' +
@@ -424,9 +425,12 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       item.group.traverse(function(obj) { if (obj.isMesh) childCount++; });
       var info = childCount > 1 ? childCount + ' meshes' : '';
 
+      // Visible / hidden eye glyphs: open eye for ON, prohibition symbol for
+      // OFF \u2014 the previous "eye in speech bubble" variant was nearly
+      // identical to the open eye at this font size.
       html += '<div class="' + cls + '" data-idx="' + idx + '">' +
-        '<button class="geolist-eye" onclick="event.stopPropagation();Viewer3D._toggleItemVisibility(Viewer3D._sceneItems[' + idx + '])" title="Toggle Visibility">' +
-        (item.visible ? '\uD83D\uDC41' : '\uD83D\uDC41\u200D\uD83D\uDDE8') + '</button>' +
+        '<button class="geolist-eye" onclick="event.stopPropagation();Viewer3D._toggleItemVisibility(Viewer3D._sceneItems[' + idx + '])" title="' + (item.visible ? 'Hide' : 'Show') + '">' +
+        (item.visible ? '\uD83D\uDC41' : '\u2298') + '</button>' +
         '<div class="geolist-info" onclick="Viewer3D._selectItem(Viewer3D._sceneItems[' + idx + '])">' +
         '<span class="geolist-icon">' + icon + '</span>' +
         '<span class="geolist-label">' + label + '</span>' +

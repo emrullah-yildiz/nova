@@ -1288,7 +1288,7 @@ input[type="number"] {
 
 #geo-list-panel {
 
-  position: absolute; top: 12px; right: 12px;
+  position: absolute; top: 12px; left: 12px; right: auto;
 
   width: 230px; max-height: calc(100% - 70px);
 
@@ -1328,13 +1328,20 @@ input[type="number"] {
 
 .geolist-item:hover { background: var(--bg-surface-hover); }
 
-.geolist-item.selected { background: rgba(137,180,250,0.15); outline: 1px solid rgba(137,180,250,0.35); }
+.geolist-item.selected { background: rgba(137,180,250,0.22); outline: 1px solid rgba(137,180,250,0.55); }
 
-.geolist-item.hidden-item { opacity: 0.4; }
+/* Hidden rows dim the label/icon but keep the eye glyph at full opacity
+   and tinted red so its OFF state reads clearly even from a distance. */
+.geolist-item.hidden-item .geolist-icon,
+.geolist-item.hidden-item .geolist-label,
+.geolist-item.hidden-item .geolist-meta { opacity: 0.45; }
 
-.geolist-eye { width: 20px; height: 20px; border-radius: 3px; background: transparent; color: var(--text-muted); display: flex; align-items: center; justify-content: center; font-size: 11px; cursor: pointer; flex-shrink: 0; }
+.geolist-eye { width: 20px; height: 20px; border-radius: 3px; background: transparent; color: var(--text-muted); display: flex; align-items: center; justify-content: center; font-size: 13px; cursor: pointer; flex-shrink: 0; opacity: 1; }
+
+.geolist-item.hidden-item .geolist-eye { color: var(--accent-red); font-weight: 700; }
 
 .geolist-eye:hover { background: var(--bg-surface); color: var(--text-primary); }
+.geolist-item.hidden-item .geolist-eye:hover { color: var(--accent-red); background: rgba(243,139,168,0.18); }
 
 .geolist-info { flex: 1; display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; }
 
@@ -1342,7 +1349,8 @@ input[type="number"] {
 
 .geolist-label { font-size: 11px; color: var(--text-secondary); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.geolist-item.selected .geolist-label { color: var(--accent-blue); font-weight: 600; }
+.geolist-item.selected .geolist-label { color: #ffffff; font-weight: 700; }
+.geolist-item.selected .geolist-icon { color: var(--accent-blue); }
 
 .geolist-meta { font-size: 9px; color: var(--text-disabled); margin-left: auto; white-space: nowrap; flex-shrink: 0; }
 
