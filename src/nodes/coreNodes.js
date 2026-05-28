@@ -52,29 +52,33 @@ function mergeRegistryIntoLegacyMaps(registry) {
   const existingCategoryIds = new Set(NODE_LIBRARY.categories.map((category) => category.id));
 
   registry.listCategories().forEach((category) => {
-    const legacyNodes = category.nodes
+    const v1NodeDefs = category.nodes
       .map((type) => registry.getNode(type))
-      .filter(Boolean)
+      .filter((node) => node && node.metadata && node.metadata.standardVersion === 'v1');
+
+    if (v1NodeDefs.length === 0) return;
+
+    const legacyShapes = v1NodeDefs
       .map(toLegacyNodeDefinition)
       .filter((node) => !NODE_TYPE_MAP[node.type]);
 
-    if (legacyNodes.length === 0) return;
+    if (legacyShapes.length === 0) return;
 
     if (existingCategoryIds.has(category.id)) {
       const target = NODE_LIBRARY.categories.find((entry) => entry.id === category.id);
-      target.nodes.push(...legacyNodes);
+      target.nodes.push(...legacyShapes);
     } else {
       NODE_LIBRARY.categories.push({
         id: category.id,
         name: category.name,
         color: category.color,
         icon: category.icon,
-        nodes: legacyNodes
+        nodes: legacyShapes
       });
       existingCategoryIds.add(category.id);
     }
 
-    legacyNodes.forEach((node) => {
+    legacyShapes.forEach((node) => {
       NODE_TYPE_MAP[node.type] = Object.assign({}, node, {
         categoryId: category.id,
         categoryColor: category.color
@@ -82,7 +86,14 @@ function mergeRegistryIntoLegacyMaps(registry) {
     });
   });
 
+  const v1CanonicalTypes = new Set(
+    registry.listNodes()
+      .filter((node) => node.metadata && node.metadata.standardVersion === 'v1')
+      .map((node) => node.type)
+  );
+
   registry.aliases.forEach((canonical, alias) => {
+    if (!v1CanonicalTypes.has(canonical)) return;
     if (!NODE_TYPE_MAP[alias]) {
       NODE_TYPE_MAP[alias] = NODE_TYPE_MAP[canonical];
     }

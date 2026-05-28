@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { createCoreNodeRegistry } from '../src/nodes/coreNodes.js';
+import { createCoreNodeRegistry, getLiveCoreRegistry } from '../src/nodes/coreNodes.js';
 import { createNodeTypeMapFromRegistry } from '../src/nodes/legacyBridge.js';
+import { NODE_LIBRARY } from '../src/core/nodes.js';
 import { validateHelpExample } from '../src/ui/node-help-docs.js';
 
 const TYPE_PATTERN = /^[A-Z][A-Za-z0-9]*(\.[A-Z][A-Za-z0-9]+)+$/;
@@ -160,6 +161,45 @@ describe('node author contract (v1)', () => {
         if (resolved !== node.type) {
           violations.push(`${node.type} alias "${alias}" resolved to "${resolved}"`);
         }
+      });
+    });
+
+    expect(violations).toEqual([]);
+  });
+});
+
+describe('library panel merge', () => {
+  it('NODE_LIBRARY has no duplicate display names within any category after the live merge', () => {
+    getLiveCoreRegistry();
+
+    const violations = [];
+    NODE_LIBRARY.categories.forEach((category) => {
+      const counts = new Map();
+      category.nodes.forEach((node) => {
+        const name = node.name || node.type;
+        counts.set(name, (counts.get(name) || 0) + 1);
+      });
+      counts.forEach((count, name) => {
+        if (count > 1) {
+          violations.push(`${category.id}: "${name}" appears ${count} times`);
+        }
+      });
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('NODE_LIBRARY has no duplicate type IDs within any category after the live merge', () => {
+    getLiveCoreRegistry();
+
+    const violations = [];
+    NODE_LIBRARY.categories.forEach((category) => {
+      const seen = new Set();
+      category.nodes.forEach((node) => {
+        if (seen.has(node.type)) {
+          violations.push(`${category.id}: "${node.type}" appears more than once`);
+        }
+        seen.add(node.type);
       });
     });
 
