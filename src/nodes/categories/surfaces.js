@@ -14,17 +14,6 @@ function toNumber(value, fallback = 0) {
 function toInteger(value, fallback = 0) {
   return Math.max(1, Math.floor(toNumber(value, fallback)));
 }
-function toPoint(value, fallback = new Geo.Point3(0, 0, 0)) {
-  if (value && typeof value === 'object' && value.x !== undefined) return value;
-  return fallback;
-}
-function toVector(value, fallback = new Geo.Vector3(0, 0, 1)) {
-  if (value instanceof Geo.Vector3) return value;
-  if (value && typeof value === 'object' && value.x !== undefined) {
-    return new Geo.Vector3(value.x || 0, value.y || 0, value.z || 0);
-  }
-  return fallback;
-}
 function toList(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -342,62 +331,6 @@ export const surfacesNodes = [
       sampleCode: '{{surface}} = Geo.ruledSurface({{curve1}}, {{curve2}})'
     }
   },
-  {
-    type: 'Surface.ByPlane',
-    name: 'Surface.ByPlane',
-    category: 'surfaces',
-    subGroup: 'Creation',
-    icon: '▱',
-    aliases: ['surf-plane'],
-    description: 'Creates an infinite Plane geometry from an origin point and a normal vector. Returns a Plane object (not a finite mesh); use as a reference for Mirror, intersection, and projection operations.',
-    inputs: [
-      { id: 'origin', name: 'Origin', type: 'point', description: 'Anchor point on the plane' },
-      { id: 'normal', name: 'Normal', type: 'vector', description: 'Plane normal vector' }
-    ],
-    outputs: [{ id: 'plane', name: 'Plane', type: 'plane', description: 'Plane geometry' }],
-    controls: [],
-    execute(context, inputs) {
-      return {
-        plane: new Geo.Plane(
-          toPoint(inputs.origin),
-          toVector(inputs.normal, new Geo.Vector3(0, 0, 1))
-        )
-      };
-    },
-    codegen: {
-      python: '{{plane}} = Geo.Plane({{origin}}, {{normal}})',
-      csharp: 'var {{plane}} = Geo.Plane({{origin}}, {{normal}});'
-    },
-    help: {
-      inputs: [
-        { name: 'Origin', description: 'Anchor point' },
-        { name: 'Normal', description: 'Plane normal' }
-      ],
-      outputs: [{ name: 'Plane', description: 'Plane geometry' }],
-      example: {
-        title: 'XY plane at the origin',
-        nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'Input.Number', x: 0, y: 80, controls: { val: 0 } },
-          { type: 'Input.Number', x: 0, y: 150, controls: { val: 0 } },
-          { type: 'Input.Number', x: 0, y: 220, controls: { val: 1 } },
-          { type: 'Vector.ByCoordinates', x: 240, y: 150 },
-          { type: 'Surface.ByPlane', x: 460, y: 70 },
-          { type: 'output-watch', x: 660, y: 70 }
-        ],
-        wires: [
-          [0, 'point', 5, 'origin'],
-          [1, 'value', 4, 'x'],
-          [2, 'value', 4, 'y'],
-          [3, 'value', 4, 'z'],
-          [4, 'vector', 5, 'normal'],
-          [5, 'plane', 6, 'value']
-        ]
-      },
-      sampleCode: '{{plane}} = Geo.Plane({{origin}}, {{normal}})'
-    }
-  },
-
   // ─── Query ───────────────────────────────────────────────
   {
     type: 'Surface.Isolines',
