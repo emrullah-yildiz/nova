@@ -308,34 +308,55 @@ const app = {
   // ── NODE LIBRARY ──
 
   renderNodeLibrary() {
+    var html = '';
+    NODE_LIBRARY.categories.forEach(function(cat) {
+      // Group nodes by their 'group' property
+      var groups = {};
+      cat.nodes.forEach(function(n) {
+        var g = n.group || '_ungrouped';
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(n);
+      });
+      var groupKeys = Object.keys(groups).sort(function(a, b) {
+        // Order: specific named groups first, then ungrouped
+        if (a === '_ungrouped') return 1;
+        if (b === '_ungrouped') return -1;
+        return a.localeCompare(b);
+      });
 
-    document.getElementById('node-categories').innerHTML = NODE_LIBRARY.categories.map(cat => `
-
-      <div class="node-category open" data-cat="${cat.id}">
-
+      html += `<div class="node-category open" data-cat="${cat.id}">
         <button class="node-category-header" onclick="app.toggleCategory('${cat.id}')">
-
           <span class="node-category-dot" style="background:${cat.color}"></span>
-
           <span class="node-category-name">${cat.name}</span>
-
           <span class="node-category-count">${cat.nodes.length}</span>
-
           <svg class="node-category-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
-
         </button>
+        <div class="node-category-items">`;
 
-        <div class="node-category-items">
+      groupKeys.forEach(function(g) {
+        if (g !== '_ungrouped') {
+          html += `<div class="node-subgroup">
+            <button class="node-subgroup-header" onclick="app.toggleSubGroup(this)">
+              <svg class="node-subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              <span class="node-subgroup-name">${g}</span>
+            </button>
+            <div class="node-subgroup-items">`;
+        }
+        groups[g].forEach(function(n) {
+          html += `<button class="node-lib-item" draggable="true" ondragstart="app.onLibDragStart(event,'${n.type}')" onclick="app.addNodeFromLib('${n.type}')"><span class="nli-icon" style="color:${cat.color}">${n.icon}</span>${n.name}</button>`;
+        });
+        if (g !== '_ungrouped') {
+          html += `</div></div>`;
+        }
+      });
 
-          ${cat.nodes.map(n => `<button class="node-lib-item" draggable="true" ondragstart="app.onLibDragStart(event,'${n.type}')" onclick="app.addNodeFromLib('${n.type}')"><span class="nli-icon" style="color:${cat.color}">${n.icon}</span>${n.name}</button>`).join('')}
-
-        </div>
-
-      </div>`).join('');
-
+      html += `</div></div>`;
+    });
+    document.getElementById('node-categories').innerHTML = html;
   },
 
   toggleCategory(id) { const el=document.querySelector(`.node-category[data-cat="${id}"]`); if(el) el.classList.toggle('open'); },
+  toggleSubGroup(btn) { const container = btn.parentElement; if (container) container.classList.toggle('open'); },
 
   filterNodes(q) {
 

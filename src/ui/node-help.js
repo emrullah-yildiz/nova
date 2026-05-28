@@ -25,7 +25,7 @@ window.NODE_HELP = {};
 // CURVES
 // ═══════════════════════════════════════
 
-window.NODE_HELP['surf-arc'] = {
+window.NODE_HELP['curve-arc-by-center-radius-angles'] = {
   description: 'Creates a circular arc from a center point, radius, and start/end angles in degrees. Useful for partial circles, rounded corners, and angular geometry.',
   inputs: [
     { name: 'Center', desc: 'Center point of the arc' },
@@ -39,11 +39,11 @@ window.NODE_HELP['surf-arc'] = {
     { type: 'number-input', x: 0, y: 80, controls: { val: 5 } },
     { type: 'number-input', x: 0, y: 140, controls: { val: 0 } },
     { type: 'number-input', x: 0, y: 200, controls: { val: 90 } },
-    { type: 'surf-arc', x: 280, y: 60 }
+    { type: 'curve-arc-by-center-radius-angles', x: 280, y: 60 }
   ], wires: [[0,'point',4,'center'],[1,'value',4,'radius'],[2,'value',4,'startAngle'],[3,'value',4,'endAngle']] }
 };
 
-window.NODE_HELP['op-bezier'] = {
+window.NODE_HELP['curve-bezier-by-control-points'] = {
   description: 'Creates a smooth Bezier curve through a list of control points. The curve is pulled toward control points without necessarily passing through them (except endpoints).',
   inputs: [{ name: 'Control Pts', desc: 'List of Point3 control points' }],
   outputs: [{ name: 'Curve', desc: 'Smooth Bezier curve' }],
@@ -53,7 +53,7 @@ window.NODE_HELP['op-bezier'] = {
     { type: 'point-bycoordinates', x: 0, y: 160, controls: { x: 7, y: -5, z: 0 } },
     { type: 'point-bycoordinates', x: 0, y: 240, controls: { x: 10, y: 0, z: 0 } },
     { type: 'list-create', x: 200, y: 80 },
-    { type: 'op-bezier', x: 420, y: 80 }
+    { type: 'curve-bezier-by-control-points', x: 420, y: 80 }
   ], wires: [[0,'point',4,'item0'],[1,'point',4,'item1'],[2,'point',4,'item2'],[3,'point',4,'item3'],[4,'list',5,'points']] }
 };
 
@@ -71,6 +71,19 @@ window.NODE_HELP['nurbs-blend'] = {
     { type: 'number-input', x: 200, y: 300, controls: { val: 0.5 } },
     { type: 'nurbs-blend', x: 420, y: 100 }
   ], wires: [[0,'point',2,'startPoint'],[1,'point',2,'endPoint'],[3,'point',5,'startPoint'],[4,'point',5,'endPoint'],[2,'line',7,'curve1'],[5,'line',7,'curve2'],[6,'value',7,'t']] }
+};
+
+window.NODE_HELP['curve-chord-direction'] = {
+  description: 'Returns the direction vector from the curve start point to its end point. For lines this is the line direction. For arcs it connects the arc start to end. Works on any curve type including arcs, polylines, and NURBS.',
+  inputs: [{ name: 'Curve', desc: 'Any curve (Line, Arc, Polyline, NURBS, Circle)' }],
+  outputs: [{ name: 'Direction', desc: 'Unit vector from start to end' }],
+  example: { title: 'Line chord direction', nodes: [
+    { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+    { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 10, y: 5, z: 0 } },
+    { type: 'line-bystartpointendpoint', x: 200, y: 0 },
+    { type: 'curve-chord-direction', x: 400, y: 0 },
+    { type: 'output-watch', x: 580, y: 0 }
+  ], wires: [[0,'point',2,'startPoint'],[1,'point',2,'endPoint'],[2,'line',3,'curve'],[3,'direction',4,'value']] }
 };
 
 window.NODE_HELP['geo-circle'] = {
@@ -94,6 +107,42 @@ window.NODE_HELP['prof-circle'] = {
     { type: 'number-input', x: 0, y: 130, controls: { val: 32 } },
     { type: 'prof-circle', x: 240, y: 20 }
   ], wires: [[0,'point',3,'center'],[1,'value',3,'radius'],[2,'value',3,'resolution']] }
+};
+
+window.NODE_HELP['curve-deconstruct'] = {
+  description: 'Decomposes any curve into its fundamental properties: start point, end point, total length, midpoint, and chord direction. Works on lines, arcs, polylines, circles, and NURBS curves.',
+  inputs: [{ name: 'Curve', desc: 'Any curve type to decompose' }],
+  outputs: [
+    { name: 'Start', desc: 'Start point (t=0)' },
+    { name: 'End', desc: 'End point (t=1)' },
+    { name: 'Length', desc: 'Total arc length' },
+    { name: 'MidPoint', desc: 'Center or midpoint of the curve' },
+    { name: 'ChordDir', desc: 'Unit direction from start to end' }
+  ],
+  example: { title: 'Deconstruct a line', nodes: [
+    { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+    { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 10, y: 5, z: 3 } },
+    { type: 'line-bystartpointendpoint', x: 200, y: 0 },
+    { type: 'curve-deconstruct', x: 420, y: 0 },
+    { type: 'output-watch', x: 620, y: 0 },
+    { type: 'output-watch', x: 620, y: 60 },
+    { type: 'output-watch', x: 620, y: 120 },
+    { type: 'output-watch', x: 620, y: 180 },
+    { type: 'output-watch', x: 620, y: 240 }
+  ], wires: [[0,'point',2,'startPoint'],[1,'point',2,'endPoint'],[2,'line',3,'curve'],[3,'start',4,'value'],[3,'end',5,'value'],[3,'length',6,'value'],[3,'midpoint',7,'value'],[3,'direction',8,'value']] }
+};
+
+window.NODE_HELP['curve-endpoint'] = {
+  description: 'Extracts the end point (parameter t=1) of any curve. For lines the end point is the second input; for arcs it is the point at the end angle; for polylines it is the last point.',
+  inputs: [{ name: 'Curve', desc: 'Any curve type' }],
+  outputs: [{ name: 'Point', desc: 'The end point of the curve' }],
+  example: { title: 'Get line end point', nodes: [
+    { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+    { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 10, y: 0, z: 0 } },
+    { type: 'line-bystartpointendpoint', x: 200, y: 0 },
+    { type: 'curve-endpoint', x: 400, y: 0 },
+    { type: 'output-watch', x: 560, y: 0 }
+  ], wires: [[0,'point',2,'startPoint'],[1,'point',2,'endPoint'],[2,'line',3,'curve'],[3,'point',4,'value']] }
 };
 
 window.NODE_HELP['prof-ellipse'] = {
@@ -138,6 +187,47 @@ window.NODE_HELP['nurbs-interpolate'] = {
   ], wires: [[0,'point',4,'item0'],[1,'point',4,'item1'],[2,'point',4,'item2'],[3,'point',4,'item3'],[4,'list',6,'points'],[5,'value',6,'degree']] }
 };
 
+window.NODE_HELP['curve-length'] = {
+  description: 'Calculates the total length (arc length) of any curve. For lines it is the distance between endpoints. For arcs it follows the curved path. For polylines it sums all segment lengths.',
+  inputs: [{ name: 'Curve', desc: 'Any curve type to measure' }],
+  outputs: [{ name: 'Length', desc: 'Total arc length' }],
+  example: { title: 'Line length', nodes: [
+    { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+    { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 10, y: 0, z: 0 } },
+    { type: 'line-bystartpointendpoint', x: 200, y: 0 },
+    { type: 'curve-length', x: 400, y: 0 },
+    { type: 'output-watch', x: 540, y: 0 }
+  ], wires: [[0,'point',2,'startPoint'],[1,'point',2,'endPoint'],[2,'line',3,'curve'],[3,'length',4,'value']] }
+};
+
+window.NODE_HELP['line-bypointanddirection'] = {
+  description: 'Creates a straight line from an origin point, a direction vector, and a length. The direction is automatically normalized. Useful for creating construction lines and axes.',
+  inputs: [
+    { name: 'Origin', desc: 'Starting point' },
+    { name: 'Direction', desc: 'Direction vector (will be normalized)' },
+    { name: 'Length', desc: 'Total line length from origin' }
+  ],
+  outputs: [{ name: 'Line', desc: 'The resulting line segment' }],
+  example: { title: 'Line 10 units in X direction', nodes: [
+    { type: 'point-origin', x: 0, y: 0 },
+    { type: 'point-bycoordinates', x: 0, y: 80, controls: { x: 1, y: 0, z: 0 } },
+    { type: 'point-deconstruct', x: 200, y: 80 },
+    { type: 'vector3' in window ? 'vector3' : 'number-input', x: 200, y: 0, controls: { val: 10 } },
+    { type: 'line-bypointanddirection', x: 400, y: 0 }
+  ], wires: [[0,'point',3,'origin'],[1,'point',2,'point'],[2,'x',3,'direction'],[3,'line',4,'value']] }
+};
+
+window.NODE_HELP['line-bystartpointendpoint'] = {
+  description: 'Creates a straight line between two points. The simplest way to create a line segment. Connects Start Point to End Point.',
+  inputs: [{ name: 'Start Point', desc: 'First endpoint' },{ name: 'End Point', desc: 'Second endpoint' }],
+  outputs: [{ name: 'Line', desc: 'Line segment connecting the points' }],
+  example: { title: 'Line from (0,0) to (10,5)', nodes: [
+    { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+    { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 10, y: 5, z: 0 } },
+    { type: 'line-bystartpointendpoint', x: 200, y: 0 }
+  ], wires: [[0,'point',2,'startPoint'],[1,'point',2,'endPoint']] }
+};
+
 window.NODE_HELP['nurbs-curve'] = {
   description: 'Creates a NURBS curve from control points. The curve is attracted toward points but does not pass through them (except endpoints). Degree controls smoothness.',
   inputs: [{ name: 'Control Pts', desc: 'List of control points' },{ name: 'Degree', desc: 'NURBS degree (3 = cubic)' }],
@@ -180,22 +270,33 @@ window.NODE_HELP['prof-rect'] = {
   ], wires: [[0,'point',3,'center'],[1,'value',3,'width'],[2,'value',3,'depth']] }
 };
 
-window.NODE_HELP['geometry-distance'] = {
-  description: 'Calculates the 3D distance between any two geometries based on their center points. Works with Points, Lines, Circles, Polylines, Arcs, and Meshes.',
-  inputs: [{ name: 'Geometry A', desc: 'First geometry (Point, Line, Circle, Mesh, etc.)' },{ name: 'Geometry B', desc: 'Second geometry (Point, Line, Circle, Mesh, etc.)' }],
-  outputs: [{ name: 'Distance', desc: 'Distance between center points' }],
-  example: { title: 'Distance between sphere and box', nodes: [
-    { type: 'point-origin', x: 0, y: 0 },
-    { type: 'number-input', x: 0, y: 70, controls: { val: 5 } },
-    { type: 'solid-sphere', x: 200, y: 0 },
-    { type: 'point-bycoordinates', x: 400, y: 0, controls: { x: 10, y: 5, z: 0 } },
-    { type: 'number-input', x: 400, y: 70, controls: { val: 4 } },
-    { type: 'number-input', x: 400, y: 130, controls: { val: 4 } },
-    { type: 'number-input', x: 400, y: 190, controls: { val: 4 } },
-    { type: 'solid-box', x: 600, y: 40 },
-    { type: 'geometry-distance', x: 800, y: 0 },
-    { type: 'output-watch', x: 1000, y: 0 }
-  ], wires: [[0,'point',2,'center'],[1,'value',2,'radius'],[3,'point',7,'center'],[4,'value',7,'width'],[5,'value',7,'depth'],[6,'value',7,'height'],[2,'solid',8,'a'],[7,'solid',8,'b'],[8,'distance',9,'value']] }
+window.NODE_HELP['curve-startpoint'] = {
+  description: 'Extracts the start point (parameter t=0) of any curve. For lines the start point is the first input; for arcs it is the point at the start angle; for polylines it is the first point.',
+  inputs: [{ name: 'Curve', desc: 'Any curve type' }],
+  outputs: [{ name: 'Point', desc: 'The start point of the curve' }],
+  example: { title: 'Get line start point', nodes: [
+    { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+    { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 10, y: 0, z: 0 } },
+    { type: 'line-bystartpointendpoint', x: 200, y: 0 },
+    { type: 'curve-startpoint', x: 400, y: 0 },
+    { type: 'output-watch', x: 560, y: 0 }
+  ], wires: [[0,'point',2,'startPoint'],[1,'point',2,'endPoint'],[2,'line',3,'curve'],[3,'point',4,'value']] }
+};
+
+window.NODE_HELP['curve-tangent'] = {
+  description: 'Calculates the tangent direction vector at a given parameter t along a curve. t=0 is the start, t=0.5 is the midpoint, t=1 is the end. For lines this equals the chord direction at all points. For arcs and NURBS curves it follows the changing direction.',
+  inputs: [
+    { name: 'Curve', desc: 'Any curve type' },
+    { name: 'Parameter t', desc: 'Position along curve (0=start, 1=end)' }
+  ],
+  outputs: [{ name: 'Tangent', desc: 'Unit tangent vector at parameter t' }],
+  example: { title: 'Tangent at midpoint of line', nodes: [
+    { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+    { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 10, y: 5, z: 0 } },
+    { type: 'line-bystartpointendpoint', x: 200, y: 0 },
+    { type: 'number-input', x: 0, y: 200, controls: { val: 0.5 } },
+    { type: 'curve-tangent', x: 420, y: 0 }
+  ], wires: [[0,'point',2,'startPoint'],[1,'point',2,'endPoint'],[2,'line',4,'curve'],[3,'value',4,'param']] }
 };
 
 window.NODE_HELP['nurbs-tween'] = {
@@ -212,6 +313,24 @@ window.NODE_HELP['nurbs-tween'] = {
     { type: 'number-input', x: 200, y: 310, controls: { val: 5 } },
     { type: 'nurbs-tween', x: 420, y: 100 }
   ], wires: [[0,'point',2,'startPoint'],[1,'point',2,'endPoint'],[3,'point',5,'startPoint'],[4,'point',5,'endPoint'],[2,'line',7,'curve1'],[5,'line',7,'curve2'],[6,'value',7,'count']] }
+};
+
+window.NODE_HELP['geometry-distance'] = {
+  description: 'Calculates the 3D distance between any two geometries based on their center points. Works with Points, Lines, Circles, Polylines, Arcs, and Meshes.',
+  inputs: [{ name: 'Geometry A', desc: 'First geometry (Point, Line, Circle, Mesh, etc.)' },{ name: 'Geometry B', desc: 'Second geometry (Point, Line, Circle, Mesh, etc.)' }],
+  outputs: [{ name: 'Distance', desc: 'Distance between center points' }],
+  example: { title: 'Distance between sphere and box', nodes: [
+    { type: 'point-origin', x: 0, y: 0 },
+    { type: 'number-input', x: 0, y: 70, controls: { val: 5 } },
+    { type: 'solid-sphere', x: 200, y: 0 },
+    { type: 'point-bycoordinates', x: 400, y: 0, controls: { x: 10, y: 5, z: 0 } },
+    { type: 'number-input', x: 400, y: 70, controls: { val: 4 } },
+    { type: 'number-input', x: 400, y: 130, controls: { val: 4 } },
+    { type: 'number-input', x: 400, y: 190, controls: { val: 4 } },
+    { type: 'solid-box', x: 600, y: 40 },
+    { type: 'geometry-distance', x: 800, y: 0 },
+    { type: 'output-watch', x: 1000, y: 0 }
+  ], wires: [[0,'point',2,'center'],[1,'value',2,'radius'],[3,'point',7,'center'],[4,'value',7,'width'],[5,'value',7,'depth'],[6,'value',7,'height'],[2,'solid',8,'a'],[7,'solid',8,'b'],[8,'distance',9,'value']] }
 };
 
 // Helper — build example graph
