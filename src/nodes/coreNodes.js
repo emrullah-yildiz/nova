@@ -5,6 +5,7 @@ import { inputCategory, inputNodes } from './categories/input.js';
 import { listCategory, listNodes } from './categories/list.js';
 import { logicCategory, logicNodes } from './categories/logic.js';
 import { mathCategory, mathNodes } from './categories/math.js';
+import { surfacesCategory, surfacesNodes } from './categories/surfaces.js';
 import { vectorCategory, vectorNodes } from './categories/vector.js';
 import { legacyCoreCategories, legacyCoreNodes } from './legacyCoreNodes.js';
 import { createNodeRegistry, toLegacyNodeDefinition } from './registry.js';
@@ -16,6 +17,7 @@ const modernCategories = [
   listCategory,
   logicCategory,
   mathCategory,
+  surfacesCategory,
   vectorCategory
 ];
 
@@ -33,6 +35,7 @@ export const coreNodes = [
   ...listNodes,
   ...logicNodes,
   ...mathNodes,
+  ...surfacesNodes,
   ...vectorNodes,
   ...legacyCoreNodes
 ];

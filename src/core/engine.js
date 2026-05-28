@@ -742,9 +742,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-      case 'op-ruled-surface': { var c1 = getInput('curve1'), c2 = getInput('curve2'); if (c1 && c2) return Geo.ruledSurface(c1, c2); return undefined; }
 
-      case 'op-isolines': { var mesh = getInput('mesh'), cnt = getInput('count'); var dir = ctrl.dir; if (mesh) return dir === 'V' ? Geo.getIsolinesV(mesh, cnt||10) : Geo.getIsolinesU(mesh, cnt||10); return undefined; }
 
       case 'op-point-grid': { var o = getInput('origin')||new Geo.Point3(0,0,0); return Geo.pointGrid(o instanceof Geo.Point3?o:new Geo.Point3(0,0,0), new Geo.Vector3(1,0,0), new Geo.Vector3(0,1,0), getInput('uCount')||5, getInput('vCount')||5, getInput('spacing')||1, getInput('spacing')||1); }
 
@@ -752,9 +750,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       // ── Surfaces ──
 
-      case 'surf-plane': { var o = getInput('origin')||new Geo.Point3(0,0,0), n = getInput('normal')||new Geo.Vector3(0,0,1); return new Geo.Plane(o instanceof Geo.Point3?o:new Geo.Point3(0,0,0), n instanceof Geo.Vector3?n:new Geo.Vector3(0,0,1)); }
 
-      case 'surf-from-grid': { var pts = getInput('points'), u = getInput('uCount'), v = getInput('vCount'); if (pts && u && v) return Geo.surfaceFromGrid(pts, u, v); return undefined; }
 
 
       case 'surf-arc': { var c = getInput('center')||new Geo.Point3(0,0,0), r = getInput('radius'), sa = getInput('startAngle'), ea = getInput('endAngle'); return new Geo.Arc3(c instanceof Geo.Point3?c:new Geo.Point3(0,0,0), r||5, (sa||0)*Math.PI/180, (ea||360)*Math.PI/180); }
@@ -785,7 +781,6 @@ export function installEngine(targetApp = getRuntimeApp()) {
       case 'pat-fibonacci-sphere': return Geo.fibonacciSphere(getInput('count')||100, getInput('radius')||10);
 
 
-      case 'nurbs-surface': { var grid = getInput('grid'); if (grid && Array.isArray(grid)) return Geo.createNurbsSurface(grid, getInput('degreeU')||3, getInput('degreeV')||3); return undefined; }
 
 
 

@@ -159,17 +159,6 @@ NODE_LIBRARY.categories.push({ id: 'solids', name: 'Solids', color: '#f38ba8', i
 ] });
 
 // ═══════════════════════════════════════
-// 15. SURFACES
-// ═══════════════════════════════════════
-NODE_LIBRARY.categories.push({ id: 'surfaces', name: 'Surfaces', color: '#94e2d5', icon: '◇', nodes: [
-  { type: 'nurbs-surface', name: 'Surface.ByNURBS', icon: '▧', inputs: [{ id: 'grid', name: 'Ctrl Grid', type: 'list' },{ id: 'degU', name: 'Degree U', type: 'number' },{ id: 'degV', name: 'Degree V', type: 'number' }], outputs: [{ id: 'surface', name: 'Surface', type: 'mesh' }], controls: [], preview: true, codegen: { python: '{{surface}} = Geo.createNurbsSurface({{grid}}, {{degU}}, {{degV}}).toMesh()', csharp: '' } },
-  { type: 'surf-from-grid', name: 'Surface.ByPointGrid', icon: '▦', inputs: [{ id: 'points', name: 'Points', type: 'list' },{ id: 'uCount', name: 'U Count', type: 'number' },{ id: 'vCount', name: 'V Count', type: 'number' }], outputs: [{ id: 'surface', name: 'Surface', type: 'mesh' }], controls: [], preview: true, codegen: { python: '{{surface}} = Geo.surfaceFromGrid({{points}}, {{uCount}}, {{vCount}})', csharp: '' } },
-  { type: 'op-ruled-surface', name: 'Surface.ByRuledLoft', icon: '▨', inputs: [{ id: 'curve1', name: 'Curve 1', type: 'any' },{ id: 'curve2', name: 'Curve 2', type: 'any' }], outputs: [{ id: 'surface', name: 'Surface', type: 'mesh' }], controls: [], preview: true, codegen: { python: '{{surface}} = Geo.ruledSurface({{curve1}}, {{curve2}})', csharp: '' } },
-  { type: 'op-isolines', name: 'Surface.Isolines', icon: '≡', inputs: [{ id: 'mesh', name: 'Mesh', type: 'mesh' },{ id: 'count', name: 'Count', type: 'number' }], outputs: [{ id: 'curves', name: 'Curves', type: 'list' }], controls: [{ id: 'dir', type: 'dropdown', options: ['U','V'], default: 'U', label: 'Direction' }], preview: true, codegen: { python: '{{curves}} = Geo.getIsolinesU({{mesh}}, {{count}}) if "{{ctrl.dir}}" == "U" else Geo.getIsolinesV({{mesh}}, {{count}})', csharp: '' } },
-  { type: 'surf-plane', name: 'Surface.Plane', icon: '▱', inputs: [{ id: 'origin', name: 'Origin', type: 'point' },{ id: 'normal', name: 'Normal', type: 'vector' }], outputs: [{ id: 'plane', name: 'Plane', type: 'plane' }], controls: [], preview: true, codegen: { python: '{{plane}} = Geo.Plane({{origin}}, {{normal}})', csharp: '' } }
-] });
-
-// ═══════════════════════════════════════
 // BUILD NODE_TYPE_MAP (flat lookup)
 // ═══════════════════════════════════════
 NODE_LIBRARY.categories.forEach(function(cat) {
