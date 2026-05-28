@@ -213,7 +213,7 @@ Status checked: 2026-05-28.
 - [x] Audit logs capture authentication, project, AI, graph-run, and Connect session events.
 - [x] Postgres schema and migrations exist for enterprise persistence.
 - [x] API startup now supports async persistence initialization.
-- [ ] Production Postgres persistence needs integration testing against a real Postgres service.
+- [x] Production Postgres persistence has an integration test harness for a real Postgres service. Status: verified against Neon on 2026-05-28; run with `NOVA_POSTGRES_INTEGRATION_TESTS=true NOVA_DATABASE_URL=... npm run test:postgres`.
 - [ ] Unsafe user-content HTML paths still need hardening.
 - [ ] Redis-backed sessions, pairing state, and rate limits remain pending.
 - [ ] Pagination for large lists remains pending.
