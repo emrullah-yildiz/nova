@@ -371,9 +371,9 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
         ' onmouseenter="this.style.background=\'var(--bg-surface-hover)\';this.style.borderColor=\'var(--accent-blue)\'"' +
         ' onmouseleave="this.style.background=\'\';this.style.borderColor=\'var(--border-color)\'">' +
           '<div style="font-size:20px">📄</div>' +
-          '<div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--text-primary)">' + p.name + '</div>' +
-          '<div style="font-size:11px;color:var(--text-muted)">' + p.nodes + ' nodes, ' + p.wires + ' wires — ' + p.date + '</div></div>' +
-          '<button onclick="event.stopPropagation();if(confirm(\'Delete ' + p.name + '?\')){localStorage.removeItem(\'' + STORAGE_PREFIX + p.name + '\');document.getElementById(\'open-dialog-overlay\').remove();app.showOpenDialog()}" style="width:24px;height:24px;border-radius:4px;background:transparent;color:var(--text-muted);border:none;font-size:12px;cursor:pointer" title="Delete">🗑</button>' +
+          '<div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--text-primary)">' + escapeHtml(p.name) + '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted)">' + p.nodes + ' nodes, ' + p.wires + ' wires — ' + escapeHtml(p.date) + '</div></div>' +
+          '<button onclick="event.stopPropagation();if(confirm(\'Delete ' + escapeJsString(p.name) + '?\')){localStorage.removeItem(\'' + escapeJsString(STORAGE_PREFIX + p.name) + '\');document.getElementById(\'open-dialog-overlay\').remove();app.showOpenDialog()}" style="width:24px;height:24px;border-radius:4px;background:transparent;color:var(--text-muted);border:none;font-size:12px;cursor:pointer" title="Delete">🗑</button>' +
         '</div>'
       ).join('');
     }
@@ -421,10 +421,10 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     if (!el) return;
     el.innerHTML = recent.map(r => {
       const ago = _timeAgo(r.date);
-      return '<button class="recent-item" onclick="app.openFromLocal(\'' + r.name.replace(/'/g, "\\'") + '\')">' +
+      return '<button class="recent-item" onclick="app.openFromLocal(\'' + escapeJsString(r.name) + '\')">' +
         '<span class="ri-icon">📄</span>' +
-        '<span class="ri-name">' + r.name + '</span>' +
-        '<span class="ri-date">' + ago + '</span></button>';
+        '<span class="ri-name">' + escapeHtml(r.name) + '</span>' +
+        '<span class="ri-date">' + escapeHtml(ago) + '</span></button>';
     }).join('');
   };
 
@@ -492,7 +492,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       recoveryDiv.style.cssText = 'margin-bottom:24px;padding:12px 16px;background:rgba(137,180,250,0.08);border:1px solid rgba(137,180,250,0.2);border-radius:10px;display:flex;align-items:center;gap:12px;';
       recoveryDiv.innerHTML = '<span style="font-size:18px">🔄</span>' +
         '<div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--text-primary)">Unsaved work found</div>' +
-        '<div style="font-size:11px;color:var(--text-muted)">' + autosave.nodes.length + ' nodes from ' + (autosave.name || 'last session') + '</div></div>' +
+        '<div style="font-size:11px;color:var(--text-muted)">' + autosave.nodes.length + ' nodes from ' + escapeHtml(autosave.name || 'last session') + '</div></div>' +
         '<button id="btn-recover" style="padding:6px 14px;font-size:12px;font-weight:600;background:var(--accent-blue);color:var(--bg-tertiary);border:none;border-radius:6px;cursor:pointer">Recover</button>' +
         '<button id="btn-dismiss-recover" style="padding:6px 10px;font-size:12px;background:var(--bg-surface);color:var(--text-muted);border:none;border-radius:6px;cursor:pointer">Dismiss</button>';
       templatesSection.parentElement.insertBefore(recoveryDiv, templatesSection);
@@ -516,3 +516,4 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
 }
 
 export default installSaveLoad;
+
