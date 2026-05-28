@@ -21,6 +21,15 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   const STORAGE_PREFIX = 'nodeflow_project_';
   const RECENT_KEY = 'nodeflow_recent_projects';
   const AUTOSAVE_KEY = 'nodeflow_autosave';
+  const escapeHtml = value => app.escapeHtml
+    ? app.escapeHtml(value)
+    : String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  const escapeJsString = value => String(value == null ? '' : value)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/</g, '\\x3c');
 
   // ══════════════════════════════════════
   // SERIALIZE — graph → JSON
@@ -310,7 +319,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     overlay.innerHTML = '<div style="width:400px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:var(--radius-lg);box-shadow:0 20px 60px rgba(0,0,0,0.5);padding:24px;animation:slideUp 0.2s ease">' +
       '<h3 style="font-size:16px;font-weight:700;color:var(--text-bright);margin-bottom:16px">💾 Save Project</h3>' +
       '<label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">Project Name</label>' +
-      '<input id="save-name-input" type="text" value="' + (app._projectName || 'Untitled') + '" style="width:100%;padding:10px 14px;font-size:14px;background:var(--bg-surface);color:var(--text-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);outline:none;margin-bottom:16px" />' +
+      '<input id="save-name-input" type="text" value="' + escapeHtml(app._projectName || 'Untitled') + '" style="width:100%;padding:10px 14px;font-size:14px;background:var(--bg-surface);color:var(--text-primary);border:1px solid var(--border-color);border-radius:var(--radius-sm);outline:none;margin-bottom:16px" />' +
       '<div style="display:flex;gap:8px;justify-content:flex-end">' +
         '<button onclick="app.saveToLocal(document.getElementById(\'save-name-input\').value);document.getElementById(\'save-dialog-overlay\').remove()" style="padding:8px 16px;font-size:13px;font-weight:600;background:var(--accent-blue);color:var(--bg-tertiary);border:none;border-radius:var(--radius-sm);cursor:pointer">Save to Browser</button>' +
         '<button onclick="app._projectName=document.getElementById(\'save-name-input\').value;app.saveToFile();document.getElementById(\'save-dialog-overlay\').remove()" style="padding:8px 16px;font-size:13px;background:var(--bg-surface);color:var(--text-secondary);border:none;border-radius:var(--radius-sm);cursor:pointer">Download File</button>' +
@@ -358,7 +367,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       projectListHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px">No saved projects yet.<br>Use Save to store projects in your browser.</div>';
     } else {
       projectListHTML = projects.map(p =>
-        '<div class="open-project-item" onclick="app.openFromLocal(\'' + p.name.replace(/'/g, "\\'") + '\');document.getElementById(\'open-dialog-overlay\').remove()" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid var(--border-color);margin-bottom:6px;transition:all 0.15s"' +
+        '<div class="open-project-item" onclick="app.openFromLocal(\'' + escapeJsString(p.name) + '\');document.getElementById(\'open-dialog-overlay\').remove()" style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid var(--border-color);margin-bottom:6px;transition:all 0.15s"' +
         ' onmouseenter="this.style.background=\'var(--bg-surface-hover)\';this.style.borderColor=\'var(--accent-blue)\'"' +
         ' onmouseleave="this.style.background=\'\';this.style.borderColor=\'var(--border-color)\'">' +
           '<div style="font-size:20px">📄</div>' +

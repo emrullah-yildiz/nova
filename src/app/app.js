@@ -1278,7 +1278,22 @@ const app = {
 
   },
 
-  fmt(t){return t.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>').replace(/• /g,'&bull; ');},
+  escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  },
+
+  fmt(t){
+    const escaped = this.escapeHtml(t);
+    return escaped
+      .replace(/\*\*([^*\n][\s\S]*?)\*\*/g,'<strong>$1</strong>')
+      .replace(/\n/g,'<br>')
+      .replace(/• /g,'&bull; ');
+  },
 
   setChatSuggestions(ch,items) {
 
