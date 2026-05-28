@@ -27,6 +27,7 @@
 import { createLacingFrames, hasListInput, mapLacingFrames } from './lacing.js';
 import { hostRegistry } from '../hosts/HostRegistry.js';
 import { setPreviewItemVisibility } from '../viewer/preview-sync.js';
+import { NODE_TYPE_MAP } from './nodes.js';
 import { getLiveCoreRegistry } from '../nodes/coreNodes.js';
 import { executeRegistryNodeUnlaced } from '../nodes/runtimeAdapter.js';
 
@@ -209,6 +210,18 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     if (self._manualRunMode && !self._isRunningGraph) {
       return self.getLastRunNodeValue(nd);
+    }
+
+    // Lazily resolve nd.def from NODE_TYPE_MAP for nodes constructed without
+    // going through addNodeToCanvas (e.g. test fixtures, programmatic graph
+    // imports). The generic lacing path relies on nd.def.inputs.
+    if (!nd.def && nd.type && typeof NODE_TYPE_MAP !== 'undefined' && NODE_TYPE_MAP[nd.type]) {
+      var resolvedDef = NODE_TYPE_MAP[nd.type];
+      nd.def = {
+        ...resolvedDef,
+        inputs: (resolvedDef.inputs || []).map(function(inp) { return { ...inp }; }),
+        outputs: (resolvedDef.outputs || []).map(function(out) { return { ...out }; })
+      };
     }
 
     var cache = self._computeCache;
@@ -647,113 +660,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-      // ── Math (extended) ──
-
-      case 'math-modulo': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined && b !== 0) ? a % b : undefined; }
-
-      case 'math-negate': { var a = getVal('a',undefined); return a !== undefined ? -a : undefined; }
-
-      case 'math-abs': { var a = getVal('a',undefined); return a !== undefined ? Math.abs(a) : undefined; }
-
-      case 'math-reciprocal': { var a = getVal('a',undefined); return (a !== undefined && a !== 0) ? 1 / a : undefined; }
-
-      case 'math-remap': {
-
-        var v = getVal('value', undefined);
-
-        var tMin = getVal('toMin', 0), tMax = getVal('toMax', 100);
-
-        var fMinRaw = nd.controlValues ? nd.controlValues['fromMin'] : '0';
-
-        var fMaxRaw = nd.controlValues ? nd.controlValues['fromMax'] : '1';
-
-        var fMinAuto = (fMinRaw === 'auto' || fMinRaw === undefined);
-
-        var fMaxAuto = (fMaxRaw === 'auto' || fMaxRaw === undefined);
-
-        if (v === undefined) return undefined;
-
-        // List of numbers
-
-        if (Array.isArray(v)) {
-
-          var nums = v.filter(function(x) { return typeof x === 'number'; });
-
-          if (nums.length === 0) return undefined;
-
-          var fMin = fMinAuto ? Math.min.apply(null, nums) : getVal('fromMin', 0);
-
-          var fMax = fMaxAuto ? Math.max.apply(null, nums) : getVal('fromMax', 1);
-
-          if (fMax === fMin) fMax = fMin + 1;
-
-          return nums.map(function(n) { return tMin + (n - fMin) / (fMax - fMin) * (tMax - tMin); });
-
-        }
-
-        // Single number
-
-        if (typeof v === 'number') {
-
-          var fMin = fMinAuto ? 0 : getVal('fromMin', 0);
-
-          var fMax = fMaxAuto ? 1 : getVal('fromMax', 1);
-
-          if (fMax === fMin) fMax = fMin + 1;
-
-          return tMin + (v - fMin) / (fMax - fMin) * (tMax - tMin);
-
-        }
-
-        return undefined;
-
-      }
-
-      case 'math-floor': { var a = getVal('a',undefined); return a !== undefined ? Math.floor(a) : undefined; }
-
-      case 'math-ceil': { var a = getVal('a',undefined); return a !== undefined ? Math.ceil(a) : undefined; }
-
-      case 'math-round': { var a = getVal('a',undefined), d = getVal('digits',0); return a !== undefined ? parseFloat(a.toFixed(Math.max(0,Math.round(d)))) : undefined; }
-
-      case 'math-min': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined) ? Math.min(a, b) : undefined; }
-
-      case 'math-max': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined) ? Math.max(a, b) : undefined; }
-
-      case 'math-clamp': { var v = getInput('value'), mn = getVal('min',0), mx = getVal('max',1); return v !== undefined ? Math.max(mn, Math.min(mx, v)) : undefined; }
-
-
-
-      // ── Math (v1+v2 unified — uses getVal for formula/control fallback) ──
-      // Array-aware arithmetic: broadcasts scalars, adds element-wise for arrays
-
-      case 'math-add': {
-        var a = getVal('a',undefined), b = getVal('b',undefined);
-        return executeBinaryLacedMath(nd, a, b, function(x, y) { return x + y; });
-      }
-
-      case 'math-subtract': {
-        var a = getVal('a',undefined), b = getVal('b',undefined);
-        return executeBinaryLacedMath(nd, a, b, function(x, y) { return x - y; });
-      }
-
-      case 'math-multiply': {
-        var a = getVal('a',undefined), b = getVal('b',undefined);
-        return executeBinaryLacedMath(nd, a, b, function(x, y) { return x * y; });
-      }
-
-      case 'math-divide': {
-        var a = getVal('a',undefined), b = getVal('b',undefined);
-        return executeBinaryLacedMath(nd, a, b, function(x, y) { return y !== 0 ? x / y : undefined; });
-      }
-
-      case 'math-power': {
-        var base = getVal('base',undefined), exp = getVal('exp',undefined);
-        if (base === undefined || exp === undefined) return undefined;
-        if (Array.isArray(base) && Array.isArray(exp)) { var powArr = []; for (var pi = 0; pi < Math.min(base.length, exp.length); pi++) powArr.push(Math.pow(base[pi], exp[pi])); return powArr; }
-        if (Array.isArray(base)) { var powArrA = []; for (var pi2 = 0; pi2 < base.length; pi2++) powArrA.push(Math.pow(base[pi2], exp)); return powArrA; }
-        if (Array.isArray(exp)) { var powArrB = []; for (var pi3 = 0; pi3 < exp.length; pi3++) powArrB.push(Math.pow(base, exp[pi3])); return powArrB; }
-        return Math.pow(base, exp);
-      }
+      // Math nodes migrated to src/nodes/categories/math.js (executed via registry fallback).
 
 
 

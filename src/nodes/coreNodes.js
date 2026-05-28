@@ -3,6 +3,7 @@ import { curvesCategory, curvesNodes } from './categories/curves.js';
 import { inputCategory, inputNodes } from './categories/input.js';
 import { listCategory, listNodes } from './categories/list.js';
 import { logicCategory, logicNodes } from './categories/logic.js';
+import { mathCategory, mathNodes } from './categories/math.js';
 import { legacyCoreCategories, legacyCoreNodes } from './legacyCoreNodes.js';
 import { createNodeRegistry, toLegacyNodeDefinition } from './registry.js';
 
@@ -10,7 +11,8 @@ const modernCategories = [
   curvesCategory,
   inputCategory,
   listCategory,
-  logicCategory
+  logicCategory,
+  mathCategory
 ];
 
 const modernCategoryIds = new Set(modernCategories.map((category) => category.id));
@@ -25,6 +27,7 @@ export const coreNodes = [
   ...inputNodes,
   ...listNodes,
   ...logicNodes,
+  ...mathNodes,
   ...legacyCoreNodes
 ];
 
