@@ -4,7 +4,8 @@ import { createNodeTypeMapFromRegistry } from '../src/nodes/legacyBridge.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP } from '../src/core/nodes.js';
 import { buildNodeHelpDoc, validateHelpExample } from '../src/ui/node-help-docs.js';
 
-const TYPE_PATTERN = /^[A-Z][A-Za-z0-9]*(\.[A-Z][A-Za-z0-9]+)+$/;
+// Allow single-letter NodeNames after the dot (Point.X, Point.Y, Point.Z).
+const TYPE_PATTERN = /^[A-Z][A-Za-z0-9]*(\.[A-Z][A-Za-z0-9]*)+$/;
 const MIN_DESCRIPTION_LENGTH = 60;
 const HOST_REQUIRED_KEY = 'requiresHost';
 

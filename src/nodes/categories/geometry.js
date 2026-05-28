@@ -64,8 +64,8 @@ export const geometryNodes = [
       example: {
         title: 'Distance from (0,0,0) to (3,4,0) = 5',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 80, controls: { x: 3, y: 4, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 80, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Geometry.Distance', x: 280, y: 30 },
           { type: 'output-watch', x: 500, y: 30 }
         ],
@@ -112,10 +112,10 @@ export const geometryNodes = [
       example: {
         title: 'Move a 3-4-5 line — length unchanged (5)',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
-          { type: 'point-bycoordinates', x: 0, y: 160, controls: { x: 10, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 160, controls: { x: 10, y: 0, z: 0 } },
           { type: 'Geometry.Move', x: 460, y: 90 },
           { type: 'Curve.Length', x: 680, y: 90 },
           { type: 'output-watch', x: 880, y: 90 }
@@ -171,11 +171,11 @@ export const geometryNodes = [
       example: {
         title: 'Rotate a 3-4-5 line 90° — length unchanged (5)',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
-          { type: 'point-origin', x: 0, y: 160 },
-          { type: 'point-bycoordinates', x: 0, y: 230, controls: { x: 0, y: 0, z: 1 } },
+          { type: 'Point.Origin', x: 0, y: 160 },
+          { type: 'Point.ByCoordinates', x: 0, y: 230, controls: { x: 0, y: 0, z: 1 } },
           { type: 'Input.Number', x: 0, y: 300, controls: { val: 90 } },
           { type: 'Geometry.Rotate', x: 460, y: 150 },
           { type: 'Curve.Length', x: 680, y: 150 },
@@ -229,11 +229,11 @@ export const geometryNodes = [
       example: {
         title: 'Scale a 3-4-5 line by 2 → length 10',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Input.Number', x: 0, y: 160, controls: { val: 2 } },
-          { type: 'point-origin', x: 0, y: 230 },
+          { type: 'Point.Origin', x: 0, y: 230 },
           { type: 'Geometry.Scale', x: 460, y: 90 },
           { type: 'Curve.Length', x: 680, y: 90 },
           { type: 'output-watch', x: 880, y: 90 }
@@ -291,11 +291,11 @@ export const geometryNodes = [
       example: {
         title: 'Mirror a 3-4-5 line — length unchanged (5)',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
-          { type: 'point-origin', x: 0, y: 160 },
-          { type: 'point-bycoordinates', x: 0, y: 230, controls: { x: 1, y: 0, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 160 },
+          { type: 'Point.ByCoordinates', x: 0, y: 230, controls: { x: 1, y: 0, z: 0 } },
           { type: 'Geometry.Mirror', x: 460, y: 110 },
           { type: 'Curve.Length', x: 680, y: 110 },
           { type: 'output-watch', x: 880, y: 110 }
@@ -356,10 +356,10 @@ export const geometryNodes = [
       example: {
         title: '5 copies along X every 2 units — count 5',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
-          { type: 'point-bycoordinates', x: 0, y: 160, controls: { x: 1, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 160, controls: { x: 1, y: 0, z: 0 } },
           { type: 'Input.Integer', x: 0, y: 230, controls: { val: 5 } },
           { type: 'Input.Number', x: 0, y: 300, controls: { val: 2 } },
           { type: 'Geometry.LinearArray', x: 460, y: 150 },
@@ -423,11 +423,11 @@ export const geometryNodes = [
       example: {
         title: '6 radial copies around Z — count 6',
         nodes: [
-          { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 1, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 2, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 1, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 2, y: 0, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
-          { type: 'point-origin', x: 0, y: 160 },
-          { type: 'point-bycoordinates', x: 0, y: 230, controls: { x: 0, y: 0, z: 1 } },
+          { type: 'Point.Origin', x: 0, y: 160 },
+          { type: 'Point.ByCoordinates', x: 0, y: 230, controls: { x: 0, y: 0, z: 1 } },
           { type: 'Input.Integer', x: 0, y: 300, controls: { val: 6 } },
           { type: 'Geometry.PolarArray', x: 460, y: 150 },
           { type: 'List.Count', x: 680, y: 150 },

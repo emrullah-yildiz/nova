@@ -103,7 +103,7 @@ export const curvesNodes = [
       example: {
         title: 'Arc length of a quarter circle (r=5)',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
+          { type: 'Point.Origin', x: 0, y: 0 },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 5 } },
           { type: 'Input.Number', x: 0, y: 150, controls: { val: 0 } },
           { type: 'Input.Number', x: 0, y: 220, controls: { val: 90 } },
@@ -150,10 +150,10 @@ export const curvesNodes = [
       example: {
         title: 'Bezier S-curve length from 4 control points',
         nodes: [
-          { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 3, y: 5, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 140, controls: { x: 7, y: -5, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 210, controls: { x: 10, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 5, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 7, y: -5, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 10, y: 0, z: 0 } },
           { type: 'List.Create', x: 240, y: 90 },
           { type: 'Bezier.ByControlPoints', x: 460, y: 90 },
           { type: 'Curve.Length', x: 680, y: 90 },
@@ -208,7 +208,7 @@ export const curvesNodes = [
       example: {
         title: 'Circumference of a radius-10 circle',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
+          { type: 'Point.Origin', x: 0, y: 0 },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 10 } },
           { type: 'Circle.ByCenterRadius', x: 240, y: 30 },
           { type: 'Curve.Length', x: 460, y: 30 },
@@ -264,7 +264,7 @@ export const curvesNodes = [
       example: {
         title: 'Sample 24 points around a radius-5 circle',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
+          { type: 'Point.Origin', x: 0, y: 0 },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 5 } },
           { type: 'Input.Number', x: 0, y: 150, controls: { val: 24 } },
           { type: 'Circle.ByCenterRadiusResolution', x: 240, y: 70 },
@@ -308,8 +308,8 @@ export const curvesNodes = [
       example: {
         title: 'Chord direction of a line from (0,0,0) to (3,4,0)',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Curve.ChordDirection', x: 460, y: 30 },
           { type: 'output-watch', x: 680, y: 30 }
@@ -367,8 +367,8 @@ export const curvesNodes = [
       example: {
         title: 'Deconstruct a 3-4-5 line, watch the length',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Curve.Deconstruct', x: 460, y: 30 },
           { type: 'output-watch', x: 680, y: 30 }
@@ -407,8 +407,8 @@ export const curvesNodes = [
       example: {
         title: 'End point of a 3-4-5 line',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Curve.EndPoint', x: 460, y: 30 },
           { type: 'output-watch', x: 660, y: 30 }
@@ -447,8 +447,8 @@ export const curvesNodes = [
       example: {
         title: 'Length of a 3-4-5 line',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Curve.Length', x: 460, y: 30 },
           { type: 'output-watch', x: 660, y: 30 }
@@ -487,8 +487,8 @@ export const curvesNodes = [
       example: {
         title: 'Start point of a 3-4-5 line',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Curve.StartPoint', x: 460, y: 30 },
           { type: 'output-watch', x: 660, y: 30 }
@@ -533,8 +533,8 @@ export const curvesNodes = [
       example: {
         title: 'Tangent at the midpoint of a 3-4-5 line',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Input.Number', x: 240, y: 150, controls: { val: 0.5 } },
           { type: 'Curve.TangentAtPoint', x: 460, y: 80 },
@@ -603,7 +603,7 @@ export const curvesNodes = [
       example: {
         title: 'Sample a 10x6 ellipse into 24 points, count them',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
+          { type: 'Point.Origin', x: 0, y: 0 },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 10 } },
           { type: 'Input.Number', x: 0, y: 150, controls: { val: 6 } },
           { type: 'Input.Number', x: 0, y: 220, controls: { val: 0 } },
@@ -664,8 +664,8 @@ export const curvesNodes = [
       example: {
         title: 'A 5-unit line from origin along X, length confirmed',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 5 } },
           { type: 'Line.ByPointAndDirection', x: 240, y: 60 },
           { type: 'Curve.Length', x: 460, y: 60 },
@@ -712,8 +712,8 @@ export const curvesNodes = [
       example: {
         title: '3-4-5 line, length confirmed',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Curve.Length', x: 460, y: 30 },
           { type: 'output-watch', x: 660, y: 30 }
@@ -762,10 +762,10 @@ export const curvesNodes = [
       example: {
         title: 'NURBS curve length from 4 control points (degree 3)',
         nodes: [
-          { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 3, y: 5, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 140, controls: { x: 7, y: -5, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 210, controls: { x: 10, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 5, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 7, y: -5, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 10, y: 0, z: 0 } },
           { type: 'List.Create', x: 240, y: 90 },
           { type: 'Input.Number', x: 240, y: 210, controls: { val: 3 } },
           { type: 'NURBS.ByControlPoints', x: 460, y: 140 },
@@ -818,10 +818,10 @@ export const curvesNodes = [
       example: {
         title: 'NURBS interpolated through 4 points, length',
         nodes: [
-          { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 3, y: 5, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 140, controls: { x: 7, y: -5, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 210, controls: { x: 10, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 5, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 7, y: -5, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 10, y: 0, z: 0 } },
           { type: 'List.Create', x: 240, y: 90 },
           { type: 'Input.Number', x: 240, y: 210, controls: { val: 3 } },
           { type: 'NURBS.Interpolate', x: 460, y: 140 },
@@ -876,10 +876,10 @@ export const curvesNodes = [
       example: {
         title: 'Perimeter of a unit-square polyline',
         nodes: [
-          { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 140, controls: { x: 1, y: 1, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 210, controls: { x: 0, y: 1, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 1, y: 1, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 0, y: 1, z: 0 } },
           { type: 'List.Create', x: 240, y: 90 },
           { type: 'Input.Boolean', x: 240, y: 210, controls: { val: 'True' } },
           { type: 'Polyline.ByPoints', x: 460, y: 140 },
@@ -944,7 +944,7 @@ export const curvesNodes = [
       example: {
         title: '4 corners of a 10×6 rectangle',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
+          { type: 'Point.Origin', x: 0, y: 0 },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 10 } },
           { type: 'Input.Number', x: 0, y: 150, controls: { val: 6 } },
           { type: 'Rectangle.ByCenterWidthDepth', x: 240, y: 70 },
@@ -997,11 +997,11 @@ export const curvesNodes = [
       example: {
         title: 'Blend two lines at midpoint, measure length',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 10, y: 0, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 10, y: 0, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
-          { type: 'point-bycoordinates', x: 0, y: 160, controls: { x: 0, y: 10, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 230, controls: { x: 10, y: 10, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 160, controls: { x: 0, y: 10, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 230, controls: { x: 10, y: 10, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 190 },
           { type: 'Input.Number', x: 240, y: 310, controls: { val: 0.5 } },
           { type: 'Utilities.Blend', x: 460, y: 100 },
@@ -1048,10 +1048,10 @@ export const curvesNodes = [
       example: {
         title: 'Interpolate through 4 points, measure length',
         nodes: [
-          { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 3, y: 5, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 140, controls: { x: 7, y: -5, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 210, controls: { x: 10, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 5, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 7, y: -5, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 10, y: 0, z: 0 } },
           { type: 'List.Create', x: 240, y: 90 },
           { type: 'Utilities.Interpolate', x: 460, y: 90 },
           { type: 'Curve.Length', x: 680, y: 90 },
@@ -1103,11 +1103,11 @@ export const curvesNodes = [
       example: {
         title: 'Tween 5 curves between two parallel lines',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 10, y: 0, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 10, y: 0, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
-          { type: 'point-bycoordinates', x: 0, y: 160, controls: { x: 0, y: 10, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 230, controls: { x: 10, y: 10, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 160, controls: { x: 0, y: 10, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 230, controls: { x: 10, y: 10, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 190 },
           { type: 'Input.Number', x: 240, y: 310, controls: { val: 5 } },
           { type: 'Utilities.Tween', x: 460, y: 100 },

@@ -626,29 +626,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-      // ── Point nodes ──
-
-      case 'point-origin': return new Geo.Point3(0, 0, 0);
-
-      case 'point-bycoordinates': return new Geo.Point3(getVal('x', 0), getVal('y', 0), getVal('z', 0));
-
-      case 'point-deconstruct': {
-
-        var pt = getInput('point');
-
-        if (!pt) return undefined;
-
-        nd._portValues = { x: pt.x !== undefined ? pt.x : 0, y: pt.y !== undefined ? pt.y : 0, z: pt.z !== undefined ? pt.z : 0 };
-
-        return nd._portValues;
-
-      }
-
-      case 'point-x': { var p = getInput('point'); return p ? (p.x !== undefined ? p.x : 0) : undefined; }
-
-      case 'point-y': { var p = getInput('point'); return p ? (p.y !== undefined ? p.y : 0) : undefined; }
-
-      case 'point-z': { var p = getInput('point'); return p ? (p.z !== undefined ? p.z : 0) : undefined; }
+      // Point nodes migrated to src/nodes/categories/point.js.
 
 
 

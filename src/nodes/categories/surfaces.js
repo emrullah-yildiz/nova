@@ -50,10 +50,10 @@ export const surfacesNodes = [
       example: {
         title: 'Patch a unit-square boundary — 4 face triangles',
         nodes: [
-          { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 140, controls: { x: 1, y: 1, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 210, controls: { x: 0, y: 1, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 1, y: 1, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 0, y: 1, z: 0 } },
           { type: 'List.Create', x: 240, y: 90 },
           { type: 'Surface.ByPatch', x: 460, y: 90 },
           { type: 'output-watch', x: 660, y: 90 }
@@ -119,10 +119,10 @@ export const surfacesNodes = [
       example: {
         title: 'Coons patch from 4 unit-edge lines',
         nodes: [
-          { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 140, controls: { x: 0, y: 1, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 210, controls: { x: 1, y: 1, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 0, y: 1, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 1, y: 1, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 0 },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 100 },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 200 },
@@ -187,10 +187,10 @@ export const surfacesNodes = [
       example: {
         title: 'NURBS surface from a 4-point grid (degree 1×1)',
         nodes: [
-          { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 140, controls: { x: 0, y: 1, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 210, controls: { x: 1, y: 1, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 0, y: 1, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 1, y: 1, z: 0 } },
           { type: 'List.Create', x: 240, y: 30 },
           { type: 'List.Create', x: 240, y: 170 },
           { type: 'List.Create', x: 460, y: 100 },
@@ -252,10 +252,10 @@ export const surfacesNodes = [
       example: {
         title: 'Surface from a 2×2 point grid',
         nodes: [
-          { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 140, controls: { x: 0, y: 1, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 210, controls: { x: 1, y: 1, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 0, y: 1, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 1, y: 1, z: 0 } },
           { type: 'List.Create', x: 240, y: 90 },
           { type: 'Input.Integer', x: 0, y: 290, controls: { val: 2 } },
           { type: 'Input.Integer', x: 0, y: 360, controls: { val: 2 } },
@@ -309,10 +309,10 @@ export const surfacesNodes = [
       example: {
         title: 'Ruled surface between two parallel lines',
         nodes: [
-          { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 10, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 140, controls: { x: 0, y: 10, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 210, controls: { x: 10, y: 10, z: 5 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 10, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 0, y: 10, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 10, y: 10, z: 5 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 170 },
           { type: 'Surface.ByRuledLoft', x: 480, y: 100 },
@@ -368,10 +368,10 @@ export const surfacesNodes = [
       example: {
         title: '10 U-isolines from a 2×2 patch surface',
         nodes: [
-          { type: 'point-bycoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 140, controls: { x: 0, y: 1, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 210, controls: { x: 1, y: 1, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 0, y: 1, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 1, y: 1, z: 0 } },
           { type: 'List.Create', x: 240, y: 90 },
           { type: 'Input.Integer', x: 0, y: 290, controls: { val: 2 } },
           { type: 'Input.Integer', x: 0, y: 360, controls: { val: 2 } },

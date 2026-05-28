@@ -111,8 +111,8 @@ export const vectorNodes = [
       example: {
         title: 'Vector from (0,0,0) to (3,4,0) — length 5',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 80, controls: { x: 3, y: 4, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 80, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Vector.ByStartPointEndPoint', x: 280, y: 30 },
           { type: 'Vector.Length', x: 500, y: 30 },
           { type: 'output-watch', x: 700, y: 30 }

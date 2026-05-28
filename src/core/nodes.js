@@ -111,18 +111,6 @@ NODE_LIBRARY.categories.push({ id: 'patterns', name: 'Patterns', color: '#f5c2e7
 
 
 // ═══════════════════════════════════════
-// 13. POINT
-// ═══════════════════════════════════════
-NODE_LIBRARY.categories.push({ id: 'point', name: 'Point', color: '#89b4fa', icon: '•', nodes: [
-  { type: 'point-bycoordinates', name: 'Point.ByCoordinates', icon: '•', inputs: [{ id: 'x', name: 'X', type: 'number' },{ id: 'y', name: 'Y', type: 'number' },{ id: 'z', name: 'Z', type: 'number' }], outputs: [{ id: 'point', name: 'Point', type: 'point' }], controls: [{ id: 'x', type: 'formula', default: '0', label: 'X', axis: 'x' },{ id: 'y', type: 'formula', default: '0', label: 'Y', axis: 'y' },{ id: 'z', type: 'formula', default: '0', label: 'Z', axis: 'z' }], preview: true, codegen: { python: '{{point}} = Geo.Point3({{x}}, {{y}}, {{z}})', csharp: '' } },
-  { type: 'point-deconstruct', name: 'Point.Deconstruct', icon: '⊙', inputs: [{ id: 'point', name: 'Point', type: 'point' }], outputs: [{ id: 'x', name: 'X', type: 'number' },{ id: 'y', name: 'Y', type: 'number' },{ id: 'z', name: 'Z', type: 'number' }], controls: [], preview: true, codegen: { python: '{{x}} = {{point}}.x\\n{{y}} = {{point}}.y\\n{{z}} = {{point}}.z', csharp: '' } },
-  { type: 'point-origin', name: 'Point.Origin', icon: '⊕', inputs: [], outputs: [{ id: 'point', name: 'Point', type: 'point' }], controls: [], preview: true, codegen: { python: '{{point}} = Geo.Point3(0, 0, 0)', csharp: '' } },
-  { type: 'point-x', name: 'Point.X', icon: 'X', inputs: [{ id: 'point', name: 'Point', type: 'point' }], outputs: [{ id: 'x', name: 'X', type: 'number' }], controls: [], preview: true, codegen: { python: '{{x}} = {{point}}.x', csharp: '' } },
-  { type: 'point-y', name: 'Point.Y', icon: 'Y', inputs: [{ id: 'point', name: 'Point', type: 'point' }], outputs: [{ id: 'y', name: 'Y', type: 'number' }], controls: [], preview: true, codegen: { python: '{{y}} = {{point}}.y', csharp: '' } },
-  { type: 'point-z', name: 'Point.Z', icon: 'Z', inputs: [{ id: 'point', name: 'Point', type: 'point' }], outputs: [{ id: 'z', name: 'Z', type: 'number' }], controls: [], preview: true, codegen: { python: '{{z}} = {{point}}.z', csharp: '' } }
-] });
-
-// ═══════════════════════════════════════
 // 13. HOSTS
 NODE_LIBRARY.categories.push({ id: 'host', name: 'Host', color: '#74c7ec', icon: 'H', nodes: [
   { type: 'host-get-elements', name: 'Host.GetElements', icon: 'H', inputs: [{ id: 'query', name: 'Query', type: 'string' }], outputs: [{ id: 'elements', name: 'Elements', type: 'list' },{ id: 'count', name: 'Count', type: 'number' },{ id: 'host', name: 'Host', type: 'string' }], controls: [{ id: 'host', type: 'dropdown', options: ['revit','rhino'], default: 'revit', label: 'Host' },{ id: 'category', type: 'text', default: 'Walls', label: 'Category / Layer' }], preview: true, codegen: { python: '{{elements}} = HostRegistry.get("{{ctrl.host}}").getElements({"category": "{{ctrl.category}}"})\\n{{count}} = len({{elements}})' } },

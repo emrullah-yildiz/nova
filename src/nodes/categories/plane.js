@@ -58,7 +58,7 @@ export const planeNodes = [
       example: {
         title: 'XY plane at the origin — normal Z = 1',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
+          { type: 'Point.Origin', x: 0, y: 0 },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 0 } },
           { type: 'Input.Number', x: 0, y: 150, controls: { val: 0 } },
           { type: 'Input.Number', x: 0, y: 220, controls: { val: 1 } },
@@ -121,9 +121,9 @@ export const planeNodes = [
       example: {
         title: 'XY plane from (0,0,0), (1,0,0), (0,1,0) — normal Z = 1',
         nodes: [
-          { type: 'point-origin', x: 0, y: 0 },
-          { type: 'point-bycoordinates', x: 0, y: 80, controls: { x: 1, y: 0, z: 0 } },
-          { type: 'point-bycoordinates', x: 0, y: 150, controls: { x: 0, y: 1, z: 0 } },
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 80, controls: { x: 1, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 150, controls: { x: 0, y: 1, z: 0 } },
           { type: 'Plane.ByThreePoints', x: 280, y: 60 },
           { type: 'Plane.Normal', x: 500, y: 60 },
           { type: 'Vector.Deconstruct', x: 700, y: 60 },
@@ -283,7 +283,7 @@ export const planeNodes = [
         nodes: [
           { type: 'Plane.XY', x: 0, y: 0 },
           { type: 'Plane.Origin', x: 220, y: 0 },
-          { type: 'point-deconstruct', x: 420, y: 0 },
+          { type: 'Point.Deconstruct', x: 420, y: 0 },
           { type: 'output-watch', x: 640, y: 0 }
         ],
         wires: [
