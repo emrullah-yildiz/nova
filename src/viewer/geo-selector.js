@@ -1,4 +1,5 @@
 import { Geo } from '../geometry/index.js';
+import { setNodePreviewState, setPreviewItemVisibility, showAllPreviews } from './preview-sync.js';
 import { Viewer3D as RuntimeViewer3D } from './viewer3d.js';
 
 function getRuntimeApp() {
@@ -311,31 +312,13 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
   };
 
   Viewer3D._toggleItemVisibility = function(item) {
-    item.visible = !item.visible;
-    item.group.visible = item.visible;
+    var wasSelected = item && item.selected;
+    setPreviewItemVisibility(app, this, item, !item.visible);
 
     // If hiding the selected item, deselect
-    if (!item.visible && item.selected) {
+    if (!item.visible && wasSelected) {
       this._deselectAll();
     }
-
-    // Also sync the node's _preview3d flag
-    if (item.nodeId && typeof app !== 'undefined') {
-      // If ALL items for this node are hidden, set _preview3d = false
-      var nodeItems = this._sceneItems.filter(function(it) { return it.nodeId === item.nodeId; });
-      var allHidden = nodeItems.every(function(it) { return !it.visible; });
-      var nd = app.nodes.find(function(n) { return n.id === item.nodeId; });
-      if (nd) nd._preview3d = !allHidden;
-
-      // Update the eye button on the node if it exists
-      var eyeBtn = document.querySelector('#' + item.nodeId + ' .node-preview-eye');
-      if (eyeBtn) {
-        eyeBtn.className = 'node-preview-eye' + (nd._preview3d ? '' : ' off');
-        eyeBtn.textContent = nd._preview3d ? '\uD83D\uDC41' : '\uD83D\uDC41\u200D\uD83D\uDDE8';
-      }
-    }
-
-    this._renderGeoList();
   };
 
   // Isolate: hide all except this item
@@ -357,38 +340,15 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
   // Sync a node's _preview3d state to the 3D scene items (no rebuild)
   // Called from the 2D canvas eye toggle button
   Viewer3D._syncNodePreview = function(nodeId, visible) {
-    if (!this._sceneItems || this._sceneItems.length === 0) return;
-    var changed = false;
-    this._sceneItems.forEach(function(item) {
-      if (item.nodeId === nodeId) {
-        item.visible = visible;
-        item.group.visible = visible;
-        if (!visible && item.selected) {
-          item.selected = false;
-        }
-        changed = true;
-      }
-    });
-    if (changed) {
-      // If we hid the selected item, restore others to normal opacity
-      if (!visible && this._selectedItem && this._selectedItem.nodeId === nodeId) {
-        this._deselectAll();
-      }
-      this._renderGeoList();
-    }
+    var wasSelected = this._selectedItem && this._selectedItem.nodeId === nodeId;
+    setNodePreviewState(app, this, nodeId, visible);
+    if (visible === false && wasSelected) this._deselectAll();
   };
 
   // Show all
   Viewer3D._showAll = function() {
-    this._sceneItems.forEach(function(it) {
-      it.visible = true;
-      it.group.visible = true;
-    });
+    showAllPreviews(app, this, { renderList: false });
     this._deselectAll();
-    // Restore all node _preview3d
-    if (typeof app !== 'undefined') {
-      app.nodes.forEach(function(nd) { nd._preview3d = true; });
-    }
     this._renderGeoList();
   };
 

@@ -14,7 +14,8 @@ const PythonRunner = {
 
     try {
       const lines = code.split('\n');
-      let jsCode = '';
+      let jsCode = '';
+      const indentStack = [];
 
       lines.forEach(line => {
         const trimmed = line.trim();
@@ -112,14 +113,29 @@ const PythonRunner = {
         jsLine = jsLine.replace(/\.append\((.+)\)/, '.push($1)');
 
         // Indentation → track for block closing
-        const indent = line.search(/\S/);
-        jsCode += '  '.repeat(Math.max(0, Math.floor(indent / 4))) + jsLine + '\n';
+        const indent = line.search(/\S/);
+        const isContinuation = /^(elif |else:|except|finally:)/.test(trimmed);
+
+        while (indentStack.length > 0) {
+          const topIndent = indentStack[indentStack.length - 1];
+          if (isContinuation ? indent < topIndent : indent <= topIndent) {
+            jsCode += '  '.repeat(Math.max(0, Math.floor(topIndent / 4))) + '}\n';
+            indentStack.pop();
+          } else {
+            break;
+          }
+        }
+        jsCode += '  '.repeat(Math.max(0, Math.floor(indent / 4))) + jsLine + '\n';
+
+        if (/\{\s*$/.test(jsLine)) indentStack.push(indent);
       });
 
       // Close any open blocks
-      const openBraces = (jsCode.match(/{/g) || []).length;
-      const closeBraces = (jsCode.match(/}/g) || []).length;
-      for (let i = 0; i < openBraces - closeBraces; i++) jsCode += '}\n';
+      while (indentStack.length > 0) {
+        const topIndent = indentStack.pop();
+        jsCode += '  '.repeat(Math.max(0, Math.floor(topIndent / 4))) + '}\n';
+      }
+
 
       // Build input declarations
       const inputDecls = Object.keys(inputs || {}).map(k => 'let ' + k + ' = __inputs__["' + k + '"];').join('\n');

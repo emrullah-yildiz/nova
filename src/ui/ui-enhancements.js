@@ -1,4 +1,5 @@
 import { NODE_TYPE_MAP } from '../core/nodes.js';
+import { shouldCancelRectSelection, shouldStartRectSelection } from './canvas-event-guards.js';
 import { Viewer3D } from '../viewer/viewer3d.js';
 
 function getRuntimeApp() {
@@ -34,7 +35,8 @@ export function installUiEnhancements(targetApp = getRuntimeApp()) {
 
   // Start rect selection on mousedown (left button, no alt, not on node/toolbar)
   canvasArea.addEventListener('mousedown', function(e) {
-    if (e.button !== 0 || e.altKey) return;
+    if (!shouldStartRectSelection(app, e)) return;
+
     if (e.target.closest('.node') || e.target.closest('.canvas-toolbar') ||
         e.target.closest('.canvas-zoom') || e.target.closest('.ws-chat-panel') ||
         e.target.closest('.node-library')) return;
@@ -50,7 +52,7 @@ export function installUiEnhancements(targetApp = getRuntimeApp()) {
   document.addEventListener('mousemove', function(e) {
     if (!rectSelect) return;
     // Don't interfere with panning or node drag
-    if (app.isPanning || app.draggingNode || app.connectingWire) {
+    if (shouldCancelRectSelection(app)) {
       rectSelect = null;
       rectDiv.style.display = 'none';
       return;
