@@ -180,6 +180,24 @@ window.NODE_HELP['prof-rect'] = {
   ], wires: [[0,'point',3,'center'],[1,'value',3,'width'],[2,'value',3,'depth']] }
 };
 
+window.NODE_HELP['geometry-distance'] = {
+  description: 'Calculates the 3D distance between any two geometries based on their center points. Works with Points, Lines, Circles, Polylines, Arcs, and Meshes.',
+  inputs: [{ name: 'Geometry A', desc: 'First geometry (Point, Line, Circle, Mesh, etc.)' },{ name: 'Geometry B', desc: 'Second geometry (Point, Line, Circle, Mesh, etc.)' }],
+  outputs: [{ name: 'Distance', desc: 'Distance between center points' }],
+  example: { title: 'Distance between sphere and box', nodes: [
+    { type: 'point-origin', x: 0, y: 0 },
+    { type: 'number-input', x: 0, y: 70, controls: { val: 5 } },
+    { type: 'solid-sphere', x: 200, y: 0 },
+    { type: 'point-bycoordinates', x: 400, y: 0, controls: { x: 10, y: 5, z: 0 } },
+    { type: 'number-input', x: 400, y: 70, controls: { val: 4 } },
+    { type: 'number-input', x: 400, y: 130, controls: { val: 4 } },
+    { type: 'number-input', x: 400, y: 190, controls: { val: 4 } },
+    { type: 'solid-box', x: 600, y: 40 },
+    { type: 'geometry-distance', x: 800, y: 0 },
+    { type: 'output-watch', x: 1000, y: 0 }
+  ], wires: [[0,'point',2,'center'],[1,'value',2,'radius'],[3,'point',7,'center'],[4,'value',7,'width'],[5,'value',7,'depth'],[6,'value',7,'height'],[2,'solid',8,'a'],[7,'solid',8,'b'],[8,'distance',9,'value']] }
+};
+
 window.NODE_HELP['nurbs-tween'] = {
   description: 'Generates intermediate curves evenly spaced between two boundary curves. Useful for surface grids, floor plates, or transition profiles.',
   inputs: [{ name: 'Curve A', desc: 'First boundary' },{ name: 'Curve B', desc: 'Second boundary' },{ name: 'Count', desc: 'Number of tweens' }],

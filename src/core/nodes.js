@@ -218,10 +218,16 @@ NODE_LIBRARY.categories.push({ id: 'patterns', name: 'Patterns', color: '#f5c2e7
 ] });
 
 // ═══════════════════════════════════════
-// 12. POINT
+// 12. GEOMETRY
+// ═══════════════════════════════════════
+NODE_LIBRARY.categories.push({ id: 'geometry', name: 'Geometry', color: '#89b4fa', icon: '◇', nodes: [
+  { type: 'geometry-distance', name: 'Geometry.Distance', icon: '⟷', inputs: [{ id: 'a', name: 'Geometry A', type: 'any' },{ id: 'b', name: 'Geometry B', type: 'any' }], outputs: [{ id: 'distance', name: 'Distance', type: 'number' }], controls: [], preview: true, codegen: { python: '{{distance}} = Geo.distanceBetween({{a}}, {{b}})', csharp: '' } }
+] });
+
+// ═══════════════════════════════════════
+// 13. POINT
 // ═══════════════════════════════════════
 NODE_LIBRARY.categories.push({ id: 'point', name: 'Point', color: '#89b4fa', icon: '•', nodes: [
-  { type: 'geo-distance', name: 'Distance', icon: '⟷', inputs: [{ id: 'a', name: 'Point A', type: 'point' },{ id: 'b', name: 'Point B', type: 'point' }], outputs: [{ id: 'distance', name: 'Distance', type: 'number' }], controls: [], preview: true, codegen: { python: '{{distance}} = math.dist({{a}}, {{b}})', csharp: '' } },
   { type: 'point-bycoordinates', name: 'Point.ByCoordinates', icon: '•', inputs: [{ id: 'x', name: 'X', type: 'number' },{ id: 'y', name: 'Y', type: 'number' },{ id: 'z', name: 'Z', type: 'number' }], outputs: [{ id: 'point', name: 'Point', type: 'point' }], controls: [{ id: 'x', type: 'formula', default: '0', label: 'X', axis: 'x' },{ id: 'y', type: 'formula', default: '0', label: 'Y', axis: 'y' },{ id: 'z', type: 'formula', default: '0', label: 'Z', axis: 'z' }], preview: true, codegen: { python: '{{point}} = Geo.Point3({{x}}, {{y}}, {{z}})', csharp: '' } },
   { type: 'point-deconstruct', name: 'Point.Deconstruct', icon: '⊙', inputs: [{ id: 'point', name: 'Point', type: 'point' }], outputs: [{ id: 'x', name: 'X', type: 'number' },{ id: 'y', name: 'Y', type: 'number' },{ id: 'z', name: 'Z', type: 'number' }], controls: [], preview: true, codegen: { python: '{{x}} = {{point}}.x\\n{{y}} = {{point}}.y\\n{{z}} = {{point}}.z', csharp: '' } },
   { type: 'point-origin', name: 'Point.Origin', icon: '⊕', inputs: [], outputs: [{ id: 'point', name: 'Point', type: 'point' }], controls: [], preview: true, codegen: { python: '{{point}} = Geo.Point3(0, 0, 0)', csharp: '' } },
