@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { createCoreNodeRegistry, getLiveCoreRegistry } from '../src/nodes/coreNodes.js';
 import { createNodeTypeMapFromRegistry } from '../src/nodes/legacyBridge.js';
-import { NODE_LIBRARY } from '../src/core/nodes.js';
-import { validateHelpExample } from '../src/ui/node-help-docs.js';
+import { NODE_LIBRARY, NODE_TYPE_MAP } from '../src/core/nodes.js';
+import { buildNodeHelpDoc, validateHelpExample } from '../src/ui/node-help-docs.js';
 
 const TYPE_PATTERN = /^[A-Z][A-Za-z0-9]*(\.[A-Z][A-Za-z0-9]+)+$/;
 const MIN_DESCRIPTION_LENGTH = 60;
@@ -187,6 +187,49 @@ describe('library panel merge', () => {
     });
 
     expect(violations).toEqual([]);
+  });
+
+  it('help panel surfaces the inline example from a modern node, not the auto-stub', () => {
+    getLiveCoreRegistry();
+    const logicAnd = NODE_TYPE_MAP['Logic.And'];
+    expect(logicAnd).toBeDefined();
+    expect(logicAnd.help).toBeTruthy();
+
+    const helpDoc = buildNodeHelpDoc(logicAnd, null);
+
+    expect(helpDoc.example).toBeTruthy();
+    expect(helpDoc.example.nodes.length).toBeGreaterThan(1);
+    expect(helpDoc.example.wires.length).toBeGreaterThan(0);
+    expect(helpDoc.example.title).not.toMatch(/sample$/i);
+  });
+
+  it('inline node.help takes precedence over the legacy NODE_HELP global', () => {
+    const inlineHelp = {
+      description: 'Inline description wins',
+      inputs: [{ name: 'A', description: 'inline A doc' }],
+      outputs: [{ name: 'Result', description: 'inline Result doc' }],
+      example: { title: 'Inline example', nodes: [{ type: 'X' }], wires: [] },
+      sampleCode: 'inline code'
+    };
+    const explicitHelp = {
+      description: 'Legacy description loses',
+      example: { title: 'Legacy example', nodes: [], wires: [] }
+    };
+    const nodeDefinition = {
+      type: 'X',
+      name: 'X',
+      inputs: [{ id: 'a', name: 'A', type: 'any' }],
+      outputs: [{ id: 'result', name: 'Result', type: 'any' }],
+      controls: [],
+      help: inlineHelp,
+      codegen: { python: '' }
+    };
+
+    const helpDoc = buildNodeHelpDoc(nodeDefinition, explicitHelp);
+
+    expect(helpDoc.description).toBe('Inline description wins');
+    expect(helpDoc.example.title).toBe('Inline example');
+    expect(helpDoc.sampleCode).toBe('inline code');
   });
 
   it('NODE_LIBRARY has no duplicate type IDs within any category after the live merge', () => {
