@@ -78,7 +78,7 @@ export const solidsNodes = [
           { type: 'Input.Number', x: 0, y: 150, controls: { val: 1 } },
           { type: 'Input.Number', x: 0, y: 220, controls: { val: 1 } },
           { type: 'Box.ByCenterWidthDepthHeight', x: 240, y: 90 },
-          { type: 'output-watch', x: 480, y: 90 }
+          { type: 'Output.Watch', x: 480, y: 90 }
         ],
         wires: [
           [0, 'point', 4, 'center'],
@@ -138,7 +138,7 @@ export const solidsNodes = [
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 1 } },
           { type: 'Input.Number', x: 0, y: 150, controls: { val: 2 } },
           { type: 'Cone.ByBaseRadiusHeight', x: 240, y: 70 },
-          { type: 'output-watch', x: 480, y: 70 }
+          { type: 'Output.Watch', x: 480, y: 70 }
         ],
         wires: [
           [0, 'point', 3, 'base'],
@@ -197,7 +197,7 @@ export const solidsNodes = [
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 1 } },
           { type: 'Input.Number', x: 0, y: 150, controls: { val: 2 } },
           { type: 'Cylinder.ByBaseRadiusHeight', x: 240, y: 70 },
-          { type: 'output-watch', x: 480, y: 70 }
+          { type: 'Output.Watch', x: 480, y: 70 }
         ],
         wires: [
           [0, 'point', 3, 'base'],
@@ -248,7 +248,7 @@ export const solidsNodes = [
           { type: 'Point.Origin', x: 0, y: 0 },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 1 } },
           { type: 'Sphere.ByCenterRadius', x: 240, y: 30 },
-          { type: 'output-watch', x: 460, y: 30 }
+          { type: 'Output.Watch', x: 460, y: 30 }
         ],
         wires: [
           [0, 'point', 2, 'center'],
@@ -306,7 +306,7 @@ export const solidsNodes = [
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 2 } },
           { type: 'Input.Number', x: 0, y: 150, controls: { val: 0.5 } },
           { type: 'Torus.ByCenterRadii', x: 240, y: 70 },
-          { type: 'output-watch', x: 480, y: 70 }
+          { type: 'Output.Watch', x: 480, y: 70 }
         ],
         wires: [
           [0, 'point', 3, 'center'],
@@ -358,7 +358,7 @@ export const solidsNodes = [
           { type: 'Circle.ByCenterRadius', x: 240, y: 200 },
           { type: 'List.Create', x: 480, y: 110 },
           { type: 'Solid.ByLoft', x: 700, y: 110 },
-          { type: 'output-watch', x: 920, y: 110 }
+          { type: 'Output.Watch', x: 920, y: 110 }
         ],
         wires: [
           [0, 'point', 2, 'center'],
@@ -425,7 +425,7 @@ export const solidsNodes = [
           { type: 'Point.ByCoordinates', x: 0, y: 240, controls: { x: 0, y: 0, z: 1 } },
           { type: 'Input.Number', x: 0, y: 310, controls: { val: 360 } },
           { type: 'Solid.ByRevolve', x: 480, y: 180 },
-          { type: 'output-watch', x: 720, y: 180 }
+          { type: 'Output.Watch', x: 720, y: 180 }
         ],
         wires: [
           [0, 'point', 2, 'startPoint'],
@@ -478,7 +478,7 @@ export const solidsNodes = [
           { type: 'Point.ByCoordinates', x: 0, y: 240, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 200 },
           { type: 'Solid.BySweep', x: 480, y: 110 },
-          { type: 'output-watch', x: 720, y: 110 }
+          { type: 'Output.Watch', x: 720, y: 110 }
         ],
         wires: [
           [0, 'point', 2, 'center'],
@@ -531,7 +531,7 @@ export const solidsNodes = [
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Input.Number', x: 240, y: 150, controls: { val: 0.3 } },
           { type: 'Solid.ByPipe', x: 460, y: 80 },
-          { type: 'output-watch', x: 680, y: 80 }
+          { type: 'Output.Watch', x: 680, y: 80 }
         ],
         wires: [
           [0, 'point', 2, 'startPoint'],
@@ -582,7 +582,7 @@ export const solidsNodes = [
           { type: 'Point.ByCoordinates', x: 0, y: 120, controls: { x: 0.5, y: 0, z: 0 } },
           { type: 'Box.ByCenterWidthDepthHeight', x: 240, y: 120 },
           { type: 'Solid.BooleanUnion', x: 480, y: 60 },
-          { type: 'output-watch', x: 720, y: 60 }
+          { type: 'Output.Watch', x: 720, y: 60 }
         ],
         wires: [
           [0, 'point', 1, 'center'],
@@ -631,7 +631,7 @@ export const solidsNodes = [
           { type: 'Point.ByCoordinates', x: 0, y: 120, controls: { x: 0.5, y: 0, z: 0 } },
           { type: 'Box.ByCenterWidthDepthHeight', x: 240, y: 120 },
           { type: 'Solid.BooleanIntersect', x: 480, y: 60 },
-          { type: 'output-watch', x: 720, y: 60 }
+          { type: 'Output.Watch', x: 720, y: 60 }
         ],
         wires: [
           [0, 'point', 1, 'center'],
@@ -680,7 +680,7 @@ export const solidsNodes = [
           { type: 'Input.Number', x: 0, y: 120, controls: { val: 0.5 } },
           { type: 'Sphere.ByCenterRadius', x: 240, y: 90 },
           { type: 'Solid.BooleanSubtract', x: 480, y: 60 },
-          { type: 'output-watch', x: 720, y: 60 }
+          { type: 'Output.Watch', x: 720, y: 60 }
         ],
         wires: [
           [0, 'point', 1, 'center'],
@@ -729,7 +729,7 @@ export const solidsNodes = [
           { type: 'Sphere.ByCenterRadius', x: 240, y: 150 },
           { type: 'List.Create', x: 480, y: 60 },
           { type: 'Solid.CombineAll', x: 700, y: 60 },
-          { type: 'output-watch', x: 940, y: 60 }
+          { type: 'Output.Watch', x: 940, y: 60 }
         ],
         wires: [
           [0, 'point', 1, 'center'],

@@ -53,18 +53,6 @@ NODE_LIBRARY.categories.push({ id: 'modeling', name: 'Modeling', color: '#f5c2e7
   { type: 'op-thicken', name: 'Thicken', icon: '⊡', inputs: [{ id: 'mesh', name: 'Mesh', type: 'mesh' },{ id: 'thickness', name: 'Thickness', type: 'number' }], outputs: [{ id: 'result', name: 'Result', type: 'mesh' }], controls: [], preview: true, codegen: { python: '{{result}} = Geo.thicken({{mesh}}, {{thickness}})', csharp: '' } },
   { type: 'op-trim', name: 'Trim Line', icon: '✂', inputs: [{ id: 'line', name: 'Line', type: 'line' },{ id: 't0', name: 'Start t', type: 'number' },{ id: 't1', name: 'End t', type: 'number' }], outputs: [{ id: 'result', name: 'Result', type: 'line' }], controls: [], preview: true, codegen: { python: '{{result}} = Geo.trimLine({{line}}, {{t0}}, {{t1}})', csharp: '' } }
 ] });
-
-// ═══════════════════════════════════════
-// 9. OUTPUT
-// ═══════════════════════════════════════
-NODE_LIBRARY.categories.push({ id: 'output', name: 'Output', color: '#f9e2af', icon: '◎', nodes: [
-  { type: 'output-chart', name: 'Chart', icon: '📊', inputs: [{ id: 'data', name: 'Data', type: 'list' }], outputs: [], controls: [{ id: 'chartType', type: 'dropdown', options: ['Bar','Line','Pie'], default: 'Bar', label: 'Type' }], preview: true, codegen: { python: 'plot_chart({{data}}, chart_type="{{ctrl.chartType}}")', csharp: '' } },
-  { type: 'output-log', name: 'Console Log', icon: '⊳', inputs: [{ id: 'value', name: 'Value', type: 'any' }], outputs: [], controls: [], preview: true, codegen: { python: 'print({{value}})', csharp: '' } },
-  { type: 'output-display', name: 'Display', icon: '🖥', inputs: [{ id: 'value', name: 'Value', type: 'any' }], outputs: [], controls: [{ id: 'format', type: 'dropdown', options: ['Auto','JSON','Table'], default: 'Auto', label: 'Format' }], preview: true, codegen: { python: 'print({{value}})', csharp: '' } },
-  { type: 'output-export', name: 'Export', icon: '📤', inputs: [{ id: 'data', name: 'Data', type: 'any' }], outputs: [], controls: [{ id: 'fmt', type: 'dropdown', options: ['JSON','CSV','Text'], default: 'JSON', label: 'Format' }], preview: true, codegen: { python: 'export_data({{data}}, format="{{ctrl.fmt}}")', csharp: '' } },
-  { type: 'output-watch', name: 'Watch', icon: '👁', inputs: [{ id: 'value', name: 'Value', type: 'any' }], outputs: [], controls: [], preview: true, codegen: { python: 'print({{value}})', csharp: '' } }
-] });
-
 // ═══════════════════════════════════════
 // 10. PARAMETRIC FORMS
 // ═══════════════════════════════════════

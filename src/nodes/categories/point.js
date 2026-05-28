@@ -60,7 +60,7 @@ export const pointNodes = [
           { type: 'Point.ByCoordinates', x: 240, y: 60 },
           { type: 'Point.Origin', x: 240, y: 180 },
           { type: 'Geometry.Distance', x: 480, y: 90 },
-          { type: 'output-watch', x: 700, y: 90 }
+          { type: 'Output.Watch', x: 700, y: 90 }
         ],
         wires: [
           [0, 'value', 3, 'x'],
@@ -100,7 +100,7 @@ export const pointNodes = [
         nodes: [
           { type: 'Point.Origin', x: 0, y: 0 },
           { type: 'Point.X', x: 220, y: 0 },
-          { type: 'output-watch', x: 420, y: 0 }
+          { type: 'Output.Watch', x: 420, y: 0 }
         ],
         wires: [
           [0, 'point', 1, 'point'],
@@ -150,7 +150,7 @@ export const pointNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 0 } },
           { type: 'Point.ByCoordinates', x: 240, y: 60 },
           { type: 'Point.Deconstruct', x: 460, y: 60 },
-          { type: 'output-watch', x: 680, y: 60 }
+          { type: 'Output.Watch', x: 680, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'x'],
@@ -192,7 +192,7 @@ export const pointNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 0 } },
           { type: 'Point.ByCoordinates', x: 240, y: 60 },
           { type: 'Point.X', x: 460, y: 60 },
-          { type: 'output-watch', x: 660, y: 60 }
+          { type: 'Output.Watch', x: 660, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'x'],
@@ -234,7 +234,7 @@ export const pointNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 0 } },
           { type: 'Point.ByCoordinates', x: 240, y: 60 },
           { type: 'Point.Y', x: 460, y: 60 },
-          { type: 'output-watch', x: 660, y: 60 }
+          { type: 'Output.Watch', x: 660, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'x'],
@@ -276,7 +276,7 @@ export const pointNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 7 } },
           { type: 'Point.ByCoordinates', x: 240, y: 60 },
           { type: 'Point.Z', x: 460, y: 60 },
-          { type: 'output-watch', x: 660, y: 60 }
+          { type: 'Output.Watch', x: 660, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'x'],

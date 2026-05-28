@@ -76,7 +76,7 @@ export const logicNodes = [
           { type: 'Input.Number', x: 220, y: 220, controls: { val: 80 } },
           { type: 'Input.Number', x: 220, y: 290, controls: { val: 120 } },
           { type: 'Logic.If', x: 660, y: 160 },
-          { type: 'output-watch', x: 880, y: 160 }
+          { type: 'Output.Watch', x: 880, y: 160 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -136,7 +136,7 @@ export const logicNodes = [
           { type: 'Input.Number', x: 220, y: 220, controls: { val: 250 } },
           { type: 'Input.Number', x: 220, y: 290, controls: { val: 150 } },
           { type: 'Logic.If', x: 660, y: 140 },
-          { type: 'output-watch', x: 880, y: 140 }
+          { type: 'Output.Watch', x: 880, y: 140 }
         ],
         wires: [
           [0, 'value', 4, 'a'],
@@ -194,7 +194,7 @@ export const logicNodes = [
           { type: 'Input.Number', x: 220, y: 150, controls: { val: 1 } },
           { type: 'Input.Number', x: 220, y: 220, controls: { val: 0 } },
           { type: 'Logic.If', x: 440, y: 90 },
-          { type: 'output-watch', x: 660, y: 90 }
+          { type: 'Output.Watch', x: 660, y: 90 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -245,7 +245,7 @@ export const logicNodes = [
           { type: 'Input.Number', x: 420, y: 130, controls: { val: 5 } },
           { type: 'Input.Number', x: 420, y: 200, controls: { val: 0 } },
           { type: 'Logic.If', x: 640, y: 80 },
-          { type: 'output-watch', x: 860, y: 80 }
+          { type: 'Output.Watch', x: 860, y: 80 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -304,7 +304,7 @@ export const logicNodes = [
           { type: 'Input.Number', x: 220, y: 130, controls: { val: 80 } },
           { type: 'Input.Number', x: 220, y: 200, controls: { val: 100 } },
           { type: 'Logic.If', x: 440, y: 80 },
-          { type: 'output-watch', x: 640, y: 80 }
+          { type: 'Output.Watch', x: 640, y: 80 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -358,7 +358,7 @@ export const logicNodes = [
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 50 } },
           { type: 'Logic.Compare', x: 220, y: 30, controls: { op: '<' } },
           { type: 'Logic.Gate', x: 420, y: 30 },
-          { type: 'output-watch', x: 640, y: 30 }
+          { type: 'Output.Watch', x: 640, y: 30 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -409,7 +409,7 @@ export const logicNodes = [
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 5.0 } },
           { type: 'Logic.Compare', x: 220, y: 30, controls: { op: '<=' } },
           { type: 'Logic.Gate', x: 420, y: 30 },
-          { type: 'output-watch', x: 640, y: 30 }
+          { type: 'Output.Watch', x: 640, y: 30 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -452,7 +452,7 @@ export const logicNodes = [
           { type: 'Logic.IsNull', x: 220, y: 0 },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 20 } },
           { type: 'Logic.If', x: 420, y: 30 },
-          { type: 'output-watch', x: 640, y: 30 }
+          { type: 'Output.Watch', x: 640, y: 30 }
         ],
         wires: [
           [0, 'value', 1, 'value'],

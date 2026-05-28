@@ -905,11 +905,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-      // ── Output ──
-
-      case 'output-watch': case 'output-display': case 'output-log':
-
-        return getInput('value');
+      // Output nodes migrated to src/nodes/categories/output.js.
 
 
 

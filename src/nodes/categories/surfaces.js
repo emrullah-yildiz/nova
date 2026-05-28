@@ -63,7 +63,7 @@ export const surfacesNodes = [
           { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 0, y: 1, z: 0 } },
           { type: 'List.Create', x: 240, y: 90 },
           { type: 'Surface.ByPatch', x: 460, y: 90 },
-          { type: 'output-watch', x: 660, y: 90 }
+          { type: 'Output.Watch', x: 660, y: 90 }
         ],
         wires: [
           [0, 'point', 4, 'item0'],
@@ -135,7 +135,7 @@ export const surfacesNodes = [
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 200 },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 300 },
           { type: 'Surface.ByCoonsPatch', x: 480, y: 150 },
-          { type: 'output-watch', x: 720, y: 150 }
+          { type: 'Output.Watch', x: 720, y: 150 }
         ],
         wires: [
           [0, 'point', 4, 'startPoint'],
@@ -204,7 +204,7 @@ export const surfacesNodes = [
           { type: 'Input.Integer', x: 240, y: 290 },
           { type: 'Input.Integer', x: 240, y: 360 },
           { type: 'Surface.ByNurbsControlPoints', x: 680, y: 150 },
-          { type: 'output-watch', x: 900, y: 150 }
+          { type: 'Output.Watch', x: 900, y: 150 }
         ],
         wires: [
           [0, 'point', 4, 'item0'],
@@ -267,7 +267,7 @@ export const surfacesNodes = [
           { type: 'Input.Integer', x: 0, y: 290, controls: { val: 2 } },
           { type: 'Input.Integer', x: 0, y: 360, controls: { val: 2 } },
           { type: 'Surface.ByPointGrid', x: 460, y: 150 },
-          { type: 'output-watch', x: 680, y: 150 }
+          { type: 'Output.Watch', x: 680, y: 150 }
         ],
         wires: [
           [0, 'point', 4, 'item0'],
@@ -323,7 +323,7 @@ export const surfacesNodes = [
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 170 },
           { type: 'Surface.ByRuledLoft', x: 480, y: 100 },
-          { type: 'output-watch', x: 700, y: 100 }
+          { type: 'Output.Watch', x: 700, y: 100 }
         ],
         wires: [
           [0, 'point', 4, 'startPoint'],
@@ -377,7 +377,7 @@ export const surfacesNodes = [
           { type: 'Input.Number', x: 0, y: 300, controls: { val: 1 } },
           { type: 'Vector.ByCoordinates', x: 240, y: 230 },
           { type: 'Surface.ByCurveExtrude', x: 480, y: 120 },
-          { type: 'output-watch', x: 720, y: 120 }
+          { type: 'Output.Watch', x: 720, y: 120 }
         ],
         wires: [
           [0, 'point', 2, 'center'],
@@ -441,7 +441,7 @@ export const surfacesNodes = [
           { type: 'Input.Integer', x: 460, y: 290, controls: { val: 10 } },
           { type: 'Surface.Isolines', x: 700, y: 200 },
           { type: 'List.Count', x: 920, y: 200 },
-          { type: 'output-watch', x: 1120, y: 200 }
+          { type: 'Output.Watch', x: 1120, y: 200 }
         ],
         wires: [
           [0, 'point', 4, 'item0'],

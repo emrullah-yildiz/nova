@@ -66,7 +66,7 @@ export const planeNodes = [
           { type: 'Plane.ByOriginNormal', x: 460, y: 70 },
           { type: 'Plane.Normal', x: 660, y: 70 },
           { type: 'Vector.Deconstruct', x: 860, y: 70 },
-          { type: 'output-watch', x: 1080, y: 70 }
+          { type: 'Output.Watch', x: 1080, y: 70 }
         ],
         wires: [
           [0, 'point', 5, 'origin'],
@@ -127,7 +127,7 @@ export const planeNodes = [
           { type: 'Plane.ByThreePoints', x: 280, y: 60 },
           { type: 'Plane.Normal', x: 500, y: 60 },
           { type: 'Vector.Deconstruct', x: 700, y: 60 },
-          { type: 'output-watch', x: 920, y: 60 }
+          { type: 'Output.Watch', x: 920, y: 60 }
         ],
         wires: [
           [0, 'point', 3, 'a'],
@@ -168,7 +168,7 @@ export const planeNodes = [
           { type: 'Plane.XY', x: 0, y: 0 },
           { type: 'Plane.Normal', x: 220, y: 0 },
           { type: 'Vector.Deconstruct', x: 420, y: 0 },
-          { type: 'output-watch', x: 640, y: 0 }
+          { type: 'Output.Watch', x: 640, y: 0 }
         ],
         wires: [
           [0, 'plane', 1, 'plane'],
@@ -206,7 +206,7 @@ export const planeNodes = [
           { type: 'Plane.XZ', x: 0, y: 0 },
           { type: 'Plane.Normal', x: 220, y: 0 },
           { type: 'Vector.Deconstruct', x: 420, y: 0 },
-          { type: 'output-watch', x: 640, y: 0 }
+          { type: 'Output.Watch', x: 640, y: 0 }
         ],
         wires: [
           [0, 'plane', 1, 'plane'],
@@ -244,7 +244,7 @@ export const planeNodes = [
           { type: 'Plane.YZ', x: 0, y: 0 },
           { type: 'Plane.Normal', x: 220, y: 0 },
           { type: 'Vector.Deconstruct', x: 420, y: 0 },
-          { type: 'output-watch', x: 640, y: 0 }
+          { type: 'Output.Watch', x: 640, y: 0 }
         ],
         wires: [
           [0, 'plane', 1, 'plane'],
@@ -284,7 +284,7 @@ export const planeNodes = [
           { type: 'Plane.XY', x: 0, y: 0 },
           { type: 'Plane.Origin', x: 220, y: 0 },
           { type: 'Point.Deconstruct', x: 420, y: 0 },
-          { type: 'output-watch', x: 640, y: 0 }
+          { type: 'Output.Watch', x: 640, y: 0 }
         ],
         wires: [
           [0, 'plane', 1, 'plane'],
@@ -322,7 +322,7 @@ export const planeNodes = [
           { type: 'Plane.XY', x: 0, y: 0 },
           { type: 'Plane.Normal', x: 220, y: 0 },
           { type: 'Vector.Length', x: 420, y: 0 },
-          { type: 'output-watch', x: 620, y: 0 }
+          { type: 'Output.Watch', x: 620, y: 0 }
         ],
         wires: [
           [0, 'plane', 1, 'plane'],
@@ -360,7 +360,7 @@ export const planeNodes = [
           { type: 'Plane.XY', x: 0, y: 0 },
           { type: 'Plane.XAxis', x: 220, y: 0 },
           { type: 'Vector.Length', x: 420, y: 0 },
-          { type: 'output-watch', x: 620, y: 0 }
+          { type: 'Output.Watch', x: 620, y: 0 }
         ],
         wires: [
           [0, 'plane', 1, 'plane'],
@@ -398,7 +398,7 @@ export const planeNodes = [
           { type: 'Plane.XY', x: 0, y: 0 },
           { type: 'Plane.YAxis', x: 220, y: 0 },
           { type: 'Vector.Length', x: 420, y: 0 },
-          { type: 'output-watch', x: 620, y: 0 }
+          { type: 'Output.Watch', x: 620, y: 0 }
         ],
         wires: [
           [0, 'plane', 1, 'plane'],

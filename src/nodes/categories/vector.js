@@ -66,7 +66,7 @@ export const vectorNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 0 } },
           { type: 'Vector.ByCoordinates', x: 240, y: 60 },
           { type: 'Vector.Length', x: 460, y: 60 },
-          { type: 'output-watch', x: 660, y: 60 }
+          { type: 'Output.Watch', x: 660, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'x'],
@@ -115,7 +115,7 @@ export const vectorNodes = [
           { type: 'Point.ByCoordinates', x: 0, y: 80, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Vector.ByStartPointEndPoint', x: 280, y: 30 },
           { type: 'Vector.Length', x: 500, y: 30 },
-          { type: 'output-watch', x: 700, y: 30 }
+          { type: 'Output.Watch', x: 700, y: 30 }
         ],
         wires: [
           [0, 'point', 2, 'startPoint'],
@@ -159,7 +159,7 @@ export const vectorNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 0 } },
           { type: 'Vector.ByCoordinates', x: 240, y: 60 },
           { type: 'Vector.Length', x: 460, y: 60 },
-          { type: 'output-watch', x: 660, y: 60 }
+          { type: 'Output.Watch', x: 660, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'x'],
@@ -212,7 +212,7 @@ export const vectorNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 0 } },
           { type: 'Vector.ByCoordinates', x: 240, y: 60 },
           { type: 'Vector.Deconstruct', x: 460, y: 60 },
-          { type: 'output-watch', x: 680, y: 60 }
+          { type: 'Output.Watch', x: 680, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'x'],
@@ -270,7 +270,7 @@ export const vectorNodes = [
           { type: 'Input.Number', x: 0, y: 370, controls: { val: 0 } },
           { type: 'Vector.ByCoordinates', x: 240, y: 290 },
           { type: 'Vector.AngleBetween', x: 460, y: 180 },
-          { type: 'output-watch', x: 680, y: 180 }
+          { type: 'Output.Watch', x: 680, y: 180 }
         ],
         wires: [
           [0, 'value', 3, 'x'],
@@ -319,7 +319,7 @@ export const vectorNodes = [
           { type: 'Vector.ByCoordinates', x: 240, y: 60 },
           { type: 'Vector.Normalized', x: 460, y: 60 },
           { type: 'Vector.Length', x: 660, y: 60 },
-          { type: 'output-watch', x: 860, y: 60 }
+          { type: 'Output.Watch', x: 860, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'x'],
@@ -363,7 +363,7 @@ export const vectorNodes = [
           { type: 'Vector.ByCoordinates', x: 240, y: 60 },
           { type: 'Vector.Reverse', x: 460, y: 60 },
           { type: 'Vector.Length', x: 660, y: 60 },
-          { type: 'output-watch', x: 860, y: 60 }
+          { type: 'Output.Watch', x: 860, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'x'],
@@ -419,7 +419,7 @@ export const vectorNodes = [
           { type: 'Vector.ByCoordinates', x: 240, y: 290 },
           { type: 'Vector.Add', x: 460, y: 180 },
           { type: 'Vector.Length', x: 660, y: 180 },
-          { type: 'output-watch', x: 860, y: 180 }
+          { type: 'Output.Watch', x: 860, y: 180 }
         ],
         wires: [
           [0, 'value', 3, 'x'],
@@ -479,7 +479,7 @@ export const vectorNodes = [
           { type: 'Vector.ByCoordinates', x: 240, y: 290 },
           { type: 'Vector.Subtract', x: 460, y: 180 },
           { type: 'Vector.Length', x: 660, y: 180 },
-          { type: 'output-watch', x: 860, y: 180 }
+          { type: 'Output.Watch', x: 860, y: 180 }
         ],
         wires: [
           [0, 'value', 3, 'x'],
@@ -534,7 +534,7 @@ export const vectorNodes = [
           { type: 'Input.Number', x: 0, y: 230, controls: { val: 2 } },
           { type: 'Vector.Scale', x: 460, y: 120 },
           { type: 'Vector.Length', x: 680, y: 120 },
-          { type: 'output-watch', x: 880, y: 120 }
+          { type: 'Output.Watch', x: 880, y: 120 }
         ],
         wires: [
           [0, 'value', 3, 'x'],
@@ -584,7 +584,7 @@ export const vectorNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 0 } },
           { type: 'Vector.ByCoordinates', x: 240, y: 60 },
           { type: 'Vector.Dot', x: 460, y: 60 },
-          { type: 'output-watch', x: 660, y: 60 }
+          { type: 'Output.Watch', x: 660, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'x'],
@@ -638,7 +638,7 @@ export const vectorNodes = [
           { type: 'Vector.ByCoordinates', x: 240, y: 290 },
           { type: 'Vector.Cross', x: 460, y: 180 },
           { type: 'Vector.Length', x: 660, y: 180 },
-          { type: 'output-watch', x: 860, y: 180 }
+          { type: 'Output.Watch', x: 860, y: 180 }
         ],
         wires: [
           [0, 'value', 3, 'x'],

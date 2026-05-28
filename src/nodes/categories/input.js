@@ -51,7 +51,7 @@ export const inputNodes = [
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 100 } },
           { type: 'Input.Number', x: 0, y: 150, controls: { val: 0 } },
           { type: 'Logic.If', x: 240, y: 60 },
-          { type: 'output-watch', x: 460, y: 60 }
+          { type: 'Output.Watch', x: 460, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'condition'],
@@ -94,7 +94,7 @@ export const inputNodes = [
           { type: 'Input.Integer', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 240, y: 60 },
           { type: 'List.Sum', x: 460, y: 60 },
-          { type: 'output-watch', x: 660, y: 60 }
+          { type: 'Output.Watch', x: 660, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -137,7 +137,7 @@ export const inputNodes = [
           { type: 'Input.Number', x: 0, y: 70, controls: { val: 4.5 } },
           { type: 'List.Create', x: 240, y: 30 },
           { type: 'List.Sum', x: 460, y: 30 },
-          { type: 'output-watch', x: 660, y: 30 }
+          { type: 'Output.Watch', x: 660, y: 30 }
         ],
         wires: [
           [0, 'value', 2, 'item0'],
@@ -184,7 +184,7 @@ export const inputNodes = [
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 10 } },
           { type: 'Logic.Compare', x: 240, y: 30, controls: { op: '>' } },
           { type: 'Logic.Gate', x: 460, y: 30 },
-          { type: 'output-watch', x: 680, y: 30 }
+          { type: 'Output.Watch', x: 680, y: 30 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -227,7 +227,7 @@ export const inputNodes = [
           { type: 'Input.Integer', x: 0, y: 80, controls: { val: 3 } },
           { type: 'List.Repeat', x: 240, y: 30 },
           { type: 'List.Count', x: 460, y: 30 },
-          { type: 'output-watch', x: 660, y: 30 }
+          { type: 'Output.Watch', x: 660, y: 30 }
         ],
         wires: [
           [0, 'value', 2, 'item'],

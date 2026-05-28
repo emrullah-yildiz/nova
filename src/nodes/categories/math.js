@@ -54,7 +54,7 @@ export const mathNodes = [
         nodes: [
           { type: 'Input.Number', x: 0, y: 0, controls: { val: -7 } },
           { type: 'Math.Absolute', x: 240, y: 0 },
-          { type: 'output-watch', x: 460, y: 0 }
+          { type: 'Output.Watch', x: 460, y: 0 }
         ],
         wires: [
           [0, 'value', 1, 'a'],
@@ -101,7 +101,7 @@ export const mathNodes = [
           { type: 'Input.Number', x: 0, y: 0, controls: { val: 100 } },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 50 } },
           { type: 'Math.Add', x: 240, y: 30 },
-          { type: 'output-watch', x: 460, y: 30 }
+          { type: 'Output.Watch', x: 460, y: 30 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -139,7 +139,7 @@ export const mathNodes = [
         nodes: [
           { type: 'Input.Number', x: 0, y: 0, controls: { val: 2.3 } },
           { type: 'Math.Ceiling', x: 240, y: 0 },
-          { type: 'output-watch', x: 460, y: 0 }
+          { type: 'Output.Watch', x: 460, y: 0 }
         ],
         wires: [
           [0, 'value', 1, 'a'],
@@ -183,7 +183,7 @@ export const mathNodes = [
         nodes: [
           { type: 'Input.Number', x: 0, y: 0, controls: { val: 175 } },
           { type: 'Math.Clamp', x: 240, y: 0, controls: { min: 0, max: 100 } },
-          { type: 'output-watch', x: 460, y: 0 }
+          { type: 'Output.Watch', x: 460, y: 0 }
         ],
         wires: [
           [0, 'value', 1, 'value'],
@@ -232,7 +232,7 @@ export const mathNodes = [
           { type: 'Input.Number', x: 0, y: 0, controls: { val: 100 } },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 4 } },
           { type: 'Math.Divide', x: 240, y: 30 },
-          { type: 'output-watch', x: 460, y: 30 }
+          { type: 'Output.Watch', x: 460, y: 30 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -270,7 +270,7 @@ export const mathNodes = [
         nodes: [
           { type: 'Input.Number', x: 0, y: 0, controls: { val: 2.7 } },
           { type: 'Math.Floor', x: 240, y: 0 },
-          { type: 'output-watch', x: 460, y: 0 }
+          { type: 'Output.Watch', x: 460, y: 0 }
         ],
         wires: [
           [0, 'value', 1, 'a'],
@@ -314,7 +314,7 @@ export const mathNodes = [
           { type: 'Input.Number', x: 0, y: 0, controls: { val: 10 } },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 5 } },
           { type: 'Math.Max', x: 240, y: 30 },
-          { type: 'output-watch', x: 460, y: 30 }
+          { type: 'Output.Watch', x: 460, y: 30 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -359,7 +359,7 @@ export const mathNodes = [
           { type: 'Input.Number', x: 0, y: 0, controls: { val: 10 } },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 5 } },
           { type: 'Math.Min', x: 240, y: 30 },
-          { type: 'output-watch', x: 460, y: 30 }
+          { type: 'Output.Watch', x: 460, y: 30 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -409,7 +409,7 @@ export const mathNodes = [
           { type: 'Input.Number', x: 0, y: 0, controls: { val: 7 } },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 3 } },
           { type: 'Math.Modulo', x: 240, y: 30 },
-          { type: 'output-watch', x: 460, y: 30 }
+          { type: 'Output.Watch', x: 460, y: 30 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -457,7 +457,7 @@ export const mathNodes = [
           { type: 'Input.Number', x: 0, y: 0, controls: { val: 10 } },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 5 } },
           { type: 'Math.Multiply', x: 240, y: 30 },
-          { type: 'output-watch', x: 460, y: 30 }
+          { type: 'Output.Watch', x: 460, y: 30 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -495,7 +495,7 @@ export const mathNodes = [
         nodes: [
           { type: 'Input.Number', x: 0, y: 0, controls: { val: 10 } },
           { type: 'Math.Negate', x: 240, y: 0 },
-          { type: 'output-watch', x: 460, y: 0 }
+          { type: 'Output.Watch', x: 460, y: 0 }
         ],
         wires: [
           [0, 'value', 1, 'a'],
@@ -542,7 +542,7 @@ export const mathNodes = [
           { type: 'Input.Number', x: 0, y: 0, controls: { val: 5 } },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 2 } },
           { type: 'Math.Power', x: 240, y: 30 },
-          { type: 'output-watch', x: 460, y: 30 }
+          { type: 'Output.Watch', x: 460, y: 30 }
         ],
         wires: [
           [0, 'value', 2, 'base'],
@@ -581,7 +581,7 @@ export const mathNodes = [
         nodes: [
           { type: 'Input.Number', x: 0, y: 0, controls: { val: 4 } },
           { type: 'Math.Reciprocal', x: 240, y: 0 },
-          { type: 'output-watch', x: 460, y: 0 }
+          { type: 'Output.Watch', x: 460, y: 0 }
         ],
         wires: [
           [0, 'value', 1, 'a'],
@@ -634,7 +634,7 @@ export const mathNodes = [
         nodes: [
           { type: 'Input.Number', x: 0, y: 0, controls: { val: 5 } },
           { type: 'Math.Remap', x: 240, y: 0, controls: { fromMin: '0', fromMax: '10', toMin: '0', toMax: '100' } },
-          { type: 'output-watch', x: 460, y: 0 }
+          { type: 'Output.Watch', x: 460, y: 0 }
         ],
         wires: [
           [0, 'value', 1, 'value'],
@@ -675,7 +675,7 @@ export const mathNodes = [
         nodes: [
           { type: 'Input.Number', x: 0, y: 0, controls: { val: 3.14159 } },
           { type: 'Math.Round', x: 240, y: 0, controls: { digits: 2 } },
-          { type: 'output-watch', x: 460, y: 0 }
+          { type: 'Output.Watch', x: 460, y: 0 }
         ],
         wires: [
           [0, 'value', 1, 'a'],
@@ -722,7 +722,7 @@ export const mathNodes = [
           { type: 'Input.Number', x: 0, y: 0, controls: { val: 100 } },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 30 } },
           { type: 'Math.Subtract', x: 240, y: 30 },
-          { type: 'output-watch', x: 460, y: 30 }
+          { type: 'Output.Watch', x: 460, y: 30 }
         ],
         wires: [
           [0, 'value', 2, 'a'],

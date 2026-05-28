@@ -109,7 +109,7 @@ export const curvesNodes = [
           { type: 'Input.Number', x: 0, y: 220, controls: { val: 90 } },
           { type: 'Arc.ByCenterRadiusAngles', x: 240, y: 110 },
           { type: 'Curve.Length', x: 460, y: 110 },
-          { type: 'output-watch', x: 660, y: 110 }
+          { type: 'Output.Watch', x: 660, y: 110 }
         ],
         wires: [
           [0, 'point', 4, 'center'],
@@ -157,7 +157,7 @@ export const curvesNodes = [
           { type: 'List.Create', x: 240, y: 90 },
           { type: 'Bezier.ByControlPoints', x: 460, y: 90 },
           { type: 'Curve.Length', x: 680, y: 90 },
-          { type: 'output-watch', x: 880, y: 90 }
+          { type: 'Output.Watch', x: 880, y: 90 }
         ],
         wires: [
           [0, 'point', 4, 'item0'],
@@ -212,7 +212,7 @@ export const curvesNodes = [
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 10 } },
           { type: 'Circle.ByCenterRadius', x: 240, y: 30 },
           { type: 'Curve.Length', x: 460, y: 30 },
-          { type: 'output-watch', x: 660, y: 30 }
+          { type: 'Output.Watch', x: 660, y: 30 }
         ],
         wires: [
           [0, 'point', 2, 'center'],
@@ -269,7 +269,7 @@ export const curvesNodes = [
           { type: 'Input.Number', x: 0, y: 150, controls: { val: 24 } },
           { type: 'Circle.ByCenterRadiusResolution', x: 240, y: 70 },
           { type: 'List.Count', x: 480, y: 70 },
-          { type: 'output-watch', x: 680, y: 70 }
+          { type: 'Output.Watch', x: 680, y: 70 }
         ],
         wires: [
           [0, 'point', 3, 'center'],
@@ -312,7 +312,7 @@ export const curvesNodes = [
           { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Curve.ChordDirection', x: 460, y: 30 },
-          { type: 'output-watch', x: 680, y: 30 }
+          { type: 'Output.Watch', x: 680, y: 30 }
         ],
         wires: [
           [0, 'point', 2, 'startPoint'],
@@ -371,7 +371,7 @@ export const curvesNodes = [
           { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Curve.Deconstruct', x: 460, y: 30 },
-          { type: 'output-watch', x: 680, y: 30 }
+          { type: 'Output.Watch', x: 680, y: 30 }
         ],
         wires: [
           [0, 'point', 2, 'startPoint'],
@@ -411,7 +411,7 @@ export const curvesNodes = [
           { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Curve.EndPoint', x: 460, y: 30 },
-          { type: 'output-watch', x: 660, y: 30 }
+          { type: 'Output.Watch', x: 660, y: 30 }
         ],
         wires: [
           [0, 'point', 2, 'startPoint'],
@@ -451,7 +451,7 @@ export const curvesNodes = [
           { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Curve.Length', x: 460, y: 30 },
-          { type: 'output-watch', x: 660, y: 30 }
+          { type: 'Output.Watch', x: 660, y: 30 }
         ],
         wires: [
           [0, 'point', 2, 'startPoint'],
@@ -491,7 +491,7 @@ export const curvesNodes = [
           { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Curve.StartPoint', x: 460, y: 30 },
-          { type: 'output-watch', x: 660, y: 30 }
+          { type: 'Output.Watch', x: 660, y: 30 }
         ],
         wires: [
           [0, 'point', 2, 'startPoint'],
@@ -538,7 +538,7 @@ export const curvesNodes = [
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Input.Number', x: 240, y: 150, controls: { val: 0.5 } },
           { type: 'Curve.TangentAtPoint', x: 460, y: 80 },
-          { type: 'output-watch', x: 680, y: 80 }
+          { type: 'Output.Watch', x: 680, y: 80 }
         ],
         wires: [
           [0, 'point', 2, 'startPoint'],
@@ -610,7 +610,7 @@ export const curvesNodes = [
           { type: 'Input.Number', x: 0, y: 290, controls: { val: 24 } },
           { type: 'Ellipse.ByCenterWidthDepth', x: 240, y: 150 },
           { type: 'List.Count', x: 480, y: 150 },
-          { type: 'output-watch', x: 680, y: 150 }
+          { type: 'Output.Watch', x: 680, y: 150 }
         ],
         wires: [
           [0, 'point', 5, 'center'],
@@ -669,7 +669,7 @@ export const curvesNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 5 } },
           { type: 'Line.ByPointAndDirection', x: 240, y: 60 },
           { type: 'Curve.Length', x: 460, y: 60 },
-          { type: 'output-watch', x: 660, y: 60 }
+          { type: 'Output.Watch', x: 660, y: 60 }
         ],
         wires: [
           [0, 'point', 3, 'origin'],
@@ -716,7 +716,7 @@ export const curvesNodes = [
           { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
           { type: 'Curve.Length', x: 460, y: 30 },
-          { type: 'output-watch', x: 660, y: 30 }
+          { type: 'Output.Watch', x: 660, y: 30 }
         ],
         wires: [
           [0, 'point', 2, 'startPoint'],
@@ -770,7 +770,7 @@ export const curvesNodes = [
           { type: 'Input.Number', x: 240, y: 210, controls: { val: 3 } },
           { type: 'NURBS.ByControlPoints', x: 460, y: 140 },
           { type: 'Curve.Length', x: 680, y: 140 },
-          { type: 'output-watch', x: 880, y: 140 }
+          { type: 'Output.Watch', x: 880, y: 140 }
         ],
         wires: [
           [0, 'point', 4, 'item0'],
@@ -826,7 +826,7 @@ export const curvesNodes = [
           { type: 'Input.Number', x: 240, y: 210, controls: { val: 3 } },
           { type: 'NURBS.Interpolate', x: 460, y: 140 },
           { type: 'Curve.Length', x: 680, y: 140 },
-          { type: 'output-watch', x: 880, y: 140 }
+          { type: 'Output.Watch', x: 880, y: 140 }
         ],
         wires: [
           [0, 'point', 4, 'item0'],
@@ -884,7 +884,7 @@ export const curvesNodes = [
           { type: 'Input.Boolean', x: 240, y: 210, controls: { val: 'True' } },
           { type: 'Polyline.ByPoints', x: 460, y: 140 },
           { type: 'Curve.Length', x: 680, y: 140 },
-          { type: 'output-watch', x: 880, y: 140 }
+          { type: 'Output.Watch', x: 880, y: 140 }
         ],
         wires: [
           [0, 'point', 4, 'item0'],
@@ -949,7 +949,7 @@ export const curvesNodes = [
           { type: 'Input.Number', x: 0, y: 150, controls: { val: 6 } },
           { type: 'Rectangle.ByCenterWidthDepth', x: 240, y: 70 },
           { type: 'List.Count', x: 480, y: 70 },
-          { type: 'output-watch', x: 680, y: 70 }
+          { type: 'Output.Watch', x: 680, y: 70 }
         ],
         wires: [
           [0, 'point', 3, 'center'],
@@ -1006,7 +1006,7 @@ export const curvesNodes = [
           { type: 'Input.Number', x: 240, y: 310, controls: { val: 0.5 } },
           { type: 'Utilities.Blend', x: 460, y: 100 },
           { type: 'Curve.Length', x: 680, y: 100 },
-          { type: 'output-watch', x: 880, y: 100 }
+          { type: 'Output.Watch', x: 880, y: 100 }
         ],
         wires: [
           [0, 'point', 2, 'startPoint'],
@@ -1055,7 +1055,7 @@ export const curvesNodes = [
           { type: 'List.Create', x: 240, y: 90 },
           { type: 'Utilities.Interpolate', x: 460, y: 90 },
           { type: 'Curve.Length', x: 680, y: 90 },
-          { type: 'output-watch', x: 880, y: 90 }
+          { type: 'Output.Watch', x: 880, y: 90 }
         ],
         wires: [
           [0, 'point', 4, 'item0'],
@@ -1112,7 +1112,7 @@ export const curvesNodes = [
           { type: 'Input.Number', x: 240, y: 310, controls: { val: 5 } },
           { type: 'Utilities.Tween', x: 460, y: 100 },
           { type: 'List.Count', x: 680, y: 100 },
-          { type: 'output-watch', x: 880, y: 100 }
+          { type: 'Output.Watch', x: 880, y: 100 }
         ],
         wires: [
           [0, 'point', 2, 'startPoint'],

@@ -84,7 +84,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 0, y: 70, controls: { val: 20 } },
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 30 } },
           { type: 'List.Create', x: 220, y: 60 },
-          { type: 'output-watch', x: 460, y: 60 }
+          { type: 'Output.Watch', x: 460, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'item0'],
@@ -125,7 +125,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Count', x: 440, y: 60 },
-          { type: 'output-watch', x: 640, y: 60 }
+          { type: 'Output.Watch', x: 640, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -168,7 +168,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.First', x: 440, y: 60 },
-          { type: 'output-watch', x: 640, y: 60 }
+          { type: 'Output.Watch', x: 640, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -211,7 +211,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Last', x: 440, y: 60 },
-          { type: 'output-watch', x: 640, y: 60 }
+          { type: 'Output.Watch', x: 640, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -262,7 +262,7 @@ export const listNodes = [
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'Input.Number', x: 220, y: 150, controls: { val: 2 } },
           { type: 'List.GetItem', x: 440, y: 90 },
-          { type: 'output-watch', x: 640, y: 90 }
+          { type: 'Output.Watch', x: 640, y: 90 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -317,7 +317,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 2 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Sum', x: 440, y: 60 },
-          { type: 'output-watch', x: 640, y: 60 }
+          { type: 'Output.Watch', x: 640, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -374,7 +374,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 5 } },
           { type: 'List.Sequence', x: 220, y: 60 },
           { type: 'List.Sum', x: 440, y: 60 },
-          { type: 'output-watch', x: 640, y: 60 }
+          { type: 'Output.Watch', x: 640, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -422,7 +422,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 0, y: 70, controls: { val: 5 } },
           { type: 'List.Repeat', x: 220, y: 30 },
           { type: 'List.Count', x: 440, y: 30 },
-          { type: 'output-watch', x: 640, y: 30 }
+          { type: 'Output.Watch', x: 640, y: 30 }
         ],
         wires: [
           [0, 'value', 2, 'item'],
@@ -464,7 +464,7 @@ export const listNodes = [
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Reverse', x: 440, y: 60 },
           { type: 'List.First', x: 640, y: 60 },
-          { type: 'output-watch', x: 840, y: 60 }
+          { type: 'Output.Watch', x: 840, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -510,7 +510,7 @@ export const listNodes = [
           { type: 'List.Create', x: 440, y: 90 },
           { type: 'List.Flatten', x: 660, y: 90 },
           { type: 'List.Count', x: 860, y: 90 },
-          { type: 'output-watch', x: 1060, y: 90 }
+          { type: 'Output.Watch', x: 1060, y: 90 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -566,7 +566,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 220, y: 160, controls: { val: 3 } },
           { type: 'List.Take', x: 440, y: 90 },
           { type: 'List.Sum', x: 640, y: 90 },
-          { type: 'output-watch', x: 840, y: 90 }
+          { type: 'Output.Watch', x: 840, y: 90 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -618,7 +618,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 220, y: 160, controls: { val: 2 } },
           { type: 'List.Skip', x: 440, y: 90 },
           { type: 'List.Sum', x: 640, y: 90 },
-          { type: 'output-watch', x: 840, y: 90 }
+          { type: 'Output.Watch', x: 840, y: 90 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -676,7 +676,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 220, y: 230, controls: { val: 5 } },
           { type: 'List.Slice', x: 440, y: 120 },
           { type: 'List.Sum', x: 640, y: 120 },
-          { type: 'output-watch', x: 840, y: 120 }
+          { type: 'Output.Watch', x: 840, y: 120 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -734,7 +734,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 220, y: 230, controls: { val: 0 } },
           { type: 'List.Insert', x: 440, y: 120 },
           { type: 'List.First', x: 640, y: 120 },
-          { type: 'output-watch', x: 840, y: 120 }
+          { type: 'Output.Watch', x: 840, y: 120 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -798,7 +798,7 @@ export const listNodes = [
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'Input.Number', x: 220, y: 160, controls: { val: 2 } },
           { type: 'List.Remove', x: 440, y: 90 },
-          { type: 'output-watch', x: 640, y: 90 }
+          { type: 'Output.Watch', x: 640, y: 90 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -852,7 +852,7 @@ export const listNodes = [
           { type: 'List.Range', x: 220, y: 260 },
           { type: 'List.Join', x: 460, y: 150 },
           { type: 'List.Count', x: 680, y: 150 },
-          { type: 'output-watch', x: 880, y: 150 }
+          { type: 'Output.Watch', x: 880, y: 150 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -917,7 +917,7 @@ export const listNodes = [
           { type: 'List.Range', x: 220, y: 260 },
           { type: 'List.Zip', x: 460, y: 150 },
           { type: 'List.Count', x: 680, y: 150 },
-          { type: 'output-watch', x: 880, y: 150 }
+          { type: 'Output.Watch', x: 880, y: 150 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -989,7 +989,7 @@ export const listNodes = [
           { type: 'List.Range', x: 220, y: 260 },
           { type: 'List.CrossReference', x: 460, y: 150 },
           { type: 'List.Count', x: 680, y: 150 },
-          { type: 'output-watch', x: 880, y: 150 }
+          { type: 'Output.Watch', x: 880, y: 150 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -1060,7 +1060,7 @@ export const listNodes = [
           { type: 'List.Create', x: 220, y: 280 },
           { type: 'List.FilterByBoolean', x: 460, y: 170 },
           { type: 'List.Count', x: 680, y: 170 },
-          { type: 'output-watch', x: 880, y: 170 }
+          { type: 'Output.Watch', x: 880, y: 170 }
         ],
         wires: [
           [0, 'value', 3, 'item0'],
@@ -1107,7 +1107,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Sum', x: 440, y: 60 },
-          { type: 'output-watch', x: 640, y: 60 }
+          { type: 'Output.Watch', x: 640, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -1150,7 +1150,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Average', x: 440, y: 60 },
-          { type: 'output-watch', x: 640, y: 60 }
+          { type: 'Output.Watch', x: 640, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -1193,7 +1193,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Min', x: 440, y: 60 },
-          { type: 'output-watch', x: 640, y: 60 }
+          { type: 'Output.Watch', x: 640, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -1236,7 +1236,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Max', x: 440, y: 60 },
-          { type: 'output-watch', x: 640, y: 60 }
+          { type: 'Output.Watch', x: 640, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -1285,7 +1285,7 @@ export const listNodes = [
           { type: 'List.Create', x: 220, y: 60 },
           { type: 'List.Sort', x: 440, y: 60 },
           { type: 'List.First', x: 640, y: 60 },
-          { type: 'output-watch', x: 840, y: 60 }
+          { type: 'Output.Watch', x: 840, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'item0'],
@@ -1346,7 +1346,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 220, y: 160, controls: { val: 42 } },
           { type: 'List.Shuffle', x: 440, y: 90 },
           { type: 'List.First', x: 640, y: 90 },
-          { type: 'output-watch', x: 840, y: 90 }
+          { type: 'Output.Watch', x: 840, y: 90 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -1393,7 +1393,7 @@ export const listNodes = [
           { type: 'List.Create', x: 220, y: 140 },
           { type: 'List.Unique', x: 440, y: 140 },
           { type: 'List.Count', x: 640, y: 140 },
-          { type: 'output-watch', x: 840, y: 140 }
+          { type: 'Output.Watch', x: 840, y: 140 }
         ],
         wires: [
           [0, 'value', 5, 'item0'],
@@ -1452,7 +1452,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 220, y: 160, controls: { val: 2 } },
           { type: 'List.Chunk', x: 440, y: 90 },
           { type: 'List.Count', x: 640, y: 90 },
-          { type: 'output-watch', x: 840, y: 90 }
+          { type: 'Output.Watch', x: 840, y: 90 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -1505,7 +1505,7 @@ export const listNodes = [
           { type: 'List.Create', x: 440, y: 90 },
           { type: 'List.Transpose', x: 660, y: 90 },
           { type: 'List.Count', x: 860, y: 90 },
-          { type: 'output-watch', x: 1060, y: 90 }
+          { type: 'Output.Watch', x: 1060, y: 90 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -1555,7 +1555,7 @@ export const listNodes = [
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Pairs', x: 440, y: 60 },
           { type: 'List.Count', x: 640, y: 60 },
-          { type: 'output-watch', x: 840, y: 60 }
+          { type: 'Output.Watch', x: 840, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -1605,7 +1605,7 @@ export const listNodes = [
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'Input.Number', x: 220, y: 160, controls: { val: 3 } },
           { type: 'List.IndexOf', x: 440, y: 90 },
-          { type: 'output-watch', x: 640, y: 90 }
+          { type: 'Output.Watch', x: 640, y: 90 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -1658,7 +1658,7 @@ export const listNodes = [
           { type: 'Input.Number', x: 440, y: 200, controls: { val: 1 } },
           { type: 'Input.Number', x: 440, y: 270, controls: { val: 0 } },
           { type: 'Logic.If', x: 660, y: 150 },
-          { type: 'output-watch', x: 860, y: 150 }
+          { type: 'Output.Watch', x: 860, y: 150 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -1706,7 +1706,7 @@ export const listNodes = [
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Map', x: 440, y: 60, controls: { code: 'x * 2' } },
           { type: 'List.Sum', x: 640, y: 60 },
-          { type: 'output-watch', x: 840, y: 60 }
+          { type: 'Output.Watch', x: 840, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
@@ -1775,7 +1775,7 @@ export const listNodes = [
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.GroupBy', x: 440, y: 60, controls: { expr: 'x % 3' } },
           { type: 'List.Count', x: 660, y: 60 },
-          { type: 'output-watch', x: 860, y: 60 }
+          { type: 'Output.Watch', x: 860, y: 60 }
         ],
         wires: [
           [0, 'value', 3, 'start'],
