@@ -109,6 +109,7 @@ docker run --rm -p 8787:8787 \
 | Variable | Required | Default | Purpose |
 |----------|----------|---------|---------|
 | `NOVA_DATABASE_URL` | Production | — | PostgreSQL connection string |
+| `NOVA_REDIS_URL` | Production | — | Redis URL for sessions, connector pairing, and rate limits |
 | `NOVA_SESSION_SECRET` | Yes | — | Long random string for session signing |
 | `NOVA_CORS_ORIGIN` | Yes | `*` | Frontend URL for CORS |
 | `NOVA_ALLOW_DEV_LOGIN` | No | `false` | Set to `true` for local dev only |
@@ -119,6 +120,7 @@ docker run --rm -p 8787:8787 \
 
 - [ ] Database: `npm run migrate` run at deploy time
 - [ ] Database integration check: `NOVA_POSTGRES_INTEGRATION_TESTS=true NOVA_DATABASE_URL=postgres://... npm run test:postgres`
+- [ ] Redis state store configured with `NOVA_REDIS_URL`
 - [ ] `NOVA_ALLOW_DEV_LOGIN` not set or explicitly `false`
 - [ ] `NOVA_SESSION_SECRET` set to a strong random value
 - [ ] `NOVA_CORS_ORIGIN` set to the exact frontend URL

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { hashToken } from './state-store.mjs';
 
 export const ROLES = Object.freeze({
   OWNER: 'Owner',
@@ -15,6 +16,7 @@ export class EnterpriseStore {
     this.now = options.now || (() => Date.now());
     this.authService = options.authService || null;
     this.persistence = options.persistence || null;
+    this.stateStore = options.stateStore || null;
     this.organizations = new Map();
     this.users = new Map();
     this.projects = new Map();
@@ -112,6 +114,21 @@ export class EnterpriseStore {
     };
   }
 
+  async createAuthSessionAsync({ email, organizationId }) {
+    const session = this.createAuthSession({ email, organizationId });
+    if (this.stateStore) {
+      const payload = this.authService ? this.authService.verifySessionToken(session.token) : { sub: session.user.id, org: organizationId, role: session.user.role };
+      const ttlMs = payload.exp ? Math.max(1, payload.exp - this.now()) : 8 * 60 * 60 * 1000;
+      await this.stateStore.set('session:' + hashToken(session.token), {
+        userId: session.user.id,
+        organizationId,
+        role: session.user.role,
+        createdAt: this.now()
+      }, ttlMs);
+    }
+    return session;
+  }
+
   createOrUpdateExternalUser({ email, displayName, externalSubject = '' }) {
     const existing = Array.from(this.users.values()).find(user => user.email === email || (externalSubject && user.externalSubject === externalSubject));
     if (existing) {
@@ -140,6 +157,18 @@ export class EnterpriseStore {
       role: membership.role,
       user: publicUser(user, payload.org, membership.role)
     };
+  }
+
+  async authenticateAsync(token) {
+    const context = this.authenticate(token);
+    if (this.stateStore) {
+      const session = await this.stateStore.get('session:' + hashToken(token));
+      if (!session) throw createHttpError(401, 'Session expired.');
+      if (session.userId !== context.userId || session.organizationId !== context.organizationId) {
+        throw createHttpError(401, 'Invalid session.');
+      }
+    }
+    return context;
   }
 
   listProjects(context) {
@@ -325,6 +354,14 @@ export class EnterpriseStore {
     return clone(session);
   }
 
+  async createConnectorSessionAsync(context, payload = {}) {
+    const session = this.createConnectorSession(context, payload);
+    if (this.stateStore) {
+      await this.stateStore.set('connector:' + session.id, session, Math.max(1, session.expiresAt - this.now()));
+    }
+    return session;
+  }
+
   pairConnector(context, sessionId, pairingCode) {
     this.requireWrite(context);
     const session = this.requireConnectorAccess(context, sessionId);
@@ -341,6 +378,32 @@ export class EnterpriseStore {
       metadata: { host: session.host }
     });
     return clone(session);
+  }
+
+  async pairConnectorAsync(context, sessionId, pairingCode) {
+    if (!this.stateStore) return this.pairConnector(context, sessionId, pairingCode);
+    this.requireWrite(context);
+    const stored = await this.stateStore.get('connector:' + sessionId);
+    if (!stored) throw createHttpError(410, 'Connector pairing session expired.');
+    if (stored.organizationId !== context.organizationId) throw createHttpError(403, 'Cross-organization access denied.');
+    if (stored.expiresAt < this.now()) {
+      await this.stateStore.delete('connector:' + sessionId);
+      throw createHttpError(410, 'Connector pairing session expired.');
+    }
+    if (stored.pairingCode !== pairingCode) throw createHttpError(403, 'Invalid connector pairing code.');
+    stored.status = 'online';
+    stored.pairedAt = this.now();
+    stored.lastSeenAt = this.now();
+    this.connectorSessions.set(sessionId, stored);
+    await this.stateStore.set('connector:' + sessionId, stored, Math.max(1, stored.expiresAt - this.now()));
+    this.audit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      type: 'connector.session.paired',
+      targetId: stored.id,
+      metadata: { host: stored.host }
+    });
+    return clone(stored);
   }
 
   listAuditEvents(context) {
@@ -367,7 +430,8 @@ export class EnterpriseStore {
     provider = 'mock',
     model = 'nova-mock-enterprise',
     messages = [],
-    metadata = {}
+    metadata = {},
+    skipRateLimit = false
   } = {}) {
     this.requireContext(context);
     if (projectId) this.requireProjectAccess(context, projectId);
@@ -378,7 +442,7 @@ export class EnterpriseStore {
     if (!allowedProviders.includes(provider)) throw createHttpError(403, 'AI provider is not allowed for this organization.');
     if (allowedModels[provider] && !allowedModels[provider].includes(model)) throw createHttpError(403, 'AI model is not allowed for this organization.');
     if (!Array.isArray(messages) || messages.length === 0) throw createHttpError(400, 'AI request messages are required.');
-    this.requireAiRateLimit(context, aiSettings.maxRequestsPerMinute || 20);
+    if (!skipRateLimit) this.requireAiRateLimit(context, aiSettings.maxRequestsPerMinute || 20);
 
     const request = {
       id: createId('air'),
@@ -405,6 +469,18 @@ export class EnterpriseStore {
       metadata: { projectId, provider, model, messageCount: messages.length, promptLogged: !!aiSettings.promptLogging }
     });
     return clone(request);
+  }
+
+  async createAiRequestAsync(context, payload = {}) {
+    if (!this.stateStore) return this.createAiRequest(context, payload);
+    this.requireContext(context);
+    const organization = this.requireOrganization(context.organizationId);
+    const aiSettings = organization.settings.ai || {};
+    await this.requireAiRateLimitAsync(context, {
+      maxUserRequestsPerMinute: aiSettings.maxRequestsPerMinute || 20,
+      maxOrganizationRequestsPerMinute: aiSettings.maxOrganizationRequestsPerMinute || Math.max(20, (aiSettings.maxRequestsPerMinute || 20) * 10)
+    });
+    return this.createAiRequest(context, { ...payload, skipRateLimit: true });
   }
 
   completeAiRequest(context, requestId, { content = '', usage = null } = {}) {
@@ -529,6 +605,18 @@ export class EnterpriseStore {
     const count = this.aiUsageBuckets.get(key) || 0;
     if (count >= maxRequestsPerMinute) throw createHttpError(429, 'AI rate limit exceeded.');
     this.aiUsageBuckets.set(key, count + 1);
+  }
+
+  async requireAiRateLimitAsync(context, { maxUserRequestsPerMinute, maxOrganizationRequestsPerMinute }) {
+    if (!this.stateStore) return this.requireAiRateLimit(context, maxUserRequestsPerMinute);
+    const minute = Math.floor(this.now() / 60000);
+    const ttlMs = 70000;
+    const userKey = ['rate', 'ai', context.organizationId, context.userId, minute].join(':');
+    const orgKey = ['rate', 'ai', context.organizationId, 'org', minute].join(':');
+    const userCount = await this.stateStore.increment(userKey, ttlMs);
+    const orgCount = await this.stateStore.increment(orgKey, ttlMs);
+    if (userCount > maxUserRequestsPerMinute) throw createHttpError(429, 'AI rate limit exceeded.');
+    if (orgCount > maxOrganizationRequestsPerMinute) throw createHttpError(429, 'Organization AI rate limit exceeded.');
   }
 
   requireOrganization(id) {
