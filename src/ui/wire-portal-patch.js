@@ -1,5 +1,12 @@
 // ═══════════════════════════════════════════════════
 /* eslint-disable no-inner-declarations */
+import {
+  PORTAL_DEFAULT_IN_T,
+  PORTAL_DEFAULT_OUT_T,
+  movePortalDrag,
+  startPortalDrag
+} from './wire-portal-drag.js';
+
 // WIRE PORTAL PATCH v6
 // Crossing wires: shorter wire gets 3D portal rings.
 // Each portal moves independently along the wire.
@@ -19,19 +26,14 @@ export function installWirePortalPatch(targetApp = getRuntimeApp()) {
   var app = targetApp;
 
   var INSTALLED = false;
-  var DEFAULT_IN = 0.12;   // portal-in default t (near output port)
-  var DEFAULT_OUT = 0.88;  // portal-out default t (near input port)
-  var MIN_T = 0.02;
-  var MAX_T = 0.98;
+  var DEFAULT_IN = PORTAL_DEFAULT_IN_T;   // portal-in default t (near output port)
+  var DEFAULT_OUT = PORTAL_DEFAULT_OUT_T;  // portal-out default t (near input port)
 
   // Per-wire per-side margins: key = wireKey+':in' or wireKey+':out', value = t
   var portalT = {};
 
   var dragKey = null;    // e.g. 'node-1:value>node-3:x:in'
-  var dragAxis = null;
-  var dragStartPos = 0;
-  var dragStartT = 0;
-  var dragWireLen = 200;
+  var dragState = null;
 
   function install() {
     if (INSTALLED) return;
@@ -224,29 +226,29 @@ export function installWirePortalPatch(targetApp = getRuntimeApp()) {
       e.preventDefault();
       var pk = ring.getAttribute('data-pk'); // e.g. 'node-1:val>node-2:x:in'
       dragKey = pk;
-      dragWireLen = parseFloat(ring.getAttribute('data-wlen')) || 200;
-      var ddx = parseFloat(ring.getAttribute('data-dx')) || 1;
-      var ddy = parseFloat(ring.getAttribute('data-dy')) || 0;
-      var dlen = Math.sqrt(ddx*ddx + ddy*ddy) || 1;
-      dragAxis = { x: ddx/dlen, y: ddy/dlen };
-      dragStartT = portalT[pk] !== undefined ? portalT[pk] : (pk.endsWith(':in') ? DEFAULT_IN : DEFAULT_OUT);
-      dragStartPos = e.clientX * dragAxis.x + e.clientY * dragAxis.y;
+      dragState = startPortalDrag({
+        key: pk,
+        wireLength: parseFloat(ring.getAttribute('data-wlen')) || 200,
+        dx: parseFloat(ring.getAttribute('data-dx')) || 1,
+        dy: parseFloat(ring.getAttribute('data-dy')) || 0,
+        startT: portalT[pk],
+        clientX: e.clientX,
+        clientY: e.clientY
+      });
     });
 
     document.addEventListener('mousemove', function(e) {
       if (!dragKey) return;
       e.stopPropagation();
       e.preventDefault();
-      var pos = e.clientX * dragAxis.x + e.clientY * dragAxis.y;
-      var delta = (pos - dragStartPos) / Math.max(dragWireLen * 0.5, 80);
-      var newT = dragStartT + delta * 0.4;
-      newT = Math.max(MIN_T, Math.min(MAX_T, newT));
+      var newT = movePortalDrag(dragState, e.clientX, e.clientY);
       portalT[dragKey] = newT;
       app.renderWires();
     }, true);
 
     document.addEventListener('mouseup', function() {
       dragKey = null;
+      dragState = null;
     }, true);
   }
 
