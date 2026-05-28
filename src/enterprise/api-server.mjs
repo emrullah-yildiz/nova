@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { AuthService } from './auth.mjs';
-import { EnterpriseStore, ROLES, createHttpError } from './domain.mjs';
+import { EnterpriseStore, ROLES, createHttpError, decodePaginationCursor } from './domain.mjs';
 import { JsonFilePersistence } from './persistence.mjs';
 import { createStateStore } from './state-store.mjs';
 import { PostgresPersistence } from '../../server/db/postgres-persistence.mjs';
@@ -89,14 +89,23 @@ function matchRoute(method, path, options = {}) {
     }],
     ['POST', /^\/api\/auth\/oidc\/callback$/, true, 200, handleOidcCallback],
     ['GET', /^\/api\/me$/, false, 200, ({ context }) => ({ user: context.user })],
-    ['GET', /^\/api\/projects$/, false, 200, ({ store, context }) => ({ projects: store.listProjects(context) })],
+    ['GET', /^\/api\/projects$/, false, 200, ({ store, context, url }) => {
+      const page = store.listProjects(context, parsePaginationParams(url));
+      return { projects: page.items, pagination: page.pagination };
+    }],
     ['POST', /^\/api\/projects$/, false, 201, ({ store, context, body }) => store.createProject(context, validateCreateProjectBody(body || {}))],
     ['GET', /^\/api\/projects\/([^/]+)$/, false, 200, ({ store, context, params }) => store.getProject(context, params[0])],
     ['POST', /^\/api\/projects\/([^/]+)\/members$/, false, 200, ({ store, context, params, body }) => store.addProjectMember(context, params[0], validateProjectMemberBody(body || {}))],
     ['PUT', /^\/api\/projects\/([^/]+)\/graph$/, false, 200, ({ store, context, params, body }) => store.updateProjectGraph(context, params[0], validateSaveGraphBody(body || {}))],
-    ['GET', /^\/api\/projects\/([^/]+)\/versions$/, false, 200, ({ store, context, params }) => ({ versions: store.listProjectVersions(context, params[0]) })],
+    ['GET', /^\/api\/projects\/([^/]+)\/versions$/, false, 200, ({ store, context, params, url }) => {
+      const page = store.listProjectVersions(context, params[0], parsePaginationParams(url));
+      return { versions: page.items, pagination: page.pagination };
+    }],
     ['POST', /^\/api\/projects\/([^/]+)\/versions\/([^/]+)\/restore$/, false, 200, ({ store, context, params }) => store.restoreProjectVersion(context, params[0], params[1])],
-    ['GET', /^\/api\/projects\/([^/]+)\/runs$/, false, 200, ({ store, context, params }) => ({ runs: store.listGraphRuns(context, params[0]) })],
+    ['GET', /^\/api\/projects\/([^/]+)\/runs$/, false, 200, ({ store, context, params, url }) => {
+      const page = store.listGraphRuns(context, params[0], parsePaginationParams(url));
+      return { runs: page.items, pagination: page.pagination };
+    }],
     ['POST', /^\/api\/projects\/([^/]+)\/runs$/, false, 201, ({ store, context, params, body }) => store.recordGraphRun(context, params[0], validateGraphRunBody(body || {}))],
     ['POST', /^\/api\/connectors\/sessions$/, false, 201, ({ store, context, body }) => store.createConnectorSessionAsync(context, validateConnectorSessionBody(body || {}))],
     ['POST', /^\/api\/connectors\/sessions\/([^/]+)\/pair$/, false, 200, ({ store, context, params, body }) => {
@@ -104,7 +113,10 @@ function matchRoute(method, path, options = {}) {
       return store.pairConnectorAsync(context, params[0], payload.pairingCode);
     }],
     ['POST', /^\/api\/ai\/chat$/, false, 200, handleAiChat],
-    ['GET', /^\/api\/audit$/, false, 200, ({ store, context }) => ({ events: store.listAuditEvents(context) })],
+    ['GET', /^\/api\/audit$/, false, 200, ({ store, context, url }) => {
+      const page = store.listAuditEvents(context, parsePaginationParams(url));
+      return { events: page.items, pagination: page.pagination };
+    }],
     ['POST', /^\/api\/host-operations$/, false, 201, ({ store, context, body }) => store.recordHostOperation(context, validateHostOperationBody(body || {}))]
   ];
 
@@ -115,6 +127,23 @@ function matchRoute(method, path, options = {}) {
     return { public: isPublic, status, handler, params: match.slice(1) };
   }
   return null;
+}
+
+function parsePaginationParams(url) {
+  const limit = parseLimitParam(url.searchParams.get('limit'));
+  const cursor = url.searchParams.get('cursor') || '';
+  return {
+    limit,
+    offset: cursor ? decodePaginationCursor(cursor) : 0
+  };
+}
+
+function parseLimitParam(value) {
+  if (value === null || value === '') return 50;
+  if (!/^\d+$/.test(value)) throw createHttpError(400, 'limit must be a positive integer.');
+  const limit = Number(value);
+  if (limit < 1 || limit > 200) throw createHttpError(400, 'limit must be between 1 and 200.');
+  return limit;
 }
 
 async function handleOidcCallback({ store, authService, body }) {

@@ -76,6 +76,33 @@ describe('enterprise domain', () => {
     expect(() => store.getProject(ctxB, project.id)).toThrow(/Cross-organization/);
   });
 
+  it('paginates enterprise project, version, run, and audit lists', () => {
+    let now = 0;
+    const store = new EnterpriseStore({ now: () => now += 1 });
+    const org = store.createOrganization({ name: 'Paged Org' });
+    const ctx = createContext(store, org.id);
+    const projectA = store.createProject(ctx, { name: 'A' });
+    const projectB = store.createProject(ctx, { name: 'B' });
+    store.createProject(ctx, { name: 'C' });
+
+    const projectsPage = store.listProjects(ctx, { limit: 2, offset: 0 });
+    expect(projectsPage.items.map(project => project.name)).toEqual(['A', 'B']);
+    expect(projectsPage.pagination).toMatchObject({ limit: 2, total: 3, hasMore: true });
+    expect(store.listProjects(ctx, { limit: 2, offset: 2 }).items.map(project => project.name)).toEqual(['C']);
+
+    store.updateProjectGraph(ctx, projectA.id, { graph: { nodes: [], wires: [] }, message: 'Second' });
+    store.updateProjectGraph(ctx, projectA.id, { graph: { nodes: [], wires: [] }, message: 'Third' });
+    expect(store.listProjectVersions(ctx, projectA.id, { limit: 1, offset: 1 }).items[0].message).toBe('Second');
+
+    store.recordGraphRun(ctx, projectB.id, { startedAt: 10 });
+    store.recordGraphRun(ctx, projectB.id, { startedAt: 20 });
+    expect(store.listGraphRuns(ctx, projectB.id, { limit: 1, offset: 0 }).items[0].startedAt).toBe(20);
+
+    const auditPage = store.listAuditEvents(ctx, { limit: 2, offset: 0 });
+    expect(auditPage.items).toHaveLength(2);
+    expect(auditPage.pagination.total).toBeGreaterThan(2);
+  });
+
   it('exports and reloads enterprise store snapshots through JSON persistence', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nova-enterprise-store-'));
     const filePath = path.join(dir, 'store.json');

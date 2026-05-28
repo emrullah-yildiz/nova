@@ -30,8 +30,8 @@ export class NovaCloudClient {
     return this.request('/api/me');
   }
 
-  async listProjects() {
-    return this.request('/api/projects');
+  async listProjects(pagination = {}) {
+    return this.request(withPagination('/api/projects', pagination));
   }
 
   async createProject({ name, graph }) {
@@ -52,8 +52,8 @@ export class NovaCloudClient {
     });
   }
 
-  async listProjectVersions(projectId) {
-    return this.request('/api/projects/' + encodeURIComponent(projectId) + '/versions');
+  async listProjectVersions(projectId, pagination = {}) {
+    return this.request(withPagination('/api/projects/' + encodeURIComponent(projectId) + '/versions', pagination));
   }
 
   async restoreProjectVersion(projectId, versionId) {
@@ -62,8 +62,8 @@ export class NovaCloudClient {
     });
   }
 
-  async listGraphRuns(projectId) {
-    return this.request('/api/projects/' + encodeURIComponent(projectId) + '/runs');
+  async listGraphRuns(projectId, pagination = {}) {
+    return this.request(withPagination('/api/projects/' + encodeURIComponent(projectId) + '/runs', pagination));
   }
 
   async recordGraphRun(projectId, payload = {}) {
@@ -129,6 +129,14 @@ function getFetchImpl() {
   if (typeof window !== 'undefined' && typeof window.fetch === 'function') return window.fetch.bind(window);
   if (typeof fetch === 'function') return fetch;
   return null;
+}
+
+function withPagination(path, { limit, cursor } = {}) {
+  const params = new URLSearchParams();
+  if (limit !== undefined && limit !== null) params.set('limit', String(limit));
+  if (cursor) params.set('cursor', cursor);
+  const query = params.toString();
+  return query ? path + '?' + query : path;
 }
 
 function storeToken(token) {

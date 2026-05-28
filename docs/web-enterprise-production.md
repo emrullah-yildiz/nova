@@ -65,6 +65,8 @@ Current endpoints:
 - `GET /api/audit`
 - `POST /api/host-operations`
 
+List endpoints for projects, project versions, project graph runs, and audit events accept `limit` and `cursor` query parameters and return a `pagination` object with `nextCursor`, `hasMore`, `limit`, and `total`.
+
 ## Production Hardening Still Required
 
 Before enterprise rollout, wire the OIDC callback to the production identity provider and JWKS validation, disable dev login outside local environments, move JSON persistence to a managed database, enforce HTTPS/WSS in deployment, add persistent audit retention, and deploy the connector relay on managed infrastructure.
