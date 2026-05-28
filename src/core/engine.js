@@ -665,37 +665,23 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       // ── Solids ──
 
-      case 'solid-box': { var c = getInput('center')||new Geo.Point3(0,0,0); return Geo.createBox(c instanceof Geo.Point3?c:new Geo.Point3(0,0,0), getInput('width')||10, getInput('depth')||10, getInput('height')||10); }
 
-      case 'solid-sphere': { var c = getInput('center')||new Geo.Point3(0,0,0); return Geo.createSphere(c instanceof Geo.Point3?c:new Geo.Point3(0,0,0), getInput('radius')||5); }
 
-      case 'solid-cylinder': { var b = getInput('base')||new Geo.Point3(0,0,0); return Geo.createCylinder(b instanceof Geo.Point3?b:new Geo.Point3(0,0,0), getInput('radius')||5, getInput('height')||10); }
 
-      case 'solid-cone': { var b = getInput('base')||new Geo.Point3(0,0,0); return Geo.createCone(b instanceof Geo.Point3?b:new Geo.Point3(0,0,0), getInput('radius')||5, getInput('height')||10); }
 
-      case 'solid-torus': { var c = getInput('center')||new Geo.Point3(0,0,0); return Geo.createTorus(c instanceof Geo.Point3?c:new Geo.Point3(0,0,0), getInput('majorR')||5, getInput('minorR')||1.5); }
 
 
 
       // ── Operations ──
 
-      case 'op-extrude': { var curve = getInput('curve'), vec = getInput('vector'); if (curve && vec) return Geo.extrude(curve, vec instanceof Geo.Vector3 ? vec : new Geo.Vector3(vec.x||0,vec.y||0,vec.z||0)); return undefined; }
 
-      case 'op-revolve': { var curve = getInput('curve'), ao = getInput('axisOrigin'), ad = getInput('axisDir'), angle = getInput('angle'); if (curve) return Geo.revolve(curve, ao, ad, (angle||360)*Math.PI/180); return undefined; }
 
-      case 'op-loft': { var profiles = getInput('profiles'); if (profiles) return Geo.loft(profiles); return undefined; }
 
-      case 'op-sweep': { var profile = getInput('profile'), path = getInput('path'); if (profile && path) return Geo.sweep(profile, path); return undefined; }
 
-      case 'op-pipe': { var curve = getInput('curve'), r = getInput('radius'); if (curve) return Geo.pipe(curve, r||0.5); return undefined; }
 
-      case 'op-boolean-union': { var a = getInput('a'), b = getInput('b'); if (a && b) return Geo.booleanUnion(a,b); return undefined; }
 
-      case 'op-boolean-intersect': { var a = getInput('a'), b = getInput('b'); if (a && b) return Geo.booleanIntersect(a,b); return undefined; }
 
-      case 'op-boolean-subtract': { var a = getInput('a'), b = getInput('b'); if (a && b) return Geo.booleanSubtract(a,b); return undefined; }
 
-      case 'op-combine-all': { var meshes = getInput('meshes'); if (meshes && Array.isArray(meshes)) return Geo.combineAll(meshes); return undefined; }
 
 
 

@@ -7,6 +7,7 @@ import { logicCategory, logicNodes } from './categories/logic.js';
 import { mathCategory, mathNodes } from './categories/math.js';
 import { planeCategory, planeNodes } from './categories/plane.js';
 import { pointCategory, pointNodes } from './categories/point.js';
+import { solidsCategory, solidsNodes } from './categories/solids.js';
 import { surfacesCategory, surfacesNodes } from './categories/surfaces.js';
 import { vectorCategory, vectorNodes } from './categories/vector.js';
 import { legacyCoreCategories, legacyCoreNodes } from './legacyCoreNodes.js';
@@ -21,6 +22,7 @@ const modernCategories = [
   mathCategory,
   planeCategory,
   pointCategory,
+  solidsCategory,
   surfacesCategory,
   vectorCategory
 ];
@@ -41,6 +43,7 @@ export const coreNodes = [
   ...mathNodes,
   ...planeNodes,
   ...pointNodes,
+  ...solidsNodes,
   ...surfacesNodes,
   ...vectorNodes,
   ...legacyCoreNodes
