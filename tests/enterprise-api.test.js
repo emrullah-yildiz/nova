@@ -255,6 +255,65 @@ describe('enterprise API server', () => {
     }
   });
 
+  it('can proxy enterprise AI through a server-held provider key', async () => {
+    const originalFetch = globalThis.fetch;
+    const providerCalls = [];
+    globalThis.fetch = async (url, options = {}) => {
+      if (String(url).startsWith('http://127.0.0.1:')) return originalFetch(url, options);
+      providerCalls.push({ url, options });
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: 'Provider-backed reply' } }],
+        usage: { total_tokens: 12 }
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    };
+
+    const { server } = createEnterpriseApiServer({
+      allowDevLogin: true,
+      aiProviderConfig: {
+        env: {
+          NOVA_OPENAI_API_KEY: 'server-secret',
+          NOVA_OPENAI_API_URL: 'https://provider.example/chat'
+        }
+      },
+      aiPolicy: {
+        allowedProviders: ['mock', 'openai'],
+        allowedModels: {
+          mock: ['nova-mock-enterprise'],
+          openai: ['gpt-4o-mini']
+        }
+      }
+    });
+    const port = await listen(server);
+    const baseUrl = 'http://127.0.0.1:' + port;
+
+    try {
+      const login = await request(baseUrl, '/api/auth/dev-login', {
+        method: 'POST',
+        body: { email: 'owner@demo.nova', organizationSlug: 'demo' }
+      });
+      const ai = await request(baseUrl, '/api/ai/chat', {
+        method: 'POST',
+        token: login.body.token,
+        body: {
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: 'Use server key' }]
+        }
+      });
+
+      expect(ai.status).toBe(200);
+      expect(ai.body.message.content).toBe('Provider-backed reply');
+      expect(providerCalls).toHaveLength(1);
+      expect(providerCalls[0].options.headers.Authorization).toBe('Bearer server-secret');
+    } finally {
+      globalThis.fetch = originalFetch;
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
   it('rejects malformed enterprise API payloads before domain operations run', async () => {
     const { server } = createEnterpriseApiServer({ allowDevLogin: true });
     const port = await listen(server);

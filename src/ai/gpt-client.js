@@ -4,6 +4,9 @@
 // Real AI integration with streaming support
 // ============================================
 
+import { createNovaCloudClient } from '../enterprise/cloud-client.js';
+import { getRuntimeConfig } from '../config/runtime-config.js';
+
 const GPTClient = {
   MODEL: 'anthropic/claude-sonnet-4.5',
   MAX_TOKENS: 2048,
@@ -98,6 +101,23 @@ const GPTClient = {
   },
   isApiKeyValid(key) {
     return typeof key === 'string' && key.length > 10;
+  },
+  isEnterpriseAiEnabled() {
+    const config = getRuntimeConfig();
+    return !!(config.enterpriseAiEnabled && config.apiBaseUrl);
+  },
+  getEnterpriseClient() {
+    if (!this._enterpriseClient) this._enterpriseClient = createNovaCloudClient();
+    return this._enterpriseClient;
+  },
+  async ensureEnterpriseSession(client) {
+    const config = getRuntimeConfig();
+    if (client.isAuthenticated()) return;
+    if (config.authProvider === 'dev') {
+      await client.devLogin();
+      return;
+    }
+    throw new Error('Nova Cloud sign-in required.');
   },
 
   buildSystemPrompt(existingCode) {
@@ -345,6 +365,9 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
   },
 
   async call(userMessage, context, existingCode) {
+    if (this.isEnterpriseAiEnabled()) {
+      return this.callEnterprise(userMessage, context, existingCode);
+    }
     const apiKey = this.getApiKey();
     NFLogger.aiRequest(userMessage, this.getProvider(), this.getModel());
     this._callStart = Date.now();
@@ -392,7 +415,44 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     return reply;
   },
 
+  async callEnterprise(userMessage, context, existingCode) {
+    const client = this.getEnterpriseClient();
+    await this.ensureEnterpriseSession(client);
+    NFLogger.aiRequest(userMessage, 'nova-cloud', this.getModel());
+    this._callStart = Date.now();
+    const history = this._histories[context] || [];
+    const messages = [
+      { role: 'system', content: this.buildSystemPrompt(existingCode) },
+      ...history.slice(-10),
+      { role: 'user', content: userMessage }
+    ];
+    const response = await client.chatWithAi({
+      projectId: '',
+      provider: this.getProvider(),
+      model: this.getModel(),
+      messages,
+      metadata: { context }
+    });
+    const reply = response && response.message ? response.message.content : '';
+    NFLogger.aiResponse(reply, Date.now() - this._callStart);
+    history.push({ role: 'user', content: userMessage });
+    history.push({ role: 'assistant', content: reply });
+    this._histories[context] = history;
+    return reply;
+  },
+
   async callStream(userMessage, context, existingCode, onChunk, onDone, onError) {
+    if (this.isEnterpriseAiEnabled()) {
+      try {
+        const reply = await this.callEnterprise(userMessage, context, existingCode);
+        onChunk(reply, reply);
+        onDone(reply);
+      } catch (e) {
+        NFLogger.aiError(e.message || 'Nova Cloud AI error', 'nova-cloud');
+        onError(e.message || 'Nova Cloud AI error');
+      }
+      return;
+    }
     const apiKey = this.getApiKey();
     NFLogger.aiRequest(userMessage, this.getProvider(), this.getModel());
     var _streamStart = Date.now();

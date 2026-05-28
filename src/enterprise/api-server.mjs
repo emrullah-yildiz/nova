@@ -28,8 +28,9 @@ export function createEnterpriseApiServer(options = {}) {
   const store = options.store || new EnterpriseStore({ authService, persistence });
   if (!store.authService) store.authService = authService;
   if (options.bootstrapDemo !== false && store.organizations.size === 0 && !options.databaseUrl) store.bootstrapDemoTenant();
+  if (options.aiPolicy) applyAiPolicy(store, options.aiPolicy);
   const corsOrigin = options.corsOrigin || '*';
-  const aiProvider = options.aiProvider || createMockAiProvider();
+  const aiProvider = options.aiProvider || createConfiguredAiProvider(options.aiProviderConfig || {});
   const allowDevLogin = options.allowDevLogin === true;
 
   const server = http.createServer(async (req, res) => {
@@ -63,6 +64,7 @@ export function createEnterpriseApiServer(options = {}) {
 export async function createEnterpriseApiServerAsync(options = {}) {
   const api = createEnterpriseApiServer(options);
   if (api.store && api.store.ready) await api.store.ready();
+  if (options.aiPolicy) applyAiPolicy(api.store, options.aiPolicy);
   return api;
 }
 
@@ -214,6 +216,32 @@ function readJsonBody(req) {
   });
 }
 
+function createConfiguredAiProvider(config = {}) {
+  const providers = {
+    mock: createMockAiProvider(),
+    ...createOpenAiCompatibleProviders(config)
+  };
+  return {
+    async complete(request) {
+      const provider = providers[request.provider] || providers.mock;
+      return provider.complete(request);
+    }
+  };
+}
+
+function applyAiPolicy(store, aiPolicy) {
+  for (const organization of store.organizations.values()) {
+    organization.settings.ai = {
+      ...(organization.settings.ai || {}),
+      ...aiPolicy,
+      allowedModels: {
+        ...((organization.settings.ai && organization.settings.ai.allowedModels) || {}),
+        ...(aiPolicy.allowedModels || {})
+      }
+    };
+  }
+}
+
 function createMockAiProvider() {
   return {
     async complete({ messages = [], model }) {
@@ -226,6 +254,75 @@ function createMockAiProvider() {
           inputMessages: messages.length,
           outputCharacters: text.length
         }
+      };
+    }
+  };
+}
+
+function createOpenAiCompatibleProviders(config = {}) {
+  const env = config.env || (typeof process !== 'undefined' ? process.env : {});
+  const definitions = [
+    {
+      id: 'openai',
+      apiKey: env.NOVA_OPENAI_API_KEY,
+      apiUrl: env.NOVA_OPENAI_API_URL || 'https://api.openai.com/v1/chat/completions',
+      extraHeaders: {}
+    },
+    {
+      id: 'groq',
+      apiKey: env.NOVA_GROQ_API_KEY,
+      apiUrl: env.NOVA_GROQ_API_URL || 'https://api.groq.com/openai/v1/chat/completions',
+      extraHeaders: {}
+    },
+    {
+      id: 'openrouter',
+      apiKey: env.NOVA_OPENROUTER_API_KEY,
+      apiUrl: env.NOVA_OPENROUTER_API_URL || 'https://openrouter.ai/api/v1/chat/completions',
+      extraHeaders: {
+        'HTTP-Referer': env.NOVA_PUBLIC_APP_URL || 'https://nova.local',
+        'X-Title': 'Nova'
+      }
+    }
+  ];
+  return Object.fromEntries(
+    definitions
+      .filter(definition => definition.apiKey)
+      .map(definition => [definition.id, createOpenAiCompatibleProvider(definition)])
+  );
+}
+
+function createOpenAiCompatibleProvider({ apiKey, apiUrl, extraHeaders = {} }) {
+  return {
+    async complete({ model, messages = [] }) {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + apiKey,
+          ...extraHeaders
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.7,
+          max_tokens: 2048
+        })
+      });
+      const text = await response.text();
+      let data = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (error) {
+        data = {};
+      }
+      if (!response.ok) {
+        const message = data && data.error && data.error.message ? data.error.message : 'AI provider request failed.';
+        throw createHttpError(response.status, message, 'AI_PROVIDER_ERROR');
+      }
+      const choice = data.choices && data.choices[0] && data.choices[0].message;
+      return {
+        content: choice && choice.content ? choice.content : '',
+        usage: data.usage || null
       };
     }
   };

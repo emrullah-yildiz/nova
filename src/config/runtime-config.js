@@ -6,7 +6,8 @@ const DEFAULT_CONFIG = {
   authProvider: 'dev',
   connectorPairingUrl: 'http://127.0.0.1:8787/api/connectors/sessions',
   cloudProjectsEnabled: true,
-  managedSaas: true
+  managedSaas: true,
+  enterpriseAiEnabled: false
 };
 
 export function getRuntimeConfig(runtimeGlobal = getRuntimeGlobal()) {
@@ -36,7 +37,8 @@ function fromEnv(env = {}) {
     apiBaseUrl: env.VITE_NOVA_API_BASE_URL,
     websocketUrl: env.VITE_NOVA_WEBSOCKET_URL,
     authProvider: env.VITE_NOVA_AUTH_PROVIDER,
-    connectorPairingUrl: env.VITE_NOVA_CONNECTOR_PAIRING_URL
+    connectorPairingUrl: env.VITE_NOVA_CONNECTOR_PAIRING_URL,
+    enterpriseAiEnabled: parseBoolean(env.VITE_NOVA_ENTERPRISE_AI_ENABLED)
   };
 }
 
@@ -57,6 +59,11 @@ function compactObject(value = {}) {
   return Object.fromEntries(
     Object.entries(value).filter(([, entry]) => entry !== undefined && entry !== null && entry !== '')
   );
+}
+
+function parseBoolean(value) {
+  if (value === undefined || value === null || value === '') return undefined;
+  return value === true || String(value).toLowerCase() === 'true';
 }
 
 export const RuntimeConfig = getRuntimeConfig();
