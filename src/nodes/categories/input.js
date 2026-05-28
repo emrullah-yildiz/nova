@@ -42,7 +42,6 @@ export const inputNodes = [
       csharp: 'bool {{value}} = {{ctrl.val_lower}};'
     },
     help: {
-      description: 'Enable workflow: a True/False dropdown picks one of two numeric values downstream — Logic.If returns 100 when the dropdown is True, 0 otherwise.',
       inputs: [],
       outputs: [{ name: 'Value', description: 'Chosen boolean' }],
       example: {
@@ -85,7 +84,6 @@ export const inputNodes = [
       csharp: 'int {{value}} = {{ctrl.val}};'
     },
     help: {
-      description: 'Range-driver workflow: an integer constant sets the end of a 0..N range, which is then summed to confirm the loop bound downstream.',
       inputs: [],
       outputs: [{ name: 'Value', description: 'Integer constant' }],
       example: {
@@ -130,7 +128,6 @@ export const inputNodes = [
       csharp: 'double {{value}} = {{ctrl.val}};'
     },
     help: {
-      description: 'Addition workflow: two numeric constants are bundled into a list and summed to produce the total downstream (5.5 + 4.5 = 10).',
       inputs: [],
       outputs: [{ name: 'Value', description: 'Numeric constant' }],
       example: {
@@ -178,7 +175,6 @@ export const inputNodes = [
       csharp: 'double {{value}} = Math.Max({{ctrl.min}}, Math.Min({{ctrl.max}}, {{ctrl.val}}));'
     },
     help: {
-      description: 'Threshold-gate workflow: a slider supplies a value, a constant threshold is compared, and a Logic.Gate forwards the slider value only when it clears the threshold.',
       inputs: [],
       outputs: [{ name: 'Value', description: 'Slider value' }],
       example: {
@@ -222,7 +218,6 @@ export const inputNodes = [
       csharp: 'string {{value}} = "{{ctrl.val}}";'
     },
     help: {
-      description: 'Tag-counting workflow: a text constant is repeated as a list a chosen number of times and the resulting tag count is surfaced downstream.',
       inputs: [],
       outputs: [{ name: 'Value', description: 'Text constant' }],
       example: {

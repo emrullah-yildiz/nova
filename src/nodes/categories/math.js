@@ -47,7 +47,6 @@ export const mathNodes = [
       csharp: 'double {{result}} = Math.Abs({{a}});'
     },
     help: {
-      description: 'Displacement-magnitude workflow: a signed displacement of -7 units becomes a positive magnitude of 7, suitable for a distance label.',
       inputs: [{ name: 'Value', description: 'Signed input' }],
       outputs: [{ name: 'Result', description: 'Non-negative magnitude' }],
       example: {
@@ -91,7 +90,6 @@ export const mathNodes = [
       csharp: 'double {{result}} = {{a}} + {{b}};'
     },
     help: {
-      description: 'Total-area workflow: sum a wall area (100) and a floor area (50) to report the combined surface area as a single tangible total.',
       inputs: [
         { name: 'A', description: 'First addend' },
         { name: 'B', description: 'Second addend' }
@@ -134,7 +132,6 @@ export const mathNodes = [
       csharp: 'double {{result}} = Math.Ceiling({{a}});'
     },
     help: {
-      description: 'Resource-allocation workflow: round 2.3 hours of work up to 3 hours to never under-budget the project schedule.',
       inputs: [{ name: 'Value', description: 'Input number' }],
       outputs: [{ name: 'Result', description: 'Rounded up' }],
       example: {
@@ -179,7 +176,6 @@ export const mathNodes = [
       csharp: 'double {{result}} = Math.Max({{min}}, Math.Min({{max}}, {{value}}));'
     },
     help: {
-      description: 'Safe-range workflow: keep a measured speed of 175 inside the legal range [0, 100], surfacing 100 as the actual reportable value.',
       inputs: [{ name: 'Value', description: 'Input value' }],
       outputs: [{ name: 'Result', description: 'Clamped value' }],
       example: {
@@ -225,7 +221,6 @@ export const mathNodes = [
       csharp: 'double {{result}} = {{b}} != 0 ? {{a}} / {{b}} : double.NaN;'
     },
     help: {
-      description: 'Average-cost workflow: divide a total revenue of 100 by 4 customers to derive an average revenue-per-customer of 25.',
       inputs: [
         { name: 'A', description: 'Numerator' },
         { name: 'B', description: 'Denominator' }
@@ -268,7 +263,6 @@ export const mathNodes = [
       csharp: 'double {{result}} = Math.Floor({{a}});'
     },
     help: {
-      description: 'Whole-hours workflow: round 2.7 actual hours down to 2 completed hours when paying only for whole hours of work.',
       inputs: [{ name: 'Value', description: 'Input number' }],
       outputs: [{ name: 'Result', description: 'Rounded down' }],
       example: {
@@ -309,7 +303,6 @@ export const mathNodes = [
       csharp: 'double {{result}} = Math.Max({{a}}, {{b}});'
     },
     help: {
-      description: 'Largest-dimension workflow: pick the longer of width (10) and depth (5) to report the room\'s largest plan dimension downstream.',
       inputs: [
         { name: 'A', description: 'First candidate' },
         { name: 'B', description: 'Second candidate' }
@@ -355,7 +348,6 @@ export const mathNodes = [
       csharp: 'double {{result}} = Math.Min({{a}}, {{b}});'
     },
     help: {
-      description: 'Smallest-dimension workflow: pick the shorter of width (10) and depth (5) to report the room\'s tightest plan dimension downstream.',
       inputs: [
         { name: 'A', description: 'First candidate' },
         { name: 'B', description: 'Second candidate' }
@@ -406,7 +398,6 @@ export const mathNodes = [
       csharp: 'double {{result}} = {{a}} % {{b}};'
     },
     help: {
-      description: 'Wrap-around workflow: take position 7 modulo 3 to assign it to bucket 1 — the same pattern works for cycling through 3 columns, floors, or shifts.',
       inputs: [
         { name: 'A', description: 'Dividend' },
         { name: 'B', description: 'Divisor' }
@@ -455,7 +446,6 @@ export const mathNodes = [
       csharp: 'double {{result}} = {{a}} * {{b}};'
     },
     help: {
-      description: 'Room-area workflow: multiply room width (10) by depth (5) to derive a floor area of 50 m² for the schedule downstream.',
       inputs: [
         { name: 'A', description: 'First factor' },
         { name: 'B', description: 'Second factor' }
@@ -498,7 +488,6 @@ export const mathNodes = [
       csharp: 'double {{result}} = -{{a}};'
     },
     help: {
-      description: 'Direction-reverse workflow: flip a forward speed of +10 into a backward speed of -10 for the return trip down the route.',
       inputs: [{ name: 'Value', description: 'Input value' }],
       outputs: [{ name: 'Result', description: 'Negated' }],
       example: {
@@ -542,7 +531,6 @@ export const mathNodes = [
       csharp: 'double {{result}} = Math.Pow({{base}}, {{exp}});'
     },
     help: {
-      description: 'Square-area workflow: square the side of a 5-unit square (5^2) to derive its 25-square-unit area.',
       inputs: [
         { name: 'Base', description: 'Base' },
         { name: 'Exp', description: 'Exponent' }
@@ -586,7 +574,6 @@ export const mathNodes = [
       csharp: 'double {{result}} = {{a}} != 0 ? 1.0 / {{a}} : double.NaN;'
     },
     help: {
-      description: 'Frequency-from-period workflow: invert a 4-second period to derive a 0.25 Hz frequency for the downstream signal calc.',
       inputs: [{ name: 'Value', description: 'Non-zero input' }],
       outputs: [{ name: 'Result', description: '1/value' }],
       example: {
@@ -640,7 +627,6 @@ export const mathNodes = [
       csharp: 'double {{result}} = {{toMin}} + ({{value}} - {{fromMin}}) / ({{fromMax}} - {{fromMin}}) * ({{toMax}} - {{toMin}});'
     },
     help: {
-      description: 'Unit-conversion workflow: remap a measured value of 5 (originally in the 0..10 scale) into the 0..100 percentage scale, producing 50% downstream.',
       inputs: [{ name: 'Value', description: 'Value to remap' }],
       outputs: [{ name: 'Result', description: 'Remapped value' }],
       example: {
@@ -682,7 +668,6 @@ export const mathNodes = [
       csharp: 'double {{result}} = Math.Round({{a}}, (int){{digits}});'
     },
     help: {
-      description: 'Display-precision workflow: round π (3.14159…) to 2 decimal places to report 3.14 as a clean display value for the spec sheet.',
       inputs: [{ name: 'Value', description: 'Value to round' }],
       outputs: [{ name: 'Result', description: 'Rounded value' }],
       example: {
@@ -726,7 +711,6 @@ export const mathNodes = [
       csharp: 'double {{result}} = {{a}} - {{b}};'
     },
     help: {
-      description: 'Net-profit workflow: subtract a cost of 30 from a revenue of 100 to report a net profit of 70 downstream.',
       inputs: [
         { name: 'A', description: 'Minuend' },
         { name: 'B', description: 'Subtrahend' }

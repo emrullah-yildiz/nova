@@ -72,7 +72,6 @@ export const listNodes = [
       csharp: 'var {{list}} = new List<object> { {{item0}}, {{item1}} };'
     },
     help: {
-      description: 'Shopping-cart workflow: gather three line-item prices into a single list and watch the assembled list as the cart total breakdown.',
       inputs: [
         { name: 'Item 0', description: 'First item value' },
         { name: 'Item 1', description: 'Second item value' }
@@ -116,7 +115,6 @@ export const listNodes = [
       csharp: 'int {{count}} = {{list}}.Count;'
     },
     help: {
-      description: 'Inventory workflow: build a range of sample bay numbers and report how many bays the schedule covers.',
       inputs: [{ name: 'List', description: 'List to measure' }],
       outputs: [{ name: 'Count', description: 'Number of items' }],
       example: {
@@ -160,7 +158,6 @@ export const listNodes = [
       csharp: 'var {{item}} = {{list}}.FirstOrDefault();'
     },
     help: {
-      description: 'Queue workflow: get the head of a numbered queue (1..5) and forward it to the next stage of the pipeline.',
       inputs: [{ name: 'List', description: 'List to read from' }],
       outputs: [{ name: 'Item', description: 'First item' }],
       example: {
@@ -204,7 +201,6 @@ export const listNodes = [
       csharp: 'var {{item}} = {{list}}.LastOrDefault();'
     },
     help: {
-      description: 'History workflow: take the final entry from a recorded series (1..10) and surface it as the latest reading.',
       inputs: [{ name: 'List', description: 'List to read from' }],
       outputs: [{ name: 'Item', description: 'Last item' }],
       example: {
@@ -252,7 +248,6 @@ export const listNodes = [
       csharp: 'var {{item}} = {{list}}[(int){{index}}];'
     },
     help: {
-      description: 'Waypoint workflow: pick the third waypoint (index 2) from a planned route and forward its value to the next stage.',
       inputs: [
         { name: 'List', description: 'List to read from' },
         { name: 'Index', description: 'Zero-based position' }
@@ -308,7 +303,6 @@ export const listNodes = [
       csharp: 'var {{list}} = Enumerable.Range((int){{start}}, (int)(({{end}} - {{start}}) / {{step}})).Select(i => {{start}} + i * {{step}}).ToList();'
     },
     help: {
-      description: 'Scheduling workflow: generate odd bay numbers from 1 to 9 (1, 3, 5, 7, 9) and total them as the placement count baseline.',
       inputs: [
         { name: 'Start', description: 'Inclusive start' },
         { name: 'End', description: 'Exclusive end' },
@@ -366,7 +360,6 @@ export const listNodes = [
       csharp: 'var {{list}} = Enumerable.Range(0, (int){{count}}).Select(i => {{start}} + i * {{step}}).ToList();'
     },
     help: {
-      description: 'Sampling workflow: produce 5 evenly spaced sample times (0, 2, 4, 6, 8) and sum them as the total elapsed sampling duration.',
       inputs: [
         { name: 'Start', description: 'First value' },
         { name: 'Step', description: 'Increment' },
@@ -417,7 +410,6 @@ export const listNodes = [
       csharp: 'var {{list}} = Enumerable.Repeat({{item}}, (int){{count}}).ToList();'
     },
     help: {
-      description: 'Defaults workflow: initialise a 5-row table with the placeholder value 100 and confirm the row count downstream.',
       inputs: [
         { name: 'Item', description: 'Value to repeat' },
         { name: 'Count', description: 'Number of copies' }
@@ -461,7 +453,6 @@ export const listNodes = [
       csharp: 'var {{result}} = {{list}}.AsEnumerable().Reverse().ToList();'
     },
     help: {
-      description: 'Newest-first workflow: take a chronologically ordered range (1..6), reverse it so the latest entry comes first, and pick that newest entry as the headline reading.',
       inputs: [{ name: 'List', description: 'List to reverse' }],
       outputs: [{ name: 'Result', description: 'Reversed list' }],
       example: {
@@ -506,7 +497,6 @@ export const listNodes = [
       csharp: 'var {{result}} = {{list}}.SelectMany(x => x is IEnumerable<object> e ? e : new[] { x }).ToList();'
     },
     help: {
-      description: 'Multi-floor totals workflow: combine two per-floor room lists into a list of lists, flatten to all rooms, then count the building-wide total.',
       inputs: [{ name: 'List', description: 'Nested list to flatten' }],
       outputs: [{ name: 'Result', description: 'Flattened single-level list' }],
       example: {
@@ -561,7 +551,6 @@ export const listNodes = [
       csharp: 'var {{result}} = {{list}}.Take((int){{count}}).ToList();'
     },
     help: {
-      description: 'Top-3 workflow: take the first three readings from a 1..10 sample series and total them as the early-window sum.',
       inputs: [
         { name: 'List', description: 'List to slice' },
         { name: 'Count', description: 'How many items to keep' }
@@ -614,7 +603,6 @@ export const listNodes = [
       csharp: 'var {{result}} = {{list}}.Skip((int){{count}}).ToList();'
     },
     help: {
-      description: 'Warmup-skip workflow: discard the first two warm-up readings from a 1..6 series and sum only the steady-state samples.',
       inputs: [
         { name: 'List', description: 'List to slice' },
         { name: 'Count', description: 'Items to discard from the start' }
@@ -671,7 +659,6 @@ export const listNodes = [
       csharp: 'var {{result}} = {{list}}.Skip((int){{from}}).Take((int){{to}} - (int){{from}}).ToList();'
     },
     help: {
-      description: 'Middle-window workflow: take indices 2..5 from a 1..10 series (the values 3, 4, 5) and report their total.',
       inputs: [
         { name: 'List', description: 'List to slice' },
         { name: 'From', description: 'Inclusive start index' },
@@ -730,7 +717,6 @@ export const listNodes = [
       csharp: 'var {{result}} = new List<object>({{list}}); {{result}}.Insert((int){{index}}, {{item}});'
     },
     help: {
-      description: 'Prepend-checkpoint workflow: insert a starting checkpoint value (99) at the head of a route 1..4 and confirm the new first stop.',
       inputs: [
         { name: 'List', description: 'List to insert into' },
         { name: 'Item', description: 'Value to insert' },
@@ -795,7 +781,6 @@ export const listNodes = [
       csharp: 'var {{result}} = new List<object>({{list}}); var {{removed}} = {{result}}[(int){{index}}]; {{result}}.RemoveAt((int){{index}});'
     },
     help: {
-      description: 'Cancelled-order workflow: drop the item at index 2 from an order list 1..6 and surface the cancelled value for the audit log.',
       inputs: [
         { name: 'List', description: 'List to modify' },
         { name: 'Index', description: 'Position to drop' }
@@ -849,7 +834,6 @@ export const listNodes = [
       csharp: 'var {{result}} = {{listA}}.Concat({{listB}}).ToList();'
     },
     help: {
-      description: 'Manifest workflow: combine two flight passenger lists (1..3 and 1..4) into a unified manifest and report the total head-count.',
       inputs: [
         { name: 'List A', description: 'First list' },
         { name: 'List B', description: 'Second list' }
@@ -915,7 +899,6 @@ export const listNodes = [
       csharp: 'var {{result}} = {{listA}}.Zip({{listB}}, (a, b) => new[] { a, b }).ToList();'
     },
     help: {
-      description: 'Seat-assignment workflow: pair students (1..4) with assigned seat numbers (10..14) and report how many seats were assigned.',
       inputs: [
         { name: 'List A', description: 'First list' },
         { name: 'List B', description: 'Second list' }
@@ -985,7 +968,6 @@ export const listNodes = [
       csharp: 'var {{pairsA}} = {{listA}}.SelectMany(a => {{listB}}.Select(b => a)).ToList();\nvar {{pairsB}} = {{listA}}.SelectMany(a => {{listB}}.Select(b => b)).ToList();'
     },
     help: {
-      description: 'Tournament workflow: generate every host × guest pairing from 3 hosts (1..3) and 4 guests (1..4) and report the total schedule size (12 matches).',
       inputs: [
         { name: 'List A', description: 'Outer list' },
         { name: 'List B', description: 'Inner list' }
@@ -1057,7 +1039,6 @@ export const listNodes = [
       csharp: 'var {{inList}} = {{list}}.Zip({{mask}}, (v, m) => new { v, m }).Where(x => (bool)x.m).Select(x => x.v).ToList();'
     },
     help: {
-      description: 'Active-room workflow: keep only the items where the boolean mask is true (active rooms) from a list of room numbers and report how many remain.',
       inputs: [
         { name: 'List', description: 'Values to filter' },
         { name: 'Booleans', description: 'Parallel mask' }
@@ -1116,7 +1097,6 @@ export const listNodes = [
       csharp: 'double {{result}} = {{list}}.OfType<double>().Sum();'
     },
     help: {
-      description: 'Total-area workflow: sum the per-room areas of a 1..5 sample to report the floor-wide total area downstream.',
       inputs: [{ name: 'List', description: 'Numeric list' }],
       outputs: [{ name: 'Result', description: 'Sum total' }],
       example: {
@@ -1160,7 +1140,6 @@ export const listNodes = [
       csharp: 'double {{result}} = {{list}}.OfType<double>().Average();'
     },
     help: {
-      description: 'Mean-thickness workflow: average the four wall-thickness samples (1..4) to report the typical thickness for the assembly.',
       inputs: [{ name: 'List', description: 'Numeric list' }],
       outputs: [{ name: 'Result', description: 'Mean value' }],
       example: {
@@ -1204,7 +1183,6 @@ export const listNodes = [
       csharp: 'double {{result}} = {{list}}.OfType<double>().Min();'
     },
     help: {
-      description: 'Lightest-load workflow: scan column loads (1..6) and surface the lightest load value for the foundation sizing report.',
       inputs: [{ name: 'List', description: 'Numeric list' }],
       outputs: [{ name: 'Result', description: 'Smallest value' }],
       example: {
@@ -1248,7 +1226,6 @@ export const listNodes = [
       csharp: 'double {{result}} = {{list}}.OfType<double>().Max();'
     },
     help: {
-      description: 'Heaviest-load workflow: scan column loads (1..6) and surface the largest load value for structural sizing.',
       inputs: [{ name: 'List', description: 'Numeric list' }],
       outputs: [{ name: 'Result', description: 'Largest value' }],
       example: {
@@ -1297,7 +1274,6 @@ export const listNodes = [
       csharp: 'var {{result}} = {{list}}.OrderBy(x => x).ToList();'
     },
     help: {
-      description: 'Ranking workflow: sort a list of unsorted column loads, then pick the smallest as the baseline for downstream sizing.',
       inputs: [{ name: 'List', description: 'List to sort' }],
       outputs: [{ name: 'Result', description: 'Sorted list' }],
       example: {
@@ -1355,7 +1331,6 @@ export const listNodes = [
       csharp: 'var _r = new Random((int){{seed}}); var {{result}} = {{list}}.OrderBy(_ => _r.Next()).ToList();'
     },
     help: {
-      description: 'Random-draw workflow: shuffle a participant list (1..6) with a fixed seed for reproducibility and surface the first drawn participant.',
       inputs: [
         { name: 'List', description: 'List to shuffle' },
         { name: 'Seed', description: 'Random seed' }
@@ -1405,7 +1380,6 @@ export const listNodes = [
       csharp: 'var {{result}} = {{list}}.Distinct().ToList();'
     },
     help: {
-      description: 'Distinct-materials workflow: deduplicate a list of repeated floor-material codes and report how many distinct materials appear.',
       inputs: [{ name: 'List', description: 'List to deduplicate' }],
       outputs: [{ name: 'Result', description: 'Distinct items' }],
       example: {
@@ -1463,7 +1437,6 @@ export const listNodes = [
       csharp: 'var {{result}} = {{list}}.Select((x, i) => new { x, i }).GroupBy(g => g.i / (int){{size}}).Select(g => g.Select(x => x.x).ToList()).ToList();'
     },
     help: {
-      description: 'Pagination workflow: partition 1..6 invoices into chunks of 2 per page and report the resulting page count.',
       inputs: [
         { name: 'List', description: 'List to partition' },
         { name: 'Size', description: 'Items per chunk' }
@@ -1519,7 +1492,6 @@ export const listNodes = [
       csharp: 'var {{result}} = Enumerable.Range(0, {{list}}.Max(r => r.Count)).Select(i => {{list}}.Select(r => r.ElementAtOrDefault(i)).ToList()).ToList();'
     },
     help: {
-      description: 'Rows-to-columns workflow: transpose a 2-row grid built from two 1..3 ranges and count how many resulting columns the operation produced.',
       inputs: [{ name: 'List', description: 'Rows to transpose' }],
       outputs: [{ name: 'Result', description: 'Columns' }],
       example: {
@@ -1572,7 +1544,6 @@ export const listNodes = [
       csharp: 'var {{result}} = {{list}}.Zip({{list}}.Skip(1), (a, b) => new[] { a, b }).ToList();'
     },
     help: {
-      description: 'Adjacent-waypoint workflow: build consecutive waypoint pairs from a 1..5 route and report how many leg segments the route contains.',
       inputs: [{ name: 'List', description: 'Source list' }],
       outputs: [{ name: 'Result', description: 'List of [a, b] pairs' }],
       example: {
@@ -1620,7 +1591,6 @@ export const listNodes = [
       csharp: 'int {{index}} = {{list}}.ToList().IndexOf({{item}});'
     },
     help: {
-      description: 'Locate-target workflow: find the position of waypoint 3 in a 1..6 route so downstream nodes can branch from that exact index.',
       inputs: [
         { name: 'List', description: 'List to search' },
         { name: 'Item', description: 'Value to find' }
@@ -1671,7 +1641,6 @@ export const listNodes = [
       csharp: 'bool {{result}} = {{list}}.Contains({{item}});'
     },
     help: {
-      description: 'Membership-gate workflow: check whether the target room number 3 appears in a list of active rooms (1..5) and pick the "active" label (1) or "missing" label (0) accordingly.',
       inputs: [
         { name: 'List', description: 'List to test' },
         { name: 'Item', description: 'Value to look for' }
@@ -1726,7 +1695,6 @@ export const listNodes = [
       csharp: 'var {{result}} = {{list}}.Select(x => {{code}}).ToList();'
     },
     help: {
-      description: 'Unit-conversion workflow: scale every measurement in 1..5 by 2 (e.g. metres → half-metres) and total the converted result downstream.',
       inputs: [{ name: 'List', description: 'List of values' }],
       outputs: [{ name: 'Result', description: 'Transformed list' }],
       example: {
@@ -1790,7 +1758,6 @@ export const listNodes = [
       csharp: 'var _g = {{list}}.GroupBy(x => {{expr}}); var {{groupKeys}} = _g.Select(g => g.Key).ToList(); var {{groups}} = _g.Select(g => g.ToList()).ToList();'
     },
     help: {
-      description: 'Floor-grouping workflow: bucket room numbers 1..7 by floor (x % 3) and report how many distinct floors the building has.',
       inputs: [
         { name: 'List', description: 'Items to group' },
         { name: 'Keys', description: 'Optional parallel keys' }

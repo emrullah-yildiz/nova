@@ -93,7 +93,6 @@ export const curvesNodes = [
       csharp: 'var {{arc}} = Geo.Arc3({{center}}, {{radius}}, {{startAngle}} * Math.PI / 180, {{endAngle}} * Math.PI / 180);'
     },
     help: {
-      description: 'Quarter-arc workflow: build a 90° arc of radius 5 around the origin and measure its arc length downstream as a quality check.',
       inputs: [
         { name: 'Center', description: 'Center of the arc' },
         { name: 'Radius', description: 'Radius' },
@@ -146,7 +145,6 @@ export const curvesNodes = [
       csharp: 'var {{curve}} = Geo.bezier({{points}});'
     },
     help: {
-      description: 'S-curve workflow: assemble 4 control points spanning an S-shape, build a Bezier curve through them, and surface its arc length downstream.',
       inputs: [{ name: 'Control Pts', description: 'List of Point3 control points' }],
       outputs: [{ name: 'Curve', description: 'Bezier curve' }],
       example: {
@@ -202,7 +200,6 @@ export const curvesNodes = [
       csharp: 'var {{circle}} = Geo.Circle3({{center}}, {{radius}});'
     },
     help: {
-      description: 'Circumference workflow: build a circle of radius 10 at the origin and read its circumference for downstream perimeter cost estimates.',
       inputs: [
         { name: 'Center', description: 'Center of the circle' },
         { name: 'Radius', description: 'Circle radius' }
@@ -258,7 +255,6 @@ export const curvesNodes = [
       csharp: 'var {{profile}} = Enumerable.Range(0, (int){{resolution}}).Select(j => new Point3({{center}}.X + {{radius}} * Math.Cos(2 * Math.PI * j / (int){{resolution}}), {{center}}.Y + {{radius}} * Math.Sin(2 * Math.PI * j / (int){{resolution}}), {{center}}.Z)).ToList();'
     },
     help: {
-      description: 'Sample-count workflow: discretise a circle into 24 perimeter points and confirm the sampling count downstream before feeding into a Loft.',
       inputs: [
         { name: 'Center', description: 'Center point' },
         { name: 'Radius', description: 'Radius' },
@@ -307,7 +303,6 @@ export const curvesNodes = [
       csharp: 'var {{direction}} = {{curve}}.chordDirection();'
     },
     help: {
-      description: 'Heading workflow: build a line from origin to (3, 4, 0) and surface its unit chord direction for downstream routing decisions.',
       inputs: [{ name: 'Curve', description: 'Any curve type' }],
       outputs: [{ name: 'Direction', description: 'Unit direction vector' }],
       example: {
@@ -361,7 +356,6 @@ export const curvesNodes = [
       csharp: 'var {{start}} = {{curve}}.pointAt(0); var {{end}} = {{curve}}.pointAt(1); var {{length}} = {{curve}}.length(); var {{midpoint}} = {{curve}}.getCenter(); var {{direction}} = {{curve}}.chordDirection();'
     },
     help: {
-      description: 'Introspection workflow: build a line from origin to (3,4,0), decompose it, and watch the length output as a tangible 5.0 confirmation.',
       inputs: [{ name: 'Curve', description: 'Curve to deconstruct' }],
       outputs: [
         { name: 'Start', description: 'Start point' },
@@ -408,7 +402,6 @@ export const curvesNodes = [
       csharp: 'var {{point}} = {{curve}}.pointAt(1);'
     },
     help: {
-      description: 'Terminus workflow: build a line from origin to (3,4,0) and extract its endpoint to confirm the target coordinates downstream.',
       inputs: [{ name: 'Curve', description: 'Any curve type' }],
       outputs: [{ name: 'Point', description: 'End point' }],
       example: {
@@ -449,7 +442,6 @@ export const curvesNodes = [
       csharp: 'var {{length}} = {{curve}}.length();'
     },
     help: {
-      description: 'Quick-length workflow: build a 3-4-5 line and confirm its arc length is exactly 5.0 — handy for unit-test style checks on curve construction.',
       inputs: [{ name: 'Curve', description: 'Any curve type' }],
       outputs: [{ name: 'Length', description: 'Arc length' }],
       example: {
@@ -490,7 +482,6 @@ export const curvesNodes = [
       csharp: 'var {{point}} = {{curve}}.pointAt(0);'
     },
     help: {
-      description: 'Origin-extraction workflow: build a line from origin to (3,4,0) and extract its start point to confirm the anchor downstream.',
       inputs: [{ name: 'Curve', description: 'Any curve type' }],
       outputs: [{ name: 'Point', description: 'Start point' }],
       example: {
@@ -534,7 +525,6 @@ export const curvesNodes = [
       csharp: 'var {{tangent}} = {{curve}}.tangentAt({{param}});'
     },
     help: {
-      description: 'Mid-tangent workflow: build a 3-4-5 line and read its tangent at the midpoint as the steady direction-of-travel vector.',
       inputs: [
         { name: 'Curve', description: 'Any curve type' },
         { name: 'Parameter t', description: 'Position along the curve' }
@@ -602,7 +592,6 @@ export const curvesNodes = [
       csharp: 'var {{profile}} = Enumerable.Range(0, (int){{resolution}}).Select(j => { double a = 2*Math.PI*j/(int){{resolution}}; double x = {{width}}/2*Math.Cos(a); double y = {{depth}}/2*Math.Sin(a); double r = {{rotation}}*Math.PI/180; return new Point3({{center}}.X + x*Math.Cos(r) - y*Math.Sin(r), {{center}}.Y + x*Math.Sin(r) + y*Math.Cos(r), {{center}}.Z); }).ToList();'
     },
     help: {
-      description: 'Discretisation workflow: sample a 10×6 ellipse at the origin into 24 perimeter points and confirm the sample count downstream before feeding into a Loft.',
       inputs: [
         { name: 'Center', description: 'Center point' },
         { name: 'Width', description: 'Span along X' },
@@ -666,7 +655,6 @@ export const curvesNodes = [
       csharp: 'var {{line}} = Geo.Line3({{origin}}, {{origin}}.add({{direction}}.normalize().scale({{length}})));'
     },
     help: {
-      description: 'Heading-and-distance workflow: shoot a 5-unit line from the origin along the X axis and confirm its length downstream as a quick sanity check.',
       inputs: [
         { name: 'Origin', description: 'Start point' },
         { name: 'Direction', description: 'Direction vector' },
@@ -716,7 +704,6 @@ export const curvesNodes = [
       csharp: 'var {{line}} = Geo.Line3({{startPoint}}, {{endPoint}});'
     },
     help: {
-      description: 'Pythagorean workflow: build a line from origin to (3, 4, 0) and read its length as the classic 3-4-5 hypotenuse for an instant correctness check.',
       inputs: [
         { name: 'Start Point', description: 'Start endpoint' },
         { name: 'End Point', description: 'End endpoint' }
@@ -767,7 +754,6 @@ export const curvesNodes = [
       csharp: 'var {{curve}} = Geo.createNurbsCurve({{points}}, (int){{degree}});'
     },
     help: {
-      description: 'Curvature workflow: build a degree-3 NURBS curve from 4 control points and measure its arc length to compare against the straight-line chord distance.',
       inputs: [
         { name: 'Control Pts', description: 'Control point list' },
         { name: 'Degree', description: 'NURBS degree' }
@@ -824,7 +810,6 @@ export const curvesNodes = [
       csharp: 'var {{curve}} = Geo.nurbsInterpolate({{points}}, (int){{degree}});'
     },
     help: {
-      description: 'Spline-fit workflow: fit a degree-3 NURBS through 4 anchor points and report the resulting arc length downstream.',
       inputs: [
         { name: 'Through Pts', description: 'Anchor points' },
         { name: 'Degree', description: 'NURBS degree' }
@@ -883,7 +868,6 @@ export const curvesNodes = [
       csharp: 'var {{polyline}} = Geo.Polyline3({{points}}, {{closed}});'
     },
     help: {
-      description: 'Perimeter workflow: assemble 4 corner points of a unit square, build a closed polyline, and surface its perimeter (4.0) as a tangible check.',
       inputs: [
         { name: 'Points', description: 'Ordered point list' },
         { name: 'Closed', description: 'Close to first point' }
@@ -951,7 +935,6 @@ export const curvesNodes = [
       csharp: 'var {{profile}} = new List<Point3> { new Point3({{center}}.X - {{width}}/2, {{center}}.Y - {{depth}}/2, {{center}}.Z), new Point3({{center}}.X + {{width}}/2, {{center}}.Y - {{depth}}/2, {{center}}.Z), new Point3({{center}}.X + {{width}}/2, {{center}}.Y + {{depth}}/2, {{center}}.Z), new Point3({{center}}.X - {{width}}/2, {{center}}.Y + {{depth}}/2, {{center}}.Z) };'
     },
     help: {
-      description: 'Corner-count workflow: generate the 4 corner points of a 10×6 rectangle at the origin and confirm exactly four corners arrive at the consumer.',
       inputs: [
         { name: 'Center', description: 'Center point' },
         { name: 'Width', description: 'Span along X' },
@@ -1005,7 +988,6 @@ export const curvesNodes = [
       csharp: 'var {{curve}} = Geo.blendCurves({{curve1}}, {{curve2}}, {{t}});'
     },
     help: {
-      description: 'Mid-blend workflow: blend two lines at t=0.5 and read the blended curve length downstream to verify a smooth interpolation.',
       inputs: [
         { name: 'Curve A', description: 'First curve' },
         { name: 'Curve B', description: 'Second curve' },
@@ -1061,7 +1043,6 @@ export const curvesNodes = [
       csharp: 'var {{curve}} = Geo.interpolate({{points}});'
     },
     help: {
-      description: 'Path-trace workflow: fit a smooth curve through 4 anchor points and report the resulting curve length downstream.',
       inputs: [{ name: 'Points', description: 'Anchor points' }],
       outputs: [{ name: 'Curve', description: 'Interpolating curve' }],
       example: {
@@ -1113,7 +1094,6 @@ export const curvesNodes = [
       csharp: 'var {{curves}} = Geo.tweenCurves({{curve1}}, {{curve2}}, (int){{count}});'
     },
     help: {
-      description: 'Floor-plate workflow: generate 5 evenly spaced intermediate curves between two parallel lines and confirm the produced count downstream.',
       inputs: [
         { name: 'Curve A', description: 'First boundary' },
         { name: 'Curve B', description: 'Second boundary' },

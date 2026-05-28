@@ -60,7 +60,6 @@ export const logicNodes = [
       csharp: 'bool {{result}} = {{a}} && {{b}};'
     },
     help: {
-      description: 'Eligibility workflow: a customer earns the bulk discount only when their cart total exceeds the threshold AND they are a member. Logic.And combines both checks and Logic.If returns the discounted price (or the original).',
       inputs: [
         { name: 'A', description: 'First boolean operand' },
         { name: 'B', description: 'Second boolean operand' }
@@ -121,7 +120,6 @@ export const logicNodes = [
       csharp: 'bool {{result}} = {{a}} || {{b}};'
     },
     help: {
-      description: 'Thermal-break workflow: specify a thicker wall assembly when the facade faces north OR when the outdoor temperature drops below freezing. Logic.Or fires when either condition is satisfied, and Logic.If picks the assembly thickness.',
       inputs: [
         { name: 'A', description: 'First boolean operand' },
         { name: 'B', description: 'Second boolean operand' }
@@ -182,7 +180,6 @@ export const logicNodes = [
       csharp: 'bool {{result}} = {{a}} ^ {{b}};'
     },
     help: {
-      description: 'Ballot-validation workflow: a ballot is valid only when exactly one option is chosen (not zero, not both). Logic.Xor flags valid ballots and Logic.If returns the score (1 valid, 0 invalid).',
       inputs: [
         { name: 'A', description: 'First boolean operand' },
         { name: 'B', description: 'Second boolean operand' }
@@ -236,7 +233,6 @@ export const logicNodes = [
       csharp: 'bool {{result}} = !{{value}};'
     },
     help: {
-      description: 'Inventory workflow: a reorder may be sent only when the warehouse is NOT empty. Logic.Compare flags an empty warehouse, Logic.Not inverts it, and Logic.If forwards the reorder quantity (or zero when blocked).',
       inputs: [{ name: 'Value', description: 'Boolean to invert' }],
       outputs: [{ name: 'Result', description: 'Inverted boolean value' }],
       example: {
@@ -293,7 +289,6 @@ export const logicNodes = [
       csharp: 'var {{result}} = {{condition}} ? {{ifTrue}} : {{ifFalse}};'
     },
     help: {
-      description: 'Pricing tier workflow: charge the bulk price when the order quantity clears the bulk threshold, otherwise charge the regular price. Logic.Compare drives Logic.If and the chosen unit price is forwarded downstream.',
       inputs: [
         { name: 'Test', description: 'Boolean selector' },
         { name: 'True', description: 'Returned when test is true' },
@@ -351,7 +346,6 @@ export const logicNodes = [
       csharp: 'bool {{result}} = {{a}} {{op}} {{b}};'
     },
     help: {
-      description: 'Reorder-alert workflow: forward the current stock count downstream (where a notification or restock job picks it up) only when stock falls below the reorder threshold. Logic.Compare tests the threshold and Logic.Gate forwards the value.',
       inputs: [
         { name: 'A', description: 'Left side of the comparison' },
         { name: 'B', description: 'Right side of the comparison' }
@@ -403,7 +397,6 @@ export const logicNodes = [
       csharp: 'var {{result}} = {{pass}} ? {{value}} : null;'
     },
     help: {
-      description: 'QA workflow: a calibrated sensor reading should only continue into the rest of the graph when it falls within tolerance. Logic.Compare checks the tolerance and Logic.Gate forwards the reading downstream when the check passes.',
       inputs: [
         { name: 'Value', description: 'Value to forward' },
         { name: 'Pass', description: 'Open/close the gate' }
@@ -450,7 +443,6 @@ export const logicNodes = [
       csharp: 'bool {{result}} = {{value}} == null;'
     },
     help: {
-      description: 'Fallback workflow: when a sensor reading is missing the dashboard should display a safe default temperature instead of a blank. Logic.IsNull detects the missing reading and Logic.If picks the default or the live value.',
       inputs: [{ name: 'Value', description: 'Value to inspect' }],
       outputs: [{ name: 'Result', description: 'True if the value is null or undefined' }],
       example: {
