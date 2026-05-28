@@ -55,6 +55,7 @@ import { installNovaConnectPanel } from './integrations/connect/connect-panel.js
 import { installGeoSelector } from './viewer/geo-selector.js';
 import { RuntimeConfig, getRuntimeConfig } from './config/runtime-config.js';
 import { NovaCloudClient, createNovaCloudClient } from './enterprise/cloud-client.js';
+import { requestWriteApproval, resolveApproval, getPendingApprovals, getApprovalStatus, recordHostAuditEvent } from './integrations/connect/revit-write-approval.js';
 
 const NovaConnect = createNovaConnectClient();
 let installedRevitBridge = RevitBridge;
@@ -189,6 +190,18 @@ function installAfterAppInit() {
   installNodeHelp(app);
   installNodeHelpPanel(app);
   installNovaConnectPanel(app);
+
+  // Expose Revit write approval module on window so the Connect panel
+  // buttons can call resolveApproval() via inline onclick handlers.
+  if (typeof window !== 'undefined') {
+    window.__revitWriteApproval = {
+      requestWriteApproval,
+      resolveApproval,
+      getPendingApprovals,
+      getApprovalStatus,
+      recordHostAuditEvent
+    };
+  }
   installGeoSelector(app);
 
   // Mount the Execution Engine v2 — enables dirty tracking, caching,
