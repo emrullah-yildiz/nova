@@ -118,6 +118,25 @@ describe('3D preview sync', () => {
     expect(documentRef.nodeEl.classList.contains('node-3d-hidden')).toBe(false);
   });
 
+  it('re-renders the panel even when called without an options object', () => {
+    // The geo-selector eye-button handler calls these helpers without an
+    // options arg; the panel still needs to redraw so the OFF glyph
+    // appears immediately instead of waiting for the next selection.
+    const { app, viewer } = createPreviewFixture();
+
+    setPreviewItemVisibility(app, viewer, viewer._sceneItems[0], false);
+    expect(viewer._renderCount).toBe(1);
+
+    setPreviewItemVisibility(app, viewer, viewer._sceneItems[0], true);
+    expect(viewer._renderCount).toBe(2);
+
+    setNodePreviewState(app, viewer, 'node-1', false);
+    expect(viewer._renderCount).toBe(3);
+
+    showAllPreviews(app, viewer);
+    expect(viewer._renderCount).toBe(4);
+  });
+
   it('hides engine-tracked items (app._sceneItems with idx) when toggling node preview off', () => {
     const { app, documentRef } = createPreviewFixture();
     const child0 = { visible: true };

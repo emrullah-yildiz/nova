@@ -94,7 +94,9 @@ export function setNodePreviewState(app, viewer, nodeId, visible, options) {
   updateNodePreviewControl(nodeId, nextVisible, options);
   updateNodeHiddenClass(nodeId, !nextVisible, options);
 
-  if (viewer && changed && options && options.renderList !== false && typeof viewer._renderGeoList === 'function') {
+  // Re-render the in-viewport list by default; only skip when the caller
+  // passes { renderList: false } (e.g. during a batched rebuild).
+  if (viewer && changed && (!options || options.renderList !== false) && typeof viewer._renderGeoList === 'function') {
     viewer._renderGeoList();
   }
 
@@ -134,7 +136,9 @@ export function setPreviewItemVisibility(app, viewer, item, visible, options) {
     updateNodeHiddenClass(item.nodeId, !nodeVisible, options);
   }
 
-  if (viewer && changed && options && options.renderList !== false && typeof viewer._renderGeoList === 'function') {
+  // Re-render the in-viewport list by default; only skip when the caller
+  // passes { renderList: false } (e.g. during a batched rebuild).
+  if (viewer && changed && (!options || options.renderList !== false) && typeof viewer._renderGeoList === 'function') {
     viewer._renderGeoList();
   }
 
@@ -180,7 +184,9 @@ export function showAllPreviews(app, viewer, options) {
   }
 
   if (viewer) viewer._selectedItem = null;
-  if (viewer && changed && options && options.renderList !== false && typeof viewer._renderGeoList === 'function') {
+  // Re-render the in-viewport list by default; only skip when the caller
+  // passes { renderList: false } (e.g. during a batched rebuild).
+  if (viewer && changed && (!options || options.renderList !== false) && typeof viewer._renderGeoList === 'function') {
     viewer._renderGeoList();
   }
 
