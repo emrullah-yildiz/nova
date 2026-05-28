@@ -5,8 +5,6 @@ export const logicCategory = {
   icon: '⊻'
 };
 
-const STANDARD_V1 = { standardVersion: 'v1' };
-
 const booleanOutput = [{ id: 'result', name: 'Result', type: 'boolean', description: 'Boolean result of the operation' }];
 const valueOutput = [{ id: 'result', name: 'Result', type: 'any', description: 'Value forwarded from the input' }];
 
@@ -91,7 +89,6 @@ export const logicNodes = [
       },
       sampleCode: '{{result}} = {{a}} and {{b}}'
     },
-    metadata: STANDARD_V1
   },
   {
     type: 'Logic.Or',
@@ -151,7 +148,6 @@ export const logicNodes = [
       },
       sampleCode: '{{result}} = {{a}} or {{b}}'
     },
-    metadata: STANDARD_V1
   },
   {
     type: 'Logic.Xor',
@@ -209,7 +205,6 @@ export const logicNodes = [
       },
       sampleCode: '{{result}} = ({{a}} or {{b}}) and not ({{a}} and {{b}})'
     },
-    metadata: STANDARD_V1
   },
   {
     type: 'Logic.Not',
@@ -257,7 +252,6 @@ export const logicNodes = [
       },
       sampleCode: '{{result}} = not {{value}}'
     },
-    metadata: STANDARD_V1
   },
   {
     type: 'Logic.If',
@@ -317,7 +311,6 @@ export const logicNodes = [
       },
       sampleCode: '{{result}} = {{ifTrue}} if {{condition}} else {{ifFalse}}'
     },
-    metadata: STANDARD_V1
   },
   {
     type: 'Logic.Compare',
@@ -372,7 +365,6 @@ export const logicNodes = [
       },
       sampleCode: '{{result}} = {{a}} {{op}} {{b}}'
     },
-    metadata: STANDARD_V1
   },
   {
     type: 'Logic.Gate',
@@ -425,7 +417,6 @@ export const logicNodes = [
       },
       sampleCode: '{{result}} = {{value}} if {{pass}} else None'
     },
-    metadata: STANDARD_V1
   },
   {
     type: 'Logic.IsNull',
@@ -469,7 +460,6 @@ export const logicNodes = [
         ]
       },
       sampleCode: '{{result}} = {{value}} is None'
-    },
-    metadata: STANDARD_V1
+    }
   }
 ];

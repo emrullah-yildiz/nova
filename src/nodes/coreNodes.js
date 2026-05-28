@@ -1,35 +1,26 @@
 import { NODE_LIBRARY, NODE_TYPE_MAP } from '../core/nodes.js';
-import { inputCategory, inputNodes } from './categories/input.js';
-import { listCategory, listNodes } from './categories/list.js';
 import { logicCategory, logicNodes } from './categories/logic.js';
-import { mathCategory, mathNodes } from './categories/math.js';
 import { legacyCoreCategories, legacyCoreNodes } from './legacyCoreNodes.js';
 import { createNodeRegistry, toLegacyNodeDefinition } from './registry.js';
 
 const modernCategories = [
-  inputCategory,
-  listCategory,
-  logicCategory,
-  mathCategory
+  logicCategory
 ];
 
-const modernCategoryIds = new Set(modernCategories.map(category => category.id));
+const modernCategoryIds = new Set(modernCategories.map((category) => category.id));
 
 export const coreCategories = [
   ...modernCategories,
-  ...legacyCoreCategories.filter(category => !modernCategoryIds.has(category.id))
+  ...legacyCoreCategories.filter((category) => !modernCategoryIds.has(category.id))
 ];
 
 export const coreNodes = [
-  ...inputNodes,
-  ...listNodes,
   ...logicNodes,
-  ...mathNodes,
   ...legacyCoreNodes
 ];
 
 export function registerCoreNodes(registry) {
-  coreCategories.forEach(category => registry.registerCategory(category));
+  coreCategories.forEach((category) => registry.registerCategory(category));
   registry.registerNodes(coreNodes);
   return registry;
 }
@@ -48,17 +39,21 @@ export function getLiveCoreRegistry() {
   return _liveCoreRegistry;
 }
 
+function isModernNode(node) {
+  return node && (!node.metadata || node.metadata.source !== 'legacy-node-library');
+}
+
 function mergeRegistryIntoLegacyMaps(registry) {
   const existingCategoryIds = new Set(NODE_LIBRARY.categories.map((category) => category.id));
 
   registry.listCategories().forEach((category) => {
-    const v1NodeDefs = category.nodes
+    const modernNodes = category.nodes
       .map((type) => registry.getNode(type))
-      .filter((node) => node && node.metadata && node.metadata.standardVersion === 'v1');
+      .filter(isModernNode);
 
-    if (v1NodeDefs.length === 0) return;
+    if (modernNodes.length === 0) return;
 
-    const legacyShapes = v1NodeDefs
+    const legacyShapes = modernNodes
       .map(toLegacyNodeDefinition)
       .filter((node) => !NODE_TYPE_MAP[node.type]);
 
@@ -86,14 +81,14 @@ function mergeRegistryIntoLegacyMaps(registry) {
     });
   });
 
-  const v1CanonicalTypes = new Set(
+  const modernCanonicalTypes = new Set(
     registry.listNodes()
-      .filter((node) => node.metadata && node.metadata.standardVersion === 'v1')
+      .filter(isModernNode)
       .map((node) => node.type)
   );
 
   registry.aliases.forEach((canonical, alias) => {
-    if (!v1CanonicalTypes.has(canonical)) return;
+    if (!modernCanonicalTypes.has(canonical)) return;
     if (!NODE_TYPE_MAP[alias]) {
       NODE_TYPE_MAP[alias] = NODE_TYPE_MAP[canonical];
     }
