@@ -391,6 +391,12 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
     }
 
     var defaultLacingMode = def.lacing && def.lacing.mode ? def.lacing.mode : null;
+    var supportsGenericLacing = !defaultLacingMode
+      && !def.dynamicInputs
+      && (def.inputs || []).length > 0
+      && (def.outputs || []).length > 0
+      && !(def.inputs || []).some(function(input) { return input.type === 'list'; });
+    if (supportsGenericLacing) defaultLacingMode = 'shortest';
 
     if (propsControls.length > 0 || (def.controls || []).some(function(c) { return c.type === 'formula'; }) || (defaultLacingMode && defaultLacingMode !== 'none')) {
 

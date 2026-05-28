@@ -324,11 +324,91 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
+    function supportsGenericLacing() {
+      var def = nd.def || {};
+      var inputs = def.inputs || [];
+      if (inputs.length === 0 || def.dynamicInputs) return false;
+      if (def.lacing && def.lacing.mode === 'none') return false;
+      return !inputs.some(function(input) { return input.type === 'list'; });
+    }
+
+    function computeGenericLacedValue(mode) {
+      var def = nd.def || {};
+      var inputDefinitions = def.inputs || [];
+      var outputs = def.outputs || [];
+      var inputValues = {};
+
+      inputDefinitions.forEach(function(input) {
+        var value = getInput(input.id);
+        inputValues[input.id] = value !== undefined ? value : getVal(input.id, undefined);
+      });
+
+      if (!hasListInput(inputDefinitions, inputValues)) return undefined;
+
+      var frames = createLacingFrames(inputDefinitions, inputValues, mode);
+      var singleOutputId = outputs.length === 1 ? outputs[0].id : null;
+      var portValues = {};
+      outputs.forEach(function(output) { portValues[output.id] = []; });
+
+      function executeFrame(frame) {
+        var previousPortValues = nd._portValues;
+        delete nd._portValues;
+
+        var framedGetInput = function(portId) {
+          return Object.prototype.hasOwnProperty.call(frame, portId) ? frame[portId] : getInput(portId);
+        };
+        var framedGetVal = function(portId, fallback) {
+          return Object.prototype.hasOwnProperty.call(frame, portId) && frame[portId] !== undefined
+            ? frame[portId]
+            : getVal(portId, fallback);
+        };
+
+        var value = computeInner(nd, framedGetInput, framedGetVal);
+        var framePortValues = nd._portValues;
+        nd._portValues = previousPortValues;
+
+        if (framePortValues) return framePortValues;
+        if (singleOutputId) return { [singleOutputId]: value };
+        return value && typeof value === 'object' ? value : {};
+      }
+
+      frames.forEach(function(frame) {
+        if (Array.isArray(frame)) {
+          var nested = {};
+          outputs.forEach(function(output) { nested[output.id] = []; });
+          frame.forEach(function(innerFrame) {
+            var outputValues = executeFrame(innerFrame);
+            outputs.forEach(function(output) { nested[output.id].push(outputValues[output.id]); });
+          });
+          outputs.forEach(function(output) { portValues[output.id].push(nested[output.id]); });
+          return;
+        }
+
+        var outputValues = executeFrame(frame);
+        outputs.forEach(function(output) { portValues[output.id].push(outputValues[output.id]); });
+      });
+
+      if (outputs.length > 1) {
+        nd._portValues = portValues;
+        return portValues;
+      }
+
+      return singleOutputId ? portValues[singleOutputId] : undefined;
+    }
+
     var result = undefined;
 
     try {
 
-      result = computeInner(nd, getInput, getVal);
+      var mode = nd.controlValues && nd.controlValues._lacingMode
+        ? nd.controlValues._lacingMode
+        : (nd.def && nd.def.lacing && nd.def.lacing.mode) || null;
+
+      if (mode && mode !== 'none' && supportsGenericLacing()) {
+        result = computeGenericLacedValue(mode);
+      }
+
+      if (result === undefined) result = computeInner(nd, getInput, getVal);
 
     } catch(e) {
 

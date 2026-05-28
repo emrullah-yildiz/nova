@@ -94,6 +94,7 @@ export function toLegacyNodeDefinition(node) {
     controls: cloneList(node.controls),
     preview: node.preview,
     dynamicInputs: node.dynamicInputs,
+    lacing: node.lacing ? { ...node.lacing } : undefined,
     codegen: { ...node.codegen }
   };
 }

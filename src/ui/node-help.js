@@ -211,10 +211,12 @@ window.NODE_HELP['line-bypointanddirection'] = {
   example: { title: 'Line 10 units in X direction', nodes: [
     { type: 'point-origin', x: 0, y: 0 },
     { type: 'point-bycoordinates', x: 0, y: 80, controls: { x: 1, y: 0, z: 0 } },
-    { type: 'point-deconstruct', x: 200, y: 80 },
-    { type: 'vector3' in window ? 'vector3' : 'number-input', x: 200, y: 0, controls: { val: 10 } },
-    { type: 'line-bypointanddirection', x: 400, y: 0 }
-  ], wires: [[0,'point',3,'origin'],[1,'point',2,'point'],[2,'x',3,'direction'],[3,'line',4,'value']] }
+    { type: 'line-bystartpointendpoint', x: 200, y: 40 },
+    { type: 'curve-chord-direction', x: 400, y: 40 },
+    { type: 'number-input', x: 400, y: 140, controls: { val: 10 } },
+    { type: 'line-bypointanddirection', x: 600, y: 40 },
+    { type: 'output-watch', x: 780, y: 40 }
+  ], wires: [[0,'point',2,'startPoint'],[1,'point',2,'endPoint'],[2,'line',3,'curve'],[0,'point',5,'origin'],[3,'direction',5,'direction'],[4,'value',5,'length'],[5,'line',6,'value']] }
 };
 
 window.NODE_HELP['line-bystartpointendpoint'] = {
