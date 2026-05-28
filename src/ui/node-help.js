@@ -348,7 +348,16 @@ window.buildExampleGraph = function(helpData) {
   }
   ex.nodes.forEach(function(nDef) {
     var nd = app.addNodeToCanvas(nDef.type, nDef.x + offsetX, nDef.y + offsetY);
-    if (nd && nDef.controls) Object.keys(nDef.controls).forEach(function(k) { nd.controlValues[k] = nDef.controls[k]; });
+    if (nd && nDef.controls) {
+      Object.keys(nDef.controls).forEach(function(k) { nd.controlValues[k] = nDef.controls[k]; });
+      // The node was rendered with the definition's defaults; re-render so
+      // the textbox / dropdown / slider reflects the example's overrides.
+      var el = document.getElementById(nd.id);
+      if (el) {
+        el.remove();
+        app.renderNode(nd);
+      }
+    }
     created.push(nd);
   });
   created.forEach(function(nd, i) {
