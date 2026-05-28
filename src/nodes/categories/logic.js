@@ -62,20 +62,32 @@ export const logicNodes = [
       csharp: 'bool {{result}} = {{a}} && {{b}};'
     },
     help: {
-      description: 'Returns true when both A and B are true. Use to combine multiple gating conditions before a Logic.Gate or Logic.If.',
+      description: 'Range-check workflow: check that a value is greater than the lower bound AND less than the upper bound. Logic.And combines the two comparisons.',
       inputs: [
         { name: 'A', description: 'First boolean operand' },
         { name: 'B', description: 'Second boolean operand' }
       ],
-      outputs: [{ name: 'Result', description: 'True if both A and B are true' }],
+      outputs: [{ name: 'Result', description: 'True only when both A and B are true' }],
       example: {
-        title: 'Door visible only on level 1',
+        title: 'Value within range (10 < 15 < 100)',
         nodes: [
-          { type: 'boolean-input', x: 0, y: 0, controls: { val: 'True' } },
-          { type: 'boolean-input', x: 0, y: 80, controls: { val: 'True' } },
-          { type: 'Logic.And', x: 220, y: 30 }
+          { type: 'number-input', x: 0, y: 0, controls: { val: 15 } },
+          { type: 'number-input', x: 0, y: 80, controls: { val: 10 } },
+          { type: 'number-input', x: 0, y: 160, controls: { val: 100 } },
+          { type: 'Logic.Compare', x: 220, y: 20, controls: { op: '>' } },
+          { type: 'Logic.Compare', x: 220, y: 140, controls: { op: '<' } },
+          { type: 'Logic.And', x: 440, y: 80 },
+          { type: 'output-watch', x: 640, y: 80 }
         ],
-        wires: [[0, 'value', 2, 'a'], [1, 'value', 2, 'b']]
+        wires: [
+          [0, 'value', 3, 'a'],
+          [1, 'value', 3, 'b'],
+          [0, 'value', 4, 'a'],
+          [2, 'value', 4, 'b'],
+          [3, 'result', 5, 'a'],
+          [4, 'result', 5, 'b'],
+          [5, 'result', 6, 'value']
+        ]
       },
       sampleCode: '{{result}} = {{a}} and {{b}}'
     },
@@ -109,20 +121,33 @@ export const logicNodes = [
       csharp: 'bool {{result}} = {{a}} || {{b}};'
     },
     help: {
-      description: 'Returns true when at least one input is true. Combine with Logic.And to build composite enable conditions.',
+      description: 'Alarm workflow: raise a flag when either sensor reading exceeds its own threshold. Logic.Or combines the two over-threshold checks.',
       inputs: [
         { name: 'A', description: 'First boolean operand' },
         { name: 'B', description: 'Second boolean operand' }
       ],
-      outputs: [{ name: 'Result', description: 'True if A or B is true' }],
+      outputs: [{ name: 'Result', description: 'True when A or B (or both) is true' }],
       example: {
-        title: 'Triggered by either signal',
+        title: 'Any sensor over its threshold',
         nodes: [
-          { type: 'boolean-input', x: 0, y: 0, controls: { val: 'True' } },
-          { type: 'boolean-input', x: 0, y: 80, controls: { val: 'False' } },
-          { type: 'Logic.Or', x: 220, y: 30 }
+          { type: 'number-input', x: 0, y: 0, controls: { val: 45 } },
+          { type: 'number-input', x: 0, y: 60, controls: { val: 50 } },
+          { type: 'number-input', x: 0, y: 140, controls: { val: 12 } },
+          { type: 'number-input', x: 0, y: 200, controls: { val: 10 } },
+          { type: 'Logic.Compare', x: 220, y: 20, controls: { op: '>' } },
+          { type: 'Logic.Compare', x: 220, y: 160, controls: { op: '>' } },
+          { type: 'Logic.Or', x: 440, y: 90 },
+          { type: 'output-watch', x: 640, y: 90 }
         ],
-        wires: [[0, 'value', 2, 'a'], [1, 'value', 2, 'b']]
+        wires: [
+          [0, 'value', 4, 'a'],
+          [1, 'value', 4, 'b'],
+          [2, 'value', 5, 'a'],
+          [3, 'value', 5, 'b'],
+          [4, 'result', 6, 'a'],
+          [5, 'result', 6, 'b'],
+          [6, 'result', 7, 'value']
+        ]
       },
       sampleCode: '{{result}} = {{a}} or {{b}}'
     },
@@ -156,20 +181,31 @@ export const logicNodes = [
       csharp: 'bool {{result}} = {{a}} ^ {{b}};'
     },
     help: {
-      description: 'True when exactly one of A or B is true. Detect divergence between two parallel checks.',
+      description: 'Exactly-one-mode workflow: only emit 1 when exactly one of Mode A and Mode B is on. Logic.Xor drives a Logic.If that picks 1 (valid) or 0 (conflict).',
       inputs: [
         { name: 'A', description: 'First boolean operand' },
         { name: 'B', description: 'Second boolean operand' }
       ],
-      outputs: [{ name: 'Result', description: 'True if A and B differ' }],
+      outputs: [{ name: 'Result', description: 'True when exactly one of A or B is true' }],
       example: {
-        title: 'Exclusive choice',
+        title: 'Emit 1 only when exactly one mode is on',
         nodes: [
           { type: 'boolean-input', x: 0, y: 0, controls: { val: 'True' } },
           { type: 'boolean-input', x: 0, y: 80, controls: { val: 'False' } },
-          { type: 'Logic.Xor', x: 220, y: 30 }
+          { type: 'Logic.Xor', x: 220, y: 30 },
+          { type: 'number-input', x: 220, y: 130, controls: { val: 1 } },
+          { type: 'number-input', x: 220, y: 200, controls: { val: 0 } },
+          { type: 'Logic.If', x: 440, y: 80 },
+          { type: 'output-watch', x: 640, y: 80 }
         ],
-        wires: [[0, 'value', 2, 'a'], [1, 'value', 2, 'b']]
+        wires: [
+          [0, 'value', 2, 'a'],
+          [1, 'value', 2, 'b'],
+          [2, 'result', 5, 'condition'],
+          [3, 'value', 5, 'ifTrue'],
+          [4, 'value', 5, 'ifFalse'],
+          [5, 'result', 6, 'value']
+        ]
       },
       sampleCode: '{{result}} = ({{a}} or {{b}}) and not ({{a}} and {{b}})'
     },
@@ -200,16 +236,24 @@ export const logicNodes = [
       csharp: 'bool {{result}} = !{{value}};'
     },
     help: {
-      description: 'Inverts a boolean. Useful for negating a Logic.Compare result without wiring an extra equality check.',
+      description: 'Negate an equality test: Logic.Compare checks if two values are equal, Logic.Not flips it into a "not equal" signal that downstream nodes can react to.',
       inputs: [{ name: 'Value', description: 'Boolean to invert' }],
-      outputs: [{ name: 'Result', description: 'The inverted boolean' }],
+      outputs: [{ name: 'Result', description: 'Inverted boolean value' }],
       example: {
-        title: 'Invert a condition',
+        title: 'Not-equal check (5 ≠ 8)',
         nodes: [
-          { type: 'boolean-input', x: 0, y: 0, controls: { val: 'True' } },
-          { type: 'Logic.Not', x: 220, y: 0 }
+          { type: 'number-input', x: 0, y: 0, controls: { val: 5 } },
+          { type: 'number-input', x: 0, y: 80, controls: { val: 8 } },
+          { type: 'Logic.Compare', x: 220, y: 30, controls: { op: '==' } },
+          { type: 'Logic.Not', x: 420, y: 30 },
+          { type: 'output-watch', x: 620, y: 30 }
         ],
-        wires: [[0, 'value', 1, 'value']]
+        wires: [
+          [0, 'value', 2, 'a'],
+          [1, 'value', 2, 'b'],
+          [2, 'result', 3, 'value'],
+          [3, 'result', 4, 'value']
+        ]
       },
       sampleCode: '{{result}} = not {{value}}'
     },
@@ -244,22 +288,32 @@ export const logicNodes = [
       csharp: 'var {{result}} = {{condition}} ? {{ifTrue}} : {{ifFalse}};'
     },
     help: {
-      description: 'Ternary selector. Pick one of two upstream values based on a boolean test.',
+      description: 'Threshold-driven choice: a Logic.Compare drives Logic.If so the output is 100 when the value clears the threshold and 0 otherwise.',
       inputs: [
         { name: 'Test', description: 'Boolean selector' },
         { name: 'True', description: 'Returned when test is true' },
         { name: 'False', description: 'Returned when test is false' }
       ],
-      outputs: [{ name: 'Result', description: 'The selected value' }],
+      outputs: [{ name: 'Result', description: 'Selected value' }],
       example: {
-        title: 'Pick 100 or 0',
+        title: 'Pick 100 when value > 10, else 0',
         nodes: [
-          { type: 'boolean-input', x: 0, y: 0, controls: { val: 'True' } },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 100 } },
-          { type: 'number-input', x: 0, y: 160, controls: { val: 0 } },
-          { type: 'Logic.If', x: 240, y: 60 }
+          { type: 'number-input', x: 0, y: 0, controls: { val: 15 } },
+          { type: 'number-input', x: 0, y: 80, controls: { val: 10 } },
+          { type: 'Logic.Compare', x: 220, y: 30, controls: { op: '>' } },
+          { type: 'number-input', x: 220, y: 130, controls: { val: 100 } },
+          { type: 'number-input', x: 220, y: 200, controls: { val: 0 } },
+          { type: 'Logic.If', x: 440, y: 80 },
+          { type: 'output-watch', x: 640, y: 80 }
         ],
-        wires: [[0, 'value', 3, 'condition'], [1, 'value', 3, 'ifTrue'], [2, 'value', 3, 'ifFalse']]
+        wires: [
+          [0, 'value', 2, 'a'],
+          [1, 'value', 2, 'b'],
+          [2, 'result', 5, 'condition'],
+          [3, 'value', 5, 'ifTrue'],
+          [4, 'value', 5, 'ifFalse'],
+          [5, 'result', 6, 'value']
+        ]
       },
       sampleCode: '{{result}} = {{ifTrue}} if {{condition}} else {{ifFalse}}'
     },
@@ -293,20 +347,28 @@ export const logicNodes = [
       csharp: 'bool {{result}} = {{a}} {{op}} {{b}};'
     },
     help: {
-      description: 'Compares A and B using the dropdown operator. Use to drive Logic.If or Logic.Gate from numeric thresholds.',
+      description: 'Threshold gate workflow: Logic.Compare tests whether a value clears a threshold, and the boolean opens a Logic.Gate that lets the value through when the test passes.',
       inputs: [
         { name: 'A', description: 'Left side of the comparison' },
         { name: 'B', description: 'Right side of the comparison' }
       ],
       outputs: [{ name: 'Result', description: 'Boolean result' }],
       example: {
-        title: 'Is value greater than 10?',
+        title: 'Threshold check drives a gate',
         nodes: [
           { type: 'number-input', x: 0, y: 0, controls: { val: 15 } },
           { type: 'number-input', x: 0, y: 80, controls: { val: 10 } },
-          { type: 'Logic.Compare', x: 220, y: 30 }
+          { type: 'Logic.Compare', x: 220, y: 30, controls: { op: '>' } },
+          { type: 'Logic.Gate', x: 420, y: 30 },
+          { type: 'output-watch', x: 640, y: 30 }
         ],
-        wires: [[0, 'value', 2, 'a'], [1, 'value', 2, 'b']]
+        wires: [
+          [0, 'value', 2, 'a'],
+          [1, 'value', 2, 'b'],
+          [0, 'value', 3, 'value'],
+          [2, 'result', 3, 'pass'],
+          [3, 'result', 4, 'value']
+        ]
       },
       sampleCode: '{{result}} = {{a}} {{op}} {{b}}'
     },
@@ -338,20 +400,28 @@ export const logicNodes = [
       csharp: 'var {{result}} = {{pass}} ? {{value}} : null;'
     },
     help: {
-      description: 'Conditional pass-through. Use to short-circuit downstream geometry when an upstream condition fails.',
+      description: 'Short-circuit workflow: only forward a value when an upstream condition holds. Pair Logic.Gate with Logic.Compare to suppress downstream geometry until a check passes.',
       inputs: [
         { name: 'Value', description: 'Value to forward' },
         { name: 'Pass', description: 'Open/close the gate' }
       ],
       outputs: [{ name: 'Result', description: 'Forwarded value or undefined' }],
       example: {
-        title: 'Pass a number only when enabled',
+        title: 'Forward 42 only when it exceeds 10',
         nodes: [
           { type: 'number-input', x: 0, y: 0, controls: { val: 42 } },
-          { type: 'boolean-input', x: 0, y: 80, controls: { val: 'True' } },
-          { type: 'Logic.Gate', x: 220, y: 30 }
+          { type: 'number-input', x: 0, y: 80, controls: { val: 10 } },
+          { type: 'Logic.Compare', x: 220, y: 30, controls: { op: '>' } },
+          { type: 'Logic.Gate', x: 420, y: 30 },
+          { type: 'output-watch', x: 640, y: 30 }
         ],
-        wires: [[0, 'value', 2, 'value'], [1, 'value', 2, 'pass']]
+        wires: [
+          [0, 'value', 2, 'a'],
+          [1, 'value', 2, 'b'],
+          [0, 'value', 3, 'value'],
+          [2, 'result', 3, 'pass'],
+          [3, 'result', 4, 'value']
+        ]
       },
       sampleCode: '{{result}} = {{value}} if {{pass}} else None'
     },
@@ -378,16 +448,25 @@ export const logicNodes = [
       csharp: 'bool {{result}} = {{value}} == null;'
     },
     help: {
-      description: 'Tests for null or undefined upstream values. Combine with Logic.If to fall back to a default.',
+      description: 'Default-substitution workflow: when an upstream value is null/undefined, fall back to a default; otherwise pass the value through. Logic.IsNull drives the Logic.If branch.',
       inputs: [{ name: 'Value', description: 'Value to inspect' }],
       outputs: [{ name: 'Result', description: 'True if the value is null or undefined' }],
       example: {
-        title: 'Detect an empty input',
+        title: 'Substitute 0 when input is missing',
         nodes: [
           { type: 'number-input', x: 0, y: 0, controls: { val: 5 } },
-          { type: 'Logic.IsNull', x: 220, y: 0 }
+          { type: 'Logic.IsNull', x: 220, y: 0 },
+          { type: 'number-input', x: 0, y: 80, controls: { val: 0 } },
+          { type: 'Logic.If', x: 420, y: 30 },
+          { type: 'output-watch', x: 640, y: 30 }
         ],
-        wires: [[0, 'value', 1, 'value']]
+        wires: [
+          [0, 'value', 1, 'value'],
+          [1, 'result', 3, 'condition'],
+          [2, 'value', 3, 'ifTrue'],
+          [0, 'value', 3, 'ifFalse'],
+          [3, 'result', 4, 'value']
+        ]
       },
       sampleCode: '{{result}} = {{value}} is None'
     },

@@ -93,6 +93,48 @@ describe('node author contract (v1)', () => {
     expect(violations).toEqual([]);
   });
 
+  it('every v1 help example is a workflow (focal node has inputs wired in and result wired out)', () => {
+    const violations = [];
+
+    v1Nodes.forEach((node) => {
+      const example = node.help && node.help.example;
+      if (!example) {
+        violations.push(`${node.type}: missing example`);
+        return;
+      }
+      const nodes = Array.isArray(example.nodes) ? example.nodes : [];
+      const wires = Array.isArray(example.wires) ? example.wires : [];
+      const focalIndexes = nodes
+        .map((sampleNode, index) => (sampleNode.type === node.type ? index : -1))
+        .filter((index) => index >= 0);
+
+      if (focalIndexes.length === 0) {
+        violations.push(`${node.type}: example does not contain the focal node`);
+        return;
+      }
+
+      const hasInputs = (node.inputs || []).length > 0;
+      const hasOutputs = (node.outputs || []).length > 0;
+      const focalSet = new Set(focalIndexes);
+
+      if (hasInputs) {
+        const producerWires = wires.filter((wire) => focalSet.has(wire[2]) && !focalSet.has(wire[0]));
+        if (producerWires.length === 0) {
+          violations.push(`${node.type}: example has no producer wired into the focal node`);
+        }
+      }
+
+      if (hasOutputs) {
+        const consumerWires = wires.filter((wire) => focalSet.has(wire[0]) && !focalSet.has(wire[2]));
+        if (consumerWires.length === 0) {
+          violations.push(`${node.type}: example has no consumer wired from the focal node`);
+        }
+      }
+    });
+
+    expect(violations).toEqual([]);
+  });
+
   it('every v1 alias resolves to its canonical type via the registry', () => {
     const violations = [];
 
