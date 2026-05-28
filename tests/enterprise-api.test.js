@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createEnterpriseApiServer } from '../src/enterprise/api-server.mjs';
 import { MemoryStateStore, hashToken } from '../src/enterprise/state-store.mjs';
+import { MemoryObjectStorage } from '../src/enterprise/object-storage.mjs';
 
 function listen(server) {
   return new Promise(resolve => {
@@ -264,6 +265,77 @@ describe('enterprise API server', () => {
       const invalidLimit = await request(baseUrl, '/api/projects?limit=500', { token });
       expect(invalidLimit.status).toBe(400);
       expect(invalidLimit.body.error.message).toMatch(/limit/);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
+  it('stores artifact payloads and manages background jobs through the API', async () => {
+    const objectStorage = new MemoryObjectStorage();
+    const { server } = createEnterpriseApiServer({ allowDevLogin: true, objectStorage });
+    const port = await listen(server);
+    const baseUrl = 'http://127.0.0.1:' + port;
+
+    try {
+      const login = await request(baseUrl, '/api/auth/dev-login', {
+        method: 'POST',
+        body: { email: 'owner@demo.nova', organizationSlug: 'demo' }
+      });
+      const token = login.body.token;
+      const project = await request(baseUrl, '/api/projects', {
+        method: 'POST',
+        token,
+        body: { name: 'Export Project' }
+      });
+
+      const artifact = await request(baseUrl, '/api/projects/' + project.body.id + '/artifacts', {
+        method: 'POST',
+        token,
+        body: {
+          name: 'graph.json',
+          kind: 'graph-export',
+          contentType: 'application/json',
+          data: '{"ok":true}',
+          metadata: { source: 'test' }
+        }
+      });
+      expect(artifact.status).toBe(201);
+      expect(artifact.body.byteSize).toBe(Buffer.byteLength('{"ok":true}'));
+
+      const data = await request(baseUrl, '/api/artifacts/' + artifact.body.id + '/data', { token });
+      expect(Buffer.from(data.body.data, 'base64').toString('utf8')).toBe('{"ok":true}');
+
+      const job = await request(baseUrl, '/api/jobs', {
+        method: 'POST',
+        token,
+        body: {
+          type: 'graph.export',
+          projectId: project.body.id,
+          artifactId: artifact.body.id,
+          payload: { format: 'json' }
+        }
+      });
+      expect(job.status).toBe(201);
+      expect(job.body.status).toBe('queued');
+
+      const claimed = await request(baseUrl, '/api/jobs/claim', {
+        method: 'POST',
+        token,
+        body: { type: 'graph.export' }
+      });
+      expect(claimed.body.job.id).toBe(job.body.id);
+      expect(claimed.body.job.status).toBe('running');
+
+      const completed = await request(baseUrl, '/api/jobs/' + job.body.id + '/complete', {
+        method: 'POST',
+        token,
+        body: { result: { artifactId: artifact.body.id } }
+      });
+      expect(completed.body.status).toBe('completed');
+
+      const jobs = await request(baseUrl, '/api/jobs?limit=1', { token });
+      expect(jobs.body.jobs).toHaveLength(1);
+      expect(jobs.body.pagination.total).toBe(1);
     } finally {
       await new Promise(resolve => server.close(resolve));
     }

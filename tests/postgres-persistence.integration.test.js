@@ -44,6 +44,8 @@ describePostgres('PostgresPersistence integration', () => {
     expect(restored.projects).toHaveLength(1);
     expect(restored.projects[0].versions[0].graph.nodes[0].id).toBe('node_1');
     expect(restored.graphRuns[0].status).toBe('completed');
+    expect(restored.objectArtifacts[0].storageKey).toBe('org/org_it/projects/prj_it/artifacts/export.json');
+    expect(restored.backgroundJobs[0].status).toBe('queued');
     expect(restored.aiRequests[0].provider).toBe('mock');
     expect(restored.connectorSessions[0].status).toBe('online');
     expect(restored.auditEvents.map(event => event.type)).toContain('project.version.created');
@@ -110,6 +112,36 @@ function createSnapshot() {
       errorSummary: '',
       startedAt: now,
       completedAt: now + 25
+    }],
+    objectArtifacts: [{
+      id: 'art_it',
+      organizationId: 'org_it',
+      projectId: 'prj_it',
+      userId: 'usr_it',
+      name: 'export.json',
+      kind: 'graph-export',
+      contentType: 'application/json',
+      byteSize: 128,
+      storageKey: 'org/org_it/projects/prj_it/artifacts/export.json',
+      metadata: { format: 'json' },
+      createdAt: now
+    }],
+    backgroundJobs: [{
+      id: 'job_it',
+      organizationId: 'org_it',
+      userId: 'usr_it',
+      projectId: 'prj_it',
+      artifactId: 'art_it',
+      type: 'graph.export',
+      status: 'queued',
+      payload: { format: 'json' },
+      result: {},
+      errorSummary: '',
+      attempts: 0,
+      createdAt: now,
+      updatedAt: now,
+      availableAfter: now,
+      completedAt: null
     }],
     connectorSessions: [{
       id: 'con_it',

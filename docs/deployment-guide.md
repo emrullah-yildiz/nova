@@ -99,6 +99,7 @@ app = "nova-api"
 docker build -f Dockerfile.api -t nova-api .
 docker run --rm -p 8787:8787 \
   -e NOVA_DATABASE_URL=postgres://... \
+  -e NOVA_OBJECT_STORAGE_DIR=/data/nova-objects \
   -e NOVA_SESSION_SECRET=... \
   -e NOVA_CORS_ORIGIN=https://your-frontend.pages.dev \
   nova-api
@@ -110,6 +111,7 @@ docker run --rm -p 8787:8787 \
 |----------|----------|---------|---------|
 | `NOVA_DATABASE_URL` | Production | — | PostgreSQL connection string |
 | `NOVA_REDIS_URL` | Production | — | Redis URL for sessions, connector pairing, and rate limits |
+| `NOVA_OBJECT_STORAGE_DIR` | Production | In-memory | Durable object payload path for graph assets and exports |
 | `NOVA_SESSION_SECRET` | Yes | — | Long random string for session signing |
 | `NOVA_CORS_ORIGIN` | Yes | `*` | Frontend URL for CORS |
 | `NOVA_ALLOW_DEV_LOGIN` | No | `false` | Set to `true` for local dev only |
@@ -121,6 +123,7 @@ docker run --rm -p 8787:8787 \
 - [ ] Database: `npm run migrate` run at deploy time
 - [ ] Database integration check: `NOVA_POSTGRES_INTEGRATION_TESTS=true NOVA_DATABASE_URL=postgres://... npm run test:postgres`
 - [ ] Redis state store configured with `NOVA_REDIS_URL`
+- [ ] Object storage path configured with `NOVA_OBJECT_STORAGE_DIR`
 - [ ] `NOVA_ALLOW_DEV_LOGIN` not set or explicitly `false`
 - [ ] `NOVA_SESSION_SECRET` set to a strong random value
 - [ ] `NOVA_CORS_ORIGIN` set to the exact frontend URL

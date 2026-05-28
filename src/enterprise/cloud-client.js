@@ -73,6 +73,39 @@ export class NovaCloudClient {
     });
   }
 
+  async listArtifacts(projectId, pagination = {}) {
+    return this.request(withPagination('/api/projects/' + encodeURIComponent(projectId) + '/artifacts', pagination));
+  }
+
+  async createArtifact(projectId, payload = {}) {
+    return this.request('/api/projects/' + encodeURIComponent(projectId) + '/artifacts', {
+      method: 'POST',
+      body: payload
+    });
+  }
+
+  async getArtifactData(artifactId) {
+    return this.request('/api/artifacts/' + encodeURIComponent(artifactId) + '/data');
+  }
+
+  async listBackgroundJobs(pagination = {}) {
+    return this.request(withPagination('/api/jobs', pagination));
+  }
+
+  async enqueueBackgroundJob(payload = {}) {
+    return this.request('/api/jobs', {
+      method: 'POST',
+      body: payload
+    });
+  }
+
+  async completeBackgroundJob(jobId, result = {}) {
+    return this.request('/api/jobs/' + encodeURIComponent(jobId) + '/complete', {
+      method: 'POST',
+      body: { result }
+    });
+  }
+
   async createConnectorSession({ host = 'revit', projectId = '', connectorVersion = '0.1.0' } = {}) {
     return this.request('/api/connectors/sessions', {
       method: 'POST',
