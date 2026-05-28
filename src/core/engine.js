@@ -26,6 +26,7 @@
 
 import { createLacingFrames, hasListInput, mapLacingFrames } from './lacing.js';
 import { hostRegistry } from '../hosts/HostRegistry.js';
+import { setPreviewItemVisibility } from '../viewer/preview-sync.js';
 
 /* eslint-disable no-redeclare, no-inner-declarations, no-empty, no-unused-vars */
 
@@ -2093,7 +2094,9 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     var item = items[idx];
 
-    item.visible = !item.visible;
+    var nextVisible = !item.visible;
+
+    item.visible = nextVisible;
 
 
 
@@ -2105,13 +2108,13 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       var obj = group.children[item.idx];
 
-      if (obj) obj.visible = item.visible;
+      if (obj) obj.visible = nextVisible;
 
     } else if (item.idxStart !== undefined) {
 
       for (var i = item.idxStart; i <= item.idxEnd && i < group.children.length; i++) {
 
-        group.children[i].visible = item.visible;
+        group.children[i].visible = nextVisible;
 
       }
 
@@ -2127,13 +2130,13 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       if (nd) {
 
-        nd._preview3d = item.visible;
+        setPreviewItemVisibility(app, Viewer3D, item, nextVisible, { renderList: false });
 
         // Visual feedback on node canvas — use class instead of inline opacity
 
         var el = document.getElementById(nd.id);
 
-        if (el) el.classList.toggle('node-3d-hidden', !item.visible);
+        if (el) el.classList.toggle('node-3d-hidden', !nextVisible);
 
       }
 
