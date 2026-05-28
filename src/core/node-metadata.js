@@ -242,12 +242,12 @@ export const NODE_META = {
     example: 'floor_outline = Geo.Circle3(center, 10, Geo.Vector3(0,0,1))',
     whenToUse: 'Circular profiles, openings, column layouts.'
   },
-  'geo-distance': {
-    description: 'Calculate distance between two points.',
-    python: 'd = math.dist(a, b)',
-    csharp: 'var d = a.DistanceTo(b);',
-    example: 'span = math.dist(pt1, pt2)',
-    whenToUse: 'Measuring spans, checking proximity, attractor calculations.'
+  'geometry-distance': {
+    description: 'Calculate distance between any two geometries by their center point.',
+    python: 'd = Geo.distanceBetween(a, b)',
+    csharp: '// Geo.distanceBetween(a, b)',
+    example: 'span = Geo.distanceBetween(box, sphere)',
+    whenToUse: 'Measuring spans between points, lines, circles, meshes, or any geometry. Works with points, lines, polylines, circles, arcs, and meshes.'
   },
 
   // ═══════════════════════════════════════

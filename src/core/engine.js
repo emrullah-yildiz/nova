@@ -1027,6 +1027,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
       case 'geo-circle': { var c = getInput('center'), r = getInput('radius'); if (c) return new Geo.Circle3(c instanceof Geo.Point3 ? c : new Geo.Point3(0,0,0), r||5); return undefined; }
 
       case 'geo-distance': { var a = getInput('a'), b = getInput('b'); if (a && b) { var ap = a instanceof Geo.Point3 ? a : new Geo.Point3(a.x||0,a.y||0,a.z||0); var bp = b instanceof Geo.Point3 ? b : new Geo.Point3(b.x||0,b.y||0,b.z||0); return ap.distanceTo(bp); } return undefined; }
+      case 'geometry-distance': { var a = getInput('a'), b = getInput('b'); if (a && b && typeof Geo !== 'undefined' && Geo.distanceBetween) { return Geo.distanceBetween(a, b); } if (a && b && typeof a.distanceTo === 'function') { return a.distanceTo(b); } return undefined; }
 
 
 
