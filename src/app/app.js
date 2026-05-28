@@ -323,6 +323,11 @@ const app = {
         if (b === '_ungrouped') return -1;
         return a.localeCompare(b);
       });
+      // Skip the sub-folder header when the category contains only one
+      // non-ungrouped group — a single sub-folder under a category just
+      // adds a click for no organizational value.
+      var namedGroupCount = groupKeys.filter(function(g) { return g !== '_ungrouped'; }).length;
+      var skipSubgroupHeaders = namedGroupCount <= 1;
 
       html += `<div class="node-category open" data-cat="${cat.id}">
         <button class="node-category-header" onclick="app.toggleCategory('${cat.id}')">
@@ -334,7 +339,8 @@ const app = {
         <div class="node-category-items">`;
 
       groupKeys.forEach(function(g) {
-        if (g !== '_ungrouped') {
+        var renderSubgroupHeader = g !== '_ungrouped' && !skipSubgroupHeaders;
+        if (renderSubgroupHeader) {
           html += `<div class="node-subgroup">
             <button class="node-subgroup-header" onclick="app.toggleSubGroup(this)">
               <svg class="node-subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
@@ -345,7 +351,7 @@ const app = {
         groups[g].forEach(function(n) {
           html += `<button class="node-lib-item" draggable="true" ondragstart="app.onLibDragStart(event,'${n.type}')" onclick="app.addNodeFromLib('${n.type}')"><span class="nli-icon" style="color:${cat.color}">${n.icon}</span>${n.name}</button>`;
         });
-        if (g !== '_ungrouped') {
+        if (renderSubgroupHeader) {
           html += `</div></div>`;
         }
       });
@@ -516,7 +522,7 @@ const app = {
 
       if(c.type==='dropdown') h+=`<select onchange="app.onCtrl('${nd.id}','${c.id}',this.value)">${c.options.map(o=>`<option value="${o}" ${o===nd.controlValues[c.id]?'selected':''}>${o}</option>`).join('')}</select>`;
 
-      else if(c.type==='number') h+=`<input type="number" value="${nd.controlValues[c.id]}" onchange="app.onCtrl('${nd.id}','${c.id}',this.value)" placeholder="${c.label}">`;
+      else if(c.type==='number') h+=`<input type="number" step="any" value="${nd.controlValues[c.id]}" onchange="app.onCtrl('${nd.id}','${c.id}',this.value)" placeholder="${c.label}">`;
 
       else if(c.type==='text') h+=`<input type="text" value="${nd.controlValues[c.id]}" onchange="app.onCtrl('${nd.id}','${c.id}',this.value)" placeholder="${c.label}">`;
 
