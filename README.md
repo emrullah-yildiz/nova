@@ -1,23 +1,22 @@
-# NodeFlow AI
+# Nova
 
-NodeFlow AI is a browser-based visual scripting and parametric design prototype with AI-assisted graph editing.
-
-Nova is a visual scripting workspace for Revit/Rhino.
+Nova is a browser-based visual scripting workspace for parametric design, geometry exploration, AI-assisted graph creation, and Revit/Rhino-oriented workflows.
 
 ## Overview
 
-This repository contains a lightweight static web application that combines a node-based design canvas, a 3D viewport, a custom geometry kernel, and AI integration for code generation.
+The application combines a node-based design canvas, a 3D viewport, a custom geometry kernel, AI-assisted code generation, and early Nova Connect support for desktop design-tool integrations.
 
-## Current status
+## Current Status
 
-- Prototype/demo application, not yet packaged for production
-- Plain HTML/CSS/JavaScript with global browser scripts
-- Includes AI prompt integration via OpenAI/Groq/OpenRouter
-- Includes Revit scripting examples and geometry utilities
+- Vite-powered browser application with explicit `src/` module imports.
+- Graph execution, geometry utilities, node registry, AI workflow, and UI modules are organized under `src/`.
+- Vitest and Playwright coverage are present.
+- GitHub Actions gates linting, unit tests, browser workflow tests, build, and dependency audit.
+- Enterprise backend foundation is present for API contracts, auth/RBAC, project persistence, AI mediation, Connect pairing, and audit logging. It is still a pilot baseline, not a full production SaaS backend.
 
-## Run locally
+## Run Locally
 
-1. Install dev dependencies:
+1. Install dependencies:
 
 ```bash
 npm install
@@ -41,42 +40,48 @@ npm run dev
 npm run build
 ```
 
-5. Run browser workflow checks:
+5. Start the local enterprise API:
+
+```bash
+npm run dev:api
+```
+
+6. Run browser workflow checks:
 
 ```bash
 npx playwright install chromium
 npm run test:e2e
 ```
 
-6. Open `http://127.0.0.1:8080` in your browser if the server does not automatically open.
+7. Open `http://127.0.0.1:8080` in your browser if the server does not automatically open.
 
-## Project structure
+## Project Structure
 
-- `index.html` — main application shell
-- `app.js` — application state and UI workflow
-- `engine.js` — graph execution and node runtime
-- `geometry-lib.js`, `geo-advanced.js`, `nurbs-math.js` — geometry kernel
-- `gpt-client.js`, `gpt-integration.js` — AI API integration
-- `node-library.js`, `node-renderer.js`, `node-search-popup.js` — node editor UI
-- `save-load.js`, `logger.js`, `viewer3d.js` — persistence, logging, and 3D viewport
+- `index.html` - main application shell
+- `src/main.js` - browser module bootstrap
+- `src/app/` - application state and persistence helpers
+- `src/core/` - graph execution, compute engine, node metadata, and logging
+- `src/geometry/` - geometry kernel and math utilities
+- `src/ai/` - AI client and assistant integration
+- `src/ui/` - node editor, library, help, port, and canvas UI modules
+- `src/viewer/` - 3D viewport and geometry selection
+- `src/integrations/` - Nova Connect and Revit browser integration modules
+- `integrations/revit-addin/` - C# Revit add-in source
+- `scripts/connect-hub.cjs` - local Nova Connect WebSocket hub prototype
+- `tests/` - Vitest and Playwright tests
 
-## Phase 1 launch
+## Enterprise Planning
 
-This initial phase has begun with:
+Current enterprise planning documents:
 
-- `README.md` added
-- `package.json` added
-- `LICENSE` added
-- `.gitignore` added
-- `docs/phase-1.md` added
+- `docs/backend-architecture.md`
+- `docs/web-enterprise-production.md`
+- `docs/enterprise-mvp-requirements.md`
+- `docs/public-release-checklist.md`
+- `docs/revit-plugin-architecture.md`
 
-## Next Phase 1 goals
+Enterprise readiness work should continue toward managed Postgres/Redis persistence, production OIDC verification, deployment observability, and hardened Nova Connect relay infrastructure.
 
-- Establish a modular build toolchain
-- Add architecture and documentation artifacts
-- Separate UI, engine, and AI integration cleanly
-- Create a clear developer onboarding path
+## Public Release
 
-## Notes for maintainers
-
-This repo currently works as a static browser app, but enterprise readiness requires upstream work on packaging, modularization, testing, and security.
+Before making the repository public, use `docs/public-release-checklist.md` to verify repository hygiene, secret scanning, documentation accuracy, CI gates, licensing, and GitHub repository settings.

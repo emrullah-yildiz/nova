@@ -5,6 +5,7 @@ import {
   createIdentity,
   normalizeElementRecord
 } from '../connect/protocol.js';
+import { createRevitElementRef } from '../../core/values.js';
 
 function getRuntimeGlobal() {
   if (typeof window !== 'undefined') return window;
@@ -59,6 +60,10 @@ RevitElement.prototype.get = function(key, fallback) {
   if (key === 'levelName') return this.levelName;
   if (this.params && this.params[key] !== undefined) return this.params[key];
   return fallback !== undefined ? fallback : null;
+};
+
+RevitElement.prototype.toElementRef = function() {
+  return createRevitElementRef(this);
 };
 
 export function installRevitNodes(runtimeGlobal = getRuntimeGlobal()) {
@@ -290,7 +295,45 @@ RevitBridge = {
     }).filter(function(id) { return id !== undefined && id !== null && String(id).length > 0; });
     if (ids.length === 0) return [];
     var values = Array.isArray(value) ? value : ids.map(function() { return value; });
-    var results = await client.setParameterValues(ids, paramName, values, options || {});
+
+    // Enforce user approval before Revit write operations
+    var approvalMod = window.__revitWriteApproval;
+    if (approvalMod && typeof approvalMod.requestWriteApproval === 'function') {
+      var approvalResult = await approvalMod.requestWriteApproval({
+        host: 'revit',
+        operation: 'parameter.set',
+        description: 'Set ' + paramName + ' on ' + ids.length + ' Revit elements',
+        elementCount: ids.length,
+        elementIds: ids,
+        parameterName: paramName,
+        value: Array.isArray(values) ? values[0] : values
+      });
+      if (!approvalResult.approved) {
+        return elements.map(function(element) {
+          return {
+            elementId: RevitBridge.getElementIdentity(element),
+            parameterName: paramName,
+            ok: false,
+            message: 'Write rejected: ' + (approvalResult.message || 'User denied the write operation')
+          };
+        });
+      }
+      // Audit: record the approved host operation
+      try {
+        if (approvalMod.recordHostAuditEvent) {
+          approvalMod.recordHostAuditEvent(approvalResult, {
+            host: 'revit',
+            operation: 'parameter.set',
+            elementCount: ids.length,
+            elementIds: ids,
+            parameterName: paramName,
+            description: 'Set ' + paramName + ' on ' + ids.length + ' elements'
+          }).catch(function() {});
+        }
+      } catch (auditErr) {}
+    }
+
+    var results = await client.setParameterValues(ids, paramName, values, { ...(options || {}), approval: { approved: true, approvedBy: 'nova-user', scope: 'single-operation', message: 'Approved via Connect panel' } });
     results.forEach(function(result, index) {
       if (!result || !result.ok) return;
       var element = elements[index];

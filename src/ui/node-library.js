@@ -47,15 +47,15 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
         if (!dot) return;
         var hasWire = app.wires.some(function(w) { return w.toNode === nd.id && w.toPort === inp.id; });
         var hasCtrl = controlIds.indexOf(inp.id) >= 0 && nd.controlValues[inp.id] !== undefined && nd.controlValues[inp.id] !== null && nd.controlValues[inp.id] !== '';
-        dot.classList.toggle('has-data', hasWire || hasCtrl);
+        dot.classList.toggle('has-data', !!app._hasRun && (hasWire || hasCtrl));
       });
-      var computed = app.computeNodeValue(nd);
+      var computed = app.getLastRunNodeValue ? app.getLastRunNodeValue(nd) : undefined;
       var hasOutput = computed !== undefined && computed !== null;
       nd.def.outputs.forEach(function(out) {
         var dot = el.querySelector('.port-dot[data-port="' + out.id + '"][data-dir="output"]');
         if (!dot) return;
         var portVal = hasOutput;
-        if (nd._portValues && nd._portValues[out.id] !== undefined) portVal = true;
+        if (nd._lastRunPortValues && nd._lastRunPortValues[out.id] !== undefined) portVal = true;
         dot.classList.toggle('has-data', portVal);
       });
     });
@@ -134,6 +134,8 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
 
   function live3DUpdate() {
     if (typeof Viewer3D === 'undefined' || !Viewer3D.isInitialized || !Viewer3D.geometryGroup) return;
+    if (app._manualRunMode && !app._hasRun) return;
+    if (app._manualRunMode && app._graphDirty) return;
     while (Viewer3D.geometryGroup.children.length > 0) Viewer3D.geometryGroup.remove(Viewer3D.geometryGroup.children[0]);
     app.beginCompute();
     var rendered = 0;
@@ -142,7 +144,7 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
       if (nd._preview3d === false) return;
       if (val && val._type) { Geo.addToScene(Viewer3D.geometryGroup, val); rendered++; }
       else if (Array.isArray(val)) { val.forEach(function(v) { if (v && (v._type || v instanceof Geo.Point3)) { Geo.addToScene(Viewer3D.geometryGroup, v); rendered++; } }); }
-      if (nd._portValues) { Object.keys(nd._portValues).forEach(function(key) { var pv = nd._portValues[key]; if (pv && pv._type) { Geo.addToScene(Viewer3D.geometryGroup, pv); rendered++; } }); }
+      if (nd._lastRunPortValues) { Object.keys(nd._lastRunPortValues).forEach(function(key) { var pv = nd._lastRunPortValues[key]; if (pv && pv._type) { Geo.addToScene(Viewer3D.geometryGroup, pv); rendered++; } }); }
     });
     app.endCompute();
     if (rendered > 0 && Viewer3D._lastLiveCount === 0) Viewer3D.fitAll();
@@ -351,6 +353,197 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
   // Refresh library sidebar after all scripts loaded
   setTimeout(function() { if (app.renderNodeLibrary) app.renderNodeLibrary(); _outputTypeMap = null; }, 300);
 
+  app.copySelectedNodes = function() {
+    var selected = (this.selectedNodes || []).map(function(id) {
+      return app.nodes.find(function(n) { return n.id === id; });
+    }).filter(Boolean);
+    if (!selected.length) return false;
+    var selectedIds = selected.map(function(nd) { return nd.id; });
+    this._nodeClipboard = {
+      pasteCount: 0,
+      ids: selectedIds,
+      nodes: selected.map(function(nd) {
+        return {
+          type: nd.type,
+          x: nd.x,
+          y: nd.y,
+          def: JSON.parse(JSON.stringify(nd.def)),
+          controlValues: JSON.parse(JSON.stringify(nd.controlValues || {})),
+          dataPanelOpen: !!nd.dataPanelOpen,
+          propsPanelOpen: !!nd.propsPanelOpen,
+          inspectorOpen: !!nd.inspectorOpen
+        };
+      }),
+      wires: (this.wires || []).filter(function(w) {
+        return selectedIds.indexOf(w.toNode) >= 0;
+      }).map(function(w) {
+        return {
+          fromNode: w.fromNode,
+          fromPort: w.fromPort,
+          toNode: w.toNode,
+          toPort: w.toPort,
+          toCopied: selectedIds.indexOf(w.toNode) >= 0
+        };
+      })
+    };
+    return true;
+  };
+
+  app.pasteCopiedNodes = function() {
+    var clip = this._nodeClipboard;
+    if (!clip || !clip.nodes || !clip.nodes.length) return false;
+    if (this._pushHistory) this._pushHistory();
+    this._historySuspended = true;
+    clip.pasteCount = (clip.pasteCount || 0) + 1;
+    var offset = 40 * clip.pasteCount;
+    var idMap = {};
+    var pasted = [];
+    clip.nodes.forEach(function(src, index) {
+      var id = 'node-' + app.nextNodeId++;
+      app.nodeZCounter++;
+      var nd = {
+        id: id,
+        type: src.type,
+        x: Math.round(src.x + offset),
+        y: Math.round(src.y + offset),
+        def: JSON.parse(JSON.stringify(src.def)),
+        controlValues: JSON.parse(JSON.stringify(src.controlValues || {})),
+        dataPanelOpen: src.dataPanelOpen,
+        propsPanelOpen: src.propsPanelOpen,
+        inspectorOpen: src.inspectorOpen,
+        _propsOpen: src.propsPanelOpen,
+        _inspOpen: src.inspectorOpen,
+        zIndex: app.nodeZCounter
+      };
+      idMap[clip.ids[index]] = id;
+      app.nodes.push(nd);
+      app.renderNode(nd);
+      pasted.push(nd);
+    });
+    clip.wires.forEach(function(w) {
+      var fromNode = idMap[w.fromNode] || w.fromNode;
+      var toNode = idMap[w.toNode] || w.toNode;
+      if (!toNode) return;
+      if (!app.nodes.some(function(n) { return n.id === fromNode; })) return;
+      if (!app.nodes.some(function(n) { return n.id === toNode; })) return;
+      if (!w.toCopied && app.wires.some(function(existing) { return existing.toNode === toNode && existing.toPort === w.toPort; })) return;
+      if (app.addWire) app.addWire(fromNode, w.fromPort, toNode, w.toPort);
+      else app.wires.push({ fromNode: fromNode, fromPort: w.fromPort, toNode: toNode, toPort: w.toPort });
+    });
+    app.deselectAll();
+    pasted.forEach(function(nd) { app.selectNode(nd.id, true); });
+    if (app.invalidateCompute) app.invalidateCompute();
+    if (typeof Viewer3D !== 'undefined') Viewer3D._needsRebuild = true;
+    if (app.updatePortDots) app.updatePortDots();
+    if (app.renderWires) {
+      app.renderWires();
+      setTimeout(function() { app.renderWires(); }, 50);
+    }
+    app._historySuspended = false;
+    if (app.updateMenuState) app.updateMenuState();
+    if (app._updateHistoryMenuState) app._updateHistoryMenuState();
+    return true;
+  };
+
+  app._historySnapshot = function() {
+    return {
+      nodes: JSON.parse(JSON.stringify(this.nodes || [])),
+      wires: JSON.parse(JSON.stringify(this.wires || [])),
+      selectedNodes: (this.selectedNodes || []).slice(),
+      nextNodeId: this.nextNodeId,
+      nodeZCounter: this.nodeZCounter,
+      hasRun: !!this._hasRun,
+      lastRunVersion: this._lastRunVersion || 0
+    };
+  };
+
+  app._restoreHistorySnapshot = function(snapshot) {
+    if (!snapshot) return;
+    this._historyRestoring = true;
+    this.nodes = JSON.parse(JSON.stringify(snapshot.nodes || []));
+    this.wires = JSON.parse(JSON.stringify(snapshot.wires || []));
+    this.selectedNodes = [];
+    this.nextNodeId = snapshot.nextNodeId || 1;
+    this.nodeZCounter = snapshot.nodeZCounter || 10;
+    this._hasRun = !!snapshot.hasRun;
+    this._lastRunVersion = snapshot.lastRunVersion || 0;
+    var canvas = document.getElementById('node-canvas');
+    if (canvas) canvas.innerHTML = '';
+    var svg = document.getElementById('wire-svg');
+    if (svg) svg.innerHTML = '';
+    this.nodes.forEach(function(nd) { app.renderNode(nd); });
+    (snapshot.selectedNodes || []).forEach(function(id) {
+      if (app.nodes.some(function(nd) { return nd.id === id; })) app.selectNode(id, true);
+    });
+    if (this.updatePortDots) this.updatePortDots();
+    if (this.renderWires) {
+      this.renderWires();
+      setTimeout(function() { app.renderWires(); }, 50);
+    }
+    if (this.invalidateCompute) this.invalidateCompute();
+    if (typeof Viewer3D !== 'undefined') Viewer3D._needsRebuild = true;
+    this._historyRestoring = false;
+    if (this.updateMenuState) this.updateMenuState();
+    if (this._updateHistoryMenuState) this._updateHistoryMenuState();
+  };
+
+  app._pushHistory = function() {
+    if (this._historyRestoring || this._historySuspended) return false;
+    if (!this._undoStack) this._undoStack = [];
+    if (!this._redoStack) this._redoStack = [];
+    var snapshot = this._historySnapshot();
+    var encoded = JSON.stringify(snapshot);
+    if (this._lastHistorySnapshot === encoded) return false;
+    this._undoStack.push(snapshot);
+    if (this._undoStack.length > 100) this._undoStack.shift();
+    this._redoStack = [];
+    this._lastHistorySnapshot = encoded;
+    if (this._updateHistoryMenuState) this._updateHistoryMenuState();
+    return true;
+  };
+
+  app._updateHistoryMenuState = function() {
+    var undo = document.getElementById('mi-undo');
+    var redo = document.getElementById('mi-redo');
+    var ws = this.currentPage === 'workspace';
+    if (undo) undo.classList.toggle('disabled', !ws || !(this._undoStack && this._undoStack.length));
+    if (redo) redo.classList.toggle('disabled', !ws || !(this._redoStack && this._redoStack.length));
+  };
+
+  app.undo = function() {
+    if (!this._undoStack || !this._undoStack.length) return false;
+    if (!this._redoStack) this._redoStack = [];
+    this._redoStack.push(this._historySnapshot());
+    var snapshot = this._undoStack.pop();
+    this._lastHistorySnapshot = JSON.stringify(snapshot);
+    this._restoreHistorySnapshot(snapshot);
+    return true;
+  };
+
+  app.redo = function() {
+    if (!this._redoStack || !this._redoStack.length) return false;
+    if (!this._undoStack) this._undoStack = [];
+    this._undoStack.push(this._historySnapshot());
+    var snapshot = this._redoStack.pop();
+    this._lastHistorySnapshot = JSON.stringify(snapshot);
+    this._restoreHistorySnapshot(snapshot);
+    return true;
+  };
+
+  app._wrapHistoryMethod = function(name) {
+    if (!this[name] || this['__historyWrapped_' + name]) return;
+    var original = this[name].bind(this);
+    this['__historyWrapped_' + name] = true;
+    this[name] = function() {
+      app._pushHistory();
+      return original.apply(app, arguments);
+    };
+  };
+
+  ['addNodeToCanvas','removeNode','addWire','onCtrl','_addDynInput','_removeDynInput','_spinCtrlDyn','_spinSliderDyn','onNodeDragStart'].forEach(function(name) {
+    app._wrapHistoryMethod(name);
+  });
+
   // ═══════════════════════════════════════
   // KEYBOARD SHORTCUTS
   // ═══════════════════════════════════════
@@ -358,11 +551,33 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
     if (app.currentPage !== 'workspace') return;
     if (['INPUT', 'TEXTAREA', 'SELECT'].indexOf(e.target.tagName) >= 0) return;
     var key = e.key.toLowerCase();
-    if (key === 'p' || key === 'd') {
+    if ((e.ctrlKey || e.metaKey) && key === 'z') {
+      e.preventDefault();
+      if (app.undo) app.undo();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && key === 'y') {
+      e.preventDefault();
+      if (app.redo) app.redo();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && key === 'c') {
+      if (app.copySelectedNodes && app.copySelectedNodes()) e.preventDefault();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && key === 'v') {
+      if (app.pasteCopiedNodes && app.pasteCopiedNodes()) e.preventDefault();
+      return;
+    }
+    if (key === 'p' || key === 'd' || key === 'w') {
       var selIds = (app.selectedNodes && app.selectedNodes.length > 0) ? app.selectedNodes : app.nodes.map(function(n) { return n.id; });
       if (selIds.length === 0) return;
       e.preventDefault();
-      selIds.forEach(function(nid) { var nd = app.nodes.find(function(n) { return n.id === nid; }); if (!nd) return; if (key === 'p') app.toggleProps(nid); else app.toggleInspector(nid); });
+      if (key === 'w') {
+        if (app.toggleWarningPanels) app.toggleWarningPanels(selIds);
+      } else {
+        selIds.forEach(function(nid) { var nd = app.nodes.find(function(n) { return n.id === nid; }); if (!nd) return; if (key === 'p') app.toggleProps(nid); else app.toggleInspector(nid); });
+      }
     }
     if (key === 'l' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); if (app.autoLayout) app.autoLayout(); }
   });
@@ -524,6 +739,109 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
     return created.length + ' nodes created';
   };
 
+  app._testLargeGeometryPipeline = function() {
+    this.newProject();
+    var self = this;
+    var created = [];
+
+    function add(type, x, y) {
+      var nd = self.addNodeToCanvas(type, x, y);
+      if (nd) created.push(nd);
+      return nd;
+    }
+
+    function setCtrl(nd, key, value) {
+      if (!nd) return;
+      nd.controlValues[key] = value;
+    }
+
+    function customize(nd, options) {
+      if (!nd) return;
+      options = options || {};
+      if (options.name) nd.def.name = options.name;
+      if (options.outputs) nd.def.outputs = options.outputs;
+      if (options.inputs) nd.def.inputs = options.inputs;
+      var el = document.getElementById(nd.id);
+      if (el) {
+        el.remove();
+        self.renderNode(nd);
+      }
+    }
+
+    var title = add('custom-comment', 40, 40);
+    setCtrl(title, 'text', 'Pure mesh stress template: generate 10,000 Nova geometry refs, show bounds first, then preview meshes. Full mesh sample is left unconnected for on-demand loading.');
+    customize(title);
+
+    var boundsGenerator = add('custom-python', 80, 165);
+    setCtrl(boundsGenerator, 'code', [
+      '_count = 10000',
+      'bounds_refs = []',
+      'for i in range(_count):',
+      '    _x = i % 100',
+      '    _y = int(i / 100) % 100',
+      '    _z = int(i / 10000)',
+      '    bounds_refs.append({"type":"GeometryRef","host":"nova","id":"mesh-" + i,"versionId":"synthetic-v1","bounds":{"min":[_x,_y,_z],"max":[_x+0.8,_y+0.8,_z+0.8]},"metadata":{"geometryKind":"mesh","level":"Bounds"}})'
+    ].join('\n'));
+    customize(boundsGenerator, {
+      name: 'Mesh.BoundsRefs 10k',
+      outputs: [{ id: 'output0', name: 'Bounds Refs', type: 'list' }]
+    });
+
+    var previewGenerator = add('custom-python', 395, 165);
+    setCtrl(previewGenerator, 'code', [
+      'preview_meshes = []',
+      'for ref in input0:',
+      '    _min = ref.bounds.min',
+      '    _max = ref.bounds.max',
+      '    _cx = (_min[0] + _max[0]) / 2',
+      '    _cy = (_min[1] + _max[1]) / 2',
+      '    _cz = (_min[2] + _max[2]) / 2',
+      '    preview_meshes.append(Geo.createBox(Geo.Point3(_cx,_cy,_cz), 0.8, 0.8, 0.8))'
+    ].join('\n'));
+    customize(previewGenerator, {
+      name: 'Mesh.PreviewMeshes',
+      inputs: [{ id: 'input0', name: 'Bounds Refs', type: 'list' }],
+      outputs: [{ id: 'output0', name: 'Preview Meshes', type: 'list' }]
+    });
+
+    var fullGenerator = add('custom-python', 395, 440);
+    setCtrl(fullGenerator, 'code', [
+      '# Connect Bounds Refs to this input only when you want the heavier mesh sample.',
+      'full_mesh_sample = []',
+      'for ref in input0.slice(0, 100):',
+      '    _min = ref.bounds.min',
+      '    _max = ref.bounds.max',
+      '    _cx = (_min[0] + _max[0]) / 2',
+      '    _cy = (_min[1] + _max[1]) / 2',
+      '    _cz = (_min[2] + _max[2]) / 2',
+      '    _box = Geo.createBox(Geo.Point3(_cx,_cy,_cz), 0.8, 0.8, 0.8)',
+      '    full_mesh_sample.append(Geo.subdivide(_box, 1))'
+    ].join('\n'));
+    customize(fullGenerator, {
+      name: 'Mesh.FullMeshSample',
+      inputs: [{ id: 'input0', name: 'Bounds Refs', type: 'list' }],
+      outputs: [{ id: 'output0', name: 'Full Mesh Sample', type: 'list' }]
+    });
+
+    var fullNote = add('custom-comment', 705, 440);
+    setCtrl(fullNote, 'text', 'Full mesh is intentionally unconnected. Wire Bounds Refs into Mesh.FullMeshSample and then to a Watch when you want to test the expensive path.');
+    customize(fullNote);
+
+    var boundsWatch = add('output-watch', 705, 115);
+    var previewWatch = add('output-watch', 705, 260);
+
+    if (boundsGenerator && previewGenerator) self.addWire(boundsGenerator.id, 'output0', previewGenerator.id, 'input0');
+    if (boundsGenerator && boundsWatch) self.addWire(boundsGenerator.id, 'output0', boundsWatch.id, 'value');
+    if (previewGenerator && previewWatch) self.addWire(previewGenerator.id, 'output0', previewWatch.id, 'value');
+
+    self.updatePortDots();
+    if (typeof updatePortDataStates === 'function') updatePortDataStates();
+    setTimeout(function() { self.renderWires(); }, 100);
+    if (self.autoLayout) setTimeout(function() { self.autoLayout(); }, 200);
+    self.addAIMessage('workspace', 'Large Mesh Geometry template loaded.\n\nThis is host-free: it creates synthetic Nova mesh geometry refs, then converts them to preview meshes. The full mesh sample node is available but intentionally unconnected for on-demand testing.');
+    return created.length + ' nodes created';
+  };
+
   // Landing page template cards
   var origRenderTemplates = app.renderTemplates ? app.renderTemplates.bind(app) : null;
   app.renderTemplates = function() {
@@ -535,6 +853,7 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
       { fn: '_testListNodes', color: 'var(--accent-peach)', icon: '☰', name: 'List Nodes Test', desc: '16 list operations with Range source' },
       { fn: '_testSurfaceNodes', color: 'var(--accent-teal)', icon: '◇', name: 'Surface Nodes Test', desc: 'All 5 surface nodes with geometry' }
     ];
+    templates.push({ fn: '_testLargeGeometryPipeline', color: 'var(--accent-blue)', icon: '10k', name: 'Large Mesh Geometry', desc: '10k mesh refs, preview meshes, full mesh on demand' });
     templates.forEach(function(t) {
       var card = document.createElement('div'); card.className = 'template-card'; card.style.setProperty('--card-accent', t.color);
       card.onclick = function() { app[t.fn](); };

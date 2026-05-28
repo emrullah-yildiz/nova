@@ -7,8 +7,10 @@
   "scripts": {
     "start": "vite --host 127.0.0.1",
     "dev": "vite",
+    "dev:api": "node scripts/enterprise-api.mjs",
     "build": "vite build",
     "preview": "vite preview",
+    "release:check": "npm run test && npm run build && npm audit --audit-level=moderate",
     "lint": "eslint tests/ --ext .js --ignore-path .gitignore",
     "lint:app": "eslint src/ --ext .js --ignore-path .gitignore",
     "lint:tests": "eslint tests/ --ext .js --ignore-path .gitignore",
@@ -17,7 +19,10 @@
     "lint:all": "eslint . --ext .js --ignore-path .gitignore",
     "format": "prettier --write .",
     "test": "vitest run",
-    "test:e2e": "node scripts/run-e2e.cjs"
+    "test:postgres": "vitest run tests/postgres-persistence.integration.test.js",
+    "test:e2e": "node scripts/run-e2e.cjs",
+    "migrate": "node scripts/run-migrations.mjs",
+    "db:migrate": "node scripts/run-migrations.mjs"
   },
   "keywords": [
     "visual-scripting",
@@ -39,6 +44,7 @@
     "vitest": "^4.1.6"
   },
   "dependencies": {
+    "pg": "^8.21.0",
     "ws": "^8.20.1"
   }
 }

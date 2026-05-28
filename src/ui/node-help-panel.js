@@ -1,4 +1,5 @@
 import { NODE_TYPE_MAP } from '../core/nodes.js';
+import { buildNodeHelpDoc } from './node-help-docs.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -184,7 +185,8 @@ export function installNodeHelpPanel(targetApp = getRuntimeApp()) {
     closeHelp();
     var nd = app.nodes.find(function(n) { return n.id === nodeId; });
     if (!nd) return;
-    var help = (window.NODE_HELP && window.NODE_HELP[nd.type]) ? window.NODE_HELP[nd.type] : null;
+    var explicitHelp = (window.NODE_HELP && window.NODE_HELP[nd.type]) ? window.NODE_HELP[nd.type] : null;
+    var help = buildNodeHelpDoc(nd.def, explicitHelp);
     var el = document.getElementById(nodeId);
     if (!el) return;
 
@@ -202,15 +204,15 @@ export function installNodeHelpPanel(targetApp = getRuntimeApp()) {
     h += '</div>';
 
     if (help) {
-      h += '<div class="nhp-desc">' + help.description + '</div>';
+      h += '<div class="nhp-desc">' + escapeHtml(help.description) + '</div>';
       if (help.inputs && help.inputs.length > 0) {
         h += '<div class="nhp-section-title">Inputs</div><table class="nhp-table">';
-        help.inputs.forEach(function(inp) { h += '<tr><td class="nhp-td-name">' + inp.name + '</td><td class="nhp-td-desc">' + inp.desc + '</td></tr>'; });
+        help.inputs.forEach(function(inp) { h += '<tr><td class="nhp-td-name">' + escapeHtml(inp.name) + '</td><td class="nhp-td-desc">' + escapeHtml(inp.desc) + '</td></tr>'; });
         h += '</table>';
       }
       if (help.outputs && help.outputs.length > 0) {
         h += '<div class="nhp-section-title">Outputs</div><table class="nhp-table">';
-        help.outputs.forEach(function(out) { h += '<tr><td class="nhp-td-name">' + out.name + '</td><td class="nhp-td-desc">' + out.desc + '</td></tr>'; });
+        help.outputs.forEach(function(out) { h += '<tr><td class="nhp-td-name">' + escapeHtml(out.name) + '</td><td class="nhp-td-desc">' + escapeHtml(out.desc) + '</td></tr>'; });
         h += '</table>';
       }
       if (help.example) {
@@ -246,7 +248,9 @@ export function installNodeHelpPanel(targetApp = getRuntimeApp()) {
   app._openNodeHelp = function(nodeId) { openHelp(nodeId); };
   app._closeNodeHelp = function() { closeHelp(); };
   app._addHelpExample = function(nodeType) {
-    var help = (window.NODE_HELP && window.NODE_HELP[nodeType]) ? window.NODE_HELP[nodeType] : null;
+    var explicitHelp = (window.NODE_HELP && window.NODE_HELP[nodeType]) ? window.NODE_HELP[nodeType] : null;
+    var def = NODE_TYPE_MAP[nodeType];
+    var help = buildNodeHelpDoc(def, explicitHelp);
     if (help && typeof window.buildExampleGraph === 'function') {
       var count = window.buildExampleGraph(help);
       closeHelp();
@@ -280,6 +284,15 @@ export function installNodeHelpPanel(targetApp = getRuntimeApp()) {
   console.log('[NodeFlow] Node Help Panel loaded (SVG diagrams)');
 
   return true;
+}
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 export default installNodeHelpPanel;

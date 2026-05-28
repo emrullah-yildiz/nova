@@ -26,7 +26,7 @@ test.describe('Nova browser workflows', () => {
   test('creates, runs, saves, and reloads a basic graph', async ({ page }) => {
     await waitForApp(page);
 
-    const result = await page.evaluate(() => {
+    const result = await page.evaluate(async () => {
       localStorage.clear();
       app.newProject();
 
@@ -41,6 +41,7 @@ test.describe('Nova browser workflows', () => {
       app.addWire(a.id, 'value', sum.id, 'a');
       app.addWire(b.id, 'value', sum.id, 'b');
       app.addWire(sum.id, 'result', watch.id, 'value');
+      await app.runGraph();
       app.saveToLocal('E2E Workflow');
 
       const computed = app.computeNodeValue(watch);
@@ -48,6 +49,7 @@ test.describe('Nova browser workflows', () => {
 
       app.newProject();
       app.openFromLocal('E2E Workflow');
+      await app.runGraph();
 
       const reloadedWatch = app.nodes.find((node) => node.type === 'output-watch');
 
@@ -71,6 +73,90 @@ test.describe('Nova browser workflows', () => {
     });
 
     await expect(page.locator('#node-canvas .node')).toHaveCount(4);
+  });
+
+  test('shows wired property border only while an input wire is connected', async ({ page }) => {
+    await waitForApp(page);
+
+    const setup = await page.evaluate(async () => {
+      app.newProject();
+
+      const source = app.addNodeToCanvas('number-input', 80, 100);
+      const sum = app.addNodeToCanvas('math-add', 340, 100);
+
+      source.controlValues.val = 25;
+      sum._propsOpen = true;
+      sum.propsPanelOpen = true;
+      if (app._refreshRenderedNode) app._refreshRenderedNode(sum.id);
+
+      const initialInput = document.querySelector(`#${sum.id} .node-props-body .prop-row .prop-input`);
+      const initialStyle = initialInput.getAttribute('style') || '';
+
+      app.addWire(source.id, 'value', sum.id, 'a');
+      await app.runGraph();
+      if (app._refreshRenderedNode) app._refreshRenderedNode(sum.id);
+
+      return { sumId: sum.id, initialStyle };
+    });
+
+    const inputA = page
+      .locator(`#${setup.sumId} .node-props-body .prop-row`)
+      .filter({ has: page.locator('.prop-label', { hasText: /^A$/ }) })
+      .locator('.prop-input');
+    expect(setup.initialStyle).not.toContain('var(--accent-teal)');
+    await expect(inputA).toHaveValue('25');
+
+    const connectedStyle = await inputA.evaluate((input) => input.getAttribute('style') || '');
+    expect(connectedStyle).toContain('var(--accent-teal)');
+
+    const inputPortA = page.locator(`#${setup.sumId} .port-dot[data-port="a"][data-dir="input"]`);
+    const portBox = await inputPortA.boundingBox();
+    expect(portBox).not.toBeNull();
+
+    await page.mouse.move(portBox.x + portBox.width / 2, portBox.y + portBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(portBox.x - 160, portBox.y - 80);
+    await page.mouse.up();
+
+    const disconnectedInputA = page
+      .locator(`#${setup.sumId} .node-props-body .prop-row`)
+      .filter({ has: page.locator('.prop-label', { hasText: /^A$/ }) })
+      .locator('.prop-input');
+
+    await expect(disconnectedInputA).toHaveValue('0');
+
+    const disconnectedStyle = await disconnectedInputA.evaluate((input) => input.getAttribute('style') || '');
+    expect(disconnectedStyle).not.toContain('var(--accent-teal)');
+
+    const remainingWires = await page.evaluate(() => app.wires.length);
+    expect(remainingWires).toBe(0);
+  });
+
+  test('lets users choose a lacing mode from node properties', async ({ page }) => {
+    await waitForApp(page);
+
+    const setup = await page.evaluate(() => {
+      app.newProject();
+      const sum = app.addNodeToCanvas('math-add', 340, 100);
+      sum._propsOpen = true;
+      sum.propsPanelOpen = true;
+      if (app._refreshRenderedNode) app._refreshRenderedNode(sum.id);
+      return { sumId: sum.id };
+    });
+
+    const lacingSelect = page
+      .locator(`#${setup.sumId} .node-props-body .prop-row`, { hasText: 'Lacing' })
+      .locator('select.prop-input');
+
+    await expect(lacingSelect).toHaveValue('shortest');
+    await lacingSelect.selectOption('longest');
+
+    const storedLacingMode = await page.evaluate((sumId) => {
+      const node = app.nodes.find(item => item.id === sumId);
+      return node && node.controlValues._lacingMode;
+    }, setup.sumId);
+
+    expect(storedLacingMode).toBe('longest');
   });
 
   test('reports missing API key before attempting an AI provider call', async ({ page }) => {

@@ -24,12 +24,22 @@
 
 
 
+import { createLacingFrames, hasListInput, mapLacingFrames } from './lacing.js';
+import { hostRegistry } from '../hosts/HostRegistry.js';
+import { setPreviewItemVisibility } from '../viewer/preview-sync.js';
+
 /* eslint-disable no-redeclare, no-inner-declarations, no-empty, no-unused-vars */
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
   if (typeof globalThis !== 'undefined' && globalThis.app) return globalThis.app;
   return null;
+}
+
+function getHostAdapter(hostId) {
+  var runtimeGlobal = typeof globalThis !== 'undefined' ? globalThis : {};
+  var registry = runtimeGlobal.HostRegistry || (runtimeGlobal.NodeFlow && runtimeGlobal.NodeFlow.hostRegistry) || hostRegistry;
+  return registry.require(hostId || registry.activeHostId || 'revit');
 }
 
 export function installEngine(targetApp = getRuntimeApp()) {
@@ -48,6 +58,24 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
+  function executeBinaryLacedMath(nd, a, b, operation) {
+    if (a === undefined || b === undefined) return undefined;
+
+    var inputDefinitions = [{ id: 'a' }, { id: 'b' }];
+    var inputs = { a: a, b: b };
+    var mode = nd.controlValues && nd.controlValues._lacingMode
+      ? nd.controlValues._lacingMode
+      : (nd.def && nd.def.lacing && nd.def.lacing.mode) || 'shortest';
+
+    if (mode === 'none' || !hasListInput(inputDefinitions, inputs)) {
+      return operation(a, b);
+    }
+
+    return mapLacingFrames(createLacingFrames(inputDefinitions, inputs, mode), function(frame) {
+      return operation(frame.a, frame.b);
+    });
+  }
+
   var CACHE_UNDEFINED = Symbol('CACHE_UNDEFINED');
 
   var CACHE_COMPUTING = Symbol('CACHE_COMPUTING');
@@ -57,6 +85,73 @@ export function installEngine(targetApp = getRuntimeApp()) {
   app._computeCache = null;
 
   app._computeDepth = 0;
+  var isVitestRuntime = typeof process !== 'undefined' && process.env && process.env.VITEST;
+  app._manualRunMode = typeof document !== 'undefined' && !isVitestRuntime;
+  app._hasRun = false;
+  app._isRunningGraph = false;
+  app._lastRunVersion = 0;
+  app._debugHostLogs = [];
+
+  app._manualNoDataHTML = function() {
+    return '<span style="color:var(--text-muted)">Run to inspect data</span>';
+  };
+
+  app._escapeHTML = function(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  };
+
+  app.createErrorValue = function(error, nodeId) {
+    return {
+      type: 'ErrorValue',
+      nodeId: nodeId || '',
+      message: error && error.message ? error.message : String(error || 'Unknown error'),
+      stack: error && error.stack ? error.stack : ''
+    };
+  };
+
+  app._recordHostRequest = function(entry) {
+    var log = Object.assign({ at: new Date().toISOString() }, entry || {});
+    this._debugHostLogs.push(log);
+    if (this._debugHostLogs.length > 200) this._debugHostLogs.shift();
+    return log;
+  };
+
+  app._recordNodeTiming = function(nd, durationMs, cacheStatus) {
+    if (!nd) return;
+    nd._debug = Object.assign({}, nd._debug || {}, {
+      timingMs: durationMs,
+      cache: cacheStatus || (nd._debug && nd._debug.cache) || 'computed',
+      lastRunVersion: this._lastRunVersion || 0
+    });
+  };
+
+  app.getLastRunNodeValue = function(nd, portId) {
+    if (!nd || !this._hasRun) return undefined;
+    if (portId && nd._lastRunPortValues && nd._lastRunPortValues[portId] !== undefined) {
+      return nd._lastRunPortValues[portId];
+    }
+    return nd._lastRunValue;
+  };
+
+  app._commitRunSnapshot = function() {
+    this._hasRun = true;
+    this._lastRunVersion = (this._lastRunVersion || 0) + 1;
+    this.nodes.forEach(function(nd) {
+      nd._lastRunValue = nd._lastComputedValue;
+      if (nd._portValues) {
+        nd._lastRunPortValues = Object.assign({}, nd._portValues);
+      } else if (!nd._lastRunPortValues) {
+        nd._lastRunPortValues = undefined;
+      }
+      if (nd._pyResults) {
+        nd._lastRunPyResults = Object.assign({}, nd._pyResults);
+      }
+    });
+  };
 
 
 
@@ -109,6 +204,10 @@ export function installEngine(targetApp = getRuntimeApp()) {
   app.computeNodeValue = function(nd) {
 
     var self = this;
+
+    if (self._manualRunMode && !self._isRunningGraph) {
+      return self.getLastRunNodeValue(nd);
+    }
 
     var cache = self._computeCache;
 
@@ -192,7 +291,10 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       var evalKey = '_eval_' + id;
 
-      if (nd.controlValues && nd.controlValues[evalKey] !== undefined && !isNaN(nd.controlValues[evalKey])) return nd.controlValues[evalKey];
+      if (nd.controlValues && nd.controlValues[evalKey] !== undefined && !isNaN(nd.controlValues[evalKey])) {
+        var n = Number(nd.controlValues[evalKey]);
+        return isNaN(n) ? def : n;
+      }
 
       var cv = nd.controlValues ? nd.controlValues[id] : undefined;
 
@@ -204,7 +306,10 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
           var result = FormulaEval.eval(cv);
 
-          if (result.error === null) return result.value;
+          if (result.error === null) {
+            var n2 = Number(result.value);
+            return isNaN(n2) ? def : n2;
+          }
 
         }
 
@@ -220,11 +325,91 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
+    function supportsGenericLacing() {
+      var def = nd.def || {};
+      var inputs = def.inputs || [];
+      if (inputs.length === 0 || def.dynamicInputs) return false;
+      if (def.lacing && def.lacing.mode === 'none') return false;
+      return !inputs.some(function(input) { return input.type === 'list'; });
+    }
+
+    function computeGenericLacedValue(mode) {
+      var def = nd.def || {};
+      var inputDefinitions = def.inputs || [];
+      var outputs = def.outputs || [];
+      var inputValues = {};
+
+      inputDefinitions.forEach(function(input) {
+        var value = getInput(input.id);
+        inputValues[input.id] = value !== undefined ? value : getVal(input.id, undefined);
+      });
+
+      if (!hasListInput(inputDefinitions, inputValues)) return undefined;
+
+      var frames = createLacingFrames(inputDefinitions, inputValues, mode);
+      var singleOutputId = outputs.length === 1 ? outputs[0].id : null;
+      var portValues = {};
+      outputs.forEach(function(output) { portValues[output.id] = []; });
+
+      function executeFrame(frame) {
+        var previousPortValues = nd._portValues;
+        delete nd._portValues;
+
+        var framedGetInput = function(portId) {
+          return Object.prototype.hasOwnProperty.call(frame, portId) ? frame[portId] : getInput(portId);
+        };
+        var framedGetVal = function(portId, fallback) {
+          return Object.prototype.hasOwnProperty.call(frame, portId) && frame[portId] !== undefined
+            ? frame[portId]
+            : getVal(portId, fallback);
+        };
+
+        var value = computeInner(nd, framedGetInput, framedGetVal);
+        var framePortValues = nd._portValues;
+        nd._portValues = previousPortValues;
+
+        if (framePortValues) return framePortValues;
+        if (singleOutputId) return { [singleOutputId]: value };
+        return value && typeof value === 'object' ? value : {};
+      }
+
+      frames.forEach(function(frame) {
+        if (Array.isArray(frame)) {
+          var nested = {};
+          outputs.forEach(function(output) { nested[output.id] = []; });
+          frame.forEach(function(innerFrame) {
+            var outputValues = executeFrame(innerFrame);
+            outputs.forEach(function(output) { nested[output.id].push(outputValues[output.id]); });
+          });
+          outputs.forEach(function(output) { portValues[output.id].push(nested[output.id]); });
+          return;
+        }
+
+        var outputValues = executeFrame(frame);
+        outputs.forEach(function(output) { portValues[output.id].push(outputValues[output.id]); });
+      });
+
+      if (outputs.length > 1) {
+        nd._portValues = portValues;
+        return portValues;
+      }
+
+      return singleOutputId ? portValues[singleOutputId] : undefined;
+    }
+
     var result = undefined;
 
     try {
 
-      result = computeInner(nd, getInput, getVal);
+      var mode = nd.controlValues && nd.controlValues._lacingMode
+        ? nd.controlValues._lacingMode
+        : (nd.def && nd.def.lacing && nd.def.lacing.mode) || null;
+
+      if (mode && mode !== 'none' && supportsGenericLacing()) {
+        result = computeGenericLacedValue(mode);
+      }
+
+      if (result === undefined) result = computeInner(nd, getInput, getVal);
 
     } catch(e) {
 
@@ -402,15 +587,17 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
   // Curve helpers (work with Line3, Polyline3, NurbsCurve, any curve)
 
-  function curveStart(c) { if (!c) return undefined; if (c.start) return c.start; if (c.points && c.points.length > 0) return c.points[0]; return undefined; }
+  function curveStart(c) { if (!c) return undefined; if (c.start) return c.start; if (c.points && c.points.length > 0) return c.points[0]; if (typeof c.pointAt === 'function') return c.pointAt(0); return undefined; }
 
-  function curveEnd(c) { if (!c) return undefined; if (c.end) return c.end; if (c.points && c.points.length > 0) return c.points[c.points.length - 1]; return undefined; }
+  function curveEnd(c) { if (!c) return undefined; if (c.end) return c.end; if (c.points && c.points.length > 0) return c.points[c.points.length - 1]; if (typeof c.pointAt === 'function') return c.pointAt(1); return undefined; }
 
   function curveLen(c) { if (!c) return 0; if (typeof c.length === 'function') return c.length(); if (c.points) { var l = 0; for (var i = 1; i < c.points.length; i++) l += c.points[i-1].distanceTo(c.points[i]); return l; } return 0; }
 
   function curveDir(c) { var s = curveStart(c), e = curveEnd(c); if (s && e) { var d = e.sub(s); var l = Math.sqrt(d.x*d.x+d.y*d.y+d.z*d.z)||1; return new Geo.Vector3(d.x/l,d.y/l,d.z/l); } return new Geo.Vector3(0,0,0); }
 
-  function curveMid(c) { var s = curveStart(c), e = curveEnd(c); return (s && e) ? s.lerp(e, 0.5) : undefined; }
+  function curveMid(c) { if (c && typeof c.getCenter === 'function') return c.getCenter(); if (c && typeof c.pointAt === 'function') return c.pointAt(0.5); var s = curveStart(c), e = curveEnd(c); return (s && e) ? s.lerp(e, 0.5) : undefined; }
+
+  function curveTangent(c, t) { if (!c) return undefined; if (typeof c.tangentAt === 'function') return c.tangentAt(t); return curveDir(c); }
 
 
 
@@ -498,7 +685,27 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       case 'line-length': return curveLen(getInput('curve'));
 
+      case 'curve-startpoint': return curveStart(getInput('curve'));
+
+      case 'curve-endpoint': return curveEnd(getInput('curve'));
+
+      case 'curve-chord-direction': return curveDir(getInput('curve'));
+
+      case 'curve-length': return curveLen(getInput('curve'));
+
+      case 'curve-tangent': return curveTangent(getInput('curve'), getVal('param', 0.5));
+
       case 'line-deconstruct': {
+
+        var c = getInput('curve'); if (!c) return undefined;
+
+        nd._portValues = { start: curveStart(c), end: curveEnd(c), length: curveLen(c), midpoint: curveMid(c), direction: curveDir(c) };
+
+        return nd._portValues;
+
+      }
+
+      case 'curve-deconstruct': {
 
         var c = getInput('curve'); if (!c) return undefined;
 
@@ -599,16 +806,36 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
       // ── Math (v1+v2 unified — uses getVal for formula/control fallback) ──
+      // Array-aware arithmetic: broadcasts scalars, adds element-wise for arrays
 
-      case 'math-add': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined) ? a + b : undefined; }
+      case 'math-add': {
+        var a = getVal('a',undefined), b = getVal('b',undefined);
+        return executeBinaryLacedMath(nd, a, b, function(x, y) { return x + y; });
+      }
 
-      case 'math-subtract': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined) ? a - b : undefined; }
+      case 'math-subtract': {
+        var a = getVal('a',undefined), b = getVal('b',undefined);
+        return executeBinaryLacedMath(nd, a, b, function(x, y) { return x - y; });
+      }
 
-      case 'math-multiply': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined) ? a * b : undefined; }
+      case 'math-multiply': {
+        var a = getVal('a',undefined), b = getVal('b',undefined);
+        return executeBinaryLacedMath(nd, a, b, function(x, y) { return x * y; });
+      }
 
-      case 'math-divide': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined && b !== 0) ? a / b : undefined; }
+      case 'math-divide': {
+        var a = getVal('a',undefined), b = getVal('b',undefined);
+        return executeBinaryLacedMath(nd, a, b, function(x, y) { return y !== 0 ? x / y : undefined; });
+      }
 
-      case 'math-power': { var base = getVal('base',undefined), exp = getVal('exp',undefined); return (base !== undefined && exp !== undefined) ? Math.pow(base, exp) : undefined; }
+      case 'math-power': {
+        var base = getVal('base',undefined), exp = getVal('exp',undefined);
+        if (base === undefined || exp === undefined) return undefined;
+        if (Array.isArray(base) && Array.isArray(exp)) { var powArr = []; for (var pi = 0; pi < Math.min(base.length, exp.length); pi++) powArr.push(Math.pow(base[pi], exp[pi])); return powArr; }
+        if (Array.isArray(base)) { var powArrA = []; for (var pi2 = 0; pi2 < base.length; pi2++) powArrA.push(Math.pow(base[pi2], exp)); return powArrA; }
+        if (Array.isArray(exp)) { var powArrB = []; for (var pi3 = 0; pi3 < exp.length; pi3++) powArrB.push(Math.pow(base, exp[pi3])); return powArrB; }
+        return Math.pow(base, exp);
+      }
 
 
 
@@ -903,6 +1130,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
       case 'geo-circle': { var c = getInput('center'), r = getInput('radius'); if (c) return new Geo.Circle3(c instanceof Geo.Point3 ? c : new Geo.Point3(0,0,0), r||5); return undefined; }
 
       case 'geo-distance': { var a = getInput('a'), b = getInput('b'); if (a && b) { var ap = a instanceof Geo.Point3 ? a : new Geo.Point3(a.x||0,a.y||0,a.z||0); var bp = b instanceof Geo.Point3 ? b : new Geo.Point3(b.x||0,b.y||0,b.z||0); return ap.distanceTo(bp); } return undefined; }
+      case 'geometry-distance': { var a = getInput('a'), b = getInput('b'); if (a && b && typeof Geo !== 'undefined' && Geo.distanceBetween) { return Geo.distanceBetween(a, b); } if (a && b && typeof a.distanceTo === 'function') { return a.distanceTo(b); } return undefined; }
 
 
 
@@ -964,7 +1192,15 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       case 'op-bezier': { var pts = getInput('points'); if (pts) return Geo.bezier(pts); return undefined; }
 
+      case 'curve-bezier-by-control-points': { var pts = getInput('points'); if (pts) return Geo.bezier(pts); return undefined; }
+
       case 'op-interpolate': { var pts = getInput('points'); if (pts) return Geo.interpolate(pts); return undefined; }
+
+      case 'nurbs-interpolate': { var pts = getInput('points'); if (pts && Array.isArray(pts)) return Geo.nurbsInterpolate(pts, getInput('degree')||3); return undefined; }
+
+      case 'nurbs-blend': { var c1 = getInput('curve1'), c2 = getInput('curve2'); if (c1 && c2) return Geo.blendCurves(c1, c2, getInput('t')||0); return undefined; }
+
+      case 'nurbs-tween': { var c1 = getInput('curve1'), c2 = getInput('curve2'); if (c1 && c2) return Geo.tweenCurves(c1, c2, getInput('count')||10); return undefined; }
 
       case 'op-ruled-surface': { var c1 = getInput('curve1'), c2 = getInput('curve2'); if (c1 && c2) return Geo.ruledSurface(c1, c2); return undefined; }
 
@@ -983,6 +1219,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
       case 'surf-polyline': { var pts = getInput('points'), closed = getInput('closed'); if (pts && Array.isArray(pts)) return new Geo.Polyline3(pts, !!closed); return undefined; }
 
       case 'surf-arc': { var c = getInput('center')||new Geo.Point3(0,0,0), r = getInput('radius'), sa = getInput('startAngle'), ea = getInput('endAngle'); return new Geo.Arc3(c instanceof Geo.Point3?c:new Geo.Point3(0,0,0), r||5, (sa||0)*Math.PI/180, (ea||360)*Math.PI/180); }
+
+      case 'curve-arc-by-center-radius-angles': { var c = getInput('center')||new Geo.Point3(0,0,0), r = getInput('radius'), sa = getInput('startAngle'), ea = getInput('endAngle'); return new Geo.Arc3(c instanceof Geo.Point3?c:new Geo.Point3(0,0,0), r||5, (sa||0)*Math.PI/180, (ea||360)*Math.PI/180); }
 
 
 
@@ -1023,6 +1261,98 @@ export function installEngine(targetApp = getRuntimeApp()) {
       case 'prof-rect': { var c = getInput('center')||new Geo.Point3(0,0,0), hw = (getInput('width')||10)/2, hd = (getInput('depth')||6)/2; return [new Geo.Point3(c.x-hw,c.y-hd,c.z), new Geo.Point3(c.x+hw,c.y-hd,c.z), new Geo.Point3(c.x+hw,c.y+hd,c.z), new Geo.Point3(c.x-hw,c.y+hd,c.z)]; }
 
       // ── Revit typed element nodes ──
+      case 'host-get-elements': {
+        var hostId = ctrl.host || 'revit';
+        var queryText = getInput('query') || ctrl.category || '';
+        var query = hostId === 'rhino' ? { layer: queryText } : { category: queryText };
+        var hostStarted = Date.now();
+        var hostElems = getHostAdapter(hostId).getElements(query);
+        var hostLog = app._recordHostRequest({ nodeId: nd.id, host: hostId, operation: 'getElements', query: query, durationMs: Date.now() - hostStarted, ok: true, count: hostElems && hostElems.length || 0 });
+        nd._debug = Object.assign({}, nd._debug || {}, { hostLog: hostLog });
+        nd._portValues = { elements: hostElems, count: hostElems.length || 0, host: hostId };
+        return nd._portValues;
+      }
+      case 'host-get-geometry': {
+        var geoHostId = ctrl.host || 'revit';
+        var refs = getInput('refs');
+        if (!refs) { nd._portValues = { geometry: [], count: 0 }; return nd._portValues; }
+        var geoStarted = Date.now();
+        var hostGeo = getHostAdapter(geoHostId).getGeometry(Array.isArray(refs) ? refs : [refs], { level: ctrl.level || 'Bounds' });
+        if (hostGeo && typeof hostGeo.then === 'function') {
+          return hostGeo.then(function(result) {
+            var geoLog = app._recordHostRequest({ nodeId: nd.id, host: geoHostId, operation: 'getGeometry', level: ctrl.level || 'Bounds', durationMs: Date.now() - geoStarted, ok: true, count: result && result.length || 0 });
+            nd._debug = Object.assign({}, nd._debug || {}, { hostLog: geoLog });
+            nd._portValues = { geometry: result || [], count: result && result.length || 0 };
+            return nd._portValues;
+          });
+        }
+        var geoLogSync = app._recordHostRequest({ nodeId: nd.id, host: geoHostId, operation: 'getGeometry', level: ctrl.level || 'Bounds', durationMs: Date.now() - geoStarted, ok: true, count: hostGeo && hostGeo.length || 0 });
+        nd._debug = Object.assign({}, nd._debug || {}, { hostLog: geoLogSync });
+        nd._portValues = { geometry: hostGeo || [], count: hostGeo && hostGeo.length || 0 };
+        return nd._portValues;
+      }
+      case 'host-get-parameter-values': {
+        var paramHostId = ctrl.host || 'revit';
+        var paramRefs = getInput('refs');
+        var paramNames = getInput('names') || ctrl.names || '';
+        if (!paramRefs || !paramNames) { nd._portValues = { values: [], count: 0 }; return nd._portValues; }
+        var names = String(paramNames).split(',').map(function(name) { return name.trim(); }).filter(Boolean);
+        var paramStarted = Date.now();
+        var hostValues = getHostAdapter(paramHostId).getParameterValues(Array.isArray(paramRefs) ? paramRefs : [paramRefs], names);
+        var paramLog = app._recordHostRequest({ nodeId: nd.id, host: paramHostId, operation: 'getParameterValues', names: names, durationMs: Date.now() - paramStarted, ok: true });
+        nd._debug = Object.assign({}, nd._debug || {}, { hostLog: paramLog });
+        nd._portValues = { values: hostValues, count: Array.isArray(hostValues) ? hostValues.length : Object.keys(hostValues || {}).length };
+        return nd._portValues;
+      }
+      case 'host-set-parameter-values': {
+        var setHostId = ctrl.host || 'revit';
+        var setRefs = getInput('refs');
+        var setNamesRaw = getInput('names') || ctrl.names || '';
+        var setValues = getInput('values');
+        if (setValues === undefined) setValues = ctrl.values;
+        if (!setRefs || !setNamesRaw) { nd._portValues = { results: [], count: 0, success: false }; return nd._portValues; }
+        var setNames = String(setNamesRaw).split(',').map(function(name) { return name.trim(); }).filter(Boolean);
+        var setStarted = Date.now();
+        var setResult = getHostAdapter(setHostId).setParameterValues(Array.isArray(setRefs) ? setRefs : [setRefs], setNames, setValues);
+        if (setResult && typeof setResult.then === 'function') {
+          return setResult.then(function(results) {
+            var setLog = app._recordHostRequest({ nodeId: nd.id, host: setHostId, operation: 'setParameterValues', names: setNames, durationMs: Date.now() - setStarted, ok: true, count: results && results.length || 0 });
+            nd._debug = Object.assign({}, nd._debug || {}, { hostLog: setLog });
+            nd._portValues = { results: results || [], count: results && results.length || 0, success: !!(results && results.length && results.every(function(item) { return item && item.ok; })) };
+            return nd._portValues;
+          });
+        }
+        var setLogSync = app._recordHostRequest({ nodeId: nd.id, host: setHostId, operation: 'setParameterValues', names: setNames, durationMs: Date.now() - setStarted, ok: true, count: setResult && setResult.length || 0 });
+        nd._debug = Object.assign({}, nd._debug || {}, { hostLog: setLogSync });
+        nd._portValues = { results: setResult || [], count: setResult && setResult.length || 0, success: !!(setResult && setResult.length && setResult.every(function(item) { return item && item.ok; })) };
+        return nd._portValues;
+      }
+      case 'host-send-geometry': {
+        var sendHostId = ctrl.host || 'revit';
+        var hostGeometry = getInput('geometry');
+        var hostOptions = getInput('options') || { name: ctrl.name || 'Nova Geometry', category: ctrl.category || 'Generic Models' };
+        var sendStarted = Date.now();
+        var sendResult = getHostAdapter(sendHostId).sendGeometry(hostGeometry, hostOptions || {});
+        if (sendResult && typeof sendResult.then === 'function') {
+          return sendResult.then(function(result) {
+            var sendLog = app._recordHostRequest({ nodeId: nd.id, host: sendHostId, operation: 'sendGeometry', options: hostOptions, durationMs: Date.now() - sendStarted, ok: !!(result && result.ok) });
+            nd._debug = Object.assign({}, nd._debug || {}, { hostLog: sendLog });
+            nd._portValues = { result: result, success: !!(result && result.ok) };
+            return nd._portValues;
+          });
+        }
+        var sendLogSync = app._recordHostRequest({ nodeId: nd.id, host: sendHostId, operation: 'sendGeometry', options: hostOptions, durationMs: Date.now() - sendStarted, ok: !!(sendResult && sendResult.ok) });
+        nd._debug = Object.assign({}, nd._debug || {}, { hostLog: sendLogSync });
+        nd._portValues = { result: sendResult, success: !!(sendResult && sendResult.ok) };
+        return nd._portValues;
+      }
+      case 'rhino-objects-by-layer': {
+        var layer = getInput('layer') || ctrl.layer || 'Default';
+        var objects = getHostAdapter('rhino').getElements({ layer: layer });
+        nd._portValues = { objects: objects, count: objects.length || 0 };
+        return nd._portValues;
+      }
+
       case 'revit-all-elements-view': {
         var allElems = RevitBridge.getAllElements();
         nd._portValues = { elements: allElems, count: allElems.length };
@@ -1089,6 +1419,28 @@ export function installEngine(targetApp = getRuntimeApp()) {
         return getInput('value');
 
 
+
+      // ── Slow Compute (test cancellation) ──
+      case 'slow-compute': {
+        var delayMs = parseInt(ctrl.delayMs) || 5000;
+        var inputVal = getInput('value');
+        // Return a Promise that resolves after delayMs, giving the event loop
+        // time to process the Cancel button click and abort the operation.
+        return new Promise(function(resolve) {
+          var checkInterval = setInterval(function() {
+            if (nd._cancelled) {
+              clearInterval(checkInterval);
+              resolve(undefined);
+              return;
+            }
+            if (Date.now() - startTime >= delayMs) {
+              clearInterval(checkInterval);
+              resolve(inputVal !== undefined ? inputVal : parseFloat(ctrl.value) || 0);
+            }
+          }, 100);
+          var startTime = Date.now();
+        });
+      }
 
       // ── Python / Code ──
 
@@ -1233,6 +1585,49 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
   };
 
+  app._fmtTreeValue = function(value, depth, label) {
+    depth = depth || 0;
+    var esc = app._escapeHTML || function(v) { return String(v); };
+    var muted = 'var(--text-muted)';
+    var pad = Math.min(depth * 10, 40);
+
+    if (value === undefined) return '<span style="color:' + muted + '">-</span>';
+    if (value === null) return '<span style="color:' + muted + '">null</span>';
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') return app.formatValue(value);
+    if (value && value.type === 'ErrorValue') {
+      return '<details class="debug-tree error-value" open style="margin-left:' + pad + 'px;color:var(--accent-red)"><summary>Error: ' + esc(value.message) + '</summary>' +
+        (value.nodeId ? '<div style="margin-left:12px;color:' + muted + '">Node: ' + esc(value.nodeId) + '</div>' : '') +
+        (value.stack ? '<pre style="white-space:pre-wrap;margin:4px 0 0 12px;color:' + muted + ';font-size:10px">' + esc(value.stack.split('\n').slice(0, 4).join('\n')) + '</pre>' : '') +
+        '</details>';
+    }
+    if (value && (value._type === 'RevitElement' || value.type === 'ElementRef' || value.type === 'GeometryRef')) {
+      var elementLabel = value.name || value.category || value.type || value._type || 'Element';
+      var elementId = value.id !== undefined ? ' [' + value.id + ']' : '';
+      var params = value.parameters || value.params || value.metadata || {};
+      var rows = Object.keys(params || {}).slice(0, 40).map(function(k) {
+        return '<div style="margin-left:' + (pad + 12) + 'px"><span style="color:' + muted + '">' + esc(k) + ':</span> ' + app._fmtTreeValue(params[k], depth + 1) + '</div>';
+      }).join('');
+      return '<details class="debug-tree" open style="margin-left:' + pad + 'px"><summary><span style="color:#89dceb">' + esc(elementLabel) + esc(elementId) + '</span></summary>' + rows + '</details>';
+    }
+    if (Array.isArray(value)) {
+      var maxItems = 30;
+      var items = value.slice(0, maxItems).map(function(item, index) {
+        return '<div style="margin-left:' + (pad + 12) + 'px"><span style="color:' + muted + '">[' + index + ']</span> ' + app._fmtTreeValue(item, depth + 1) + '</div>';
+      }).join('');
+      if (value.length > maxItems) items += '<div style="margin-left:' + (pad + 12) + 'px;color:' + muted + '">... ' + (value.length - maxItems) + ' more</div>';
+      return '<details class="debug-tree data-list-view" ' + (depth < 1 ? 'open' : '') + ' style="margin-left:' + pad + 'px"><summary>List (' + value.length + ')</summary><div class="data-list-body">' + items + '</div></details>';
+    }
+    if (typeof value === 'object') {
+      var objectKeys = Object.keys(value).filter(function(k) { return typeof value[k] !== 'function'; }).slice(0, 40);
+      var title = label || value.type || value._type || 'Object';
+      var body = objectKeys.map(function(k) {
+        return '<div style="margin-left:' + (pad + 12) + 'px"><span style="color:' + muted + '">' + esc(k) + ':</span> ' + app._fmtTreeValue(value[k], depth + 1) + '</div>';
+      }).join('');
+      return '<details class="debug-tree" ' + (depth < 1 ? 'open' : '') + ' style="margin-left:' + pad + 'px"><summary>' + esc(title) + '</summary>' + body + '</details>';
+    }
+    return '<span style="color:var(--text-secondary)">' + esc(String(value)) + '</span>';
+  };
+
 
 
   app.formatValue = function(val) {
@@ -1240,6 +1635,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
     if (val === undefined) return '<span style="color:var(--text-muted)">—</span>';
 
     if (val === null) return '<span style="color:var(--text-muted)">null</span>';
+
+    if (val && (val.type === 'ErrorValue' || val.type === 'ElementRef' || val.type === 'GeometryRef' || val._type === 'RevitElement')) return app._fmtTreeValue(val);
 
     if (val && val._type === 'RevitElement') return '<span style="color:#89dceb" title="' + val.name + ' | ' + val.typeName + '">🏗 ' + val.category + ' [' + val.id + ']</span>';
     if (val && val._type) return '<span style="color:var(--accent-teal)">' + val.toString() + '</span>';
@@ -1250,7 +1647,9 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     if (typeof val === 'string') return '<span style="color:var(--accent-yellow)">"' + val + '"</span>';
 
-    if (Array.isArray(val)) return app._fmtListUniversal(val);
+    if (Array.isArray(val)) return app._fmtTreeValue(val);
+
+    if (val && typeof val === 'object') return app._fmtTreeValue(val);
 
     return '<span style="color:var(--text-secondary)">' + String(val) + '</span>';
 
@@ -1491,6 +1890,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
       if (nd._preview3d === false) return;
 
       var val = self.computeNodeValue(nd);
+      nd._lastComputedValue = val;
 
 
 
@@ -1694,7 +2094,9 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     var item = items[idx];
 
-    item.visible = !item.visible;
+    var nextVisible = !item.visible;
+
+    item.visible = nextVisible;
 
 
 
@@ -1706,13 +2108,13 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       var obj = group.children[item.idx];
 
-      if (obj) obj.visible = item.visible;
+      if (obj) obj.visible = nextVisible;
 
     } else if (item.idxStart !== undefined) {
 
       for (var i = item.idxStart; i <= item.idxEnd && i < group.children.length; i++) {
 
-        group.children[i].visible = item.visible;
+        group.children[i].visible = nextVisible;
 
       }
 
@@ -1728,13 +2130,13 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       if (nd) {
 
-        nd._preview3d = item.visible;
+        setPreviewItemVisibility(app, Viewer3D, item, nextVisible, { renderList: false });
 
         // Visual feedback on node canvas — use class instead of inline opacity
 
         var el = document.getElementById(nd.id);
 
-        if (el) el.classList.toggle('node-3d-hidden', !item.visible);
+        if (el) el.classList.toggle('node-3d-hidden', !nextVisible);
 
       }
 
@@ -1762,7 +2164,54 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
+  // ── Cancel button helpers — canvas toolbar only ──
+  app._showCancelButton = function() {
+    var runBtn = document.getElementById('toolbar-run');
+    if (runBtn) { runBtn.textContent = '■'; runBtn.style.color = 'var(--accent-red)'; runBtn.title = 'Cancel'; runBtn.onclick = app.cancelExecution; }
+  };
+  app._hideCancelButton = function() {
+    var runBtn = document.getElementById('toolbar-run');
+    if (runBtn) { runBtn.textContent = '▶'; runBtn.style.color = 'var(--accent-green)'; runBtn.title = 'Run Graph'; runBtn.onclick = function() { app.runGraph(); }; }
+  };
+  app._showCancelButton = function() {
+    var runBtn = document.getElementById('toolbar-run');
+    if (runBtn) {
+      runBtn.textContent = '■';
+      runBtn.style.color = 'var(--accent-red)';
+      runBtn.style.background = 'rgba(243,139,168,0.16)';
+      runBtn.title = 'Cancel';
+      runBtn.onclick = app.cancelExecution;
+    }
+  };
+  app._hideCancelButton = function() {
+    var runBtn = document.getElementById('toolbar-run');
+    if (runBtn) {
+      runBtn.textContent = '▶';
+      runBtn.style.color = 'var(--accent-green)';
+      runBtn.style.background = '';
+      runBtn.title = 'Run Graph';
+      runBtn.onclick = function() { app.runGraph(); };
+    }
+  };
+  app.cancelExecution = function() {
+    // Cancel V2 engine if available
+    var v2 = app._executionEngineV2;
+    if (v2 && typeof v2.cancel === 'function') {
+      v2.cancel();
+    }
+    app._hideCancelButton();
+    if (typeof app.addAIMessage === 'function') {
+      app.addAIMessage('workspace', '⏹ **Execution cancelled** by user.');
+    }
+  };
+
   app.runGraph = async function() {
+    this._isRunningGraph = true;
+
+    try {
+
+    // Show cancel button
+    app._showCancelButton();
 
     // 0. Refresh Revit data on Run if connected to a live session
 
@@ -1802,6 +2251,14 @@ export function installEngine(targetApp = getRuntimeApp()) {
     await this._prepareLiveRevitGeometries();
 
     this._renderFromCompute();
+
+    this.beginCompute();
+    this.nodes.forEach(function(nd) {
+      nd._lastComputedValue = app.computeNodeValue(nd);
+      if (nd._portValues) nd._lastRunPortValues = Object.assign({}, nd._portValues);
+    });
+    this.endCompute();
+    this._commitRunSnapshot();
 
 
 
@@ -1862,6 +2319,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
     this._graphDirty = false;
 
     this.renderWires();
+    if (this.refreshNodeWarningBadges) this.refreshNodeWarningBadges();
 
 
 
@@ -1892,6 +2350,12 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
     this.addAIMessage('workspace', '▶️ **Executed!** ' + this.nodes.length + ' nodes → 3D updated.');
+
+    app._hideCancelButton();
+
+    } finally {
+      this._isRunningGraph = false;
+    }
 
   };
 
@@ -2414,10 +2878,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
   return true;
 }
 
-if (typeof document !== 'undefined') {
-  document.addEventListener('DOMContentLoaded', function() {
-    installEngine();
-  });
-}
+// Note: auto-install is intentionally removed — main.js handles
+// initialization order (installEngine → initializeApp → ExecutionEngine.attach)
+// A second auto-run here would overwrite V2 engine patches.
 
 export default installEngine;

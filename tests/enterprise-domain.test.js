@@ -1,0 +1,357 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { EnterpriseStore, ROLES } from '../src/enterprise/domain.mjs';
+import { AuthService } from '../src/enterprise/auth.mjs';
+import { JsonFilePersistence } from '../src/enterprise/persistence.mjs';
+import { MemoryStateStore, hashToken } from '../src/enterprise/state-store.mjs';
+
+function createContext(store, organizationId, role = ROLES.OWNER, email = 'user@example.com') {
+  const user = store.createUser({ email, displayName: email });
+  store.addMembership({ organizationId, userId: user.id, role });
+  const session = store.createAuthSession({ email, organizationId });
+  return store.authenticate(session.token);
+}
+
+function createUserContext(store, organizationId, role, email) {
+  const user = store.createUser({ email, displayName: email });
+  store.addMembership({ organizationId, userId: user.id, role });
+  const session = store.createAuthSession({ email, organizationId });
+  return { user, context: store.authenticate(session.token) };
+}
+
+describe('enterprise domain', () => {
+  it('uses signed auth sessions and rejects tampered or expired tokens', () => {
+    let now = 1000;
+    const authService = new AuthService({
+      now: () => now,
+      sessionSecret: 'test-session-secret',
+      sessionTtlMs: 100
+    });
+    const store = new EnterpriseStore({ now: () => now, authService });
+    const org = store.createOrganization({ name: 'A' });
+    const user = store.createUser({ email: 'signed@example.com' });
+    store.addMembership({ organizationId: org.id, userId: user.id, role: ROLES.OWNER });
+
+    const session = store.createAuthSession({ email: user.email, organizationId: org.id });
+    expect(session.token).toContain('.');
+    expect(store.authenticate(session.token).user.email).toBe(user.email);
+
+    expect(() => store.authenticate(session.token + 'x')).toThrow(/Invalid bearer/);
+    now = 1200;
+    expect(() => store.authenticate(session.token)).toThrow(/Invalid bearer/);
+  });
+
+  it('can require state-store backed sessions in addition to signed tokens', async () => {
+    let now = 1000;
+    const authService = new AuthService({
+      now: () => now,
+      sessionSecret: 'state-session-secret',
+      sessionTtlMs: 10000
+    });
+    const stateStore = new MemoryStateStore({ now: () => now });
+    const store = new EnterpriseStore({ now: () => now, authService, stateStore });
+    const org = store.createOrganization({ name: 'A' });
+    const user = store.createUser({ email: 'state@example.com' });
+    store.addMembership({ organizationId: org.id, userId: user.id, role: ROLES.OWNER });
+
+    const session = await store.createAuthSessionAsync({ email: user.email, organizationId: org.id });
+    expect((await store.authenticateAsync(session.token)).user.email).toBe(user.email);
+
+    await stateStore.delete('session:' + hashToken(session.token));
+    await expect(store.authenticateAsync(session.token)).rejects.toThrow(/Session expired/);
+  });
+
+  it('stores projects inside an organization and blocks cross-organization access', () => {
+    const store = new EnterpriseStore();
+    const orgA = store.createOrganization({ name: 'A' });
+    const orgB = store.createOrganization({ name: 'B' });
+    const ctxA = createContext(store, orgA.id, ROLES.OWNER, 'a@example.com');
+    const ctxB = createContext(store, orgB.id, ROLES.OWNER, 'b@example.com');
+
+    const project = store.createProject(ctxA, { name: 'Tower', graph: { nodes: [{ id: 'node-1' }], wires: [] } });
+
+    expect(store.listProjects(ctxA)).toHaveLength(1);
+    expect(store.listProjects(ctxB)).toHaveLength(0);
+    expect(() => store.getProject(ctxB, project.id)).toThrow(/Cross-organization/);
+  });
+
+  it('paginates enterprise project, version, run, and audit lists', () => {
+    let now = 0;
+    const store = new EnterpriseStore({ now: () => now += 1 });
+    const org = store.createOrganization({ name: 'Paged Org' });
+    const ctx = createContext(store, org.id);
+    const projectA = store.createProject(ctx, { name: 'A' });
+    const projectB = store.createProject(ctx, { name: 'B' });
+    store.createProject(ctx, { name: 'C' });
+
+    const projectsPage = store.listProjects(ctx, { limit: 2, offset: 0 });
+    expect(projectsPage.items.map(project => project.name)).toEqual(['A', 'B']);
+    expect(projectsPage.pagination).toMatchObject({ limit: 2, total: 3, hasMore: true });
+    expect(store.listProjects(ctx, { limit: 2, offset: 2 }).items.map(project => project.name)).toEqual(['C']);
+
+    store.updateProjectGraph(ctx, projectA.id, { graph: { nodes: [], wires: [] }, message: 'Second' });
+    store.updateProjectGraph(ctx, projectA.id, { graph: { nodes: [], wires: [] }, message: 'Third' });
+    expect(store.listProjectVersions(ctx, projectA.id, { limit: 1, offset: 1 }).items[0].message).toBe('Second');
+
+    store.recordGraphRun(ctx, projectB.id, { startedAt: 10 });
+    store.recordGraphRun(ctx, projectB.id, { startedAt: 20 });
+    expect(store.listGraphRuns(ctx, projectB.id, { limit: 1, offset: 0 }).items[0].startedAt).toBe(20);
+
+    const auditPage = store.listAuditEvents(ctx, { limit: 2, offset: 0 });
+    expect(auditPage.items).toHaveLength(2);
+    expect(auditPage.pagination.total).toBeGreaterThan(2);
+  });
+
+  it('exports and reloads enterprise store snapshots through JSON persistence', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nova-enterprise-store-'));
+    const filePath = path.join(dir, 'store.json');
+    try {
+      const persistence = new JsonFilePersistence(filePath);
+      const store = new EnterpriseStore({ persistence });
+      const org = store.createOrganization({ name: 'Persistent Org' });
+      const ctx = createContext(store, org.id, ROLES.OWNER, 'persist@example.com');
+      const project = store.createProject(ctx, {
+        name: 'Persistent Project',
+        graph: { nodes: [{ id: 'saved-node' }], wires: [] }
+      });
+
+      const restored = new EnterpriseStore({ persistence });
+      const restoredContext = createContext(restored, org.id, ROLES.OWNER, 'second@example.com');
+
+      expect(restored.getProject(ctx, project.id).versions[0].graph.nodes[0].id).toBe('saved-node');
+      expect(restored.listProjects(restoredContext).map(item => item.id)).toContain(project.id);
+      expect(restored.listAuditEvents(restoredContext).length).toBeGreaterThan(0);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('creates graph versions and restores previous versions', () => {
+    const store = new EnterpriseStore({ now: (() => { let t = 1; return () => t++; })() });
+    const org = store.createOrganization({ name: 'A' });
+    const ctx = createContext(store, org.id);
+    const project = store.createProject(ctx, { name: 'Facade', graph: { nodes: [{ id: 'a' }], wires: [] } });
+
+    const updated = store.updateProjectGraph(ctx, project.id, {
+      graph: { nodes: [{ id: 'b' }], wires: [] },
+      message: 'Second'
+    });
+    const restored = store.restoreProjectVersion(ctx, project.id, updated.versions[0].id);
+
+    expect(updated.versions).toHaveLength(2);
+    expect(restored.versions).toHaveLength(3);
+    expect(restored.versions[2].graph.nodes[0].id).toBe('a');
+  });
+
+  it('records graph run metadata for saved project versions', () => {
+    const store = new EnterpriseStore({ now: (() => { let t = 100; return () => t += 10; })() });
+    const org = store.createOrganization({ name: 'A' });
+    const owner = createContext(store, org.id);
+    const viewer = createContext(store, org.id, ROLES.VIEWER, 'run-viewer@example.com');
+    const project = store.createProject(owner, { name: 'Run Project' });
+
+    const run = store.recordGraphRun(owner, project.id, {
+      status: 'failed',
+      durationMs: 42,
+      errorSummary: 'Missing input'
+    });
+
+    expect(run.projectId).toBe(project.id);
+    expect(run.versionId).toBe(project.currentVersionId);
+    expect(run.status).toBe('failed');
+    expect(store.listGraphRuns(owner, project.id)).toHaveLength(1);
+    expect(store.listAuditEvents(owner).some(event => event.type === 'graph.run.recorded')).toBe(true);
+    expect(() => store.recordGraphRun(viewer, project.id, { status: 'completed' })).toThrow(/Project access|Project write/);
+  });
+
+  it('tracks object artifacts and background jobs for long-running work', () => {
+    let now = 1000;
+    const store = new EnterpriseStore({ now: () => now += 1 });
+    const org = store.createOrganization({ name: 'Jobs Org' });
+    const owner = createContext(store, org.id, ROLES.OWNER, 'jobs-owner@example.com');
+    const viewer = createContext(store, org.id, ROLES.VIEWER, 'jobs-viewer@example.com');
+    const project = store.createProject(owner, { name: 'Queued Export' });
+
+    const artifact = store.createObjectArtifact(owner, project.id, {
+      name: 'export.json',
+      kind: 'graph-export',
+      contentType: 'application/json',
+      byteSize: 42,
+      metadata: { format: 'json' }
+    });
+    expect(artifact.storageKey).toContain(project.id);
+    expect(store.listObjectArtifacts(owner, project.id).map(item => item.id)).toContain(artifact.id);
+
+    const job = store.enqueueBackgroundJob(owner, {
+      type: 'graph.export',
+      projectId: project.id,
+      artifactId: artifact.id,
+      payload: { format: 'json' }
+    });
+    expect(job.status).toBe('queued');
+    expect(() => store.claimNextBackgroundJob(viewer)).toThrow(/Admin access/);
+
+    const claimed = store.claimNextBackgroundJob(owner, { type: 'graph.export' });
+    expect(claimed.id).toBe(job.id);
+    expect(claimed.status).toBe('running');
+    expect(claimed.attempts).toBe(1);
+
+    const completed = store.completeBackgroundJob(owner, job.id, { result: { artifactId: artifact.id } });
+    expect(completed.status).toBe('completed');
+    expect(completed.result.artifactId).toBe(artifact.id);
+    expect(store.listAuditEvents(owner).map(event => event.type)).toEqual(expect.arrayContaining([
+      'object.artifact.created',
+      'background.job.queued',
+      'background.job.claimed',
+      'background.job.completed'
+    ]));
+  });
+
+  it('enforces roles for writes and audit access', () => {
+    const store = new EnterpriseStore();
+    const org = store.createOrganization({ name: 'A' });
+    const viewer = createContext(store, org.id, ROLES.VIEWER, 'viewer@example.com');
+    const admin = createContext(store, org.id, ROLES.ADMIN, 'admin@example.com');
+
+    expect(() => store.createProject(viewer, { name: 'Blocked' })).toThrow(/Write access/);
+    store.createProject(admin, { name: 'Allowed' });
+    expect(store.listAuditEvents(admin).length).toBeGreaterThan(0);
+    expect(() => store.listAuditEvents(viewer)).toThrow(/Admin access/);
+  });
+
+  it('enforces project membership roles for reads, writes, and membership changes', () => {
+    const store = new EnterpriseStore();
+    const org = store.createOrganization({ name: 'A' });
+    const owner = createUserContext(store, org.id, ROLES.OWNER, 'owner@example.com');
+    const editor = createUserContext(store, org.id, ROLES.VIEWER, 'editor@example.com');
+    const viewer = createUserContext(store, org.id, ROLES.VIEWER, 'viewer@example.com');
+    const outsider = createUserContext(store, org.id, ROLES.VIEWER, 'outsider@example.com');
+    const project = store.createProject(owner.context, { name: 'RBAC Project' });
+
+    expect(store.listProjects(outsider.context)).toHaveLength(0);
+    expect(() => store.getProject(outsider.context, project.id)).toThrow(/Project access/);
+
+    store.addProjectMember(owner.context, project.id, { userId: editor.user.id, role: ROLES.EDITOR });
+    store.addProjectMember(owner.context, project.id, { userId: viewer.user.id, role: ROLES.VIEWER });
+
+    expect(store.getProject(viewer.context, project.id).id).toBe(project.id);
+    expect(() => store.updateProjectGraph(viewer.context, project.id, {
+      graph: { nodes: [], wires: [] }
+    })).toThrow(/Project write/);
+
+    expect(store.updateProjectGraph(editor.context, project.id, {
+      graph: { nodes: [{ id: 'editable' }], wires: [] }
+    }).versions).toHaveLength(2);
+    expect(() => store.addProjectMember(editor.context, project.id, {
+      userId: outsider.user.id,
+      role: ROLES.VIEWER
+    })).toThrow(/Project admin/);
+  });
+
+  it('creates connector pairing sessions and rejects expired sessions', () => {
+    let now = 1000;
+    const store = new EnterpriseStore({ now: () => now });
+    const org = store.createOrganization({ name: 'A' });
+    const ctx = createContext(store, org.id);
+    const project = store.createProject(ctx, { name: 'Host Project' });
+    const session = store.createConnectorSession(ctx, { host: 'revit', projectId: project.id });
+
+    expect(session.status).toBe('pairing');
+    expect(store.pairConnector(ctx, session.id, session.pairingCode).status).toBe('online');
+
+    const expired = store.createConnectorSession(ctx, { host: 'revit' });
+    now = expired.expiresAt + 1;
+    expect(() => store.pairConnector(ctx, expired.id, expired.pairingCode)).toThrow(/expired/);
+  });
+
+  it('stores connector pairing state in the state store when configured', async () => {
+    let now = 1000;
+    const stateStore = new MemoryStateStore({ now: () => now });
+    const store = new EnterpriseStore({ now: () => now, stateStore });
+    const org = store.createOrganization({ name: 'A' });
+    const ctx = createContext(store, org.id);
+    const session = await store.createConnectorSessionAsync(ctx, { host: 'revit' });
+
+    expect((await stateStore.get('connector:' + session.id)).status).toBe('pairing');
+    expect((await store.pairConnectorAsync(ctx, session.id, session.pairingCode)).status).toBe('online');
+
+    const expired = await store.createConnectorSessionAsync(ctx, { host: 'revit' });
+    now = expired.expiresAt + 1;
+    await expect(store.pairConnectorAsync(ctx, expired.id, expired.pairingCode)).rejects.toThrow(/expired/);
+  });
+
+  it('records AI requests without storing prompts by default', () => {
+    const store = new EnterpriseStore();
+    const org = store.createOrganization({ name: 'A' });
+    const ctx = createContext(store, org.id);
+    const project = store.createProject(ctx, { name: 'AI Project' });
+
+    const request = store.createAiRequest(ctx, {
+      projectId: project.id,
+      provider: 'mock',
+      model: 'nova-mock-enterprise',
+      messages: [{ role: 'user', content: 'Create a tower' }]
+    });
+    const completed = store.completeAiRequest(ctx, request.id, {
+      content: 'Done',
+      usage: { inputMessages: 1 }
+    });
+
+    expect(request.status).toBe('pending');
+    expect(request.messages).toHaveLength(0);
+    expect(completed.status).toBe('completed');
+    expect(store.listAuditEvents(ctx).some(event => event.type === 'ai.request.completed')).toBe(true);
+  });
+
+  it('enforces AI provider policy and per-minute rate limits', () => {
+    let now = 0;
+    const store = new EnterpriseStore({ now: () => now });
+    const org = store.createOrganization({ name: 'A' });
+    const context = createContext(store, org.id);
+    const organization = store.requireOrganization(org.id);
+    organization.settings.ai.maxRequestsPerMinute = 1;
+
+    expect(() => store.createAiRequest(context, {
+      provider: 'openai',
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: 'Blocked' }]
+    })).toThrow(/provider/);
+
+    store.createAiRequest(context, {
+      messages: [{ role: 'user', content: 'First' }]
+    });
+    expect(() => store.createAiRequest(context, {
+      messages: [{ role: 'user', content: 'Second' }]
+    })).toThrow(/rate limit/);
+
+    now = 60000;
+    expect(store.createAiRequest(context, {
+      messages: [{ role: 'user', content: 'Next minute' }]
+    }).status).toBe('pending');
+  });
+
+  it('enforces state-store backed user and organization AI rate limits', async () => {
+    let now = 0;
+    const stateStore = new MemoryStateStore({ now: () => now });
+    const store = new EnterpriseStore({ now: () => now, stateStore });
+    const org = store.createOrganization({ name: 'A' });
+    const first = createContext(store, org.id, ROLES.OWNER, 'first@example.com');
+    const second = createContext(store, org.id, ROLES.OWNER, 'second@example.com');
+    const organization = store.requireOrganization(org.id);
+    organization.settings.ai.maxRequestsPerMinute = 5;
+    organization.settings.ai.maxOrganizationRequestsPerMinute = 1;
+
+    expect((await store.createAiRequestAsync(first, {
+      messages: [{ role: 'user', content: 'First' }]
+    })).status).toBe('pending');
+    await expect(store.createAiRequestAsync(second, {
+      messages: [{ role: 'user', content: 'Second' }]
+    })).rejects.toThrow(/Organization AI rate limit/);
+
+    now = 60000;
+    await expect(store.createAiRequestAsync(second, {
+      messages: [{ role: 'user', content: 'Next minute' }]
+    })).resolves.toMatchObject({ status: 'pending' });
+  });
+});

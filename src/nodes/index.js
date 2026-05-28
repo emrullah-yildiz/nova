@@ -10,3 +10,26 @@ export {
   defaultNodeRegistry,
   toLegacyNodeDefinition
 } from './registry.js';
+
+export {
+  coreCategories,
+  coreNodes,
+  createCoreNodeRegistry,
+  registerCoreNodes
+} from './coreNodes.js';
+
+export {
+  createNodeTypeMapFromRegistry,
+  createRegistryFromNodeLibrary,
+  legacyNodeToRegistryDefinition,
+  registerLegacyNodeLibrary,
+  registryNodeToLegacyDefinition
+} from './legacyBridge.js';
+
+export {
+  applyNodeOutputs,
+  createRegistryComputeInner,
+  executeRegistryNode,
+  resolveControls,
+  resolveInputs
+} from './runtimeAdapter.js';

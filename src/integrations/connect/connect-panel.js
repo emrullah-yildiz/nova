@@ -3,6 +3,10 @@ function getRuntimeGlobal() {
   return globalThis;
 }
 
+function getRuntimeConfig(runtimeGlobal) {
+  return runtimeGlobal.NovaConfig || runtimeGlobal.__NOVA_CONFIG__ || {};
+}
+
 const PANEL_ID = 'nova-connect-panel';
 const STYLE_ID = 'nova-connect-panel-style';
 const STORAGE_KEY = 'nova_connect_settings';
@@ -43,8 +47,9 @@ function installAppMethods(app, runtimeGlobal) {
   app._readNovaConnectSettings = function() {
     const stored = readJson(runtimeGlobal.localStorage && runtimeGlobal.localStorage.getItem(STORAGE_KEY));
     const launch = readLaunchParameters(runtimeGlobal);
+    const config = getRuntimeConfig(runtimeGlobal);
     return {
-      url: launch.url || stored.url || 'ws://127.0.0.1:8765',
+      url: launch.url || stored.url || config.websocketUrl || 'ws://127.0.0.1:8765',
       token: launch.token || stored.token || '',
       projectId: launch.projectId || stored.projectId || ''
     };
@@ -58,7 +63,7 @@ function installAppMethods(app, runtimeGlobal) {
   app._collectNovaConnectSettings = function() {
     const document = runtimeGlobal.document;
     return {
-      url: valueOf(document, 'nova-connect-url', 'ws://127.0.0.1:8765'),
+      url: valueOf(document, 'nova-connect-url', getRuntimeConfig(runtimeGlobal).websocketUrl || 'ws://127.0.0.1:8765'),
       token: valueOf(document, 'nova-connect-token', ''),
       projectId: valueOf(document, 'nova-connect-project', '')
     };
@@ -119,6 +124,7 @@ function installAppMethods(app, runtimeGlobal) {
     const client = this._getNovaConnect();
     const status = client ? client.status : 'unavailable';
     const result = this.novaConnectLastResult;
+    const pendingApprovals = getPendingApprovalsForDisplay();
     panel.className = 'nova-connect-panel' + (this.novaConnectPanelOpen ? ' visible' : '');
     panel.innerHTML =
       '<div class="ncp-header">' +
@@ -132,11 +138,46 @@ function installAppMethods(app, runtimeGlobal) {
         '<button onclick="app.connectNovaConnect()">Connect</button>' +
         '<button onclick="app.disconnectNovaConnect()">Disconnect</button>' +
       '</div>' +
+      (pendingApprovals.length > 0 ? renderApprovalSection(pendingApprovals) : '') +
       (result ? '<div class="ncp-result ' + (result.ok === false ? 'ncp-result-error' : '') + '">' +
         '<strong>' + escapeHtml(result.message) + '</strong>' +
         (result.detail ? '<pre>' + escapeHtml(result.detail) + '</pre>' : '') +
       '</div>' : '');
   };
+}
+
+function getPendingApprovalsForDisplay() {
+  try {
+    const mod = window.__revitWriteApproval;
+    if (mod && mod.getPendingApprovals) return mod.getPendingApprovals();
+  } catch (e) {}
+  return [];
+}
+
+function renderApprovalSection(approvals) {
+  const items = approvals.map(a => {
+    const opLabel = a.operation === 'parameter.set' ? 'Set Parameter' :
+                    a.operation === 'geometry.create' ? 'Create Geometry' : a.operation;
+    return '<div class="ncp-approval-item" id="approval-' + escapeHtml(a.id) + '">' +
+      '<div class="ncp-approval-header">' +
+        '<span class="ncp-approval-icon">⚠️</span>' +
+        '<span class="ncp-approval-title">' + escapeHtml(opLabel) + '</span>' +
+      '</div>' +
+      '<div class="ncp-approval-desc">' + escapeHtml(a.description) + '</div>' +
+      (a.parameterName ? '<div class="ncp-approval-detail">Parameter: <strong>' + escapeHtml(a.parameterName) + '</strong></div>' : '') +
+      (a.elementCount > 0 ? '<div class="ncp-approval-detail">Elements: <strong>' + a.elementCount + '</strong></div>' : '') +
+      (a.value ? '<div class="ncp-approval-detail">Value: <code>' + escapeHtml(String(a.value).slice(0, 80)) + '</code></div>' : '') +
+      '<div class="ncp-approval-actions">' +
+        '<button class="ncp-approve-btn" onclick="window.__revitWriteApproval.resolveApproval(\'' + escapeHtml(a.id) + '\', true, \'Approved by user\')">✓ Approve</button>' +
+        '<button class="ncp-reject-btn" onclick="window.__revitWriteApproval.resolveApproval(\'' + escapeHtml(a.id) + '\', false, \'Rejected by user\')">✕ Deny</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  return '<div class="ncp-approval-section">' +
+    '<h4 class="ncp-approval-heading">Pending Write Approvals</h4>' +
+    items +
+  '</div>';
 }
 
 async function fetchProjectSnapshotWithRetry(client) {
@@ -363,6 +404,81 @@ function injectStyles(document) {
       font: 12px/1.45 "JetBrains Mono", monospace;
       color: var(--text-muted);
     }
+    /* Approval dialog styles */
+    .ncp-approval-section {
+      margin-top: 20px;
+      border: 1px solid rgba(249, 226, 175, 0.3);
+      border-radius: 8px;
+      background: rgba(249, 226, 175, 0.05);
+      padding: 14px;
+    }
+    .ncp-approval-heading {
+      margin: 0 0 12px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent-yellow, #f9e2af);
+    }
+    .ncp-approval-item {
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: var(--bg-surface);
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .ncp-approval-item:last-child { margin-bottom: 0; }
+    .ncp-approval-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .ncp-approval-icon { font-size: 16px; }
+    .ncp-approval-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .ncp-approval-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      line-height: 1.4;
+    }
+    .ncp-approval-detail {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+    .ncp-approval-detail code {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      color: var(--accent-green, #a6e3a1);
+    }
+    .ncp-approval-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .ncp-approve-btn, .ncp-reject-btn {
+      flex: 1;
+      min-height: 32px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 120ms ease;
+    }
+    .ncp-approve-btn {
+      background: var(--accent-green, #a6e3a1);
+      color: #1e1e2e;
+    }
+    .ncp-approve-btn:hover { opacity: 0.85; }
+    .ncp-reject-btn {
+      background: var(--accent-red, #f38ba8);
+      color: white;
+    }
+    .ncp-reject-btn:hover { opacity: 0.85; }
   `;
   document.head.appendChild(style);
 }
@@ -382,11 +498,22 @@ function readJson(value) {
 }
 
 function escapeHtml(value) {
+  var amp = '&' + 'amp;';
+  var lt = '&' + 'lt;';
+  var gt = '&' + 'gt;';
+  var quot = '&' + 'quot;';
   return String(value === undefined || value === null ? '' : value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g, amp)
+    .replace(/</g, lt)
+    .replace(/>/g, gt)
+    .replace(/"/g, quot);
 }
 
 export default installNovaConnectPanel;
+
+export function showWriteApprovalDialog() {
+  const app = getRuntimeGlobal().app;
+  if (app && app.novaConnectPanelOpen === false) {
+    app.toggleNovaConnectPanel();
+  }
+}

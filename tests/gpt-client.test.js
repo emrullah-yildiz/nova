@@ -17,4 +17,23 @@ describe('GPTClient', () => {
     expect(GPTClient.isApiKeyValid('short')).toBe(false);
     expect(GPTClient.isApiKeyValid('sk-12345678901')).toBe(true);
   });
+
+  it('detects enterprise AI mode from runtime config', () => {
+    const previousConfig = globalThis.__NOVA_CONFIG__;
+    try {
+      globalThis.__NOVA_CONFIG__ = {
+        apiBaseUrl: 'https://api.nova.example',
+        enterpriseAiEnabled: true
+      };
+      expect(GPTClient.isEnterpriseAiEnabled()).toBe(true);
+
+      globalThis.__NOVA_CONFIG__ = {
+        apiBaseUrl: 'https://api.nova.example',
+        enterpriseAiEnabled: false
+      };
+      expect(GPTClient.isEnterpriseAiEnabled()).toBe(false);
+    } finally {
+      globalThis.__NOVA_CONFIG__ = previousConfig;
+    }
+  });
 });

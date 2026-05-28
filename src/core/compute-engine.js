@@ -38,14 +38,18 @@ export function getVal(ctx, nd, id, def) {
 
   const evalKey = '_eval_' + id;
   if (nd.controlValues && nd.controlValues[evalKey] !== undefined && !isNaN(nd.controlValues[evalKey])) {
-    return nd.controlValues[evalKey];
+    const num = Number(nd.controlValues[evalKey]);
+    return isNaN(num) ? def : num;
   }
 
   const cv = nd.controlValues ? nd.controlValues[id] : undefined;
   if (cv !== undefined && cv !== null) {
     if (ctx.formulaEval && typeof cv === 'string' && cv.length > 0) {
       const result = ctx.formulaEval.eval(cv);
-      if (result && result.error === null) return result.value;
+      if (result && result.error === null) {
+        const num = Number(result.value);
+        return isNaN(num) ? def : num;
+      }
     }
     const num = parseFloat(cv);
     return isNaN(num) ? def : num;

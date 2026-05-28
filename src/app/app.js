@@ -107,11 +107,15 @@ const app = {
 
     const run = document.getElementById('menu-run');
 
-    run.classList.toggle('disabled', !ws || !has);
+    if (run) {
 
-    run.style.color = (ws && has) ? 'var(--accent-green)' : '';
+      run.classList.toggle('disabled', !ws || !has);
 
-    run.onclick = (ws && has) ? () => app.runGraph() : null;
+      run.style.color = (ws && has) ? 'var(--accent-green)' : '';
+
+      run.onclick = (ws && has) ? () => app.runGraph() : null;
+
+    }
 
     const cl = document.getElementById('mi-close');
 
@@ -124,6 +128,8 @@ const app = {
       if (el) el.classList.toggle('disabled', !ws);
 
     });
+
+    if (this._updateHistoryMenuState) this._updateHistoryMenuState();
 
   },
 
@@ -183,7 +189,8 @@ const app = {
 
   closeProject() {
 
-    this.nodes=[]; this.wires=[]; this.selectedNodes=[];
+    this.nodes=[]; this.wires=[]; this.selectedNodes=[]; this._undoStack=[]; this._redoStack=[]; this._lastHistorySnapshot=null;
+    this._hasRun=false; this._isRunningGraph=false; this._lastRunVersion=0;
 
     this.nextNodeId=1; this.nodeZCounter=10; this.zoom=1; this.panX=0; this.panY=0;
 
@@ -199,7 +206,8 @@ const app = {
 
   newProject() {
 
-    this.nodes=[]; this.wires=[]; this.selectedNodes=[];
+    this.nodes=[]; this.wires=[]; this.selectedNodes=[]; this._undoStack=[]; this._redoStack=[]; this._lastHistorySnapshot=null;
+    this._hasRun=false; this._isRunningGraph=false; this._lastRunVersion=0;
 
     this.nextNodeId=1; this.nodeZCounter=10; this.zoom=1; this.panX=0; this.panY=0;
 
@@ -287,7 +295,11 @@ const app = {
 
     this.updateMenuState();
 
-    if (p==='workspace') setTimeout(()=>this.renderWires(),50);
+    if (p==='workspace') {
+      this.syncWorkspaceLayout();
+      this.queueWorkspaceLayoutSync();
+      setTimeout(()=>this.renderWires(),50);
+    }
 
   },
 
@@ -296,34 +308,55 @@ const app = {
   // ── NODE LIBRARY ──
 
   renderNodeLibrary() {
+    var html = '';
+    NODE_LIBRARY.categories.forEach(function(cat) {
+      // Group nodes by their 'group' property
+      var groups = {};
+      cat.nodes.forEach(function(n) {
+        var g = n.group || '_ungrouped';
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(n);
+      });
+      var groupKeys = Object.keys(groups).sort(function(a, b) {
+        // Order: specific named groups first, then ungrouped
+        if (a === '_ungrouped') return 1;
+        if (b === '_ungrouped') return -1;
+        return a.localeCompare(b);
+      });
 
-    document.getElementById('node-categories').innerHTML = NODE_LIBRARY.categories.map(cat => `
-
-      <div class="node-category open" data-cat="${cat.id}">
-
+      html += `<div class="node-category open" data-cat="${cat.id}">
         <button class="node-category-header" onclick="app.toggleCategory('${cat.id}')">
-
           <span class="node-category-dot" style="background:${cat.color}"></span>
-
           <span class="node-category-name">${cat.name}</span>
-
           <span class="node-category-count">${cat.nodes.length}</span>
-
           <svg class="node-category-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
-
         </button>
+        <div class="node-category-items">`;
 
-        <div class="node-category-items">
+      groupKeys.forEach(function(g) {
+        if (g !== '_ungrouped') {
+          html += `<div class="node-subgroup">
+            <button class="node-subgroup-header" onclick="app.toggleSubGroup(this)">
+              <svg class="node-subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              <span class="node-subgroup-name">${g}</span>
+            </button>
+            <div class="node-subgroup-items">`;
+        }
+        groups[g].forEach(function(n) {
+          html += `<button class="node-lib-item" draggable="true" ondragstart="app.onLibDragStart(event,'${n.type}')" onclick="app.addNodeFromLib('${n.type}')"><span class="nli-icon" style="color:${cat.color}">${n.icon}</span>${n.name}</button>`;
+        });
+        if (g !== '_ungrouped') {
+          html += `</div></div>`;
+        }
+      });
 
-          ${cat.nodes.map(n => `<button class="node-lib-item" draggable="true" ondragstart="app.onLibDragStart(event,'${n.type}')" onclick="app.addNodeFromLib('${n.type}')"><span class="nli-icon" style="color:${cat.color}">${n.icon}</span>${n.name}</button>`).join('')}
-
-        </div>
-
-      </div>`).join('');
-
+      html += `</div></div>`;
+    });
+    document.getElementById('node-categories').innerHTML = html;
   },
 
   toggleCategory(id) { const el=document.querySelector(`.node-category[data-cat="${id}"]`); if(el) el.classList.toggle('open'); },
+  toggleSubGroup(btn) { const container = btn.parentElement; if (container) container.classList.toggle('open'); },
 
   filterNodes(q) {
 
@@ -345,7 +378,11 @@ const app = {
 
   },
 
-  toggleNodeLibrary() { const l=document.getElementById('node-library'); l.style.display=l.style.display==='none'?'':'none'; },
+  toggleNodeLibrary() {
+    const l=document.getElementById('node-library');
+    l.style.display=l.style.display==='none'?'':'none';
+    this.syncWorkspaceLayout();
+  },
 
   onLibDragStart(e,type) { e.dataTransfer.setData('text/plain',type); e.dataTransfer.effectAllowed='copy'; },
 
@@ -539,6 +576,12 @@ const app = {
 
         if (srcNd) return this.computeNodeValue(srcNd);
 
+      }
+
+      // No wire connected — fall back to control value if control exists with matching id
+      const ctrl = nd.controlValues;
+      if (ctrl && ctrl[portId] !== undefined && ctrl[portId] !== null && ctrl[portId] !== '') {
+        return parseFloat(ctrl[portId]) || 0;
       }
 
       return undefined;
@@ -1110,6 +1153,8 @@ const app = {
 
     btn.classList.toggle('hidden',this.chatVisible);
 
+    this.syncWorkspaceLayout();
+
     this.syncCodeViewerLayout();
 
   },
@@ -1148,6 +1193,8 @@ const app = {
 
     this.applyChatSize();
 
+    this.syncWorkspaceLayout();
+
     this.syncCodeViewerLayout();
 
   },
@@ -1171,6 +1218,8 @@ const app = {
     this.chatDock='float';this.chatVisible=true;
 
     document.getElementById('chat-toggle-btn').classList.add('hidden');
+
+    this.syncWorkspaceLayout();
 
     this.syncCodeViewerLayout();
 
@@ -1250,7 +1299,22 @@ const app = {
 
   },
 
-  fmt(t){return t.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>').replace(/• /g,'&bull; ');},
+  escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  },
+
+  fmt(t){
+    const escaped = this.escapeHtml(t);
+    return escaped
+      .replace(/\*\*([^*\n][\s\S]*?)\*\*/g,'<strong>$1</strong>')
+      .replace(/\n/g,'<br>')
+      .replace(/• /g,'&bull; ');
+  },
 
   setChatSuggestions(ch,items) {
 
@@ -2172,6 +2236,86 @@ const app = {
 
   },
 
+  getNodeLibraryWidth() {
+
+    const root = getComputedStyle(document.documentElement);
+
+    const value = parseFloat(root.getPropertyValue('--lib-width'));
+
+    return Number.isFinite(value) ? value : 260;
+
+  },
+
+  syncWorkspaceLayout() {
+
+    const wp = document.getElementById('workspace-page');
+
+    const lib = document.getElementById('node-library');
+
+    const chatPanel = document.getElementById('ws-chat-panel');
+
+    if (!wp) return;
+
+    const libVisible = !lib || lib.style.display !== 'none';
+
+    const libWidth = libVisible ? this.getNodeLibraryWidth() : 0;
+
+    const chatActive = this.chatVisible && chatPanel && !chatPanel.classList.contains('chat-hidden') && this.chatDock !== 'float';
+
+    let canvasLeft = libWidth;
+
+    let canvasRight = 0;
+
+    let canvasBottom = 0;
+
+    if (chatActive) {
+
+      if (this.chatDock === 'right') {
+
+        canvasRight = this.chatWidth;
+
+      } else if (this.chatDock === 'left') {
+
+        canvasLeft += this.chatWidth;
+
+      } else if (this.chatDock === 'bottom') {
+
+        canvasBottom = this.chatHeight;
+
+      }
+
+    }
+
+    wp.style.setProperty('--workspace-left', libWidth + 'px');
+
+    wp.style.setProperty('--canvas-left', canvasLeft + 'px');
+
+    wp.style.setProperty('--canvas-right', canvasRight + 'px');
+
+    wp.style.setProperty('--canvas-bottom', canvasBottom + 'px');
+
+    this.renderWires();
+
+    if (typeof Viewer3D !== 'undefined' && Viewer3D.isInitialized && Viewer3D._onResize) {
+
+      Viewer3D._onResize();
+
+    }
+
+  },
+
+  queueWorkspaceLayoutSync() {
+
+    requestAnimationFrame(() => {
+
+      this.syncWorkspaceLayout();
+
+      setTimeout(() => this.syncWorkspaceLayout(), 0);
+
+    });
+
+  },
+
 
 
   // Resize AI panel by dragging its handle
@@ -2215,6 +2359,8 @@ const app = {
       p.style.height = this.chatHeight + 'px';
 
     }
+
+    this.syncWorkspaceLayout();
 
     this.syncCodeViewerLayout();
 
@@ -2504,7 +2650,17 @@ const app = {
 
       });
 
-
+      // Re-render nodes that have property controls to show/hide wired green border
+      if (this._refreshRenderedNode) {
+        var refreshTargets = {};
+        graph.wires.forEach(function(w) {
+          var nd = this.nodes.find(function(n) { return n.id === w.toNode; });
+          if (nd && this._inputHasPropertyControl && this._inputHasPropertyControl(nd.id, w.toPort)) {
+            refreshTargets[nd.id] = true;
+          }
+        }.bind(this));
+        Object.keys(refreshTargets).forEach(function(id) { this._refreshRenderedNode(id); }.bind(this));
+      }
 
       this.updatePortDots();
 
@@ -2585,6 +2741,16 @@ app.setView = function(mode) {
     if (!Viewer3D.isInitialized) Viewer3D.init(viewport);
 
     Viewer3D.show();
+
+    if (app._manualRunMode && !app._hasRun) {
+      if (Viewer3D.clearGeometry) Viewer3D.clearGeometry();
+      Viewer3D._needsRebuild = false;
+      return;
+    }
+
+    if (app._manualRunMode && app._graphDirty) {
+      return;
+    }
 
     // Only rebuild 3D if the graph has changed since last build.
 

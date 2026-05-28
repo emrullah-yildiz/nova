@@ -14,7 +14,8 @@ const PythonRunner = {
 
     try {
       const lines = code.split('\n');
-      let jsCode = '';
+      let jsCode = '';
+      const indentStack = [];
 
       lines.forEach(line => {
         const trimmed = line.trim();
@@ -112,14 +113,29 @@ const PythonRunner = {
         jsLine = jsLine.replace(/\.append\((.+)\)/, '.push($1)');
 
         // Indentation → track for block closing
-        const indent = line.search(/\S/);
-        jsCode += '  '.repeat(Math.max(0, Math.floor(indent / 4))) + jsLine + '\n';
+        const indent = line.search(/\S/);
+        const isContinuation = /^(elif |else:|except|finally:)/.test(trimmed);
+
+        while (indentStack.length > 0) {
+          const topIndent = indentStack[indentStack.length - 1];
+          if (isContinuation ? indent < topIndent : indent <= topIndent) {
+            jsCode += '  '.repeat(Math.max(0, Math.floor(topIndent / 4))) + '}\n';
+            indentStack.pop();
+          } else {
+            break;
+          }
+        }
+        jsCode += '  '.repeat(Math.max(0, Math.floor(indent / 4))) + jsLine + '\n';
+
+        if (/\{\s*$/.test(jsLine)) indentStack.push(indent);
       });
 
       // Close any open blocks
-      const openBraces = (jsCode.match(/{/g) || []).length;
-      const closeBraces = (jsCode.match(/}/g) || []).length;
-      for (let i = 0; i < openBraces - closeBraces; i++) jsCode += '}\n';
+      while (indentStack.length > 0) {
+        const topIndent = indentStack.pop();
+        jsCode += '  '.repeat(Math.max(0, Math.floor(topIndent / 4))) + '}\n';
+      }
+
 
       // Build input declarations
       const inputDecls = Object.keys(inputs || {}).map(k => 'let ' + k + ' = __inputs__["' + k + '"];').join('\n');
@@ -191,14 +207,26 @@ const PythonRunner = {
             getProjectName: function() { return 'No Project'; },
             getParam: function(el, name) { return el && el.params ? el.params[name] || null : null; },
             filterByParam: function(els, p, op, v) { return (__runtimeGlobal__.RevitBridge || this).filterByParam(els, p, op, v); }
-          };
+          };
+
+          const HostRegistry = __runtimeGlobal__.HostRegistry || (__runtimeGlobal__.NodeFlow && __runtimeGlobal__.NodeFlow.hostRegistry) || {
+            get: function() {
+              return {
+                getElements: function() { return []; },
+                getGeometry: function() { return []; },
+                sendGeometry: function() { return { ok: false, message: 'No host registry is available.' }; },
+                getParameterValues: function() { return []; },
+                setParameterValues: function() { return []; }
+              };
+            }
+          };
 
           ${jsCode}
 
           // Collect all variables as outputs — use typeof check to avoid TDZ errors
           var __out__ = {};
           ${(function() {
-            var builtins = ['__inputs__','__out__','__range__','__len__','__print__','__reversed__','__sorted__','__sum__','__round__','__dist__','__factorial__','__radians__','__degrees__','__int__','__float__','__list__','Geo','RevitBridge','_Geo','i','j','k','_','s','v','r','m','d','n','a','b','c'];
+            var builtins = ['__inputs__','__out__','__range__','__len__','__print__','__reversed__','__sorted__','__sum__','__round__','__dist__','__factorial__','__radians__','__degrees__','__int__','__float__','__list__','Geo','RevitBridge','HostRegistry','_Geo','i','j','k','_','s','v','r','m','d','n','a','b','c'];
             var varNames = (jsCode.match(/(?:^|[;\n{} ])([a-zA-Z_][a-zA-Z0-9_]*)\s*=/gm) || [])
               .map(function(m) { return m.replace(/^[;\n{} ]+/, '').replace(/\s*=$/, '').trim(); })
               .filter(function(v) { return v && builtins.indexOf(v) < 0; });
