@@ -171,11 +171,12 @@ export class EnterpriseStore {
     return context;
   }
 
-  listProjects(context) {
+  listProjects(context, pagination = null) {
     this.requireContext(context);
-    return Array.from(this.projects.values())
+    const projects = Array.from(this.projects.values())
       .filter(project => project.organizationId === context.organizationId && this.canReadProject(context, project))
       .map(project => projectSummary(project));
+    return pagination ? paginateItems(projects, pagination) : projects;
   }
 
   createProject(context, { name, graph = null }) {
@@ -243,22 +244,24 @@ export class EnterpriseStore {
     return clone(project);
   }
 
-  listProjectVersions(context, projectId) {
+  listProjectVersions(context, projectId, pagination = null) {
     const project = this.requireProjectAccess(context, projectId);
-    return project.versions.map(version => ({
+    const versions = project.versions.map(version => ({
       id: version.id,
       createdAt: version.createdAt,
       createdBy: version.createdBy,
       message: version.message
     }));
+    return pagination ? paginateItems(versions, pagination) : versions;
   }
 
-  listGraphRuns(context, projectId) {
+  listGraphRuns(context, projectId, pagination = null) {
     const project = this.requireProjectAccess(context, projectId);
-    return Array.from(this.graphRuns.values())
+    const runs = Array.from(this.graphRuns.values())
       .filter(run => run.organizationId === context.organizationId && run.projectId === project.id)
       .sort((a, b) => b.startedAt - a.startedAt)
       .map(clone);
+    return pagination ? paginateItems(runs, pagination) : runs;
   }
 
   recordGraphRun(context, projectId, {
@@ -406,11 +409,12 @@ export class EnterpriseStore {
     return clone(stored);
   }
 
-  listAuditEvents(context) {
+  listAuditEvents(context, pagination = null) {
     this.requireAdmin(context);
-    return this.auditEvents
+    const events = this.auditEvents
       .filter(event => event.organizationId === context.organizationId)
       .map(clone);
+    return pagination ? paginateItems(events, pagination) : events;
   }
 
   recordHostOperation(context, { projectId = '', host = 'revit', operation, ok = true, metadata = {} }) {
@@ -733,6 +737,40 @@ function publicUser(user, organizationId, role) {
     organizationId,
     role
   };
+}
+
+function paginateItems(items, { limit, offset }) {
+  const start = Math.max(0, offset || 0);
+  const pageLimit = Math.max(1, limit || 50);
+  const sliced = items.slice(start, start + pageLimit);
+  const nextOffset = start + sliced.length;
+  const hasMore = nextOffset < items.length;
+  return {
+    items: sliced,
+    pagination: {
+      limit: pageLimit,
+      total: items.length,
+      nextCursor: hasMore ? encodePaginationCursor(nextOffset) : '',
+      hasMore
+    }
+  };
+}
+
+export function encodePaginationCursor(offset) {
+  return Buffer.from(JSON.stringify({ offset })).toString('base64url');
+}
+
+export function decodePaginationCursor(cursor) {
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+  } catch (error) {
+    throw createHttpError(400, 'Invalid pagination cursor.');
+  }
+  if (!payload || !Number.isInteger(payload.offset) || payload.offset < 0) {
+    throw createHttpError(400, 'Invalid pagination cursor.');
+  }
+  return payload.offset;
 }
 
 function clone(value) {

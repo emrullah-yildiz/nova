@@ -91,6 +91,7 @@ Current enterprise API endpoints:
 - `GET /api/audit`
 
 All project, AI, Connect, and audit endpoints must be tenant-scoped and authorize against organization/project roles.
+Project, version, graph-run, and audit list endpoints accept `limit` and `cursor` query parameters and return cursor pagination metadata alongside the existing response arrays.
 
 ## AI Boundary
 
@@ -169,7 +170,7 @@ The API server auto-detects the persistence backend from environment variables:
 
 Production deployments should set `NOVA_DATABASE_URL` and run `npm run migrate` at deploy time. The Docker container runs migrations automatically on startup when `NOVA_DATABASE_URL` is present.
 
-Redis remains the target for short-lived session, pairing, and rate-limit state in a future iteration.
+Redis is used for short-lived session, pairing, and rate-limit state when `NOVA_REDIS_URL` is configured.
 
 ## Security Controls
 

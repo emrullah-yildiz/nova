@@ -230,6 +230,45 @@ describe('enterprise API server', () => {
     }
   });
 
+  it('returns cursor pagination metadata for large enterprise lists', async () => {
+    const { server } = createEnterpriseApiServer({ allowDevLogin: true });
+    const port = await listen(server);
+    const baseUrl = 'http://127.0.0.1:' + port;
+
+    try {
+      const login = await request(baseUrl, '/api/auth/dev-login', {
+        method: 'POST',
+        body: { email: 'owner@demo.nova', organizationSlug: 'demo' }
+      });
+      const token = login.body.token;
+      for (const name of ['One', 'Two', 'Three']) {
+        await request(baseUrl, '/api/projects', {
+          method: 'POST',
+          token,
+          body: { name }
+        });
+      }
+
+      const firstPage = await request(baseUrl, '/api/projects?limit=2', { token });
+      expect(firstPage.status).toBe(200);
+      expect(firstPage.body.projects.map(project => project.name)).toEqual(['One', 'Two']);
+      expect(firstPage.body.pagination).toMatchObject({ limit: 2, total: 3, hasMore: true });
+      expect(firstPage.body.pagination.nextCursor).toBeTruthy();
+
+      const secondPage = await request(baseUrl, '/api/projects?limit=2&cursor=' + encodeURIComponent(firstPage.body.pagination.nextCursor), { token });
+      expect(secondPage.status).toBe(200);
+      expect(secondPage.body.projects.map(project => project.name)).toEqual(['Three']);
+      expect(secondPage.body.pagination.hasMore).toBe(false);
+      expect(secondPage.body.pagination.nextCursor).toBe('');
+
+      const invalidLimit = await request(baseUrl, '/api/projects?limit=500', { token });
+      expect(invalidLimit.status).toBe(400);
+      expect(invalidLimit.body.error.message).toMatch(/limit/);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
   it('uses state-store backed sessions on protected API routes', async () => {
     const stateStore = new MemoryStateStore();
     const { server } = createEnterpriseApiServer({ allowDevLogin: true, stateStore });
