@@ -2,6 +2,7 @@ import http from 'node:http';
 import { AuthService } from './auth.mjs';
 import { EnterpriseStore, ROLES, createHttpError } from './domain.mjs';
 import { JsonFilePersistence } from './persistence.mjs';
+import { createStateStore } from './state-store.mjs';
 import { PostgresPersistence } from '../../server/db/postgres-persistence.mjs';
 import { runMigrations } from '../../server/db/run-migrations.mjs';
 import {
@@ -25,7 +26,8 @@ export function createEnterpriseApiServer(options = {}) {
     oidcVerifier
   });
   const persistence = options.persistence || resolvePersistence(options);
-  const store = options.store || new EnterpriseStore({ authService, persistence });
+  const stateStore = options.stateStore || createStateStore(options);
+  const store = options.store || new EnterpriseStore({ authService, persistence, stateStore });
   if (!store.authService) store.authService = authService;
   if (options.bootstrapDemo !== false && store.organizations.size === 0 && !options.databaseUrl) store.bootstrapDemoTenant();
   if (options.aiPolicy) applyAiPolicy(store, options.aiPolicy);
@@ -43,7 +45,7 @@ export function createEnterpriseApiServer(options = {}) {
       const route = matchRoute(req.method, url.pathname, { allowDevLogin });
       if (!route) throw createHttpError(404, 'Route not found.');
       const body = await readJsonBody(req);
-      const context = route.public ? null : authenticateRequest(store, req);
+      const context = route.public ? null : await authenticateRequest(store, req);
       const result = await route.handler({ store, context, params: route.params, body, url, aiProvider, authService });
       if (store.flushPersistence) await store.flushPersistence();
       sendJson(res, route.status || 200, result);
@@ -80,7 +82,7 @@ function matchRoute(method, path, options = {}) {
       validateDevLoginBody(body);
       const organization = Array.from(store.organizations.values()).find(item => item.slug === (body.organizationSlug || 'demo')) ||
         Array.from(store.organizations.values())[0];
-      return store.createAuthSession({
+      return store.createAuthSessionAsync({
         email: body.email || 'owner@demo.nova',
         organizationId: organization.id
       });
@@ -96,10 +98,10 @@ function matchRoute(method, path, options = {}) {
     ['POST', /^\/api\/projects\/([^/]+)\/versions\/([^/]+)\/restore$/, false, 200, ({ store, context, params }) => store.restoreProjectVersion(context, params[0], params[1])],
     ['GET', /^\/api\/projects\/([^/]+)\/runs$/, false, 200, ({ store, context, params }) => ({ runs: store.listGraphRuns(context, params[0]) })],
     ['POST', /^\/api\/projects\/([^/]+)\/runs$/, false, 201, ({ store, context, params, body }) => store.recordGraphRun(context, params[0], validateGraphRunBody(body || {}))],
-    ['POST', /^\/api\/connectors\/sessions$/, false, 201, ({ store, context, body }) => store.createConnectorSession(context, validateConnectorSessionBody(body || {}))],
+    ['POST', /^\/api\/connectors\/sessions$/, false, 201, ({ store, context, body }) => store.createConnectorSessionAsync(context, validateConnectorSessionBody(body || {}))],
     ['POST', /^\/api\/connectors\/sessions\/([^/]+)\/pair$/, false, 200, ({ store, context, params, body }) => {
       const payload = validateConnectorPairBody(body || {});
-      return store.pairConnector(context, params[0], payload.pairingCode);
+      return store.pairConnectorAsync(context, params[0], payload.pairingCode);
     }],
     ['POST', /^\/api\/ai\/chat$/, false, 200, handleAiChat],
     ['GET', /^\/api\/audit$/, false, 200, ({ store, context }) => ({ events: store.listAuditEvents(context) })],
@@ -130,12 +132,12 @@ async function handleOidcCallback({ store, authService, body }) {
     if (organization.settings.ssoRequired) throw error;
     store.addMembership({ organizationId: organization.id, userId: user.id, role: ROLES.VIEWER });
   }
-  return store.createAuthSession({ email: user.email, organizationId: organization.id });
+  return store.createAuthSessionAsync({ email: user.email, organizationId: organization.id });
 }
 
 async function handleAiChat({ store, context, body, aiProvider }) {
   const payload = validateAiChatBody(body || {});
-  const request = store.createAiRequest(context, payload);
+  const request = await store.createAiRequestAsync(context, payload);
   try {
     const completion = await aiProvider.complete({
       provider: request.provider,
@@ -169,7 +171,7 @@ async function handleAiChat({ store, context, body, aiProvider }) {
 function authenticateRequest(store, req) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-  return store.authenticate(token);
+  return store.authenticateAsync(token);
 }
 
 function setCorsHeaders(res, origin) {

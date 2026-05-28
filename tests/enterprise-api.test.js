@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createEnterpriseApiServer } from '../src/enterprise/api-server.mjs';
+import { MemoryStateStore, hashToken } from '../src/enterprise/state-store.mjs';
 
 function listen(server) {
   return new Promise(resolve => {
@@ -224,6 +225,29 @@ describe('enterprise API server', () => {
 
       const audit = await request(baseUrl, '/api/audit', { token });
       expect(audit.body.events.some(event => event.type === 'ai.request.completed')).toBe(true);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
+  it('uses state-store backed sessions on protected API routes', async () => {
+    const stateStore = new MemoryStateStore();
+    const { server } = createEnterpriseApiServer({ allowDevLogin: true, stateStore });
+    const port = await listen(server);
+    const baseUrl = 'http://127.0.0.1:' + port;
+
+    try {
+      const login = await request(baseUrl, '/api/auth/dev-login', {
+        method: 'POST',
+        body: { email: 'owner@demo.nova', organizationSlug: 'demo' }
+      });
+      expect(login.status).toBe(200);
+      expect(await stateStore.get('session:' + hashToken(login.body.token))).not.toBe(null);
+
+      await stateStore.delete('session:' + hashToken(login.body.token));
+      const me = await request(baseUrl, '/api/me', { token: login.body.token });
+      expect(me.status).toBe(401);
+      expect(me.body.error.message).toMatch(/Session expired/);
     } finally {
       await new Promise(resolve => server.close(resolve));
     }

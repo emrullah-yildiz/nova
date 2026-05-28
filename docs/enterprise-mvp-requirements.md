@@ -215,7 +215,7 @@ Status checked: 2026-05-28.
 - [x] API startup now supports async persistence initialization.
 - [x] Production Postgres persistence has an integration test harness for a real Postgres service. Status: verified against Neon on 2026-05-28; run with `NOVA_POSTGRES_INTEGRATION_TESTS=true NOVA_DATABASE_URL=... npm run test:postgres`.
 - [x] High-risk user-content HTML paths hardened. Status: chat rendering escapes untrusted text before markdown formatting; saved/imported project names are escaped in open/recent/recovery dialogs.
-- [ ] Redis-backed sessions, pairing state, and rate limits remain pending.
+- [x] Redis-backed sessions, pairing state, and rate limits are wired. Status: API uses `NOVA_REDIS_URL` when configured; tests cover the state-store contract with the in-memory adapter.
 - [ ] Pagination for large lists remains pending.
 - [ ] Background queue and object storage paths remain pending.
 - [ ] Revit write approval must be enforced end-to-end before pilot.

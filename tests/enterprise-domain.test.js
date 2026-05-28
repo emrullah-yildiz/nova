@@ -4,6 +4,7 @@ import path from 'node:path';
 import { EnterpriseStore, ROLES } from '../src/enterprise/domain.mjs';
 import { AuthService } from '../src/enterprise/auth.mjs';
 import { JsonFilePersistence } from '../src/enterprise/persistence.mjs';
+import { MemoryStateStore, hashToken } from '../src/enterprise/state-store.mjs';
 
 function createContext(store, organizationId, role = ROLES.OWNER, email = 'user@example.com') {
   const user = store.createUser({ email, displayName: email });
@@ -39,6 +40,26 @@ describe('enterprise domain', () => {
     expect(() => store.authenticate(session.token + 'x')).toThrow(/Invalid bearer/);
     now = 1200;
     expect(() => store.authenticate(session.token)).toThrow(/Invalid bearer/);
+  });
+
+  it('can require state-store backed sessions in addition to signed tokens', async () => {
+    let now = 1000;
+    const authService = new AuthService({
+      now: () => now,
+      sessionSecret: 'state-session-secret',
+      sessionTtlMs: 10000
+    });
+    const stateStore = new MemoryStateStore({ now: () => now });
+    const store = new EnterpriseStore({ now: () => now, authService, stateStore });
+    const org = store.createOrganization({ name: 'A' });
+    const user = store.createUser({ email: 'state@example.com' });
+    store.addMembership({ organizationId: org.id, userId: user.id, role: ROLES.OWNER });
+
+    const session = await store.createAuthSessionAsync({ email: user.email, organizationId: org.id });
+    expect((await store.authenticateAsync(session.token)).user.email).toBe(user.email);
+
+    await stateStore.delete('session:' + hashToken(session.token));
+    await expect(store.authenticateAsync(session.token)).rejects.toThrow(/Session expired/);
   });
 
   it('stores projects inside an organization and blocks cross-organization access', () => {
@@ -174,6 +195,22 @@ describe('enterprise domain', () => {
     expect(() => store.pairConnector(ctx, expired.id, expired.pairingCode)).toThrow(/expired/);
   });
 
+  it('stores connector pairing state in the state store when configured', async () => {
+    let now = 1000;
+    const stateStore = new MemoryStateStore({ now: () => now });
+    const store = new EnterpriseStore({ now: () => now, stateStore });
+    const org = store.createOrganization({ name: 'A' });
+    const ctx = createContext(store, org.id);
+    const session = await store.createConnectorSessionAsync(ctx, { host: 'revit' });
+
+    expect((await stateStore.get('connector:' + session.id)).status).toBe('pairing');
+    expect((await store.pairConnectorAsync(ctx, session.id, session.pairingCode)).status).toBe('online');
+
+    const expired = await store.createConnectorSessionAsync(ctx, { host: 'revit' });
+    now = expired.expiresAt + 1;
+    await expect(store.pairConnectorAsync(ctx, expired.id, expired.pairingCode)).rejects.toThrow(/expired/);
+  });
+
   it('records AI requests without storing prompts by default', () => {
     const store = new EnterpriseStore();
     const org = store.createOrganization({ name: 'A' });
@@ -222,5 +259,29 @@ describe('enterprise domain', () => {
     expect(store.createAiRequest(context, {
       messages: [{ role: 'user', content: 'Next minute' }]
     }).status).toBe('pending');
+  });
+
+  it('enforces state-store backed user and organization AI rate limits', async () => {
+    let now = 0;
+    const stateStore = new MemoryStateStore({ now: () => now });
+    const store = new EnterpriseStore({ now: () => now, stateStore });
+    const org = store.createOrganization({ name: 'A' });
+    const first = createContext(store, org.id, ROLES.OWNER, 'first@example.com');
+    const second = createContext(store, org.id, ROLES.OWNER, 'second@example.com');
+    const organization = store.requireOrganization(org.id);
+    organization.settings.ai.maxRequestsPerMinute = 5;
+    organization.settings.ai.maxOrganizationRequestsPerMinute = 1;
+
+    expect((await store.createAiRequestAsync(first, {
+      messages: [{ role: 'user', content: 'First' }]
+    })).status).toBe('pending');
+    await expect(store.createAiRequestAsync(second, {
+      messages: [{ role: 'user', content: 'Second' }]
+    })).rejects.toThrow(/Organization AI rate limit/);
+
+    now = 60000;
+    await expect(store.createAiRequestAsync(second, {
+      messages: [{ role: 'user', content: 'Next minute' }]
+    })).resolves.toMatchObject({ status: 'pending' });
   });
 });
