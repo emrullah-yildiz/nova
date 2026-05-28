@@ -313,7 +313,7 @@ const app = {
       // Group nodes by their 'group' property
       var groups = {};
       cat.nodes.forEach(function(n) {
-        var g = n.group || '_ungrouped';
+        var g = n.subGroup || n.group || '_ungrouped';
         if (!groups[g]) groups[g] = [];
         groups[g].push(n);
       });

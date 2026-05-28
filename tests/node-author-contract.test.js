@@ -78,6 +78,14 @@ describe('node author contract', () => {
     expect(violations).toEqual([]);
   });
 
+  it('every modern node has a subGroup so the library panel can render hierarchically', () => {
+    const violations = modernNodes
+      .filter((node) => !node.subGroup || node.subGroup.length === 0)
+      .map((node) => node.type);
+
+    expect(violations).toEqual([]);
+  });
+
   it('every modern node provides Python codegen', () => {
     const violations = modernNodes
       .filter((node) => !hasText(node.codegen && node.codegen.python))
@@ -230,6 +238,22 @@ describe('library panel merge', () => {
     expect(helpDoc.description).toBe('Inline description wins');
     expect(helpDoc.example.title).toBe('Inline example');
     expect(helpDoc.sampleCode).toBe('inline code');
+  });
+
+  it('merged NODE_LIBRARY entries preserve subGroup so the panel can render sub-folders', () => {
+    getLiveCoreRegistry();
+
+    const violations = [];
+    NODE_LIBRARY.categories.forEach((category) => {
+      if (!['curves', 'list', 'logic'].includes(category.id)) return;
+      category.nodes.forEach((node) => {
+        if (!node.subGroup || node.subGroup.length === 0) {
+          violations.push(`${category.id}/${node.type}`);
+        }
+      });
+    });
+
+    expect(violations).toEqual([]);
   });
 
   it('NODE_LIBRARY has no duplicate type IDs within any category after the live merge', () => {
