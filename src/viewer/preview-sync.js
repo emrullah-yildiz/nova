@@ -36,6 +36,14 @@ export function updateNodeHiddenClass(nodeId, hidden, options) {
   return true;
 }
 
+function setSceneChildVisible(viewer, idx, visible) {
+  if (!viewer || !viewer.geometryGroup || !viewer.geometryGroup.children) return false;
+  var child = viewer.geometryGroup.children[idx];
+  if (!child) return false;
+  child.visible = visible;
+  return true;
+}
+
 export function setNodePreviewState(app, viewer, nodeId, visible, options) {
   var nextVisible = visible !== false;
   var changed = false;
@@ -56,6 +64,25 @@ export function setNodePreviewState(app, viewer, nodeId, visible, options) {
       item.visible = nextVisible;
       if (item.group) item.group.visible = nextVisible;
       if (!nextVisible && item.selected) item.selected = false;
+    });
+  }
+
+  // engine._renderFromCompute tracks its scene items on app._sceneItems
+  // (separate list from viewer._sceneItems), referencing THREE.js children
+  // by index instead of group. Toggle them via the children array.
+  if (app && viewer && Array.isArray(app._sceneItems)) {
+    app._sceneItems.forEach(function(item) {
+      if (item.nodeId !== nodeId) return;
+      if (item.visible !== nextVisible) changed = true;
+      item.visible = nextVisible;
+      if (typeof item.idx === 'number') {
+        setSceneChildVisible(viewer, item.idx, nextVisible);
+      }
+      if (typeof item.idxStart === 'number' && typeof item.idxEnd === 'number') {
+        for (var i = item.idxStart; i <= item.idxEnd; i++) {
+          setSceneChildVisible(viewer, i, nextVisible);
+        }
+      }
     });
   }
 
@@ -123,6 +150,23 @@ export function showAllPreviews(app, viewer, options) {
       item.visible = true;
       if (item.group) item.group.visible = true;
       item.selected = false;
+    });
+  }
+
+  // Engine-tracked items live in app._sceneItems and reference THREE.js
+  // children by index; restore those too.
+  if (app && viewer && Array.isArray(app._sceneItems)) {
+    app._sceneItems.forEach(function(item) {
+      if (item.visible !== true) changed = true;
+      item.visible = true;
+      if (typeof item.idx === 'number') {
+        setSceneChildVisible(viewer, item.idx, true);
+      }
+      if (typeof item.idxStart === 'number' && typeof item.idxEnd === 'number') {
+        for (var i = item.idxStart; i <= item.idxEnd; i++) {
+          setSceneChildVisible(viewer, i, true);
+        }
+      }
     });
   }
 
