@@ -42,6 +42,7 @@ export class PostgresPersistence {
     const projects = (await pool.query('SELECT * FROM projects')).rows;
     const projectMembers = (await pool.query('SELECT * FROM project_members')).rows;
     const versions = (await pool.query('SELECT * FROM project_versions ORDER BY created_at ASC')).rows;
+    const graphRuns = (await pool.query('SELECT * FROM graph_runs ORDER BY started_at ASC')).rows;
     const connectorSessions = (await pool.query('SELECT * FROM connect_sessions')).rows;
     const aiRequests = (await pool.query('SELECT * FROM ai_requests')).rows;
     const auditEvents = (await pool.query('SELECT * FROM audit_events ORDER BY created_at ASC')).rows;
@@ -95,6 +96,18 @@ export class PostgresPersistence {
           }))
         };
       }),
+      graphRuns: graphRuns.map(r => ({
+        id: r.id,
+        projectId: r.project_id,
+        organizationId: r.organization_id,
+        userId: r.user_id,
+        versionId: r.version_id || '',
+        status: r.status,
+        durationMs: r.duration_ms,
+        errorSummary: r.error_summary,
+        startedAt: r.started_at,
+        completedAt: r.completed_at
+      })),
       connectorSessions: connectorSessions.map(r => ({
         id: r.id,
         organizationId: r.organization_id,
@@ -213,6 +226,16 @@ export class PostgresPersistence {
               );
             }
           }
+        }
+      }
+
+      // Insert graph runs
+      if (snapshot.graphRuns) {
+        for (const r of snapshot.graphRuns) {
+          await client.query(
+            'INSERT INTO graph_runs (id, project_id, organization_id, user_id, version_id, status, duration_ms, error_summary, started_at, completed_at) VALUES ($1, $2, $3, $4, NULLIF($5, \'\'), $6, $7, $8, $9, $10) ON CONFLICT (id) DO UPDATE SET status=EXCLUDED.status, duration_ms=EXCLUDED.duration_ms, error_summary=EXCLUDED.error_summary, completed_at=EXCLUDED.completed_at',
+            [r.id, r.projectId, r.organizationId, r.userId, r.versionId || '', r.status, r.durationMs ?? null, r.errorSummary || '', r.startedAt, r.completedAt || null]
+          );
         }
       }
 

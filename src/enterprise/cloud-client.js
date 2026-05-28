@@ -62,6 +62,17 @@ export class NovaCloudClient {
     });
   }
 
+  async listGraphRuns(projectId) {
+    return this.request('/api/projects/' + encodeURIComponent(projectId) + '/runs');
+  }
+
+  async recordGraphRun(projectId, payload = {}) {
+    return this.request('/api/projects/' + encodeURIComponent(projectId) + '/runs', {
+      method: 'POST',
+      body: payload
+    });
+  }
+
   async createConnectorSession({ host = 'revit', projectId = '', connectorVersion = '0.1.0' } = {}) {
     return this.request('/api/connectors/sessions', {
       method: 'POST',

@@ -165,40 +165,59 @@ These targets are intentionally modest but force the right backend shape early.
 
 ## Implementation Milestones
 
+Status checked: 2026-05-28.
+
 ### Milestone 1: Backend Spine
 
-- Create `server/` backend scaffold.
-- Add health endpoint.
-- Add database migration setup.
-- Add organization, user, project, and project version models.
-- Add project save/load APIs.
-- Add audit event writer.
+- [x] Create `server/` backend scaffold.
+- [x] Add health endpoint.
+- [x] Add database migration setup.
+- [x] Add organization, user, project, and project version models.
+- [x] Add project save/load APIs.
+- [x] Add audit event writer.
 
 ### Milestone 2: Enterprise AI Proxy
 
-- Add `/ai/chat` endpoint.
-- Move provider credentials to backend.
-- Add rate limiting.
-- Add organization model policy.
-- Add frontend enterprise AI client path.
+- [x] Add `/ai/chat` endpoint.
+- [ ] Move provider credentials to backend. Status: backend proxy boundary exists; production provider adapters and secret loading still need to replace legacy browser-key paths.
+- [x] Add rate limiting.
+- [x] Add organization model policy.
+- [x] Add frontend enterprise AI client path.
 
 ### Milestone 3: Secure Connect Pilot
 
-- Harden pairing flow.
-- Require token by default.
-- Add session expiry.
-- Add schema validation for Connect messages.
-- Add Revit write approval and audit event creation.
+- [x] Harden pairing flow.
+- [x] Require token by default.
+- [x] Add session expiry.
+- [x] Add schema validation for Connect messages.
+- [ ] Add Revit write approval and audit event creation. Status: host-operation audit endpoint exists; explicit approval enforcement still needs to be wired through the local Revit write flow.
 
 ### Milestone 4: Production Pilot Readiness
 
-- Add Docker deployment.
-- Add environment templates.
-- Add structured logs.
-- Add error reporting.
-- Add load-test scripts.
-- Add deployment guide.
-- Add security review checklist.
+- [x] Add Docker deployment.
+- [x] Add environment templates.
+- [ ] Add structured logs.
+- [ ] Add error reporting.
+- [ ] Add load-test scripts.
+- [x] Add deployment guide.
+- [ ] Add security review checklist.
+
+### Current MVP Completion Snapshot
+
+- [x] Users can authenticate through dev or OIDC-ready flows.
+- [x] Users can create projects and save/load immutable graph versions.
+- [x] Graph runs can be recorded and inspected for saved projects.
+- [x] AI requests go through backend policy, usage metadata, rate limits, and audit logging.
+- [x] Project APIs enforce organization and role boundaries.
+- [x] Audit logs capture authentication, project, AI, graph-run, and Connect session events.
+- [x] Postgres schema and migrations exist for enterprise persistence.
+- [x] API startup now supports async persistence initialization.
+- [ ] Production Postgres persistence needs integration testing against a real Postgres service.
+- [ ] Legacy browser AI-key storage and unsafe user-content HTML paths still need hardening.
+- [ ] Redis-backed sessions, pairing state, and rate limits remain pending.
+- [ ] Pagination for large lists remains pending.
+- [ ] Background queue and object storage paths remain pending.
+- [ ] Revit write approval must be enforced end-to-end before pilot.
 
 ## MVP Exit Criteria
 

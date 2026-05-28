@@ -18,11 +18,21 @@ export class EnterpriseStore {
     this.organizations = new Map();
     this.users = new Map();
     this.projects = new Map();
+    this.graphRuns = new Map();
     this.connectorSessions = new Map();
     this.aiRequests = new Map();
     this.aiUsageBuckets = new Map();
     this.auditEvents = [];
-    if (this.persistence) this.restoreSnapshot(this.persistence.readSnapshot());
+    this._persistenceReady = Promise.resolve();
+    this._lastPersistPromise = Promise.resolve();
+    if (this.persistence) {
+      const snapshot = this.persistence.readSnapshot();
+      if (snapshot && typeof snapshot.then === 'function') {
+        this._persistenceReady = snapshot.then(value => this.restoreSnapshot(value));
+      } else {
+        this.restoreSnapshot(snapshot);
+      }
+    }
   }
 
   bootstrapDemoTenant() {
@@ -212,6 +222,61 @@ export class EnterpriseStore {
       createdBy: version.createdBy,
       message: version.message
     }));
+  }
+
+  listGraphRuns(context, projectId) {
+    const project = this.requireProjectAccess(context, projectId);
+    return Array.from(this.graphRuns.values())
+      .filter(run => run.organizationId === context.organizationId && run.projectId === project.id)
+      .sort((a, b) => b.startedAt - a.startedAt)
+      .map(clone);
+  }
+
+  recordGraphRun(context, projectId, {
+    versionId = '',
+    status = 'completed',
+    durationMs = null,
+    errorSummary = '',
+    startedAt = this.now(),
+    completedAt = this.now()
+  } = {}) {
+    const project = this.requireProjectAccess(context, projectId);
+    this.requireProjectWrite(context, project);
+    const resolvedVersionId = versionId || project.currentVersionId;
+    if (resolvedVersionId && !project.versions.some(version => version.id === resolvedVersionId)) {
+      throw createHttpError(404, 'Project version not found.');
+    }
+    if (!['pending', 'running', 'completed', 'failed'].includes(status)) {
+      throw createHttpError(400, 'Invalid graph run status.');
+    }
+    const run = {
+      id: createId('run'),
+      projectId: project.id,
+      organizationId: context.organizationId,
+      userId: context.userId,
+      versionId: resolvedVersionId,
+      status,
+      durationMs,
+      errorSummary: String(errorSummary || '').slice(0, 1000),
+      startedAt,
+      completedAt: completedAt || null
+    };
+    this.graphRuns.set(run.id, run);
+    this.audit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      type: 'graph.run.recorded',
+      targetId: project.id,
+      metadata: {
+        runId: run.id,
+        versionId: run.versionId,
+        status: run.status,
+        durationMs: run.durationMs,
+        failed: run.status === 'failed'
+      }
+    });
+    this.persist();
+    return clone(run);
   }
 
   restoreProjectVersion(context, projectId, versionId) {
@@ -506,6 +571,7 @@ export class EnterpriseStore {
       organizations: Array.from(this.organizations.values()).map(clone),
       users: Array.from(this.users.values()).map(clone),
       projects: Array.from(this.projects.values()).map(clone),
+      graphRuns: Array.from(this.graphRuns.values()).map(clone),
       connectorSessions: Array.from(this.connectorSessions.values()).map(clone),
       aiRequests: Array.from(this.aiRequests.values()).map(clone),
       auditEvents: this.auditEvents.map(clone)
@@ -517,6 +583,7 @@ export class EnterpriseStore {
     this.organizations = mapById(snapshot.organizations);
     this.users = mapById(snapshot.users);
     this.projects = mapById(snapshot.projects);
+    this.graphRuns = mapById(snapshot.graphRuns);
     this.connectorSessions = mapById(snapshot.connectorSessions);
     this.aiRequests = mapById(snapshot.aiRequests);
     this.auditEvents = safeArray(snapshot.auditEvents).map(clone);
@@ -524,7 +591,18 @@ export class EnterpriseStore {
 
   persist() {
     if (!this.persistence) return;
-    this.persistence.writeSnapshot(this.exportSnapshot());
+    const result = this.persistence.writeSnapshot(this.exportSnapshot());
+    if (result && typeof result.then === 'function') {
+      this._lastPersistPromise = result;
+    }
+  }
+
+  async ready() {
+    await this._persistenceReady;
+  }
+
+  async flushPersistence() {
+    await this._lastPersistPromise;
   }
 }
 

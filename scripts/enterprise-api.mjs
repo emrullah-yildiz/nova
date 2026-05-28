@@ -4,7 +4,7 @@
  * Handles async initialization of optional OIDC verifier before creating the server.
  */
 
-import { createEnterpriseApiServer } from '../src/enterprise/api-server.mjs';
+import { createEnterpriseApiServerAsync } from '../src/enterprise/api-server.mjs';
 
 async function start() {
   const port = Number(process.env.NOVA_API_PORT || 8787);
@@ -44,7 +44,7 @@ async function start() {
     }
   }
 
-  const { server } = createEnterpriseApiServer(options);
+  const { server } = await createEnterpriseApiServerAsync(options);
 
   server.listen(port, host, () => {
     console.log('[Nova Enterprise API] listening on http://' + host + ':' + port);

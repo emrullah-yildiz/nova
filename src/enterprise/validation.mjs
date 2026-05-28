@@ -60,6 +60,23 @@ export function validateAiChatBody(body = {}) {
   return body;
 }
 
+export function validateGraphRunBody(body = {}) {
+  requirePlainObject(body, 'request body');
+  optionalString(body.versionId, 'versionId', 80);
+  optionalString(body.status, 'status', 40);
+  if (body.durationMs !== undefined && body.durationMs !== null && (!Number.isFinite(body.durationMs) || body.durationMs < 0)) {
+    throw createHttpError(400, 'durationMs must be a non-negative number.');
+  }
+  optionalString(body.errorSummary, 'errorSummary', 1000);
+  if (body.startedAt !== undefined && (!Number.isFinite(body.startedAt) || body.startedAt < 0)) {
+    throw createHttpError(400, 'startedAt must be a non-negative number.');
+  }
+  if (body.completedAt !== undefined && body.completedAt !== null && (!Number.isFinite(body.completedAt) || body.completedAt < 0)) {
+    throw createHttpError(400, 'completedAt must be a non-negative number.');
+  }
+  return body;
+}
+
 export function validateHostOperationBody(body = {}) {
   requirePlainObject(body, 'request body');
   optionalString(body.projectId, 'projectId', 80);

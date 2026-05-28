@@ -187,6 +187,19 @@ describe('enterprise API server', () => {
       });
       expect(saved.body.versions).toHaveLength(2);
 
+      const run = await request(baseUrl, '/api/projects/' + project.body.id + '/runs', {
+        method: 'POST',
+        token,
+        body: { status: 'completed', durationMs: 17 }
+      });
+      expect(run.status).toBe(201);
+      expect(run.body.versionId).toBe(saved.body.currentVersionId);
+
+      const runs = await request(baseUrl, '/api/projects/' + project.body.id + '/runs', { token });
+      expect(runs.status).toBe(200);
+      expect(runs.body.runs).toHaveLength(1);
+      expect(runs.body.runs[0].durationMs).toBe(17);
+
       const connector = await request(baseUrl, '/api/connectors/sessions', {
         method: 'POST',
         token,
@@ -293,6 +306,48 @@ describe('enterprise API server', () => {
       });
       expect(invalidHostOperation.status).toBe(400);
       expect(invalidHostOperation.body.error.message).toMatch(/operation/);
+
+      const invalidRun = await request(baseUrl, '/api/projects/' + project.body.id + '/runs', {
+        method: 'POST',
+        token,
+        body: { status: 'completed', durationMs: -1 }
+      });
+      expect(invalidRun.status).toBe(400);
+      expect(invalidRun.body.error.message).toMatch(/durationMs/);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  });
+
+  it('awaits async persistence restores and writes before responding', async () => {
+    let persisted = null;
+    const persistence = {
+      async readSnapshot() {
+        return null;
+      },
+      async writeSnapshot(snapshot) {
+        await new Promise(resolve => setTimeout(resolve, 5));
+        persisted = snapshot;
+      }
+    };
+    const { createEnterpriseApiServerAsync } = await import('../src/enterprise/api-server.mjs');
+    const { server } = await createEnterpriseApiServerAsync({ persistence, allowDevLogin: true });
+    const port = await listen(server);
+    const baseUrl = 'http://127.0.0.1:' + port;
+
+    try {
+      const login = await request(baseUrl, '/api/auth/dev-login', {
+        method: 'POST',
+        body: { email: 'owner@demo.nova', organizationSlug: 'demo' }
+      });
+      const project = await request(baseUrl, '/api/projects', {
+        method: 'POST',
+        token: login.body.token,
+        body: { name: 'Async Persist' }
+      });
+
+      expect(project.status).toBe(201);
+      expect(persisted.projects.some(item => item.id === project.body.id)).toBe(true);
     } finally {
       await new Promise(resolve => server.close(resolve));
     }
