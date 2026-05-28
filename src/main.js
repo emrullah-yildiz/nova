@@ -21,6 +21,7 @@ import {
 } from './geometry/index.js';
 import { Viewer3D } from './viewer/viewer3d.js';
 import { installEngine } from './core/engine.js';
+import { getLiveCoreRegistry } from './nodes/coreNodes.js';
 import app, { initializeApp } from './app/app.js';
 import { installLoggerPatch } from './app/logger-patch.js';
 import { installSaveLoad } from './app/save-load.js';
@@ -161,6 +162,9 @@ if (typeof window !== 'undefined') {
 }
 
 function installBeforeAppInit() {
+  // Merge modern v1 node categories into NODE_LIBRARY / NODE_TYPE_MAP so
+  // the UI library panel sees them. Runs before installNodeLibrary().
+  getLiveCoreRegistry();
   const installedRevitBridge = installRevitNodes();
   NodeFlow.RevitBridge = installedRevitBridge;
   hostRegistry.clear();

@@ -27,6 +27,8 @@
 import { createLacingFrames, hasListInput, mapLacingFrames } from './lacing.js';
 import { hostRegistry } from '../hosts/HostRegistry.js';
 import { setPreviewItemVisibility } from '../viewer/preview-sync.js';
+import { getLiveCoreRegistry } from '../nodes/coreNodes.js';
+import { executeRegistryNodeUnlaced } from '../nodes/runtimeAdapter.js';
 
 /* eslint-disable no-redeclare, no-inner-declarations, no-empty, no-unused-vars */
 
@@ -839,27 +841,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-      // ── Logic (extended) ──
-
-      case 'logic-xor': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined) ? (a || b) && !(a && b) : undefined; }
-
-      case 'logic-isnull': { var v = getInput('value'); return v === undefined || v === null; }
-
-      case 'logic-gate': { var v = getInput('value'), p = getVal('pass',true); return p ? v : undefined; }
-
-
-
-      // ── Logic (core) ──
-
-      case 'logic-and': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined) ? (!!a && !!b) : undefined; }
-
-      case 'logic-or': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined) ? (!!a || !!b) : undefined; }
-
-      case 'logic-not': { var v = getVal('value',undefined); return v !== undefined ? !v : undefined; }
-
-      case 'logic-compare': { var a = getVal('a',undefined), b = getVal('b',undefined), op = ctrl.op; if (a === undefined || b === undefined) return undefined; switch(op){case'==':return a===b;case'!=':return a!==b;case'<':return a<b;case'>':return a>b;case'<=':return a<=b;case'>=':return a>=b;} return undefined; }
-
-      case 'logic-if': { var cond = getVal('condition',undefined), t = getVal('ifTrue',undefined), f = getVal('ifFalse',undefined); return cond !== undefined ? (cond ? t : f) : undefined; }
+      // Logic nodes migrated to src/nodes/categories/logic.js (executed via registry fallback).
 
 
 
@@ -1494,7 +1476,19 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-      default: return undefined;
+      default: {
+
+        var registryNode = getLiveCoreRegistry().getNode(nd.type);
+
+        if (registryNode && typeof registryNode.execute === 'function') {
+
+          return executeRegistryNodeUnlaced(registryNode, nd, getInput, getVal, { app: getRuntimeApp() });
+
+        }
+
+        return undefined;
+
+      }
 
     }
 
