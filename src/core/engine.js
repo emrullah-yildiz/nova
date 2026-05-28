@@ -639,83 +639,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-      // ── Line nodes ──
-
-      case 'line-bystartpointendpoint': {
-
-        var sp = getInput('startPoint'), ep = getInput('endPoint');
-
-        if (sp && ep) {
-
-          var s = sp instanceof Geo.Point3 ? sp : new Geo.Point3(sp.x||0, sp.y||0, sp.z||0);
-
-          var e = ep instanceof Geo.Point3 ? ep : new Geo.Point3(ep.x||0, ep.y||0, ep.z||0);
-
-          return new Geo.Line3(s, e);
-
-        }
-
-        return undefined;
-
-      }
-
-      case 'line-bypointanddirection': {
-
-        var orig = getInput('origin'), dir = getInput('direction'), len = getVal('length', 10);
-
-        if (orig && dir) {
-
-          var o = orig instanceof Geo.Point3 ? orig : new Geo.Point3(orig.x||0, orig.y||0, orig.z||0);
-
-          var d = dir instanceof Geo.Vector3 ? dir : new Geo.Vector3(dir.x||1, dir.y||0, dir.z||0);
-
-          var dn = d.normalize().scale(len);
-
-          return new Geo.Line3(o, o.add(dn));
-
-        }
-
-        return undefined;
-
-      }
-
-      case 'line-startpoint': return curveStart(getInput('curve'));
-
-      case 'line-endpoint': return curveEnd(getInput('curve'));
-
-      case 'line-direction': return curveDir(getInput('curve'));
-
-      case 'line-length': return curveLen(getInput('curve'));
-
-      case 'curve-startpoint': return curveStart(getInput('curve'));
-
-      case 'curve-endpoint': return curveEnd(getInput('curve'));
-
-      case 'curve-chord-direction': return curveDir(getInput('curve'));
-
-      case 'curve-length': return curveLen(getInput('curve'));
-
-      case 'curve-tangent': return curveTangent(getInput('curve'), getVal('param', 0.5));
-
-      case 'line-deconstruct': {
-
-        var c = getInput('curve'); if (!c) return undefined;
-
-        nd._portValues = { start: curveStart(c), end: curveEnd(c), length: curveLen(c), midpoint: curveMid(c), direction: curveDir(c) };
-
-        return nd._portValues;
-
-      }
-
-      case 'curve-deconstruct': {
-
-        var c = getInput('curve'); if (!c) return undefined;
-
-        nd._portValues = { start: curveStart(c), end: curveEnd(c), length: curveLen(c), midpoint: curveMid(c), direction: curveDir(c) };
-
-        return nd._portValues;
-
-      }
+      // Curve / Line nodes migrated to src/nodes/categories/curves.js.
 
 
 
@@ -857,7 +781,6 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       case 'geo-line': { var s = getInput('start'), e = getInput('end'); if (s && e) { var sp = s instanceof Geo.Point3 ? s : new Geo.Point3(s.x||0,s.y||0,s.z||0); var ep = e instanceof Geo.Point3 ? e : new Geo.Point3(e.x||0,e.y||0,e.z||0); return new Geo.Line3(sp,ep); } return undefined; }
 
-      case 'geo-circle': { var c = getInput('center'), r = getInput('radius'); if (c) return new Geo.Circle3(c instanceof Geo.Point3 ? c : new Geo.Point3(0,0,0), r||5); return undefined; }
 
       case 'geo-distance': { var a = getInput('a'), b = getInput('b'); if (a && b) { var ap = a instanceof Geo.Point3 ? a : new Geo.Point3(a.x||0,a.y||0,a.z||0); var bp = b instanceof Geo.Point3 ? b : new Geo.Point3(b.x||0,b.y||0,b.z||0); return ap.distanceTo(bp); } return undefined; }
       case 'geometry-distance': { var a = getInput('a'), b = getInput('b'); if (a && b && typeof Geo !== 'undefined' && Geo.distanceBetween) { return Geo.distanceBetween(a, b); } if (a && b && typeof a.distanceTo === 'function') { return a.distanceTo(b); } return undefined; }
@@ -922,15 +845,10 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       case 'op-bezier': { var pts = getInput('points'); if (pts) return Geo.bezier(pts); return undefined; }
 
-      case 'curve-bezier-by-control-points': { var pts = getInput('points'); if (pts) return Geo.bezier(pts); return undefined; }
 
-      case 'op-interpolate': { var pts = getInput('points'); if (pts) return Geo.interpolate(pts); return undefined; }
 
-      case 'nurbs-interpolate': { var pts = getInput('points'); if (pts && Array.isArray(pts)) return Geo.nurbsInterpolate(pts, getInput('degree')||3); return undefined; }
 
-      case 'nurbs-blend': { var c1 = getInput('curve1'), c2 = getInput('curve2'); if (c1 && c2) return Geo.blendCurves(c1, c2, getInput('t')||0); return undefined; }
 
-      case 'nurbs-tween': { var c1 = getInput('curve1'), c2 = getInput('curve2'); if (c1 && c2) return Geo.tweenCurves(c1, c2, getInput('count')||10); return undefined; }
 
       case 'op-ruled-surface': { var c1 = getInput('curve1'), c2 = getInput('curve2'); if (c1 && c2) return Geo.ruledSurface(c1, c2); return undefined; }
 
@@ -946,11 +864,9 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       case 'surf-from-grid': { var pts = getInput('points'), u = getInput('uCount'), v = getInput('vCount'); if (pts && u && v) return Geo.surfaceFromGrid(pts, u, v); return undefined; }
 
-      case 'surf-polyline': { var pts = getInput('points'), closed = getInput('closed'); if (pts && Array.isArray(pts)) return new Geo.Polyline3(pts, !!closed); return undefined; }
 
       case 'surf-arc': { var c = getInput('center')||new Geo.Point3(0,0,0), r = getInput('radius'), sa = getInput('startAngle'), ea = getInput('endAngle'); return new Geo.Arc3(c instanceof Geo.Point3?c:new Geo.Point3(0,0,0), r||5, (sa||0)*Math.PI/180, (ea||360)*Math.PI/180); }
 
-      case 'curve-arc-by-center-radius-angles': { var c = getInput('center')||new Geo.Point3(0,0,0), r = getInput('radius'), sa = getInput('startAngle'), ea = getInput('endAngle'); return new Geo.Arc3(c instanceof Geo.Point3?c:new Geo.Point3(0,0,0), r||5, (sa||0)*Math.PI/180, (ea||360)*Math.PI/180); }
 
 
 
@@ -976,7 +892,6 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       case 'pat-fibonacci-sphere': return Geo.fibonacciSphere(getInput('count')||100, getInput('radius')||10);
 
-      case 'nurbs-curve': { var pts = getInput('points'); if (pts && Array.isArray(pts)) return Geo.createNurbsCurve(pts, getInput('degree')||3); return undefined; }
 
       case 'nurbs-surface': { var grid = getInput('grid'); if (grid && Array.isArray(grid)) return Geo.createNurbsSurface(grid, getInput('degreeU')||3, getInput('degreeV')||3); return undefined; }
 
@@ -984,11 +899,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       // ── Profiles ──
 
-      case 'prof-circle': { var c = getInput('center')||new Geo.Point3(0,0,0), r = getInput('radius')||5, res = Math.max(8, parseInt(getInput('resolution'))||32); var pts = []; for (var j = 0; j < res; j++) { var a = 2*Math.PI*j/res; pts.push(new Geo.Point3(c.x+r*Math.cos(a), c.y+r*Math.sin(a), c.z)); } return pts; }
 
-      case 'prof-ellipse': { var c = getInput('center')||new Geo.Point3(0,0,0), w = (getInput('width')||10)/2, d = (getInput('depth')||6)/2, rot = (getInput('rotation')||0)*Math.PI/180, res = Math.max(8, parseInt(getInput('resolution'))||32); var cosR = Math.cos(rot), sinR = Math.sin(rot); var pts = []; for (var j = 0; j < res; j++) { var a = 2*Math.PI*j/res; var x = w*Math.cos(a), y = d*Math.sin(a); pts.push(new Geo.Point3(c.x+x*cosR-y*sinR, c.y+x*sinR+y*cosR, c.z)); } return pts; }
 
-      case 'prof-rect': { var c = getInput('center')||new Geo.Point3(0,0,0), hw = (getInput('width')||10)/2, hd = (getInput('depth')||6)/2; return [new Geo.Point3(c.x-hw,c.y-hd,c.z), new Geo.Point3(c.x+hw,c.y-hd,c.z), new Geo.Point3(c.x+hw,c.y+hd,c.z), new Geo.Point3(c.x-hw,c.y+hd,c.z)]; }
 
       // ── Revit typed element nodes ──
       case 'host-get-elements': {

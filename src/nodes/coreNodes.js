@@ -1,10 +1,12 @@
 import { NODE_LIBRARY, NODE_TYPE_MAP } from '../core/nodes.js';
+import { curvesCategory, curvesNodes } from './categories/curves.js';
 import { listCategory, listNodes } from './categories/list.js';
 import { logicCategory, logicNodes } from './categories/logic.js';
 import { legacyCoreCategories, legacyCoreNodes } from './legacyCoreNodes.js';
 import { createNodeRegistry, toLegacyNodeDefinition } from './registry.js';
 
 const modernCategories = [
+  curvesCategory,
   listCategory,
   logicCategory
 ];
@@ -17,6 +19,7 @@ export const coreCategories = [
 ];
 
 export const coreNodes = [
+  ...curvesNodes,
   ...listNodes,
   ...logicNodes,
   ...legacyCoreNodes
