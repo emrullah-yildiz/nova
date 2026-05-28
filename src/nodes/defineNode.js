@@ -9,8 +9,11 @@ export function normalizeNodeDefinition(definition) {
     name: definition.name || definition.displayName || definition.type,
     displayName: definition.displayName || definition.name || definition.type,
     category: definition.category || 'uncategorized',
+    subGroup: definition.subGroup || '',
+    description: definition.description || '',
     icon: definition.icon || '',
     color: definition.color || '',
+    aliases: Array.isArray(definition.aliases) ? definition.aliases.slice() : [],
     inputs: normalizePorts(definition.inputs || []),
     outputs: normalizePorts(definition.outputs || []),
     controls: normalizeControls(definition.controls || []),
@@ -19,6 +22,7 @@ export function normalizeNodeDefinition(definition) {
     lacing: normalizeLacing(definition.lacing),
     execute: definition.execute || null,
     codegen: definition.codegen || {},
+    help: normalizeHelp(definition.help),
     metadata: definition.metadata || {}
   };
 }
@@ -41,10 +45,36 @@ function normalizePorts(ports) {
       id: port.id,
       name: port.name || port.id,
       type: port.type || 'any',
+      description: port.description || port.desc || '',
       defaultValue: port.defaultValue,
       metadata: port.metadata || {}
     };
   });
+}
+
+function normalizeHelp(help) {
+  if (!help || typeof help !== 'object') return null;
+  return {
+    description: help.description || '',
+    inputs: Array.isArray(help.inputs)
+      ? help.inputs.map(function(input) {
+        return {
+          name: input.name || input.id || '',
+          description: input.description || input.desc || ''
+        };
+      })
+      : [],
+    outputs: Array.isArray(help.outputs)
+      ? help.outputs.map(function(output) {
+        return {
+          name: output.name || output.id || '',
+          description: output.description || output.desc || ''
+        };
+      })
+      : [],
+    example: help.example || null,
+    sampleCode: help.sampleCode || ''
+  };
 }
 
 function normalizeControls(controls) {
@@ -76,5 +106,7 @@ function freezeNodeDefinition(definition) {
   Object.freeze(definition.lacing);
   Object.freeze(definition.codegen);
   Object.freeze(definition.metadata);
+  Object.freeze(definition.aliases);
+  if (definition.help) Object.freeze(definition.help);
   return Object.freeze(definition);
 }

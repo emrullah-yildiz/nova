@@ -109,19 +109,7 @@ NODE_LIBRARY.categories.push({ id: 'list', name: 'List', color: '#fab387', icon:
   { type: 'list-zip', name: 'List.Zip', icon: '⊕', inputs: [{ id: 'listA', name: 'List A', type: 'list' },{ id: 'listB', name: 'List B', type: 'list' }], outputs: [{ id: 'result', name: 'Result', type: 'list' }], controls: [], preview: true, codegen: { python: '{{result}} = list(zip({{listA}}, {{listB}}))', csharp: '' } }
 ] });
 
-// ═══════════════════════════════════════
-// 6. LOGIC
-// ═══════════════════════════════════════
-NODE_LIBRARY.categories.push({ id: 'logic', name: 'Logic', color: '#f38ba8', icon: '⊻', nodes: [
-  { type: 'logic-and', name: 'Logic.AND', icon: '∧', inputs: [{ id: 'a', name: 'A', type: 'boolean' },{ id: 'b', name: 'B', type: 'boolean' }], outputs: [{ id: 'result', name: 'Result', type: 'boolean' }], controls: [{ id: 'a', type: 'formula', default: 'true', label: 'A' },{ id: 'b', type: 'formula', default: 'true', label: 'B' }], preview: true, codegen: { python: '{{result}} = {{a}} and {{b}}', csharp: '' } },
-  { type: 'logic-compare', name: 'Logic.Compare', icon: '≷', inputs: [{ id: 'a', name: 'A', type: 'any' },{ id: 'b', name: 'B', type: 'any' }], outputs: [{ id: 'result', name: 'Result', type: 'boolean' }], controls: [{ id: 'a', type: 'formula', default: '0', label: 'A' },{ id: 'b', type: 'formula', default: '0', label: 'B' },{ id: 'op', type: 'dropdown', options: ['==','!=','<','>','<=','>='], default: '==', label: 'Operator' }], preview: true, codegen: { python: '{{result}} = {{a}} {{op}} {{b}}', csharp: '' } },
-  { type: 'logic-gate', name: 'Logic.Gate', icon: '⊳', inputs: [{ id: 'value', name: 'Value', type: 'any' },{ id: 'pass', name: 'Pass', type: 'boolean' }], outputs: [{ id: 'result', name: 'Result', type: 'any' }], controls: [{ id: 'pass', type: 'formula', default: 'true', label: 'Pass' }], preview: true, codegen: { python: '{{result}} = {{value}} if {{pass}} else None', csharp: '' } },
-  { type: 'logic-if', name: 'Logic.If', icon: '?', inputs: [{ id: 'condition', name: 'Test', type: 'boolean' },{ id: 'ifTrue', name: 'True', type: 'any' },{ id: 'ifFalse', name: 'False', type: 'any' }], outputs: [{ id: 'result', name: 'Result', type: 'any' }], controls: [{ id: 'condition', type: 'formula', default: 'true', label: 'Test' },{ id: 'ifTrue', type: 'formula', default: '1', label: 'True' },{ id: 'ifFalse', type: 'formula', default: '0', label: 'False' }], preview: true, codegen: { python: '{{result}} = {{ifTrue}} if {{condition}} else {{ifFalse}}', csharp: '' } },
-  { type: 'logic-isnull', name: 'Logic.IsNull', icon: '∅', inputs: [{ id: 'value', name: 'Value', type: 'any' }], outputs: [{ id: 'result', name: 'Result', type: 'boolean' }], controls: [], preview: true, codegen: { python: '{{result}} = {{value}} is None', csharp: '' } },
-  { type: 'logic-not', name: 'Logic.NOT', icon: '¬', inputs: [{ id: 'value', name: 'Value', type: 'boolean' }], outputs: [{ id: 'result', name: 'Result', type: 'boolean' }], controls: [{ id: 'value', type: 'formula', default: 'true', label: 'Value' }], preview: true, codegen: { python: '{{result}} = not {{value}}', csharp: '' } },
-  { type: 'logic-or', name: 'Logic.OR', icon: '∨', inputs: [{ id: 'a', name: 'A', type: 'boolean' },{ id: 'b', name: 'B', type: 'boolean' }], outputs: [{ id: 'result', name: 'Result', type: 'boolean' }], controls: [{ id: 'a', type: 'formula', default: 'true', label: 'A' },{ id: 'b', type: 'formula', default: 'false', label: 'B' }], preview: true, codegen: { python: '{{result}} = {{a}} or {{b}}', csharp: '' } },
-  { type: 'logic-xor', name: 'Logic.XOR', icon: '⊻', inputs: [{ id: 'a', name: 'A', type: 'boolean' },{ id: 'b', name: 'B', type: 'boolean' }], outputs: [{ id: 'result', name: 'Result', type: 'boolean' }], controls: [{ id: 'a', type: 'formula', default: 'true', label: 'A' },{ id: 'b', type: 'formula', default: 'false', label: 'B' }], preview: true, codegen: { python: '{{result}} = ({{a}} or {{b}}) and not ({{a}} and {{b}})', csharp: '' } }
-] });
+// Logic category migrated to src/nodes/categories/logic.js (v1 standard).
 
 // ═══════════════════════════════════════
 // 7. MATH (16 nodes, A→Z)

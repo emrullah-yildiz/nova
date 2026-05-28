@@ -4,6 +4,7 @@ export class NodeRegistry {
   constructor() {
     this.categories = new Map();
     this.nodes = new Map();
+    this.aliases = new Map();
   }
 
   registerCategory(category) {
@@ -37,6 +38,9 @@ export class NodeRegistry {
     var category = this.categories.get(node.category) || this.registerCategory({ id: node.category });
     category.nodes.push(node.type);
     this.nodes.set(node.type, node);
+    if (Array.isArray(node.aliases)) {
+      node.aliases.forEach((alias) => this.registerAlias(alias, node.type));
+    }
     return node;
   }
 
@@ -44,12 +48,37 @@ export class NodeRegistry {
     return definitions.map(this.registerNode, this);
   }
 
+  registerAlias(alias, canonicalType) {
+    if (typeof alias !== 'string' || !alias) {
+      throw new TypeError('Alias must be a non-empty string.');
+    }
+    if (typeof canonicalType !== 'string' || !canonicalType) {
+      throw new TypeError('Alias requires a canonical node type.');
+    }
+    if (alias === canonicalType) return;
+    if (this.nodes.has(alias)) {
+      throw new Error('Cannot register alias "' + alias + '": already used as a canonical node type.');
+    }
+    var existing = this.aliases.get(alias);
+    if (existing && existing !== canonicalType) {
+      throw new Error('Alias "' + alias + '" already points to "' + existing + '".');
+    }
+    this.aliases.set(alias, canonicalType);
+  }
+
+  resolveType(type) {
+    if (this.nodes.has(type)) return type;
+    return this.aliases.get(type) || null;
+  }
+
   getNode(type) {
-    return this.nodes.get(type) || null;
+    if (this.nodes.has(type)) return this.nodes.get(type);
+    var canonical = this.aliases.get(type);
+    return canonical ? this.nodes.get(canonical) || null : null;
   }
 
   hasNode(type) {
-    return this.nodes.has(type);
+    return this.nodes.has(type) || this.aliases.has(type);
   }
 
   getCategory(id) {
@@ -89,13 +118,26 @@ export function toLegacyNodeDefinition(node) {
     type: node.type,
     name: node.displayName,
     icon: node.icon,
+    description: node.description || '',
+    subGroup: node.subGroup || '',
     inputs: cloneList(node.inputs),
     outputs: cloneList(node.outputs),
     controls: cloneList(node.controls),
     preview: node.preview,
     dynamicInputs: node.dynamicInputs,
     lacing: node.lacing ? { ...node.lacing } : undefined,
-    codegen: { ...node.codegen }
+    codegen: { ...node.codegen },
+    help: node.help ? cloneHelp(node.help) : null
+  };
+}
+
+function cloneHelp(help) {
+  return {
+    description: help.description,
+    inputs: help.inputs.map((input) => ({ ...input })),
+    outputs: help.outputs.map((output) => ({ ...output })),
+    example: help.example ? JSON.parse(JSON.stringify(help.example)) : null,
+    sampleCode: help.sampleCode
   };
 }
 
