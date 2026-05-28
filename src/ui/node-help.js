@@ -361,7 +361,7 @@ window.buildExampleGraph = function(helpData) {
     created.push(nd);
   });
   created.forEach(function(nd, i) {
-    if (!nd || ex.nodes[i].type !== 'list-create') return;
+    if (!nd || !nd.def || !nd.def.dynamicInputs) return;
     var maxIdx = 0;
     ex.wires.forEach(function(w) { if (w[2] === i) { var m = w[3].match(/^item(\d+)$/); if (m && parseInt(m[1]) > maxIdx) maxIdx = parseInt(m[1]); } });
     while (nd.def.inputs.length <= maxIdx) app._addDynInput(nd.id);
