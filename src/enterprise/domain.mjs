@@ -23,6 +23,8 @@ export class EnterpriseStore {
     this.graphRuns = new Map();
     this.connectorSessions = new Map();
     this.aiRequests = new Map();
+    this.backgroundJobs = new Map();
+    this.objectArtifacts = new Map();
     this.aiUsageBuckets = new Map();
     this.auditEvents = [];
     this._persistenceReady = Promise.resolve();
@@ -262,6 +264,142 @@ export class EnterpriseStore {
       .sort((a, b) => b.startedAt - a.startedAt)
       .map(clone);
     return pagination ? paginateItems(runs, pagination) : runs;
+  }
+
+  createObjectArtifact(context, projectId, {
+    name = 'artifact',
+    kind = 'graph-export',
+    contentType = 'application/octet-stream',
+    byteSize = 0,
+    storageKey = '',
+    metadata = {}
+  } = {}) {
+    const project = this.requireProjectAccess(context, projectId);
+    this.requireProjectWrite(context, project);
+    const artifact = {
+      id: createId('art'),
+      organizationId: context.organizationId,
+      projectId: project.id,
+      userId: context.userId,
+      name,
+      kind,
+      contentType,
+      byteSize,
+      storageKey: storageKey || ['org', context.organizationId, 'projects', project.id, 'artifacts', createId('obj')].join('/'),
+      metadata,
+      createdAt: this.now()
+    };
+    this.objectArtifacts.set(artifact.id, artifact);
+    this.audit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      type: 'object.artifact.created',
+      targetId: artifact.id,
+      metadata: { projectId: project.id, kind, byteSize: artifact.byteSize }
+    });
+    return clone(artifact);
+  }
+
+  listObjectArtifacts(context, projectId, pagination = null) {
+    const project = this.requireProjectAccess(context, projectId);
+    const artifacts = Array.from(this.objectArtifacts.values())
+      .filter(artifact => artifact.organizationId === context.organizationId && artifact.projectId === project.id)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map(clone);
+    return pagination ? paginateItems(artifacts, pagination) : artifacts;
+  }
+
+  getObjectArtifact(context, artifactId) {
+    this.requireContext(context);
+    const artifact = this.objectArtifacts.get(artifactId);
+    if (!artifact) throw createHttpError(404, 'Object artifact not found.');
+    if (artifact.organizationId !== context.organizationId) throw createHttpError(403, 'Cross-organization access denied.');
+    this.requireProjectAccess(context, artifact.projectId);
+    return clone(artifact);
+  }
+
+  enqueueBackgroundJob(context, {
+    type,
+    projectId = '',
+    payload = {},
+    artifactId = '',
+    availableAfter = this.now()
+  } = {}) {
+    this.requireContext(context);
+    if (projectId) this.requireProjectWrite(context, this.requireProjectAccess(context, projectId));
+    if (artifactId) this.getObjectArtifact(context, artifactId);
+    const job = {
+      id: createId('job'),
+      organizationId: context.organizationId,
+      userId: context.userId,
+      projectId,
+      artifactId,
+      type,
+      status: 'queued',
+      payload,
+      result: {},
+      errorSummary: '',
+      attempts: 0,
+      createdAt: this.now(),
+      updatedAt: this.now(),
+      availableAfter,
+      completedAt: null
+    };
+    this.backgroundJobs.set(job.id, job);
+    this.audit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      type: 'background.job.queued',
+      targetId: job.id,
+      metadata: { jobType: type, projectId, artifactId }
+    });
+    return clone(job);
+  }
+
+  listBackgroundJobs(context, pagination = null) {
+    this.requireContext(context);
+    const jobs = Array.from(this.backgroundJobs.values())
+      .filter(job => job.organizationId === context.organizationId)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map(clone);
+    return pagination ? paginateItems(jobs, pagination) : jobs;
+  }
+
+  getBackgroundJob(context, jobId) {
+    this.requireContext(context);
+    const job = this.backgroundJobs.get(jobId);
+    if (!job) throw createHttpError(404, 'Background job not found.');
+    if (job.organizationId !== context.organizationId) throw createHttpError(403, 'Cross-organization access denied.');
+    return clone(job);
+  }
+
+  claimNextBackgroundJob(context, { type = '' } = {}) {
+    this.requireAdmin(context);
+    const job = Array.from(this.backgroundJobs.values())
+      .filter(item => item.organizationId === context.organizationId)
+      .filter(item => item.status === 'queued' && item.availableAfter <= this.now())
+      .filter(item => !type || item.type === type)
+      .sort((a, b) => a.createdAt - b.createdAt)[0];
+    if (!job) return null;
+    job.status = 'running';
+    job.attempts += 1;
+    job.updatedAt = this.now();
+    this.audit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      type: 'background.job.claimed',
+      targetId: job.id,
+      metadata: { jobType: job.type, attempts: job.attempts }
+    });
+    return clone(job);
+  }
+
+  completeBackgroundJob(context, jobId, { result = {} } = {}) {
+    return this.finishBackgroundJob(context, jobId, 'completed', { result });
+  }
+
+  failBackgroundJob(context, jobId, { errorSummary = '' } = {}) {
+    return this.finishBackgroundJob(context, jobId, 'failed', { errorSummary });
   }
 
   recordGraphRun(context, projectId, {
@@ -666,6 +804,8 @@ export class EnterpriseStore {
       graphRuns: Array.from(this.graphRuns.values()).map(clone),
       connectorSessions: Array.from(this.connectorSessions.values()).map(clone),
       aiRequests: Array.from(this.aiRequests.values()).map(clone),
+      backgroundJobs: Array.from(this.backgroundJobs.values()).map(clone),
+      objectArtifacts: Array.from(this.objectArtifacts.values()).map(clone),
       auditEvents: this.auditEvents.map(clone)
     };
   }
@@ -678,6 +818,8 @@ export class EnterpriseStore {
     this.graphRuns = mapById(snapshot.graphRuns);
     this.connectorSessions = mapById(snapshot.connectorSessions);
     this.aiRequests = mapById(snapshot.aiRequests);
+    this.backgroundJobs = mapById(snapshot.backgroundJobs);
+    this.objectArtifacts = mapById(snapshot.objectArtifacts);
     this.auditEvents = safeArray(snapshot.auditEvents).map(clone);
   }
 
@@ -695,6 +837,27 @@ export class EnterpriseStore {
 
   async flushPersistence() {
     await this._lastPersistPromise;
+  }
+
+  finishBackgroundJob(context, jobId, status, { result = {}, errorSummary = '' } = {}) {
+    this.requireAdmin(context);
+    const job = this.backgroundJobs.get(jobId);
+    if (!job) throw createHttpError(404, 'Background job not found.');
+    if (job.organizationId !== context.organizationId) throw createHttpError(403, 'Cross-organization access denied.');
+    if (!['completed', 'failed'].includes(status)) throw createHttpError(400, 'Invalid background job status.');
+    job.status = status;
+    job.result = status === 'completed' ? result : {};
+    job.errorSummary = status === 'failed' ? String(errorSummary || '').slice(0, 1000) : '';
+    job.updatedAt = this.now();
+    job.completedAt = this.now();
+    this.audit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      type: 'background.job.' + status,
+      targetId: job.id,
+      metadata: { jobType: job.type }
+    });
+    return clone(job);
   }
 }
 

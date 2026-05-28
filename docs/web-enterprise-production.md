@@ -59,13 +59,23 @@ Current endpoints:
 - `PUT /api/projects/:id/graph`
 - `GET /api/projects/:id/versions`
 - `POST /api/projects/:id/versions/:versionId/restore`
+- `GET /api/projects/:id/artifacts`
+- `POST /api/projects/:id/artifacts`
+- `GET /api/artifacts/:id`
+- `GET /api/artifacts/:id/data`
+- `GET /api/jobs`
+- `POST /api/jobs`
+- `GET /api/jobs/:id`
+- `POST /api/jobs/claim`
+- `POST /api/jobs/:id/complete`
+- `POST /api/jobs/:id/fail`
 - `POST /api/connectors/sessions`
 - `POST /api/connectors/sessions/:id/pair`
 - `POST /api/ai/chat`
 - `GET /api/audit`
 - `POST /api/host-operations`
 
-List endpoints for projects, project versions, project graph runs, and audit events accept `limit` and `cursor` query parameters and return a `pagination` object with `nextCursor`, `hasMore`, `limit`, and `total`.
+List endpoints for projects, project versions, project graph runs, project artifacts, background jobs, and audit events accept `limit` and `cursor` query parameters and return a `pagination` object with `nextCursor`, `hasMore`, `limit`, and `total`.
 
 ## Production Hardening Still Required
 

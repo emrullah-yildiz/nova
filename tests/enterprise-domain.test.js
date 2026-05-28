@@ -165,6 +165,49 @@ describe('enterprise domain', () => {
     expect(() => store.recordGraphRun(viewer, project.id, { status: 'completed' })).toThrow(/Project access|Project write/);
   });
 
+  it('tracks object artifacts and background jobs for long-running work', () => {
+    let now = 1000;
+    const store = new EnterpriseStore({ now: () => now += 1 });
+    const org = store.createOrganization({ name: 'Jobs Org' });
+    const owner = createContext(store, org.id, ROLES.OWNER, 'jobs-owner@example.com');
+    const viewer = createContext(store, org.id, ROLES.VIEWER, 'jobs-viewer@example.com');
+    const project = store.createProject(owner, { name: 'Queued Export' });
+
+    const artifact = store.createObjectArtifact(owner, project.id, {
+      name: 'export.json',
+      kind: 'graph-export',
+      contentType: 'application/json',
+      byteSize: 42,
+      metadata: { format: 'json' }
+    });
+    expect(artifact.storageKey).toContain(project.id);
+    expect(store.listObjectArtifacts(owner, project.id).map(item => item.id)).toContain(artifact.id);
+
+    const job = store.enqueueBackgroundJob(owner, {
+      type: 'graph.export',
+      projectId: project.id,
+      artifactId: artifact.id,
+      payload: { format: 'json' }
+    });
+    expect(job.status).toBe('queued');
+    expect(() => store.claimNextBackgroundJob(viewer)).toThrow(/Admin access/);
+
+    const claimed = store.claimNextBackgroundJob(owner, { type: 'graph.export' });
+    expect(claimed.id).toBe(job.id);
+    expect(claimed.status).toBe('running');
+    expect(claimed.attempts).toBe(1);
+
+    const completed = store.completeBackgroundJob(owner, job.id, { result: { artifactId: artifact.id } });
+    expect(completed.status).toBe('completed');
+    expect(completed.result.artifactId).toBe(artifact.id);
+    expect(store.listAuditEvents(owner).map(event => event.type)).toEqual(expect.arrayContaining([
+      'object.artifact.created',
+      'background.job.queued',
+      'background.job.claimed',
+      'background.job.completed'
+    ]));
+  });
+
   it('enforces roles for writes and audit access', () => {
     const store = new EnterpriseStore();
     const org = store.createOrganization({ name: 'A' });

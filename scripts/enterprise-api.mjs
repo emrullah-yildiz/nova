@@ -17,6 +17,7 @@ async function start() {
   const oidcIssuer = process.env.NOVA_OIDC_ISSUER || '';
   const oidcClientId = process.env.NOVA_OIDC_CLIENT_ID || '';
   const redisUrl = process.env.NOVA_REDIS_URL || '';
+  const objectStorageDir = process.env.NOVA_OBJECT_STORAGE_DIR || '';
   const aiPolicy = resolveAiPolicy(process.env);
 
   const options = {
@@ -24,7 +25,8 @@ async function start() {
     corsOrigin,
     sessionSecret,
     aiPolicy,
-    redisUrl
+    redisUrl,
+    objectStorageDir
   };
 
   if (databaseUrl) {
@@ -37,6 +39,7 @@ async function start() {
     console.log('[Nova Enterprise API] using in-memory store');
   }
   console.log('[Nova Enterprise API] state store ' + (redisUrl ? 'redis' : 'in-memory process'));
+  console.log('[Nova Enterprise API] object storage ' + (objectStorageDir ? objectStorageDir : 'in-memory process'));
 
   // Wire OIDC/JWKS verifier if both issuer and client ID are configured
   if (oidcIssuer && oidcClientId) {

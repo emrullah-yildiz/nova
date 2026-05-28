@@ -217,7 +217,7 @@ Status checked: 2026-05-28.
 - [x] High-risk user-content HTML paths hardened. Status: chat rendering escapes untrusted text before markdown formatting; saved/imported project names are escaped in open/recent/recovery dialogs.
 - [x] Redis-backed sessions, pairing state, and rate limits are wired. Status: API uses `NOVA_REDIS_URL` when configured; tests cover the state-store contract with the in-memory adapter.
 - [x] Pagination for large lists is wired. Status: project, version, graph-run, and audit list endpoints accept `limit` and `cursor`, return `pagination` metadata, and keep their existing array response keys.
-- [ ] Background queue and object storage paths remain pending.
+- [x] Background queue and object storage paths are wired. Status: API can create/list/claim/complete/fail durable jobs and store/list/read project artifact payloads through the object storage adapter.
 - [ ] Revit write approval must be enforced end-to-end before pilot.
 
 ## MVP Exit Criteria

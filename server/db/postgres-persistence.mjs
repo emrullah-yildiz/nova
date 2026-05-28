@@ -43,6 +43,8 @@ export class PostgresPersistence {
     const projectMembers = (await pool.query('SELECT * FROM project_members')).rows;
     const versions = (await pool.query('SELECT * FROM project_versions ORDER BY created_at ASC')).rows;
     const graphRuns = (await pool.query('SELECT * FROM graph_runs ORDER BY started_at ASC')).rows;
+    const objectArtifacts = (await pool.query('SELECT * FROM object_artifacts ORDER BY created_at ASC')).rows;
+    const backgroundJobs = (await pool.query('SELECT * FROM background_jobs ORDER BY created_at ASC')).rows;
     const connectorSessions = (await pool.query('SELECT * FROM connect_sessions')).rows;
     const aiRequests = (await pool.query('SELECT * FROM ai_requests')).rows;
     const auditEvents = (await pool.query('SELECT * FROM audit_events ORDER BY created_at ASC')).rows;
@@ -108,6 +110,36 @@ export class PostgresPersistence {
         startedAt: r.started_at,
         completedAt: r.completed_at
       })),
+      objectArtifacts: objectArtifacts.map(r => ({
+        id: r.id,
+        organizationId: r.organization_id,
+        projectId: r.project_id,
+        userId: r.user_id,
+        name: r.name,
+        kind: r.kind,
+        contentType: r.content_type,
+        byteSize: Number(r.byte_size || 0),
+        storageKey: r.storage_key,
+        metadata: typeof r.metadata === 'string' ? JSON.parse(r.metadata) : (r.metadata || {}),
+        createdAt: r.created_at
+      })),
+      backgroundJobs: backgroundJobs.map(r => ({
+        id: r.id,
+        organizationId: r.organization_id,
+        userId: r.user_id,
+        projectId: r.project_id || '',
+        artifactId: r.artifact_id || '',
+        type: r.type,
+        status: r.status,
+        payload: typeof r.payload === 'string' ? JSON.parse(r.payload) : (r.payload || {}),
+        result: typeof r.result === 'string' ? JSON.parse(r.result) : (r.result || {}),
+        errorSummary: r.error_summary,
+        attempts: r.attempts,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+        availableAfter: r.available_after,
+        completedAt: r.completed_at
+      })),
       connectorSessions: connectorSessions.map(r => ({
         id: r.id,
         organizationId: r.organization_id,
@@ -162,6 +194,8 @@ export class PostgresPersistence {
       await client.query('DELETE FROM audit_events');
       await client.query('DELETE FROM ai_requests');
       await client.query('DELETE FROM connect_sessions');
+      await client.query('DELETE FROM background_jobs');
+      await client.query('DELETE FROM object_artifacts');
       await client.query('DELETE FROM project_versions');
       await client.query('DELETE FROM project_members');
       await client.query('DELETE FROM graph_runs');
@@ -235,6 +269,26 @@ export class PostgresPersistence {
           await client.query(
             'INSERT INTO graph_runs (id, project_id, organization_id, user_id, version_id, status, duration_ms, error_summary, started_at, completed_at) VALUES ($1, $2, $3, $4, NULLIF($5, \'\'), $6, $7, $8, $9, $10) ON CONFLICT (id) DO UPDATE SET status=EXCLUDED.status, duration_ms=EXCLUDED.duration_ms, error_summary=EXCLUDED.error_summary, completed_at=EXCLUDED.completed_at',
             [r.id, r.projectId, r.organizationId, r.userId, r.versionId || '', r.status, r.durationMs ?? null, r.errorSummary || '', r.startedAt, r.completedAt || null]
+          );
+        }
+      }
+
+      // Insert object artifacts
+      if (snapshot.objectArtifacts) {
+        for (const artifact of snapshot.objectArtifacts) {
+          await client.query(
+            'INSERT INTO object_artifacts (id, organization_id, project_id, user_id, name, kind, content_type, byte_size, storage_key, metadata, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, kind=EXCLUDED.kind, content_type=EXCLUDED.content_type, byte_size=EXCLUDED.byte_size, storage_key=EXCLUDED.storage_key, metadata=EXCLUDED.metadata',
+            [artifact.id, artifact.organizationId, artifact.projectId, artifact.userId, artifact.name, artifact.kind, artifact.contentType, artifact.byteSize || 0, artifact.storageKey, JSON.stringify(artifact.metadata || {}), artifact.createdAt]
+          );
+        }
+      }
+
+      // Insert background jobs
+      if (snapshot.backgroundJobs) {
+        for (const job of snapshot.backgroundJobs) {
+          await client.query(
+            'INSERT INTO background_jobs (id, organization_id, user_id, project_id, artifact_id, type, status, payload, result, error_summary, attempts, created_at, updated_at, available_after, completed_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) ON CONFLICT (id) DO UPDATE SET status=EXCLUDED.status, result=EXCLUDED.result, error_summary=EXCLUDED.error_summary, attempts=EXCLUDED.attempts, updated_at=EXCLUDED.updated_at, completed_at=EXCLUDED.completed_at',
+            [job.id, job.organizationId, job.userId, job.projectId || '', job.artifactId || '', job.type, job.status, JSON.stringify(job.payload || {}), JSON.stringify(job.result || {}), job.errorSummary || '', job.attempts || 0, job.createdAt, job.updatedAt, job.availableAfter, job.completedAt || null]
           );
         }
       }

@@ -59,6 +59,8 @@ Minimum tables for MVP:
 - `project_members`
 - `project_versions`
 - `graph_runs`
+- `object_artifacts` - metadata and storage keys for large graph/export payloads
+- `background_jobs` - durable queue records for AI/export/worker jobs
 - `ai_requests`
 - `connect_sessions`
 - `audit_events`
@@ -85,13 +87,23 @@ Current enterprise API endpoints:
 - `PUT /api/projects/:projectId/graph`
 - `GET /api/projects/:projectId/versions`
 - `POST /api/projects/:projectId/versions/:versionId/restore`
+- `GET /api/projects/:projectId/artifacts`
+- `POST /api/projects/:projectId/artifacts`
+- `GET /api/artifacts/:artifactId`
+- `GET /api/artifacts/:artifactId/data`
+- `GET /api/jobs`
+- `POST /api/jobs`
+- `GET /api/jobs/:jobId`
+- `POST /api/jobs/claim`
+- `POST /api/jobs/:jobId/complete`
+- `POST /api/jobs/:jobId/fail`
 - `POST /api/ai/chat`
 - `POST /api/connectors/sessions`
 - `POST /api/connectors/sessions/:sessionId/pair`
 - `GET /api/audit`
 
 All project, AI, Connect, and audit endpoints must be tenant-scoped and authorize against organization/project roles.
-Project, version, graph-run, and audit list endpoints accept `limit` and `cursor` query parameters and return cursor pagination metadata alongside the existing response arrays.
+Project, version, graph-run, artifact, background-job, and audit list endpoints accept `limit` and `cursor` query parameters and return cursor pagination metadata alongside the existing response arrays.
 
 ## AI Boundary
 
@@ -155,6 +167,8 @@ The initial schema (`001_initial_schema.sql`) creates:
 - `project_members` — project-level role assignments
 - `project_versions` — immutable graph snapshots with JSONB graph data
 - `graph_runs` — execution records (status, duration, error summary)
+- `object_artifacts` - metadata and storage keys for large graph/export payloads
+- `background_jobs` - durable queue records for AI/export/worker jobs
 - `ai_requests` — AI proxy requests with provider, model, messages, and usage
 - `connect_sessions` — Nova Connect pairing sessions with expiry
 - `audit_events` — immutable security and activity log
@@ -194,8 +208,8 @@ Required before enterprise MVP:
 - Stateless API process.
 - Postgres-backed durable project storage.
 - Redis-backed session/rate-limit state.
-- Background job queue for long-running work.
-- Object storage for large graph/export payloads.
+- Background job queue for long-running AI/export work.
+- Object storage path for large graph/export payloads.
 - Pagination on large project, audit, and element lists.
 - Load testing for project save/load, AI requests, and Connect session routing.
 

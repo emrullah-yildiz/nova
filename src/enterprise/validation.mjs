@@ -87,6 +87,35 @@ export function validateHostOperationBody(body = {}) {
   return body;
 }
 
+export function validateObjectArtifactBody(body = {}) {
+  requirePlainObject(body, 'request body');
+  optionalString(body.name, 'name', 240);
+  optionalString(body.kind, 'kind', 80);
+  optionalString(body.contentType, 'contentType', 160);
+  optionalString(body.data, 'data', 2_000_000);
+  optionalPlainObject(body.metadata, 'metadata');
+  return body;
+}
+
+export function validateBackgroundJobBody(body = {}) {
+  requirePlainObject(body, 'request body');
+  requireString(body.type, 'type', 120);
+  optionalString(body.projectId, 'projectId', 80);
+  optionalString(body.artifactId, 'artifactId', 80);
+  optionalPlainObject(body.payload, 'payload');
+  if (body.availableAfter !== undefined && (!Number.isFinite(body.availableAfter) || body.availableAfter < 0)) {
+    throw createHttpError(400, 'availableAfter must be a non-negative number.');
+  }
+  return body;
+}
+
+export function validateCompleteBackgroundJobBody(body = {}) {
+  requirePlainObject(body, 'request body');
+  optionalPlainObject(body.result, 'result');
+  optionalString(body.errorSummary, 'errorSummary', 1000);
+  return body;
+}
+
 function validateAiMessage(message, label) {
   requirePlainObject(message, label);
   if (!['system', 'user', 'assistant'].includes(message.role)) {

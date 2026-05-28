@@ -107,6 +107,51 @@ CREATE INDEX idx_graph_runs_project ON graph_runs(project_id);
 CREATE INDEX idx_graph_runs_org ON graph_runs(organization_id);
 
 -- ============================================
+-- Object Artifacts (large graph assets / exports)
+-- ============================================
+CREATE TABLE IF NOT EXISTS object_artifacts (
+    id              TEXT PRIMARY KEY,
+    organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    user_id         TEXT NOT NULL REFERENCES users(id),
+    name            TEXT NOT NULL,
+    kind            TEXT NOT NULL,
+    content_type    TEXT NOT NULL,
+    byte_size       BIGINT NOT NULL DEFAULT 0,
+    storage_key     TEXT NOT NULL,
+    metadata        JSONB NOT NULL DEFAULT '{}',
+    created_at      BIGINT NOT NULL
+);
+
+CREATE INDEX idx_object_artifacts_project ON object_artifacts(project_id);
+CREATE INDEX idx_object_artifacts_org ON object_artifacts(organization_id);
+
+-- ============================================
+-- Background Jobs
+-- ============================================
+CREATE TABLE IF NOT EXISTS background_jobs (
+    id              TEXT PRIMARY KEY,
+    organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id         TEXT NOT NULL REFERENCES users(id),
+    project_id      TEXT NOT NULL DEFAULT '',
+    artifact_id     TEXT NOT NULL DEFAULT '',
+    type            TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'completed', 'failed')),
+    payload         JSONB NOT NULL DEFAULT '{}',
+    result          JSONB NOT NULL DEFAULT '{}',
+    error_summary   TEXT NOT NULL DEFAULT '',
+    attempts        INTEGER NOT NULL DEFAULT 0,
+    created_at      BIGINT NOT NULL,
+    updated_at      BIGINT NOT NULL,
+    available_after BIGINT NOT NULL,
+    completed_at    BIGINT
+);
+
+CREATE INDEX idx_background_jobs_org ON background_jobs(organization_id);
+CREATE INDEX idx_background_jobs_status ON background_jobs(status);
+CREATE INDEX idx_background_jobs_type ON background_jobs(type);
+
+-- ============================================
 -- AI Requests
 -- ============================================
 CREATE TABLE IF NOT EXISTS ai_requests (
