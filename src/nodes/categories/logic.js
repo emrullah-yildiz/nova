@@ -69,13 +69,13 @@ export const logicNodes = [
       example: {
         title: 'Bulk discount when cart > $100 AND member',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 120 } },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 100 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 120 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 100 } },
           { type: 'Logic.Compare', x: 220, y: 30, controls: { op: '>' } },
-          { type: 'boolean-input', x: 0, y: 160, controls: { val: 'True' } },
+          { type: 'Input.Boolean', x: 0, y: 160, controls: { val: 'True' } },
           { type: 'Logic.And', x: 440, y: 90 },
-          { type: 'number-input', x: 220, y: 220, controls: { val: 80 } },
-          { type: 'number-input', x: 220, y: 290, controls: { val: 120 } },
+          { type: 'Input.Number', x: 220, y: 220, controls: { val: 80 } },
+          { type: 'Input.Number', x: 220, y: 290, controls: { val: 120 } },
           { type: 'Logic.If', x: 660, y: 160 },
           { type: 'output-watch', x: 880, y: 160 }
         ],
@@ -130,13 +130,13 @@ export const logicNodes = [
       example: {
         title: 'Thicker wall when north-facing OR temp < 0°C',
         nodes: [
-          { type: 'boolean-input', x: 0, y: 0, controls: { val: 'False' } },
-          { type: 'number-input', x: 0, y: 80, controls: { val: -5 } },
-          { type: 'number-input', x: 0, y: 160, controls: { val: 0 } },
+          { type: 'Input.Boolean', x: 0, y: 0, controls: { val: 'False' } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: -5 } },
+          { type: 'Input.Number', x: 0, y: 160, controls: { val: 0 } },
           { type: 'Logic.Compare', x: 220, y: 110, controls: { op: '<' } },
           { type: 'Logic.Or', x: 440, y: 60 },
-          { type: 'number-input', x: 220, y: 220, controls: { val: 250 } },
-          { type: 'number-input', x: 220, y: 290, controls: { val: 150 } },
+          { type: 'Input.Number', x: 220, y: 220, controls: { val: 250 } },
+          { type: 'Input.Number', x: 220, y: 290, controls: { val: 150 } },
           { type: 'Logic.If', x: 660, y: 140 },
           { type: 'output-watch', x: 880, y: 140 }
         ],
@@ -191,11 +191,11 @@ export const logicNodes = [
       example: {
         title: 'Valid ballot: exactly one option checked',
         nodes: [
-          { type: 'boolean-input', x: 0, y: 0, controls: { val: 'True' } },
-          { type: 'boolean-input', x: 0, y: 80, controls: { val: 'False' } },
+          { type: 'Input.Boolean', x: 0, y: 0, controls: { val: 'True' } },
+          { type: 'Input.Boolean', x: 0, y: 80, controls: { val: 'False' } },
           { type: 'Logic.Xor', x: 220, y: 30 },
-          { type: 'number-input', x: 220, y: 150, controls: { val: 1 } },
-          { type: 'number-input', x: 220, y: 220, controls: { val: 0 } },
+          { type: 'Input.Number', x: 220, y: 150, controls: { val: 1 } },
+          { type: 'Input.Number', x: 220, y: 220, controls: { val: 0 } },
           { type: 'Logic.If', x: 440, y: 90 },
           { type: 'output-watch', x: 660, y: 90 }
         ],
@@ -242,12 +242,12 @@ export const logicNodes = [
       example: {
         title: 'Send order only when stock is NOT zero',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 10 } },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 0 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 10 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 0 } },
           { type: 'Logic.Compare', x: 220, y: 30, controls: { op: '==' } },
           { type: 'Logic.Not', x: 420, y: 30 },
-          { type: 'number-input', x: 420, y: 130, controls: { val: 5 } },
-          { type: 'number-input', x: 420, y: 200, controls: { val: 0 } },
+          { type: 'Input.Number', x: 420, y: 130, controls: { val: 5 } },
+          { type: 'Input.Number', x: 420, y: 200, controls: { val: 0 } },
           { type: 'Logic.If', x: 640, y: 80 },
           { type: 'output-watch', x: 860, y: 80 }
         ],
@@ -303,11 +303,11 @@ export const logicNodes = [
       example: {
         title: 'Bulk price $80 when qty > 10, else $100',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 15 } },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 10 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 15 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 10 } },
           { type: 'Logic.Compare', x: 220, y: 30, controls: { op: '>' } },
-          { type: 'number-input', x: 220, y: 130, controls: { val: 80 } },
-          { type: 'number-input', x: 220, y: 200, controls: { val: 100 } },
+          { type: 'Input.Number', x: 220, y: 130, controls: { val: 80 } },
+          { type: 'Input.Number', x: 220, y: 200, controls: { val: 100 } },
           { type: 'Logic.If', x: 440, y: 80 },
           { type: 'output-watch', x: 640, y: 80 }
         ],
@@ -360,8 +360,8 @@ export const logicNodes = [
       example: {
         title: 'Forward stock count when below reorder level',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 45 } },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 50 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 45 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 50 } },
           { type: 'Logic.Compare', x: 220, y: 30, controls: { op: '<' } },
           { type: 'Logic.Gate', x: 420, y: 30 },
           { type: 'output-watch', x: 640, y: 30 }
@@ -412,8 +412,8 @@ export const logicNodes = [
       example: {
         title: 'Forward sensor reading only when within tolerance',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 4.95 } },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 5.0 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 4.95 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 5.0 } },
           { type: 'Logic.Compare', x: 220, y: 30, controls: { op: '<=' } },
           { type: 'Logic.Gate', x: 420, y: 30 },
           { type: 'output-watch', x: 640, y: 30 }
@@ -456,9 +456,9 @@ export const logicNodes = [
       example: {
         title: 'Default temperature when sensor reading is missing',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 22 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 22 } },
           { type: 'Logic.IsNull', x: 220, y: 0 },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 20 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 20 } },
           { type: 'Logic.If', x: 420, y: 30 },
           { type: 'output-watch', x: 640, y: 30 }
         ],

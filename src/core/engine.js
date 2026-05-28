@@ -643,15 +643,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-      // ── Input nodes ──
-
-      case 'number-input': case 'slider-input': return parseFloat(ctrl.val) || 0;
-
-      case 'integer-input': return parseInt(ctrl.val) || 0;
-
-      case 'text-input': return ctrl.val || '';
-
-      case 'boolean-input': return ctrl.val === 'True';
+      // Input nodes migrated to src/nodes/categories/input.js.
 
 
 

@@ -36,15 +36,6 @@ NODE_LIBRARY.categories.push({ id: 'testing', name: 'Testing', color: '#f5c2e7',
   { type: 'slow-compute', name: 'Slow Compute (test cancel)', icon: '⏱', inputs: [{ id: 'value', name: 'Value', type: 'number' }], outputs: [{ id: 'result', name: 'Result', type: 'number' }], controls: [{ id: 'delayMs', type: 'formula', default: '5000', label: 'Delay (ms)' }], preview: true, codegen: { python: '{{result}} = {{value}}', csharp: '' } }
 ] });
 
-// 4. INPUT
-// ═══════════════════════════════════════
-NODE_LIBRARY.categories.push({ id: 'input', name: 'Input', color: '#cba6f7', icon: '⊙', nodes: [
-  { type: 'boolean-input', name: 'Boolean', icon: '◑', inputs: [], outputs: [{ id: 'value', name: 'Value', type: 'boolean' }], controls: [{ id: 'val', type: 'dropdown', options: ['True','False'], default: 'True', label: 'Value' }], preview: true, codegen: { python: '{{value}} = {{ctrl.val}}', csharp: 'bool {{value}} = {{ctrl.val_lower}};' } },
-  { type: 'integer-input', name: 'Integer', icon: 'Z', inputs: [], outputs: [{ id: 'value', name: 'Value', type: 'number' }], controls: [{ id: 'val', type: 'number', default: 1, label: 'Value' }], preview: true, codegen: { python: '{{value}} = int({{ctrl.val}})', csharp: 'int {{value}} = {{ctrl.val}};' } },
-  { type: 'number-input', name: 'Number', icon: '#', inputs: [], outputs: [{ id: 'value', name: 'Value', type: 'number' }], controls: [{ id: 'val', type: 'number', default: 0, label: 'Value' }], preview: true, codegen: { python: '{{value}} = {{ctrl.val}}', csharp: 'double {{value}} = {{ctrl.val}};' } },
-  { type: 'slider-input', name: 'Slider', icon: '⊶', inputs: [], outputs: [{ id: 'value', name: 'Value', type: 'number' }], controls: [{ id: 'min', type: 'number', default: 0, label: 'Min' },{ id: 'max', type: 'number', default: 100, label: 'Max' },{ id: 'val', type: 'range', default: 50, label: 'Value' }], preview: true, codegen: { python: '{{value}} = {{ctrl.val}}', csharp: 'double {{value}} = {{ctrl.val}};' } },
-  { type: 'text-input', name: 'Text', icon: 'T', inputs: [], outputs: [{ id: 'value', name: 'Value', type: 'string' }], controls: [{ id: 'val', type: 'text', default: 'Hello', label: 'Text' }], preview: true, codegen: { python: '{{value}} = "{{ctrl.val}}"', csharp: 'string {{value}} = "{{ctrl.val}}";' } }
-] });
 
 // List category migrated to src/nodes/categories/list.js.
 

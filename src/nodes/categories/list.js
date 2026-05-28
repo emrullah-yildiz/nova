@@ -81,9 +81,9 @@ export const listNodes = [
       example: {
         title: 'Build a 3-item price list',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 10 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 20 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 30 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 10 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 20 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 30 } },
           { type: 'List.Create', x: 220, y: 60 },
           { type: 'output-watch', x: 460, y: 60 }
         ],
@@ -122,9 +122,9 @@ export const listNodes = [
       example: {
         title: 'Count bays in a schedule (1..6)',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 7 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 7 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Count', x: 440, y: 60 },
           { type: 'output-watch', x: 640, y: 60 }
@@ -166,9 +166,9 @@ export const listNodes = [
       example: {
         title: 'Take head of queue 1..5',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 6 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 6 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.First', x: 440, y: 60 },
           { type: 'output-watch', x: 640, y: 60 }
@@ -210,9 +210,9 @@ export const listNodes = [
       example: {
         title: 'Latest reading from a 1..10 history',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 11 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 11 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Last', x: 440, y: 60 },
           { type: 'output-watch', x: 640, y: 60 }
@@ -261,11 +261,11 @@ export const listNodes = [
       example: {
         title: 'Get waypoint #3 from a route 1..10',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 11 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 11 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
-          { type: 'number-input', x: 220, y: 150, controls: { val: 2 } },
+          { type: 'Input.Number', x: 220, y: 150, controls: { val: 2 } },
           { type: 'List.GetItem', x: 440, y: 90 },
           { type: 'output-watch', x: 640, y: 90 }
         ],
@@ -318,9 +318,9 @@ export const listNodes = [
       example: {
         title: 'Odd bays 1..9 and their total',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 10 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 2 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 10 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 2 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Sum', x: 440, y: 60 },
           { type: 'output-watch', x: 640, y: 60 }
@@ -376,9 +376,9 @@ export const listNodes = [
       example: {
         title: '5 sample times every 2 minutes',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 0 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 2 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 5 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 0 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 2 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 5 } },
           { type: 'List.Sequence', x: 220, y: 60 },
           { type: 'List.Sum', x: 440, y: 60 },
           { type: 'output-watch', x: 640, y: 60 }
@@ -426,8 +426,8 @@ export const listNodes = [
       example: {
         title: 'Initialise 5 rows with default 100',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 100 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 5 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 100 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 5 } },
           { type: 'List.Repeat', x: 220, y: 30 },
           { type: 'List.Count', x: 440, y: 30 },
           { type: 'output-watch', x: 640, y: 30 }
@@ -467,9 +467,9 @@ export const listNodes = [
       example: {
         title: 'Newest reading first (reverse 1..5, take first)',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 6 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 6 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Reverse', x: 440, y: 60 },
           { type: 'List.First', x: 640, y: 60 },
@@ -512,9 +512,9 @@ export const listNodes = [
       example: {
         title: 'Combine two floor lists and count total rooms',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 4 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 4 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 30 },
           { type: 'List.Range', x: 220, y: 140 },
           { type: 'List.Create', x: 440, y: 90 },
@@ -570,11 +570,11 @@ export const listNodes = [
       example: {
         title: 'First 3 readings of 1..10, summed',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 11 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 11 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
-          { type: 'number-input', x: 220, y: 160, controls: { val: 3 } },
+          { type: 'Input.Number', x: 220, y: 160, controls: { val: 3 } },
           { type: 'List.Take', x: 440, y: 90 },
           { type: 'List.Sum', x: 640, y: 90 },
           { type: 'output-watch', x: 840, y: 90 }
@@ -623,11 +623,11 @@ export const listNodes = [
       example: {
         title: 'Skip 2 warm-up readings, sum the rest (1..5)',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 6 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 6 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
-          { type: 'number-input', x: 220, y: 160, controls: { val: 2 } },
+          { type: 'Input.Number', x: 220, y: 160, controls: { val: 2 } },
           { type: 'List.Skip', x: 440, y: 90 },
           { type: 'List.Sum', x: 640, y: 90 },
           { type: 'output-watch', x: 840, y: 90 }
@@ -681,12 +681,12 @@ export const listNodes = [
       example: {
         title: 'Middle window [2:5] of 1..10, summed',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 11 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 11 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
-          { type: 'number-input', x: 220, y: 160, controls: { val: 2 } },
-          { type: 'number-input', x: 220, y: 230, controls: { val: 5 } },
+          { type: 'Input.Number', x: 220, y: 160, controls: { val: 2 } },
+          { type: 'Input.Number', x: 220, y: 230, controls: { val: 5 } },
           { type: 'List.Slice', x: 440, y: 120 },
           { type: 'List.Sum', x: 640, y: 120 },
           { type: 'output-watch', x: 840, y: 120 }
@@ -740,12 +740,12 @@ export const listNodes = [
       example: {
         title: 'Insert checkpoint 99 at start of 1..4',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 5 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 5 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
-          { type: 'number-input', x: 220, y: 160, controls: { val: 99 } },
-          { type: 'number-input', x: 220, y: 230, controls: { val: 0 } },
+          { type: 'Input.Number', x: 220, y: 160, controls: { val: 99 } },
+          { type: 'Input.Number', x: 220, y: 230, controls: { val: 0 } },
           { type: 'List.Insert', x: 440, y: 120 },
           { type: 'List.First', x: 640, y: 120 },
           { type: 'output-watch', x: 840, y: 120 }
@@ -807,11 +807,11 @@ export const listNodes = [
       example: {
         title: 'Drop index 2 from order 1..5, log the value',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 6 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 6 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
-          { type: 'number-input', x: 220, y: 160, controls: { val: 2 } },
+          { type: 'Input.Number', x: 220, y: 160, controls: { val: 2 } },
           { type: 'List.Remove', x: 440, y: 90 },
           { type: 'output-watch', x: 640, y: 90 }
         ],
@@ -858,13 +858,13 @@ export const listNodes = [
       example: {
         title: 'Combine two passenger manifests, count heads',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 4 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 4 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 30 },
-          { type: 'number-input', x: 0, y: 220, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 290, controls: { val: 5 } },
-          { type: 'number-input', x: 0, y: 360, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 220, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 290, controls: { val: 5 } },
+          { type: 'Input.Number', x: 0, y: 360, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 260 },
           { type: 'List.Join', x: 460, y: 150 },
           { type: 'List.Count', x: 680, y: 150 },
@@ -924,13 +924,13 @@ export const listNodes = [
       example: {
         title: 'Pair students with seats, count assignments',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 5 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 5 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 30 },
-          { type: 'number-input', x: 0, y: 220, controls: { val: 10 } },
-          { type: 'number-input', x: 0, y: 290, controls: { val: 14 } },
-          { type: 'number-input', x: 0, y: 360, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 220, controls: { val: 10 } },
+          { type: 'Input.Number', x: 0, y: 290, controls: { val: 14 } },
+          { type: 'Input.Number', x: 0, y: 360, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 260 },
           { type: 'List.Zip', x: 460, y: 150 },
           { type: 'List.Count', x: 680, y: 150 },
@@ -997,13 +997,13 @@ export const listNodes = [
       example: {
         title: 'Every host × guest pairing, total matches',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 4 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 4 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 30 },
-          { type: 'number-input', x: 0, y: 220, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 290, controls: { val: 5 } },
-          { type: 'number-input', x: 0, y: 360, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 220, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 290, controls: { val: 5 } },
+          { type: 'Input.Number', x: 0, y: 360, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 260 },
           { type: 'List.CrossReference', x: 460, y: 150 },
           { type: 'List.Count', x: 680, y: 150 },
@@ -1069,13 +1069,13 @@ export const listNodes = [
       example: {
         title: 'Keep active rooms (T, F, T) from a 3-room list',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 101 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 102 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 103 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 101 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 102 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 103 } },
           { type: 'List.Create', x: 220, y: 60 },
-          { type: 'boolean-input', x: 0, y: 220, controls: { val: 'True' } },
-          { type: 'boolean-input', x: 0, y: 290, controls: { val: 'False' } },
-          { type: 'boolean-input', x: 0, y: 360, controls: { val: 'True' } },
+          { type: 'Input.Boolean', x: 0, y: 220, controls: { val: 'True' } },
+          { type: 'Input.Boolean', x: 0, y: 290, controls: { val: 'False' } },
+          { type: 'Input.Boolean', x: 0, y: 360, controls: { val: 'True' } },
           { type: 'List.Create', x: 220, y: 280 },
           { type: 'List.FilterByBoolean', x: 460, y: 170 },
           { type: 'List.Count', x: 680, y: 170 },
@@ -1122,9 +1122,9 @@ export const listNodes = [
       example: {
         title: 'Total floor area (sum of 1..4)',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 5 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 5 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Sum', x: 440, y: 60 },
           { type: 'output-watch', x: 640, y: 60 }
@@ -1166,9 +1166,9 @@ export const listNodes = [
       example: {
         title: 'Mean of wall thicknesses 1..4',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 5 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 5 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Average', x: 440, y: 60 },
           { type: 'output-watch', x: 640, y: 60 }
@@ -1210,9 +1210,9 @@ export const listNodes = [
       example: {
         title: 'Smallest column load from 1..5',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 6 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 6 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Min', x: 440, y: 60 },
           { type: 'output-watch', x: 640, y: 60 }
@@ -1254,9 +1254,9 @@ export const listNodes = [
       example: {
         title: 'Largest column load from 1..5',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 6 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 6 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Max', x: 440, y: 60 },
           { type: 'output-watch', x: 640, y: 60 }
@@ -1303,9 +1303,9 @@ export const listNodes = [
       example: {
         title: 'Sort 3 column loads, take smallest',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 12 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 4 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 8 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 12 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 4 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 8 } },
           { type: 'List.Create', x: 220, y: 60 },
           { type: 'List.Sort', x: 440, y: 60 },
           { type: 'List.First', x: 640, y: 60 },
@@ -1364,11 +1364,11 @@ export const listNodes = [
       example: {
         title: 'Random first participant from 1..5',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 6 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 6 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
-          { type: 'number-input', x: 220, y: 160, controls: { val: 42 } },
+          { type: 'Input.Number', x: 220, y: 160, controls: { val: 42 } },
           { type: 'List.Shuffle', x: 440, y: 90 },
           { type: 'List.First', x: 640, y: 90 },
           { type: 'output-watch', x: 840, y: 90 }
@@ -1411,11 +1411,11 @@ export const listNodes = [
       example: {
         title: 'Distinct material codes from [1,2,2,3,3]',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 2 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 2 } },
-          { type: 'number-input', x: 0, y: 210, controls: { val: 3 } },
-          { type: 'number-input', x: 0, y: 280, controls: { val: 3 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 2 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 2 } },
+          { type: 'Input.Number', x: 0, y: 210, controls: { val: 3 } },
+          { type: 'Input.Number', x: 0, y: 280, controls: { val: 3 } },
           { type: 'List.Create', x: 220, y: 140 },
           { type: 'List.Unique', x: 440, y: 140 },
           { type: 'List.Count', x: 640, y: 140 },
@@ -1472,11 +1472,11 @@ export const listNodes = [
       example: {
         title: 'Paginate 1..6 invoices into pages of 2',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 7 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 7 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
-          { type: 'number-input', x: 220, y: 160, controls: { val: 2 } },
+          { type: 'Input.Number', x: 220, y: 160, controls: { val: 2 } },
           { type: 'List.Chunk', x: 440, y: 90 },
           { type: 'List.Count', x: 640, y: 90 },
           { type: 'output-watch', x: 840, y: 90 }
@@ -1525,9 +1525,9 @@ export const listNodes = [
       example: {
         title: 'Transpose 2 rows of length 3, count columns',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 4 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 4 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 30 },
           { type: 'List.Range', x: 220, y: 140 },
           { type: 'List.Create', x: 440, y: 90 },
@@ -1578,9 +1578,9 @@ export const listNodes = [
       example: {
         title: 'Number of leg segments from a 5-waypoint route',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 6 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 6 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Pairs', x: 440, y: 60 },
           { type: 'List.Count', x: 640, y: 60 },
@@ -1629,11 +1629,11 @@ export const listNodes = [
       example: {
         title: 'Find position of waypoint 3 in route 1..5',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 6 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 6 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
-          { type: 'number-input', x: 220, y: 160, controls: { val: 3 } },
+          { type: 'Input.Number', x: 220, y: 160, controls: { val: 3 } },
           { type: 'List.IndexOf', x: 440, y: 90 },
           { type: 'output-watch', x: 640, y: 90 }
         ],
@@ -1680,14 +1680,14 @@ export const listNodes = [
       example: {
         title: 'Is room 3 in the active list 1..5?',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 6 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 6 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
-          { type: 'number-input', x: 220, y: 160, controls: { val: 3 } },
+          { type: 'Input.Number', x: 220, y: 160, controls: { val: 3 } },
           { type: 'List.Contains', x: 440, y: 90 },
-          { type: 'number-input', x: 440, y: 200, controls: { val: 1 } },
-          { type: 'number-input', x: 440, y: 270, controls: { val: 0 } },
+          { type: 'Input.Number', x: 440, y: 200, controls: { val: 1 } },
+          { type: 'Input.Number', x: 440, y: 270, controls: { val: 0 } },
           { type: 'Logic.If', x: 660, y: 150 },
           { type: 'output-watch', x: 860, y: 150 }
         ],
@@ -1732,9 +1732,9 @@ export const listNodes = [
       example: {
         title: 'Double 1..4 and total the results',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 5 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 5 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.Map', x: 440, y: 60, controls: { code: 'x * 2' } },
           { type: 'List.Sum', x: 640, y: 60 },
@@ -1802,9 +1802,9 @@ export const listNodes = [
       example: {
         title: 'Group rooms by floor (x % 3), count distinct floors',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 1 } },
-          { type: 'number-input', x: 0, y: 70, controls: { val: 8 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 8 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 1 } },
           { type: 'List.Range', x: 220, y: 60 },
           { type: 'List.GroupBy', x: 440, y: 60, controls: { expr: 'x % 3' } },
           { type: 'List.Count', x: 660, y: 60 },

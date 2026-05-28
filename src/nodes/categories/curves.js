@@ -105,9 +105,9 @@ export const curvesNodes = [
         title: 'Arc length of a quarter circle (r=5)',
         nodes: [
           { type: 'point-origin', x: 0, y: 0 },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 5 } },
-          { type: 'number-input', x: 0, y: 150, controls: { val: 0 } },
-          { type: 'number-input', x: 0, y: 220, controls: { val: 90 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 5 } },
+          { type: 'Input.Number', x: 0, y: 150, controls: { val: 0 } },
+          { type: 'Input.Number', x: 0, y: 220, controls: { val: 90 } },
           { type: 'Arc.ByCenterRadiusAngles', x: 240, y: 110 },
           { type: 'Curve.Length', x: 460, y: 110 },
           { type: 'output-watch', x: 660, y: 110 }
@@ -212,7 +212,7 @@ export const curvesNodes = [
         title: 'Circumference of a radius-10 circle',
         nodes: [
           { type: 'point-origin', x: 0, y: 0 },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 10 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 10 } },
           { type: 'Circle.ByCenterRadius', x: 240, y: 30 },
           { type: 'Curve.Length', x: 460, y: 30 },
           { type: 'output-watch', x: 660, y: 30 }
@@ -269,8 +269,8 @@ export const curvesNodes = [
         title: 'Sample 24 points around a radius-5 circle',
         nodes: [
           { type: 'point-origin', x: 0, y: 0 },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 5 } },
-          { type: 'number-input', x: 0, y: 150, controls: { val: 24 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 5 } },
+          { type: 'Input.Number', x: 0, y: 150, controls: { val: 24 } },
           { type: 'Circle.ByCenterRadiusResolution', x: 240, y: 70 },
           { type: 'List.Count', x: 480, y: 70 },
           { type: 'output-watch', x: 680, y: 70 }
@@ -546,7 +546,7 @@ export const curvesNodes = [
           { type: 'point-origin', x: 0, y: 0 },
           { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
-          { type: 'number-input', x: 240, y: 150, controls: { val: 0.5 } },
+          { type: 'Input.Number', x: 240, y: 150, controls: { val: 0.5 } },
           { type: 'Curve.TangentAtPoint', x: 460, y: 80 },
           { type: 'output-watch', x: 680, y: 80 }
         ],
@@ -615,10 +615,10 @@ export const curvesNodes = [
         title: 'Sample a 10x6 ellipse into 24 points, count them',
         nodes: [
           { type: 'point-origin', x: 0, y: 0 },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 10 } },
-          { type: 'number-input', x: 0, y: 150, controls: { val: 6 } },
-          { type: 'number-input', x: 0, y: 220, controls: { val: 0 } },
-          { type: 'number-input', x: 0, y: 290, controls: { val: 24 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 10 } },
+          { type: 'Input.Number', x: 0, y: 150, controls: { val: 6 } },
+          { type: 'Input.Number', x: 0, y: 220, controls: { val: 0 } },
+          { type: 'Input.Number', x: 0, y: 290, controls: { val: 24 } },
           { type: 'Ellipse.ByCenterWidthDepth', x: 240, y: 150 },
           { type: 'List.Count', x: 480, y: 150 },
           { type: 'output-watch', x: 680, y: 150 }
@@ -678,7 +678,7 @@ export const curvesNodes = [
         nodes: [
           { type: 'point-origin', x: 0, y: 0 },
           { type: 'point-bycoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
-          { type: 'number-input', x: 0, y: 140, controls: { val: 5 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 5 } },
           { type: 'Line.ByPointAndDirection', x: 240, y: 60 },
           { type: 'Curve.Length', x: 460, y: 60 },
           { type: 'output-watch', x: 660, y: 60 }
@@ -781,7 +781,7 @@ export const curvesNodes = [
           { type: 'point-bycoordinates', x: 0, y: 140, controls: { x: 7, y: -5, z: 0 } },
           { type: 'point-bycoordinates', x: 0, y: 210, controls: { x: 10, y: 0, z: 0 } },
           { type: 'List.Create', x: 240, y: 90 },
-          { type: 'number-input', x: 240, y: 210, controls: { val: 3 } },
+          { type: 'Input.Number', x: 240, y: 210, controls: { val: 3 } },
           { type: 'NURBS.ByControlPoints', x: 460, y: 140 },
           { type: 'Curve.Length', x: 680, y: 140 },
           { type: 'output-watch', x: 880, y: 140 }
@@ -838,7 +838,7 @@ export const curvesNodes = [
           { type: 'point-bycoordinates', x: 0, y: 140, controls: { x: 7, y: -5, z: 0 } },
           { type: 'point-bycoordinates', x: 0, y: 210, controls: { x: 10, y: 0, z: 0 } },
           { type: 'List.Create', x: 240, y: 90 },
-          { type: 'number-input', x: 240, y: 210, controls: { val: 3 } },
+          { type: 'Input.Number', x: 240, y: 210, controls: { val: 3 } },
           { type: 'NURBS.Interpolate', x: 460, y: 140 },
           { type: 'Curve.Length', x: 680, y: 140 },
           { type: 'output-watch', x: 880, y: 140 }
@@ -897,7 +897,7 @@ export const curvesNodes = [
           { type: 'point-bycoordinates', x: 0, y: 140, controls: { x: 1, y: 1, z: 0 } },
           { type: 'point-bycoordinates', x: 0, y: 210, controls: { x: 0, y: 1, z: 0 } },
           { type: 'List.Create', x: 240, y: 90 },
-          { type: 'boolean-input', x: 240, y: 210, controls: { val: 'True' } },
+          { type: 'Input.Boolean', x: 240, y: 210, controls: { val: 'True' } },
           { type: 'Polyline.ByPoints', x: 460, y: 140 },
           { type: 'Curve.Length', x: 680, y: 140 },
           { type: 'output-watch', x: 880, y: 140 }
@@ -962,8 +962,8 @@ export const curvesNodes = [
         title: '4 corners of a 10×6 rectangle',
         nodes: [
           { type: 'point-origin', x: 0, y: 0 },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 10 } },
-          { type: 'number-input', x: 0, y: 150, controls: { val: 6 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 10 } },
+          { type: 'Input.Number', x: 0, y: 150, controls: { val: 6 } },
           { type: 'Rectangle.ByCenterWidthDepth', x: 240, y: 70 },
           { type: 'List.Count', x: 480, y: 70 },
           { type: 'output-watch', x: 680, y: 70 }
@@ -1021,7 +1021,7 @@ export const curvesNodes = [
           { type: 'point-bycoordinates', x: 0, y: 160, controls: { x: 0, y: 10, z: 0 } },
           { type: 'point-bycoordinates', x: 0, y: 230, controls: { x: 10, y: 10, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 190 },
-          { type: 'number-input', x: 240, y: 310, controls: { val: 0.5 } },
+          { type: 'Input.Number', x: 240, y: 310, controls: { val: 0.5 } },
           { type: 'Utilities.Blend', x: 460, y: 100 },
           { type: 'Curve.Length', x: 680, y: 100 },
           { type: 'output-watch', x: 880, y: 100 }
@@ -1129,7 +1129,7 @@ export const curvesNodes = [
           { type: 'point-bycoordinates', x: 0, y: 160, controls: { x: 0, y: 10, z: 0 } },
           { type: 'point-bycoordinates', x: 0, y: 230, controls: { x: 10, y: 10, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 190 },
-          { type: 'number-input', x: 240, y: 310, controls: { val: 5 } },
+          { type: 'Input.Number', x: 240, y: 310, controls: { val: 5 } },
           { type: 'Utilities.Tween', x: 460, y: 100 },
           { type: 'List.Count', x: 680, y: 100 },
           { type: 'output-watch', x: 880, y: 100 }
