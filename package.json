@@ -19,6 +19,7 @@
     "lint:all": "eslint . --ext .js --ignore-path .gitignore",
     "format": "prettier --write .",
     "test": "vitest run",
+    "test:postgres": "vitest run tests/postgres-persistence.integration.test.js",
     "test:e2e": "node scripts/run-e2e.cjs",
     "migrate": "node scripts/run-migrations.mjs",
     "db:migrate": "node scripts/run-migrations.mjs"

@@ -118,6 +118,7 @@ docker run --rm -p 8787:8787 \
 ### Production Checklist
 
 - [ ] Database: `npm run migrate` run at deploy time
+- [ ] Database integration check: `NOVA_POSTGRES_INTEGRATION_TESTS=true NOVA_DATABASE_URL=postgres://... npm run test:postgres`
 - [ ] `NOVA_ALLOW_DEV_LOGIN` not set or explicitly `false`
 - [ ] `NOVA_SESSION_SECRET` set to a strong random value
 - [ ] `NOVA_CORS_ORIGIN` set to the exact frontend URL
@@ -125,3 +126,15 @@ docker run --rm -p 8787:8787 \
 - [ ] Security headers already set by the API (X-Content-Type-Options, X-Frame-Options, etc.)
 - [ ] Database connection uses SSL (`?sslmode=require` or `verify-full`)
 - [ ] Health check endpoint: `GET /health`
+
+### Postgres Integration Test
+
+The Postgres persistence integration test uses a real Postgres service, creates a temporary schema, runs the production migrations in that schema, round-trips an enterprise snapshot, and drops the schema afterward.
+
+Run it against a disposable database or staging database user:
+
+```bash
+NOVA_POSTGRES_INTEGRATION_TESTS=true NOVA_DATABASE_URL=postgres://user:password@localhost:5432/nova?sslmode=verify-full npm run test:postgres
+```
+
+Without `NOVA_POSTGRES_INTEGRATION_TESTS=true` and `NOVA_DATABASE_URL`, the test is skipped during normal unit test runs.
