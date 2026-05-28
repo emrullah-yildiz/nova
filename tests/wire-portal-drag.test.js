@@ -3,6 +3,7 @@ import {
   PORTAL_DEFAULT_OUT_T,
   PORTAL_MAX_T,
   PORTAL_MIN_T,
+  findPortalRingTarget,
   movePortalDrag,
   startPortalDrag
 } from '../src/ui/wire-portal-drag.js';
@@ -73,5 +74,40 @@ describe('wire portal drag controller', () => {
 
   it('returns null for move events after drag state has been dropped/reset', () => {
     expect(movePortalDrag(null, 100, 100)).toBeNull();
+  });
+
+  it('finds portal rings from nested drag targets', () => {
+    const ring = {
+      matches(selector) {
+        return selector === '.portal-ring';
+      },
+      closest(selector) {
+        return this.matches(selector) ? this : null;
+      }
+    };
+    const nestedTarget = {
+      closest(selector) {
+        return selector === '.portal-ring' ? ring : null;
+      }
+    };
+
+    expect(findPortalRingTarget(nestedTarget)).toBe(ring);
+    expect(findPortalRingTarget({})).toBeNull();
+  });
+
+  it('finds a portal ring by pointer coordinates when the canvas is the event target', () => {
+    const ring = {
+      getBoundingClientRect() {
+        return { left: 90, right: 120, top: 40, bottom: 70 };
+      }
+    };
+    const root = {
+      querySelectorAll(selector) {
+        return selector === '.portal-ring' ? [ring] : [];
+      }
+    };
+
+    expect(findPortalRingTarget({}, 100, 50, root)).toBe(ring);
+    expect(findPortalRingTarget({}, 10, 10, root)).toBeNull();
   });
 });

@@ -3,6 +3,7 @@
 import {
   PORTAL_DEFAULT_IN_T,
   PORTAL_DEFAULT_OUT_T,
+  findPortalRingTarget,
   movePortalDrag,
   startPortalDrag
 } from './wire-portal-drag.js';
@@ -215,11 +216,8 @@ export function installWirePortalPatch(targetApp = getRuntimeApp()) {
 
   // ── Drag handling ──
   function initDragListeners() {
-    var ov = document.getElementById('portal-overlay');
-    if (!ov) return;
-
-    ov.addEventListener('mousedown', function(e) {
-      var ring = e.target.closest('.portal-ring');
+    document.addEventListener('mousedown', function(e) {
+      var ring = findPortalRingTarget(e.target, e.clientX, e.clientY, document);
       if (!ring) return;
       e.stopPropagation();
       e.stopImmediatePropagation();
@@ -235,7 +233,8 @@ export function installWirePortalPatch(targetApp = getRuntimeApp()) {
         clientX: e.clientX,
         clientY: e.clientY
       });
-    });
+      app._portalDragActive = true;
+    }, true);
 
     document.addEventListener('mousemove', function(e) {
       if (!dragKey) return;
@@ -249,6 +248,7 @@ export function installWirePortalPatch(targetApp = getRuntimeApp()) {
     document.addEventListener('mouseup', function() {
       dragKey = null;
       dragState = null;
+      app._portalDragActive = false;
     }, true);
   }
 

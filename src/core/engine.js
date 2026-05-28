@@ -586,15 +586,17 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
   // Curve helpers (work with Line3, Polyline3, NurbsCurve, any curve)
 
-  function curveStart(c) { if (!c) return undefined; if (c.start) return c.start; if (c.points && c.points.length > 0) return c.points[0]; return undefined; }
+  function curveStart(c) { if (!c) return undefined; if (c.start) return c.start; if (c.points && c.points.length > 0) return c.points[0]; if (typeof c.pointAt === 'function') return c.pointAt(0); return undefined; }
 
-  function curveEnd(c) { if (!c) return undefined; if (c.end) return c.end; if (c.points && c.points.length > 0) return c.points[c.points.length - 1]; return undefined; }
+  function curveEnd(c) { if (!c) return undefined; if (c.end) return c.end; if (c.points && c.points.length > 0) return c.points[c.points.length - 1]; if (typeof c.pointAt === 'function') return c.pointAt(1); return undefined; }
 
   function curveLen(c) { if (!c) return 0; if (typeof c.length === 'function') return c.length(); if (c.points) { var l = 0; for (var i = 1; i < c.points.length; i++) l += c.points[i-1].distanceTo(c.points[i]); return l; } return 0; }
 
   function curveDir(c) { var s = curveStart(c), e = curveEnd(c); if (s && e) { var d = e.sub(s); var l = Math.sqrt(d.x*d.x+d.y*d.y+d.z*d.z)||1; return new Geo.Vector3(d.x/l,d.y/l,d.z/l); } return new Geo.Vector3(0,0,0); }
 
-  function curveMid(c) { var s = curveStart(c), e = curveEnd(c); return (s && e) ? s.lerp(e, 0.5) : undefined; }
+  function curveMid(c) { if (c && typeof c.getCenter === 'function') return c.getCenter(); if (c && typeof c.pointAt === 'function') return c.pointAt(0.5); var s = curveStart(c), e = curveEnd(c); return (s && e) ? s.lerp(e, 0.5) : undefined; }
+
+  function curveTangent(c, t) { if (!c) return undefined; if (typeof c.tangentAt === 'function') return c.tangentAt(t); return curveDir(c); }
 
 
 
@@ -682,7 +684,27 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       case 'line-length': return curveLen(getInput('curve'));
 
+      case 'curve-startpoint': return curveStart(getInput('curve'));
+
+      case 'curve-endpoint': return curveEnd(getInput('curve'));
+
+      case 'curve-chord-direction': return curveDir(getInput('curve'));
+
+      case 'curve-length': return curveLen(getInput('curve'));
+
+      case 'curve-tangent': return curveTangent(getInput('curve'), getVal('param', 0.5));
+
       case 'line-deconstruct': {
+
+        var c = getInput('curve'); if (!c) return undefined;
+
+        nd._portValues = { start: curveStart(c), end: curveEnd(c), length: curveLen(c), midpoint: curveMid(c), direction: curveDir(c) };
+
+        return nd._portValues;
+
+      }
+
+      case 'curve-deconstruct': {
 
         var c = getInput('curve'); if (!c) return undefined;
 
@@ -1169,7 +1191,15 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       case 'op-bezier': { var pts = getInput('points'); if (pts) return Geo.bezier(pts); return undefined; }
 
+      case 'curve-bezier-by-control-points': { var pts = getInput('points'); if (pts) return Geo.bezier(pts); return undefined; }
+
       case 'op-interpolate': { var pts = getInput('points'); if (pts) return Geo.interpolate(pts); return undefined; }
+
+      case 'nurbs-interpolate': { var pts = getInput('points'); if (pts && Array.isArray(pts)) return Geo.nurbsInterpolate(pts, getInput('degree')||3); return undefined; }
+
+      case 'nurbs-blend': { var c1 = getInput('curve1'), c2 = getInput('curve2'); if (c1 && c2) return Geo.blendCurves(c1, c2, getInput('t')||0); return undefined; }
+
+      case 'nurbs-tween': { var c1 = getInput('curve1'), c2 = getInput('curve2'); if (c1 && c2) return Geo.tweenCurves(c1, c2, getInput('count')||10); return undefined; }
 
       case 'op-ruled-surface': { var c1 = getInput('curve1'), c2 = getInput('curve2'); if (c1 && c2) return Geo.ruledSurface(c1, c2); return undefined; }
 
@@ -1188,6 +1218,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
       case 'surf-polyline': { var pts = getInput('points'), closed = getInput('closed'); if (pts && Array.isArray(pts)) return new Geo.Polyline3(pts, !!closed); return undefined; }
 
       case 'surf-arc': { var c = getInput('center')||new Geo.Point3(0,0,0), r = getInput('radius'), sa = getInput('startAngle'), ea = getInput('endAngle'); return new Geo.Arc3(c instanceof Geo.Point3?c:new Geo.Point3(0,0,0), r||5, (sa||0)*Math.PI/180, (ea||360)*Math.PI/180); }
+
+      case 'curve-arc-by-center-radius-angles': { var c = getInput('center')||new Geo.Point3(0,0,0), r = getInput('radius'), sa = getInput('startAngle'), ea = getInput('endAngle'); return new Geo.Arc3(c instanceof Geo.Point3?c:new Geo.Point3(0,0,0), r||5, (sa||0)*Math.PI/180, (ea||360)*Math.PI/180); }
 
 
 

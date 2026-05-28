@@ -37,6 +37,30 @@ export function clampPortalT(value) {
   return Math.max(PORTAL_MIN_T, Math.min(PORTAL_MAX_T, number));
 }
 
+export function findPortalRingTarget(target, clientX, clientY, root) {
+  var direct = target && typeof target.closest === 'function' ? target.closest('.portal-ring') : null;
+  if (direct) return direct;
+  if (!Number.isFinite(Number(clientX)) || !Number.isFinite(Number(clientY))) return null;
+
+  var scope = root || (typeof document !== 'undefined' ? document : null);
+  if (!scope || typeof scope.querySelectorAll !== 'function') return null;
+
+  var rings = Array.from(scope.querySelectorAll('.portal-ring'));
+  for (var i = rings.length - 1; i >= 0; i--) {
+    var rect = rings[i].getBoundingClientRect();
+    if (
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom
+    ) {
+      return rings[i];
+    }
+  }
+
+  return null;
+}
+
 function projectedPosition(clientX, clientY, axis) {
   return (Number(clientX) || 0) * axis.x + (Number(clientY) || 0) * axis.y;
 }
