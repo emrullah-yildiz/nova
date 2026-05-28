@@ -61,6 +61,22 @@ describe('node author contract (v1)', () => {
     expect(violations).toEqual([]);
   });
 
+  it('every v1 node icon is a symbol (no alphabetic characters)', () => {
+    const violations = v1Nodes
+      .filter((node) => /[A-Za-z]/.test(node.icon || ''))
+      .map((node) => `${node.type} (icon="${node.icon}")`);
+
+    expect(violations).toEqual([]);
+  });
+
+  it('every v1 node icon is non-empty', () => {
+    const violations = v1Nodes
+      .filter((node) => !node.icon || node.icon.length === 0)
+      .map((node) => node.type);
+
+    expect(violations).toEqual([]);
+  });
+
   it('every v1 node provides Python codegen', () => {
     const violations = v1Nodes
       .filter((node) => !hasText(node.codegen && node.codegen.python))
