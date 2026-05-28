@@ -179,7 +179,7 @@ Status checked: 2026-05-28.
 ### Milestone 2: Enterprise AI Proxy
 
 - [x] Add `/ai/chat` endpoint.
-- [ ] Move provider credentials to backend. Status: backend proxy boundary exists; production provider adapters and secret loading still need to replace legacy browser-key paths.
+- [x] Move provider credentials to backend. Status: enterprise mode supports server-held OpenAI-compatible provider keys; legacy local browser-key mode still exists for non-enterprise use.
 - [x] Add rate limiting.
 - [x] Add organization model policy.
 - [x] Add frontend enterprise AI client path.
@@ -208,12 +208,13 @@ Status checked: 2026-05-28.
 - [x] Users can create projects and save/load immutable graph versions.
 - [x] Graph runs can be recorded and inspected for saved projects.
 - [x] AI requests go through backend policy, usage metadata, rate limits, and audit logging.
+- [x] Enterprise frontend AI can call the Nova backend without browser-held provider keys.
 - [x] Project APIs enforce organization and role boundaries.
 - [x] Audit logs capture authentication, project, AI, graph-run, and Connect session events.
 - [x] Postgres schema and migrations exist for enterprise persistence.
 - [x] API startup now supports async persistence initialization.
 - [ ] Production Postgres persistence needs integration testing against a real Postgres service.
-- [ ] Legacy browser AI-key storage and unsafe user-content HTML paths still need hardening.
+- [ ] Unsafe user-content HTML paths still need hardening.
 - [ ] Redis-backed sessions, pairing state, and rate limits remain pending.
 - [ ] Pagination for large lists remains pending.
 - [ ] Background queue and object storage paths remain pending.

@@ -16,11 +16,13 @@ async function start() {
   const sessionSecret = process.env.NOVA_SESSION_SECRET || undefined;
   const oidcIssuer = process.env.NOVA_OIDC_ISSUER || '';
   const oidcClientId = process.env.NOVA_OIDC_CLIENT_ID || '';
+  const aiPolicy = resolveAiPolicy(process.env);
 
   const options = {
     allowDevLogin,
     corsOrigin,
-    sessionSecret
+    sessionSecret,
+    aiPolicy
   };
 
   if (databaseUrl) {
@@ -51,6 +53,30 @@ async function start() {
     console.log('[Nova Enterprise API] dev login ' + (allowDevLogin ? 'enabled' : 'disabled'));
     if (oidcIssuer) console.log('[Nova Enterprise API] OIDC issuer: ' + oidcIssuer);
   });
+}
+
+function resolveAiPolicy(env) {
+  const allowedProviders = ['mock'];
+  const allowedModels = {
+    mock: ['nova-mock-enterprise']
+  };
+  if (env.NOVA_OPENAI_API_KEY) {
+    allowedProviders.push('openai');
+    allowedModels.openai = splitList(env.NOVA_OPENAI_MODELS || 'gpt-4o,gpt-4o-mini');
+  }
+  if (env.NOVA_GROQ_API_KEY) {
+    allowedProviders.push('groq');
+    allowedModels.groq = splitList(env.NOVA_GROQ_MODELS || 'llama-3.3-70b-versatile,llama-3.1-8b-instant');
+  }
+  if (env.NOVA_OPENROUTER_API_KEY) {
+    allowedProviders.push('openrouter');
+    allowedModels.openrouter = splitList(env.NOVA_OPENROUTER_MODELS || 'anthropic/claude-sonnet-4.6,openai/gpt-4o,openrouter/free');
+  }
+  return { allowedProviders, allowedModels };
+}
+
+function splitList(value) {
+  return String(value || '').split(',').map(item => item.trim()).filter(Boolean);
 }
 
 start().catch(err => {
