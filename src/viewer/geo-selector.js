@@ -8,6 +8,17 @@ function getRuntimeApp() {
   return null;
 }
 
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function getRuntimeGlobal() {
   if (typeof window !== 'undefined') return window;
   return globalThis;
@@ -428,13 +439,16 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       // Visible / hidden eye glyphs: open eye for ON, prohibition symbol for
       // OFF \u2014 the previous "eye in speech bubble" variant was nearly
       // identical to the open eye at this font size.
+      // Show the full label as a native browser tooltip on the info area so
+      // users can read names that were truncated by the 22-char cap.
+      var fullLabel = escapeAttr(item.label || '');
       html += '<div class="' + cls + '" data-idx="' + idx + '">' +
         '<button class="geolist-eye" onclick="event.stopPropagation();Viewer3D._toggleItemVisibility(Viewer3D._sceneItems[' + idx + '])" title="' + (item.visible ? 'Hide' : 'Show') + '">' +
         (item.visible ? '\uD83D\uDC41' : '\u2298') + '</button>' +
-        '<div class="geolist-info" onclick="Viewer3D._selectItem(Viewer3D._sceneItems[' + idx + '])">' +
+        '<div class="geolist-info" title="' + fullLabel + '" onclick="Viewer3D._selectItem(Viewer3D._sceneItems[' + idx + '])">' +
         '<span class="geolist-icon">' + icon + '</span>' +
-        '<span class="geolist-label">' + label + '</span>' +
-        (info ? '<span class="geolist-meta">' + info + '</span>' : '') +
+        '<span class="geolist-label">' + escapeHtml(label) + '</span>' +
+        (info ? '<span class="geolist-meta">' + escapeHtml(info) + '</span>' : '') +
         '</div>' +
         '<button class="geolist-isolate" onclick="event.stopPropagation();Viewer3D._isolateItem(Viewer3D._sceneItems[' + idx + '])" title="Isolate (solo)">\u25CE</button>' +
         '</div>';

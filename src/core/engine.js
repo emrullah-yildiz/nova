@@ -1468,6 +1468,11 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
           var pv = nd._portValues[key];
 
+          // For single-output nodes, val and the port value are the same
+          // reference — don't tag it twice. (Avoids duplicates like
+          // "Solid.BooleanUnion" + "Solid.BooleanUnion.result".)
+          if (pv === val) return;
+
           if (pv && pv._type) {
 
             if (canTag) {
