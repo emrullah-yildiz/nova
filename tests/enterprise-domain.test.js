@@ -96,6 +96,27 @@ describe('enterprise domain', () => {
     expect(restored.versions[2].graph.nodes[0].id).toBe('a');
   });
 
+  it('records graph run metadata for saved project versions', () => {
+    const store = new EnterpriseStore({ now: (() => { let t = 100; return () => t += 10; })() });
+    const org = store.createOrganization({ name: 'A' });
+    const owner = createContext(store, org.id);
+    const viewer = createContext(store, org.id, ROLES.VIEWER, 'run-viewer@example.com');
+    const project = store.createProject(owner, { name: 'Run Project' });
+
+    const run = store.recordGraphRun(owner, project.id, {
+      status: 'failed',
+      durationMs: 42,
+      errorSummary: 'Missing input'
+    });
+
+    expect(run.projectId).toBe(project.id);
+    expect(run.versionId).toBe(project.currentVersionId);
+    expect(run.status).toBe('failed');
+    expect(store.listGraphRuns(owner, project.id)).toHaveLength(1);
+    expect(store.listAuditEvents(owner).some(event => event.type === 'graph.run.recorded')).toBe(true);
+    expect(() => store.recordGraphRun(viewer, project.id, { status: 'completed' })).toThrow(/Project access|Project write/);
+  });
+
   it('enforces roles for writes and audit access', () => {
     const store = new EnterpriseStore();
     const org = store.createOrganization({ name: 'A' });

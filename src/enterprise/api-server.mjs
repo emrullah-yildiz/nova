@@ -10,6 +10,7 @@ import {
   validateConnectorSessionBody,
   validateCreateProjectBody,
   validateDevLoginBody,
+  validateGraphRunBody,
   validateHostOperationBody,
   validateOidcCallbackBody,
   validateProjectMemberBody,
@@ -43,6 +44,7 @@ export function createEnterpriseApiServer(options = {}) {
       const body = await readJsonBody(req);
       const context = route.public ? null : authenticateRequest(store, req);
       const result = await route.handler({ store, context, params: route.params, body, url, aiProvider, authService });
+      if (store.flushPersistence) await store.flushPersistence();
       sendJson(res, route.status || 200, result);
     } catch (error) {
       sendJson(res, error.status || 500, {
@@ -56,6 +58,12 @@ export function createEnterpriseApiServer(options = {}) {
   });
 
   return { server, store };
+}
+
+export async function createEnterpriseApiServerAsync(options = {}) {
+  const api = createEnterpriseApiServer(options);
+  if (api.store && api.store.ready) await api.store.ready();
+  return api;
 }
 
 function matchRoute(method, path, options = {}) {
@@ -84,6 +92,8 @@ function matchRoute(method, path, options = {}) {
     ['PUT', /^\/api\/projects\/([^/]+)\/graph$/, false, 200, ({ store, context, params, body }) => store.updateProjectGraph(context, params[0], validateSaveGraphBody(body || {}))],
     ['GET', /^\/api\/projects\/([^/]+)\/versions$/, false, 200, ({ store, context, params }) => ({ versions: store.listProjectVersions(context, params[0]) })],
     ['POST', /^\/api\/projects\/([^/]+)\/versions\/([^/]+)\/restore$/, false, 200, ({ store, context, params }) => store.restoreProjectVersion(context, params[0], params[1])],
+    ['GET', /^\/api\/projects\/([^/]+)\/runs$/, false, 200, ({ store, context, params }) => ({ runs: store.listGraphRuns(context, params[0]) })],
+    ['POST', /^\/api\/projects\/([^/]+)\/runs$/, false, 201, ({ store, context, params, body }) => store.recordGraphRun(context, params[0], validateGraphRunBody(body || {}))],
     ['POST', /^\/api\/connectors\/sessions$/, false, 201, ({ store, context, body }) => store.createConnectorSession(context, validateConnectorSessionBody(body || {}))],
     ['POST', /^\/api\/connectors\/sessions\/([^/]+)\/pair$/, false, 200, ({ store, context, params, body }) => {
       const payload = validateConnectorPairBody(body || {});
