@@ -682,7 +682,6 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
       case 'geo-distance': { var a = getInput('a'), b = getInput('b'); if (a && b) { var ap = a instanceof Geo.Point3 ? a : new Geo.Point3(a.x||0,a.y||0,a.z||0); var bp = b instanceof Geo.Point3 ? b : new Geo.Point3(b.x||0,b.y||0,b.z||0); return ap.distanceTo(bp); } return undefined; }
-      case 'geometry-distance': { var a = getInput('a'), b = getInput('b'); if (a && b && typeof Geo !== 'undefined' && Geo.distanceBetween) { return Geo.distanceBetween(a, b); } if (a && b && typeof a.distanceTo === 'function') { return a.distanceTo(b); } return undefined; }
 
 
 
@@ -720,17 +719,11 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       case 'op-combine-all': { var meshes = getInput('meshes'); if (meshes && Array.isArray(meshes)) return Geo.combineAll(meshes); return undefined; }
 
-      case 'op-move': { var geo = getInput('geometry'), vec = getInput('vector'); if (geo && vec) return Geo.move(geo, vec instanceof Geo.Vector3 ? vec : new Geo.Vector3(vec.x||0,vec.y||0,vec.z||0)); return undefined; }
 
-      case 'op-rotate': { var geo = getInput('geometry'), ao = getInput('axisOrigin'), ad = getInput('axisDir'), angle = getInput('angle'); if (geo) return Geo.rotate(geo, ao, ad, (angle||0)*Math.PI/180); return undefined; }
 
-      case 'op-scale': { var geo = getInput('geometry'), f = getInput('factor'), o = getInput('origin'); if (geo && f) return Geo.scaleGeo(geo, f, o); return undefined; }
 
-      case 'op-mirror': { var geo = getInput('geometry'), po = getInput('planeOrigin'), pn = getInput('planeNormal'); if (geo) return Geo.mirror(geo, po, pn); return undefined; }
 
-      case 'op-array-linear': { var geo = getInput('geometry'), dir = getInput('direction'), cnt = getInput('count'), sp = getInput('spacing'); if (geo && dir) return Geo.arrayLinear(geo, dir, cnt||3, sp||1); return undefined; }
 
-      case 'op-array-polar': { var geo = getInput('geometry'), c = getInput('center'), ax = getInput('axis'), cnt = getInput('count'); if (geo) return Geo.arrayPolar(geo, c, ax, cnt||6); return undefined; }
 
       case 'op-thicken': { var mesh = getInput('mesh'), t = getInput('thickness'); if (mesh) return Geo.thicken(mesh, t||1); return undefined; }
 

@@ -109,12 +109,6 @@ NODE_LIBRARY.categories.push({ id: 'patterns', name: 'Patterns', color: '#f5c2e7
   { type: 'pat-voronoi-outlines', name: 'Voronoi Outlines', icon: '⬡', inputs: [{ id: 'sites', name: 'Sites', type: 'list' }], outputs: [{ id: 'outlines', name: 'Outlines', type: 'list' }], controls: [], preview: true, codegen: { python: '{{outlines}} = Geo.voronoiOutlines({{sites}}, None, 0.5)', csharp: '' } }
 ] });
 
-// ═══════════════════════════════════════
-// 12. GEOMETRY
-// ═══════════════════════════════════════
-NODE_LIBRARY.categories.push({ id: 'geometry', name: 'Geometry', color: '#89b4fa', icon: '◇', nodes: [
-  { type: 'geometry-distance', name: 'Geometry.Distance', icon: '⟷', inputs: [{ id: 'a', name: 'Geometry A', type: 'any' },{ id: 'b', name: 'Geometry B', type: 'any' }], outputs: [{ id: 'distance', name: 'Distance', type: 'number' }], controls: [], preview: true, codegen: { python: '{{distance}} = Geo.distanceBetween({{a}}, {{b}})', csharp: '' } }
-] });
 
 // ═══════════════════════════════════════
 // 13. POINT
@@ -173,18 +167,6 @@ NODE_LIBRARY.categories.push({ id: 'surfaces', name: 'Surfaces', color: '#94e2d5
   { type: 'op-ruled-surface', name: 'Surface.ByRuledLoft', icon: '▨', inputs: [{ id: 'curve1', name: 'Curve 1', type: 'any' },{ id: 'curve2', name: 'Curve 2', type: 'any' }], outputs: [{ id: 'surface', name: 'Surface', type: 'mesh' }], controls: [], preview: true, codegen: { python: '{{surface}} = Geo.ruledSurface({{curve1}}, {{curve2}})', csharp: '' } },
   { type: 'op-isolines', name: 'Surface.Isolines', icon: '≡', inputs: [{ id: 'mesh', name: 'Mesh', type: 'mesh' },{ id: 'count', name: 'Count', type: 'number' }], outputs: [{ id: 'curves', name: 'Curves', type: 'list' }], controls: [{ id: 'dir', type: 'dropdown', options: ['U','V'], default: 'U', label: 'Direction' }], preview: true, codegen: { python: '{{curves}} = Geo.getIsolinesU({{mesh}}, {{count}}) if "{{ctrl.dir}}" == "U" else Geo.getIsolinesV({{mesh}}, {{count}})', csharp: '' } },
   { type: 'surf-plane', name: 'Surface.Plane', icon: '▱', inputs: [{ id: 'origin', name: 'Origin', type: 'point' },{ id: 'normal', name: 'Normal', type: 'vector' }], outputs: [{ id: 'plane', name: 'Plane', type: 'plane' }], controls: [], preview: true, codegen: { python: '{{plane}} = Geo.Plane({{origin}}, {{normal}})', csharp: '' } }
-] });
-
-// ═══════════════════════════════════════
-// 16. TRANSFORM
-// ═══════════════════════════════════════
-NODE_LIBRARY.categories.push({ id: 'transform', name: 'Transform', color: '#f5c2e7', icon: '↗', nodes: [
-  { type: 'op-array-linear', name: 'Linear Array', icon: '⋯', inputs: [{ id: 'geometry', name: 'Geometry', type: 'any' },{ id: 'direction', name: 'Direction', type: 'vector' },{ id: 'count', name: 'Count', type: 'number' },{ id: 'spacing', name: 'Spacing', type: 'number' }], outputs: [{ id: 'result', name: 'Result', type: 'list' }], controls: [], preview: true, codegen: { python: '{{result}} = Geo.arrayLinear({{geometry}}, {{direction}}, {{count}}, {{spacing}})', csharp: '' } },
-  { type: 'op-mirror', name: 'Mirror', icon: '⎸', inputs: [{ id: 'geometry', name: 'Geometry', type: 'any' },{ id: 'planeOrigin', name: 'Plane Pt', type: 'point' },{ id: 'planeNormal', name: 'Plane N', type: 'vector' }], outputs: [{ id: 'result', name: 'Result', type: 'any' }], controls: [], preview: true, codegen: { python: '{{result}} = Geo.mirror({{geometry}}, {{planeOrigin}}, {{planeNormal}})', csharp: '' } },
-  { type: 'op-move', name: 'Move', icon: '↗', inputs: [{ id: 'geometry', name: 'Geometry', type: 'any' },{ id: 'vector', name: 'Vector', type: 'vector' }], outputs: [{ id: 'result', name: 'Result', type: 'any' }], controls: [], preview: true, codegen: { python: '{{result}} = Geo.move({{geometry}}, {{vector}})', csharp: '' } },
-  { type: 'op-array-polar', name: 'Polar Array', icon: '✱', inputs: [{ id: 'geometry', name: 'Geometry', type: 'any' },{ id: 'center', name: 'Center', type: 'point' },{ id: 'axis', name: 'Axis', type: 'vector' },{ id: 'count', name: 'Count', type: 'number' }], outputs: [{ id: 'result', name: 'Result', type: 'list' }], controls: [], preview: true, codegen: { python: '{{result}} = Geo.arrayPolar({{geometry}}, {{center}}, {{axis}}, {{count}})', csharp: '' } },
-  { type: 'op-rotate', name: 'Rotate', icon: '↻', inputs: [{ id: 'geometry', name: 'Geometry', type: 'any' },{ id: 'axisOrigin', name: 'Axis Pt', type: 'point' },{ id: 'axisDir', name: 'Axis Dir', type: 'vector' },{ id: 'angle', name: 'Angle°', type: 'number' }], outputs: [{ id: 'result', name: 'Result', type: 'any' }], controls: [], preview: true, codegen: { python: '{{result}} = Geo.rotate({{geometry}}, {{axisOrigin}}, {{axisDir}}, math.radians({{angle}}))', csharp: '' } },
-  { type: 'op-scale', name: 'Scale', icon: '⤡', inputs: [{ id: 'geometry', name: 'Geometry', type: 'any' },{ id: 'factor', name: 'Factor', type: 'number' },{ id: 'origin', name: 'Origin', type: 'point' }], outputs: [{ id: 'result', name: 'Result', type: 'any' }], controls: [], preview: true, codegen: { python: '{{result}} = Geo.scaleGeo({{geometry}}, {{factor}}, {{origin}})', csharp: '' } }
 ] });
 
 // ═══════════════════════════════════════
