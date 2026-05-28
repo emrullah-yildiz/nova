@@ -58,6 +58,7 @@ describe('NodeRegistry', () => {
       name: 'List.Create',
       category: 'list',
       dynamicInputs: true,
+      lacing: { mode: 'shortest' },
       inputs: [{ id: 'item0', type: 'any' }],
       outputs: [{ id: 'list', type: 'list' }],
       controls: [],
@@ -74,7 +75,8 @@ describe('NodeRegistry', () => {
         expect.objectContaining({
           type: 'list.create',
           name: 'List.Create',
-          dynamicInputs: true
+          dynamicInputs: true,
+          lacing: { mode: 'shortest', preserveStructure: false }
         })
       ]
     });

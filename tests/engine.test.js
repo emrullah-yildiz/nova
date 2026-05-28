@@ -1,4 +1,5 @@
 import { FormulaEval } from '../src/core/formula-eval.js';
+import { Geo } from '../src/geometry/index.js';
 import { hostRegistry } from '../src/hosts/HostRegistry.js';
 
 function createElementStub() {
@@ -40,6 +41,7 @@ beforeAll(async () => {
     body: createElementStub()
   };
   globalThis.FormulaEval = FormulaEval;
+  globalThis.Geo = Geo;
 
   globalThis.app = {
     nodes: [],
@@ -165,6 +167,43 @@ describe('Engine computeNodeValue', () => {
     expect(app.computeNodeValue(app.nodes[7])).toEqual([
       [11, 21, 31],
       [12, 22, 32]
+    ]);
+  });
+
+  it('applies generic lacing for scalar geometry nodes', () => {
+    app.nodes = [
+      { id: 'x1', type: 'number-input', controlValues: { val: '1' } },
+      { id: 'x2', type: 'number-input', controlValues: { val: '2' } },
+      { id: 'x3', type: 'number-input', controlValues: { val: '3' } },
+      { id: 'xs', type: 'list-create', controlValues: {}, _dynInputIds: ['item0', 'item1', 'item2'] },
+      {
+        id: 'pt',
+        type: 'point-bycoordinates',
+        def: {
+          inputs: [
+            { id: 'x', type: 'number' },
+            { id: 'y', type: 'number' },
+            { id: 'z', type: 'number' }
+          ],
+          outputs: [{ id: 'point', type: 'point' }]
+        },
+        controlValues: { x: '0', y: '10', z: '0', _lacingMode: 'shortest' }
+      }
+    ];
+    app.wires = [
+      { fromNode: 'x1', fromPort: 'value', toNode: 'xs', toPort: 'item0' },
+      { fromNode: 'x2', fromPort: 'value', toNode: 'xs', toPort: 'item1' },
+      { fromNode: 'x3', fromPort: 'value', toNode: 'xs', toPort: 'item2' },
+      { fromNode: 'xs', fromPort: 'list', toNode: 'pt', toPort: 'x' }
+    ];
+
+    const points = app.computeNodeValue(app.nodes[4]);
+
+    expect(points).toHaveLength(3);
+    expect(points.map(point => [point.x, point.y, point.z])).toEqual([
+      [1, 10, 0],
+      [2, 10, 0],
+      [3, 10, 0]
     ]);
   });
 
