@@ -232,9 +232,13 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
 
       self._raycaster.setFromCamera(self._mouse, self.camera);
 
-      // Only intersect geometry group children
+      // Only intersect VISIBLE geometry-group descendants. THREE.Object3D
+      // .traverse() walks into invisible subtrees, and Raycaster's per-mesh
+      // intersect routine doesn't check object.visible — so a hidden mesh
+      // would still be clickable and select its panel row. traverseVisible
+      // skips any subtree rooted at an invisible Object3D.
       var allMeshes = [];
-      self.geometryGroup.traverse(function(obj) {
+      self.geometryGroup.traverseVisible(function(obj) {
         if (obj.isMesh || obj.isLine || obj.isLineSegments) allMeshes.push(obj);
       });
 
@@ -276,6 +280,20 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
 
     item.selected = true;
     this._selectedItem = item;
+
+    // When the user selects a hidden row the focal item won't appear in
+    // the scene, so dimming everything else just washes out the visible
+    // geometry for no gain — skip the dim pass in that case.
+    if (!item.visible) {
+      this._renderGeoList();
+      if (item.nodeId && typeof app !== 'undefined') {
+        app.deselectAll();
+        app.selectNode(item.nodeId, false);
+        var hiddenNodeEl = document.getElementById(item.nodeId);
+        if (hiddenNodeEl) hiddenNodeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
 
     // Highlight: make selected opaque/bright, dim all others
     this._sceneItems.forEach(function(it) {
