@@ -1,5 +1,7 @@
 /* eslint-disable no-redeclare */
 
+import { resolvePythonPorts } from './python-port-decl.js';
+
 // ============================================
 // NODEFLOW AI — Python Runner (Local JS eval)
 // Translates Python → JS and executes locally
@@ -267,6 +269,35 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
   };
 
   app.enhancePythonNode = function(nd, el) {
+    // Phase 14: prefer declared / inferred ports from the code itself
+    // over the generic input0/output0 fallback.
+    // Source of truth, in order:
+    //  1. The plan or parser already populated _dynInputs/_dynOutputs
+    //  2. The code's `# in:` / `# out:` header comments
+    //  3. The last top-level assignment becomes the output port name
+    //  4. Fall back to def's inputs/outputs (input0/output0)
+    if (!nd._dynInputs || !nd._dynOutputs) {
+      try {
+        const codeForPorts = (nd.controlValues && nd.controlValues.code)
+          || (nd.def.controls && nd.def.controls.find ? (nd.def.controls.find(c => c.id === 'code') || {}).default : '')
+          || '';
+        const resolved = resolvePythonPorts(codeForPorts);
+        if (resolved && resolved.source !== 'default') {
+          if (!nd._dynInputs && Array.isArray(resolved.inputs)) {
+            nd._dynInputs = resolved.inputs.map(p => p.id);
+            nd._dynInputTypes = {};
+            resolved.inputs.forEach(p => { nd._dynInputTypes[p.id] = p.type || 'any'; });
+          }
+          if (!nd._dynOutputs && Array.isArray(resolved.outputs)) {
+            nd._dynOutputs = resolved.outputs.map(p => p.id);
+            nd._dynOutputTypes = {};
+            resolved.outputs.forEach(p => { nd._dynOutputTypes[p.id] = p.type || 'any'; });
+          }
+        }
+      } catch {
+        // Defensive — port detection must never block node rendering.
+      }
+    }
     if (!nd._dynInputs) nd._dynInputs = nd.def.inputs.map(p => p.id);
     if (!nd._dynOutputs) nd._dynOutputs = nd.def.outputs.length > 0 ? nd.def.outputs.map(p => p.id) : ['output0'];
     const body = el.querySelector('.node-body');
