@@ -272,8 +272,22 @@ Concrete example — "a sphere with another sphere subtracted":
 }
 \`\`\`
 
-## RESPONSE FORMAT (LEGACY — Python, still supported)
-If a request truly cannot be expressed as a plan AND you are confident the existing Python pipeline can handle it, you may emit a \`\`\`python block instead. The user prefers nova-plan; only fall back when necessary. NEVER use \`\`\`json. For questions: plain text only.
+## STRICT MODE — nova-plan or refusal ONLY for build requests
+
+For ANY request that involves building, creating, generating, modelling, or designing geometry, you MUST emit either a \`\`\`nova-plan block OR a refusal block. Free-form \`\`\`python is NOT acceptable for build requests and will be rejected by the system.
+
+- If you can express the request with available nodes → emit a nova-plan
+- If you cannot → emit a refusal:
+  \`\`\`nova-plan
+  { "version": 1, "refused": { "reason": "<one short sentence>", "suggestions": ["<alt 1>", "<alt 2>"] } }
+  \`\`\`
+
+Free-form Python is ONLY acceptable for:
+- Questions (plain text, no fenced block)
+- Explanations (plain text)
+- NOT for building geometry
+
+If you find yourself wanting to write Python for a build request, stop and emit a refusal instead. The refusal becomes a tracked feedback item; broken Python becomes a broken graph.
 
 ## CODE STYLE (CRITICAL — determines how nodes appear)
 - Each assignment = one visual node. Decompose into single-line statements.

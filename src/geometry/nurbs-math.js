@@ -1179,6 +1179,44 @@ import { Geo } from './geometry-lib.js';
     return lines;
   };
 
+  // Hex / diamond panel grid that wraps a stack of profile rings.
+  // Given M rings each with N points (e.g. the output of
+  // twistedEllipsePlates), emit (M-1)*N four-vertex panel polylines —
+  // one per cell in the tower's surface. Every other row is laterally
+  // offset by half a cell when `stagger` is true, giving a brick /
+  // honeycomb visual. Each panel closes back to its first point so
+  // downstream renderers can treat the polyline as a closed face.
+  G.hexPanelGrid = function(profiles, stagger, skipRings) {
+    if (!Array.isArray(profiles) || profiles.length < 2) return [];
+    stagger = stagger == null ? true : !!stagger;
+    skipRings = Math.max(1, Math.floor(skipRings || 1));
+    var panels = [];
+    for (var i = 0; i + skipRings < profiles.length; i += skipRings) {
+      var ringA = profiles[i];
+      var ringB = profiles[i + skipRings];
+      if (!Array.isArray(ringA) || !Array.isArray(ringB)) continue;
+      var n = Math.min(ringA.length, ringB.length);
+      if (n < 2) continue;
+      var offsetRow = stagger && ((i / skipRings) | 0) % 2 === 1;
+      for (var j = 0; j < n; j++) {
+        var k = (j + 1) % n;
+        // Diamond panel: bottom-left → bottom-right → top-right →
+        // top-left → back. The offset row shifts the top vertices by
+        // half a cell so adjacent rows visually interlock.
+        var topLeft = offsetRow ? ringB[(j + 1) % n] : ringB[j];
+        var topRight = offsetRow ? ringB[(j + 2) % n] : ringB[k];
+        panels.push([
+          ringA[j],
+          ringA[k],
+          topRight,
+          topLeft,
+          ringA[j]
+        ]);
+      }
+    }
+    return panels;
+  };
+
   // ══════════════════════════════════════
   // 10. TOPOLOGY OPTIMIZATION (simplified)
   // Variable density mesh for structural forms
