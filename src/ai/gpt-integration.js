@@ -1,5 +1,6 @@
 import { GPTClient } from './gpt-client.js';
 import { validateGeneratedCode } from './code-validator.js';
+import { validateGeneratedCodeTypes, formatMismatchHint } from './type-validator.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   app.respond = function(ch, txt) {
@@ -221,6 +222,16 @@ document.addEventListener('DOMContentLoaded', () => {
         suggestions: validation.unknowns.map(u => u.suggestions)
       });
     }
+    // Phase 3: type-check argument flow. Catches the "valid method, wrong
+    // input type" class of bug (Geo.combineAll fed a list of points).
+    const typeCheck = validateGeneratedCodeTypes(code);
+    if (!typeCheck.ok && typeof NFLogger !== 'undefined') {
+      NFLogger.warn('type-validator', 'Argument type mismatches detected', {
+        mismatches: typeCheck.mismatches.map(m => ({
+          line: m.line, method: m.method, expected: m.expected, got: m.got
+        }))
+      });
+    }
     const mockInputs = {};
     code.split('\n').forEach(line => {
       const m = line.trim().match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(-?[\d.]+)\s*$/);
@@ -240,20 +251,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const errorMsg = testResult.error;
     console.warn('[NodeFlow] Code validation failed:', errorMsg);
     if (bubble) {
-      // Surface validator findings inline so the user sees "AI hallucinated
-      // Geo.Edge → did you mean Geo.bezier?" before the retry runs. The
-      // information is already in the fix prompt; this just makes it
-      // visible in the chat too.
+      // Surface validator findings inline so the user sees what went wrong
+      // before the retry runs. Both name (Phase 2) and type (Phase 3)
+      // issues are listed; they're complementary failure modes.
       let note = '🔧 Testing code... found an issue, asking AI to fix it...';
+      const items = [];
       if (validation && !validation.ok) {
-        const items = validation.unknowns.slice(0, 3).map(u => {
+        for (const u of validation.unknowns.slice(0, 3)) {
           const suggest = u.suggestions && u.suggestions.length
             ? ' → did you mean **' + u.suggestions[0] + '**?'
             : '';
-          return '• `Geo.' + u.method + '` is not a real Nova method' + suggest;
-        });
-        note += '\n\n' + items.join('\n');
+          items.push('• `Geo.' + u.method + '` is not a real Nova method' + suggest);
+        }
       }
+      if (typeCheck && !typeCheck.ok) {
+        for (const m of typeCheck.mismatches.slice(0, 3)) {
+          items.push('• type mismatch on line ' + m.line + ': `Geo.' + m.method + '()` arg ' + (m.paramIndex + 1) + ' got `' + m.got + '` but expected `' + m.expected + '`');
+        }
+      }
+      if (items.length) note += '\n\n' + items.join('\n');
       bubble.innerHTML = app.fmt(note);
     }
     msgContainer.scrollTop = msgContainer.scrollHeight;
@@ -284,7 +300,15 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       validatorHint = '\n\nCRITICAL — your code uses Geo.* methods that do not exist in Nova:\n' + lines.join('\n') + '\nReplace each with a real method from the inventory in your system prompt, or use a Custom.Python block as a last resort.\n';
     }
-    const fixPrompt = 'The code you generated has a runtime error:\n\nError: ' + errorMsg + '\n\nOriginal code:\n```python\n' + code + '\n```' + validatorHint + '\n\nIMPORTANT CONSTRAINTS of our JavaScript-based Python runner:\n- .pop() is not available, use index access instead\n- list() constructor not available, use [] and .push()\n- Geo classes (Geo.Point3, Geo.createBox, etc.) are available\n- math module functions available: math.sin, math.cos, math.pi, math.sqrt, etc.\n- range() returns an array\n- .append() works (transpiled to .push())\n- No try/except support\n- No dictionary comprehensions\n- Keep it simple — avoid advanced Python features\n\nPlease fix the code and return ONLY the fixed version. Brief explanation first, then ```python block.';
+    // Phase 3 hint: argument type errors. These are higher-signal than the
+    // raw runtime error because they tell the AI exactly which arg of which
+    // call was the wrong KIND of value.
+    let typeHint = '';
+    if (typeCheck && !typeCheck.ok) {
+      const lines = typeCheck.mismatches.map(formatMismatchHint);
+      typeHint = '\n\nTYPE MISMATCH — your code passes the wrong KIND of value to a real Geo.* method:\n  • ' + lines.join('\n  • ') + '\nFor list arguments, build the list from values of the expected element type. For scalars, derive the right shape (e.g. wrap a points list in Geo.Polyline3 / Geo.bezier before lofting).\n';
+    }
+    const fixPrompt = 'The code you generated has a runtime error:\n\nError: ' + errorMsg + '\n\nOriginal code:\n```python\n' + code + '\n```' + validatorHint + typeHint + '\n\nIMPORTANT CONSTRAINTS of our JavaScript-based Python runner:\n- .pop() is not available, use index access instead\n- list() constructor not available, use [] and .push()\n- Geo classes (Geo.Point3, Geo.createBox, etc.) are available\n- math module functions available: math.sin, math.cos, math.pi, math.sqrt, etc.\n- range() returns an array\n- .append() works (transpiled to .push())\n- No try/except support\n- No dictionary comprehensions\n- Keep it simple — avoid advanced Python features\n\nPlease fix the code and return ONLY the fixed version. Brief explanation first, then ```python block.';
     GPTClient.callStream(
       fixPrompt, ch, '',
       function(chunk, fullText) {
