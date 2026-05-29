@@ -1042,6 +1042,144 @@ import { Geo } from './geometry-lib.js';
   };
 
   // ══════════════════════════════════════
+  // 9b. ARCHITECTURAL COMPOSITES (Phase 8)
+  // High-level patterns that absorb common Python for-loops into a single
+  // call, so plan-mode can express tower / pavilion / facade / surface
+  // intents with one node instead of an opaque Custom.Python block.
+  // ══════════════════════════════════════
+
+  // Stacked elliptical floor plates with per-floor twist and linear taper.
+  // Output is a list of point rings — feed directly into Geo.loft to get
+  // a continuous tower mesh. The default values produce a recognisable
+  // 20-floor 60° twisted tower.
+  G.twistedEllipsePlates = function(floors, height, baseWidth, baseDepth, twistDeg, taper, resolution) {
+    floors = Math.max(1, Math.floor(floors || 20));
+    height = height || 100;
+    baseWidth = baseWidth || 18;
+    baseDepth = baseDepth || 12;
+    twistDeg = twistDeg == null ? 60 : twistDeg;
+    taper = taper == null ? 0.2 : taper;
+    resolution = Math.max(8, Math.floor(resolution || 48));
+    var profiles = [];
+    var twistRad = twistDeg * Math.PI / 180;
+    for (var i = 0; i <= floors; i++) {
+      var t = i / floors;
+      var z = t * height;
+      var rot = twistRad * t;
+      var w = baseWidth * (1 - taper * t) * 0.5;
+      var d = baseDepth * (1 - taper * t) * 0.5;
+      var cosA = Math.cos(rot);
+      var sinA = Math.sin(rot);
+      var ring = [];
+      for (var j = 0; j < resolution; j++) {
+        var a = 2 * Math.PI * j / resolution;
+        var x = w * Math.cos(a);
+        var y = d * Math.sin(a);
+        ring.push(P(x * cosA - y * sinA, x * sinA + y * cosA, z));
+      }
+      profiles.push(ring);
+    }
+    return profiles;
+  };
+
+  // Sin-modulated profile stack — produces a vase / pavilion silhouette
+  // by varying the profile radius along height with a sin wave. `pinch`
+  // controls how much the middle pulls in (0 = cylinder, 1 = bottleneck).
+  G.organicProfileStack = function(count, baseRadius, height, resolution, pinch) {
+    count = Math.max(2, Math.floor(count || 12));
+    baseRadius = baseRadius || 10;
+    height = height || 8;
+    resolution = Math.max(8, Math.floor(resolution || 48));
+    pinch = pinch == null ? 0.7 : pinch;
+    var profiles = [];
+    for (var i = 0; i < count; i++) {
+      var t = i / (count - 1);
+      var z = t * height;
+      var r = baseRadius * (1 - pinch + pinch * Math.sin(t * Math.PI));
+      var ring = [];
+      for (var j = 0; j < resolution; j++) {
+        var a = 2 * Math.PI * j / resolution;
+        ring.push(P(r * Math.cos(a), r * Math.sin(a), z));
+      }
+      profiles.push(ring);
+    }
+    return profiles;
+  };
+
+  // Doubly-curved surface from a grid of points, with sin/cos modulated
+  // height. Replaces the most common manual "for u in range, for v in
+  // range, append point" pattern.
+  G.wavyGrid = function(width, depth, uCount, vCount, amplitude, freqU, freqV) {
+    width = width || 30;
+    depth = depth || 30;
+    uCount = Math.max(2, Math.floor(uCount || 20));
+    vCount = Math.max(2, Math.floor(vCount || 20));
+    amplitude = amplitude == null ? 4 : amplitude;
+    freqU = freqU == null ? 0.3 : freqU;
+    freqV = freqV == null ? 0.3 : freqV;
+    var pts = [];
+    for (var u = 0; u < uCount; u++) {
+      for (var v = 0; v < vCount; v++) {
+        var x = (u / (uCount - 1) - 0.5) * width;
+        var y = (v / (vCount - 1) - 0.5) * depth;
+        var z = amplitude * Math.sin(x * freqU) * Math.cos(y * freqV);
+        pts.push(P(x, y, z));
+      }
+    }
+    return G.surfaceFromGrid ? G.surfaceFromGrid(pts, uCount, vCount) : pts;
+  };
+
+  // Helical polyline — turns is a fractional number of revolutions.
+  G.helicalCurve = function(turns, height, radius, segments) {
+    turns = turns == null ? 3 : turns;
+    height = height || 20;
+    radius = radius || 5;
+    segments = Math.max(8, Math.floor(segments || 60));
+    var pts = [];
+    for (var i = 0; i <= segments; i++) {
+      var t = i / segments;
+      var angle = 2 * Math.PI * turns * t;
+      pts.push(P(radius * Math.cos(angle), radius * Math.sin(angle), t * height));
+    }
+    return pts;
+  };
+
+  // Diagrid line pattern as a list of polylines (one per diagonal).
+  // Useful for facade diagrids and structural skin sketches.
+  G.diagridPattern = function(width, height, cellsX, cellsY) {
+    width = width || 40;
+    height = height || 30;
+    cellsX = Math.max(1, Math.floor(cellsX || 10));
+    cellsY = Math.max(1, Math.floor(cellsY || 12));
+    var dx = width / cellsX;
+    var dy = height / cellsY;
+    var lines = [];
+    // Diagonals going down-right
+    for (var i = -cellsY; i <= cellsX; i++) {
+      var line = [];
+      for (var j = 0; j <= Math.max(cellsX, cellsY); j++) {
+        var x = (i + j) * dx;
+        var y = j * dy;
+        if (x < 0 || x > width || y < 0 || y > height) continue;
+        line.push(P(x, y, 0));
+      }
+      if (line.length > 1) lines.push(line);
+    }
+    // Diagonals going up-right
+    for (var k = 0; k <= cellsX + cellsY; k++) {
+      var line2 = [];
+      for (var m = 0; m <= Math.max(cellsX, cellsY); m++) {
+        var x2 = (k - m) * dx;
+        var y2 = m * dy;
+        if (x2 < 0 || x2 > width || y2 < 0 || y2 > height) continue;
+        line2.push(P(x2, y2, 0));
+      }
+      if (line2.length > 1) lines.push(line2);
+    }
+    return lines;
+  };
+
+  // ══════════════════════════════════════
   // 10. TOPOLOGY OPTIMIZATION (simplified)
   // Variable density mesh for structural forms
   // ══════════════════════════════════════
