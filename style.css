@@ -314,11 +314,28 @@ input:focus, textarea:focus { border-color: var(--accent-blue); }
 
 /* Canvas */
 
-.canvas-area { position: absolute; top: 0; left: var(--canvas-left); right: var(--canvas-right); bottom: var(--canvas-bottom); background: var(--bg-primary); overflow: hidden; z-index: 1; }
+.canvas-area { position: absolute; top: 0; left: var(--canvas-left); right: var(--canvas-right); bottom: var(--canvas-bottom); background: var(--bg-primary); overflow: hidden; z-index: 1; --split-x: 50%; }
 
 .canvas-grid-svg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
 
 .wire-layer { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+
+/* Split-view: node side keeps inset:0 but clipped by ::right via width; 3D side anchored to the right of the divider. */
+.canvas-area.split-view #node-canvas,
+.canvas-area.split-view .canvas-grid-svg,
+.canvas-area.split-view .wire-layer { right: calc(100% - var(--split-x)) !important; }
+
+.canvas-area.split-view #viewport-3d { left: var(--split-x) !important; right: 0 !important; inset: auto !important; top: 0 !important; bottom: 0 !important; display: block !important; }
+
+#viewport-divider { display: none; position: absolute; top: 0; bottom: 0; left: calc(var(--split-x) - 3px); width: 6px; z-index: 19; background: transparent; cursor: col-resize; user-select: none; }
+
+#viewport-divider::before { content: ''; position: absolute; left: 2px; top: 0; bottom: 0; width: 2px; background: var(--border-color); transition: background var(--transition-fast); }
+
+#viewport-divider:hover::before, #viewport-divider.dragging::before { background: var(--accent-blue); width: 4px; left: 1px; }
+
+.canvas-area.split-view #viewport-divider { display: block; }
+
+body.dragging-divider, body.dragging-divider * { cursor: col-resize !important; }
 
 
 

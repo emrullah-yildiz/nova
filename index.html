@@ -211,9 +211,13 @@
 
       <div id="viewport-3d" style="position:absolute;inset:0;z-index:5;display:none;"></div>
 
+      <div id="viewport-divider" title="Drag to resize"></div>
+
       <div class="canvas-toolbar">
 
         <button class="canvas-tool-btn" id="btn-view-nodes" title="Node View" onclick="app.setView('nodes')" style="color:var(--accent-blue);font-weight:700;font-size:12px;">2D</button>
+
+        <button class="canvas-tool-btn" id="btn-view-split" title="Split View — nodes + 3D side by side" onclick="app.setView('split')" style="font-size:14px;">⊟</button>
 
         <button class="canvas-tool-btn" id="btn-view-3d" title="3D Viewport" onclick="app.setView('3d')" style="font-size:12px;">3D</button>
 

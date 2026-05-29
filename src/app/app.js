@@ -2692,6 +2692,8 @@ app.setView = function(mode) {
 
   this.currentView = mode;
 
+  const canvasArea = document.getElementById('canvas-area');
+
   const nodeCanvas = document.getElementById('node-canvas');
 
   const wireSvg = document.getElementById('wire-svg');
@@ -2703,6 +2705,18 @@ app.setView = function(mode) {
   const btn2D = document.getElementById('btn-view-nodes');
 
   const btn3D = document.getElementById('btn-view-3d');
+
+  const btnSplit = document.getElementById('btn-view-split');
+
+  // Reset toolbar button highlight + drop the .split-view modifier on every mode change.
+
+  if (canvasArea) canvasArea.classList.remove('split-view');
+
+  if (btn2D)    { btn2D.style.color = '';    btn2D.style.fontWeight = ''; }
+
+  if (btn3D)    { btn3D.style.color = '';    btn3D.style.fontWeight = ''; }
+
+  if (btnSplit) { btnSplit.style.color = ''; btnSplit.style.fontWeight = ''; }
 
 
 
@@ -2716,11 +2730,7 @@ app.setView = function(mode) {
 
     if (viewport) viewport.style.display = 'block';
 
-    if (btn2D) { btn2D.style.color = ''; btn2D.style.fontWeight = ''; }
-
     if (btn3D) { btn3D.style.color = 'var(--accent-blue)'; btn3D.style.fontWeight = '700'; }
-
-
 
     if (!Viewer3D.isInitialized) Viewer3D.init(viewport);
 
@@ -2736,9 +2746,37 @@ app.setView = function(mode) {
       return;
     }
 
-    // Only rebuild 3D if the graph has changed since last build.
+    if (Viewer3D._needsRebuild !== false) {
 
-    // Otherwise just show/hide with existing visibility state preserved.
+      Viewer3D.buildFromGraph(app.nodes, app.wires, (nd) => app.computeNodeValue(nd));
+
+      Viewer3D.fitAll();
+
+      Viewer3D._needsRebuild = false;
+
+    }
+
+  } else if (mode === 'split') {
+
+    // Node side + 3D side share canvas-area, separated by the divider.
+
+    if (canvasArea) canvasArea.classList.add('split-view');
+
+    if (nodeCanvas) nodeCanvas.style.display = '';
+
+    if (wireSvg) wireSvg.style.display = '';
+
+    if (gridSvg) gridSvg.style.display = '';
+
+    // .split-view rule forces viewport-3d back to display:block, but keep the inline style honest.
+
+    if (viewport) viewport.style.display = 'block';
+
+    if (btnSplit) { btnSplit.style.color = 'var(--accent-blue)'; btnSplit.style.fontWeight = '700'; }
+
+    if (!Viewer3D.isInitialized) Viewer3D.init(viewport);
+
+    Viewer3D.show();
 
     if (Viewer3D._needsRebuild !== false) {
 
@@ -2749,6 +2787,10 @@ app.setView = function(mode) {
       Viewer3D._needsRebuild = false;
 
     }
+
+    // Renderer needs to know the new (half-width) viewport size.
+
+    setTimeout(() => { if (Viewer3D._onResize) Viewer3D._onResize(); app.renderWires(); }, 30);
 
   } else {
 
@@ -2762,8 +2804,6 @@ app.setView = function(mode) {
 
     if (btn2D) { btn2D.style.color = 'var(--accent-blue)'; btn2D.style.fontWeight = '700'; }
 
-    if (btn3D) { btn3D.style.color = ''; btn3D.style.fontWeight = ''; }
-
     Viewer3D.hide();
 
     setTimeout(() => app.renderWires(), 50);
@@ -2771,6 +2811,127 @@ app.setView = function(mode) {
   }
 
 };
+
+// ── Viewport divider (split-view) ──
+
+app._initViewportDivider = function() {
+
+  const divider = document.getElementById('viewport-divider');
+
+  const area = document.getElementById('canvas-area');
+
+  if (!divider || !area || divider._wired) return;
+
+  divider._wired = true;
+
+  let dragging = false;
+
+  divider.addEventListener('mousedown', (e) => {
+
+    dragging = true;
+
+    divider.classList.add('dragging');
+
+    document.body.classList.add('dragging-divider');
+
+    e.preventDefault();
+
+  });
+
+  window.addEventListener('mousemove', (e) => {
+
+    if (!dragging) return;
+
+    const rect = area.getBoundingClientRect();
+
+    const x = Math.max(120, Math.min(rect.width - 120, e.clientX - rect.left));
+
+    area.style.setProperty('--split-x', (x / rect.width * 100).toFixed(3) + '%');
+
+    if (Viewer3D._onResize) Viewer3D._onResize();
+
+  });
+
+  window.addEventListener('mouseup', () => {
+
+    if (!dragging) return;
+
+    dragging = false;
+
+    divider.classList.remove('dragging');
+
+    document.body.classList.remove('dragging-divider');
+
+    if (typeof app.renderWires === 'function') app.renderWires();
+
+  });
+
+};
+
+// ── Live 3D rebuild for split view ──
+
+// A requestAnimationFrame watcher that observes the engine's version
+// counter (ExecutionEngine v2 bumps `_version` on every invalidate) or
+// falls back to `app._graphDirty`. When the value changes while split
+// view is active, rebuild the 3D scene. Cheap when idle (one compare
+// per frame), avoids the ordering hassle of patching invalidateCompute
+// after ExecutionEngine v2 has already wrapped it.
+
+app._runSplitWatcher = function() {
+
+  if (this._splitWatcherRunning) return;
+
+  this._splitWatcherRunning = true;
+
+  let lastSeenVersion = -1;
+
+  const tick = () => {
+
+    try {
+
+      if (this.currentView === 'split' && typeof Viewer3D !== 'undefined' && Viewer3D.isInitialized) {
+
+        const ee = typeof window !== 'undefined' ? window.__executionEngineV2 : null;
+
+        const v = ee && typeof ee._version === 'number' ? ee._version : (this._graphDirty ? 1 : 0);
+
+        if (v !== lastSeenVersion) {
+
+          lastSeenVersion = v;
+
+          try {
+
+            Viewer3D.buildFromGraph(this.nodes, this.wires, (nd) => this.computeNodeValue(nd));
+
+          } catch (e) { /* skip rebuild errors */ }
+
+          Viewer3D._needsRebuild = false;
+
+        }
+
+      }
+
+    } catch (e) { /* never let the watcher die */ }
+
+    requestAnimationFrame(tick);
+
+  };
+
+  requestAnimationFrame(tick);
+
+};
+
+if (typeof document !== 'undefined') {
+
+  document.addEventListener('DOMContentLoaded', () => {
+
+    if (app._initViewportDivider) app._initViewportDivider();
+
+    if (app._runSplitWatcher) app._runSplitWatcher();
+
+  });
+
+}
 
 
 
