@@ -86,8 +86,8 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       } else if (geoVal[0] instanceof Geo.Point3) {
         var pts = geoVal.map(function(p) { return [p.x, p.y, p.z]; });
         // Use Viewer3D.addPoints into the group
-        var geo = new THREE.SphereGeometry(0.15, 8, 8);
-        var mat = new THREE.MeshPhongMaterial({ color: color || 0x94e2d5, emissive: color || 0x94e2d5, emissiveIntensity: 0.3 });
+        var geo = new THREE.SphereGeometry(0.08, 16, 12);
+        var mat = new THREE.MeshPhongMaterial({ color: color || 0x94e2d5, emissive: color || 0x94e2d5, emissiveIntensity: 0.4, shininess: 60 });
         pts.forEach(function(p) {
           var mesh = new THREE.Mesh(geo, mat);
           mesh.position.set(p[0] || 0, p[2] || 0, p[1] || 0);

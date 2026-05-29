@@ -450,19 +450,27 @@ class _Mesh3 {
 
     const c = color || this.color;
 
-    const mat = new THREE.MeshPhongMaterial({ color: c, transparent: true, opacity: 0.85, side: THREE.DoubleSide, flatShading: true });
+    const mat = new THREE.MeshPhongMaterial({ color: c, transparent: true, opacity: 0.95, side: THREE.DoubleSide, flatShading: false, shininess: 35 });
 
     const mesh = new THREE.Mesh(g, mat);
 
+    mesh.userData.isMeshBody = true;
+
     const wire = new THREE.WireframeGeometry(g);
 
-    const wMat = new THREE.LineBasicMaterial({ color: 0x45475a, linewidth: 1 });
+    const wMat = new THREE.LineBasicMaterial({ color: 0x45475a, linewidth: 1, transparent: true, opacity: 0.45 });
+
+    const wireLines = new THREE.LineSegments(wire, wMat);
+
+    wireLines.userData.isMeshWireframe = true;
+
+    wireLines.visible = !!(typeof window !== 'undefined' && window.Viewer3D && window.Viewer3D._wireframeVisible);
 
     const group = new THREE.Group();
 
     group.add(mesh);
 
-    group.add(new THREE.LineSegments(wire, wMat));
+    group.add(wireLines);
 
     return group;
 
@@ -1079,9 +1087,9 @@ const Geo = {
       group.add(geoObj.toMesh(color));
     } else if (geoObj._type === 'Point3') {
 
-      const g = new THREE.SphereGeometry(0.3, 8, 8);
+      const g = new THREE.SphereGeometry(0.12, 16, 12);
 
-      const m = new THREE.MeshPhongMaterial({ color: color || 0x89b4fa, emissive: color || 0x89b4fa, emissiveIntensity: 0.3 });
+      const m = new THREE.MeshPhongMaterial({ color: color || 0x89b4fa, emissive: color || 0x89b4fa, emissiveIntensity: 0.4, shininess: 60 });
 
       const mesh = new THREE.Mesh(g, m);
 
