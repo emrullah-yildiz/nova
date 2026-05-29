@@ -2,13 +2,30 @@ import { PROVIDERS, pickModel, shouldFallthrough, resolveProvider } from '../api
 
 describe('proxy chat — pickModel', () => {
   const groq = PROVIDERS.find(p => p.name === 'groq-8b');
+  const gemini = PROVIDERS.find(p => p.name === 'gemini-flash');
   const openrouter = PROVIDERS.find(p => p.name === 'openrouter-free');
   const cerebras = PROVIDERS.find(p => p.name === 'cerebras');
 
-  it('exposes all three providers', () => {
+  it('exposes all four providers', () => {
     expect(groq).toBeDefined();
+    expect(gemini).toBeDefined();
     expect(openrouter).toBeDefined();
     expect(cerebras).toBeDefined();
+  });
+
+  it('places gemini-flash second in the chain (most generous free tier after fastest)', () => {
+    // Groq's 8B is fastest; Gemini's 1500-RPD cap is the largest of the
+    // remaining free tiers, so it should be the first fallback when Groq
+    // throttles. OpenRouter and Cerebras come after.
+    expect(PROVIDERS[0].name).toBe('groq-8b');
+    expect(PROVIDERS[1].name).toBe('gemini-flash');
+  });
+
+  it('Gemini provider has an OpenAI-compatible endpoint and accepts flash models', () => {
+    expect(gemini.url).toBe('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions');
+    expect(gemini.allowedModels.has('gemini-2.0-flash-exp')).toBe(true);
+    expect(gemini.allowedModels.has('gemini-1.5-flash')).toBe(true);
+    expect(gemini.defaultModel).toBe('gemini-2.0-flash-exp');
   });
 
   it('honors the client request only when it is on the provider allowlist', () => {
@@ -45,6 +62,7 @@ describe('proxy chat — pickModel', () => {
     // and be silently mishandled.
     const allIds = [
       ...groq.allowedModels,
+      ...gemini.allowedModels,
       ...openrouter.allowedModels,
       ...cerebras.allowedModels
     ];

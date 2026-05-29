@@ -24,6 +24,24 @@ const PROVIDERS = [
     ])
   },
   {
+    // Gemini's free tier is the most generous on the market: 1500 RPD on
+    // Flash 2.0, ~10x Groq's free TPM headroom. Their OpenAI-compatible
+    // endpoint accepts standard chat-completion bodies and supports
+    // streaming, so it slots in as just-another-provider with no custom
+    // request shape.
+    name: 'gemini-flash',
+    url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+    envKey: 'GEMINI_API_KEY',
+    altEnvKey: 'NOVA_GEMINI_API_KEY',
+    defaultModel: 'gemini-2.0-flash-exp',
+    allowedModels: new Set([
+      'gemini-2.0-flash-exp',
+      'gemini-1.5-flash',
+      'gemini-1.5-flash-8b',
+      'gemini-1.5-pro'
+    ])
+  },
+  {
     name: 'openrouter-free',
     url: 'https://openrouter.ai/api/v1/chat/completions',
     envKey: 'OPENROUTER_API_KEY',
