@@ -331,8 +331,10 @@ input:focus, textarea:focus { border-color: var(--accent-blue); }
  *                             one renders.
  */
 
-/* viewport-3d is hidden by default; the active mode below shows it. */
-#viewport-3d { display: none; }
+/* viewport-3d default stack position. Inline z-index was removed from
+ * index.html so class-based rules below can change it without an
+ * !important arms race. */
+#viewport-3d { display: none; z-index: 5; }
 .canvas-area.view-3d #viewport-3d,
 .canvas-area.split-view #viewport-3d { display: block; }
 
