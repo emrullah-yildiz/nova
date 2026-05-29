@@ -121,7 +121,7 @@ const app = {
 
     if (cl) cl.classList.toggle('disabled', !ws);
 
-    ['mi-save','mi-saveas','mi-export','mi-import'].forEach(id => {
+    ['mi-save','mi-saveas','mi-cloud-save','mi-cloud-open','mi-export','mi-import'].forEach(id => {
 
       const el = document.getElementById(id);
 
@@ -181,6 +181,7 @@ const app = {
 
     this.nodes=[]; this.wires=[]; this.selectedNodes=[]; this._undoStack=[]; this._redoStack=[]; this._lastHistorySnapshot=null;
     this._hasRun=false; this._isRunningGraph=false; this._lastRunVersion=0;
+    this._cloudProjectId='';
 
     this.nextNodeId=1; this.nodeZCounter=10; this.zoom=1; this.panX=0; this.panY=0;
 
@@ -198,6 +199,7 @@ const app = {
 
     this.nodes=[]; this.wires=[]; this.selectedNodes=[]; this._undoStack=[]; this._redoStack=[]; this._lastHistorySnapshot=null;
     this._hasRun=false; this._isRunningGraph=false; this._lastRunVersion=0;
+    this._cloudProjectId='';
 
     this.nextNodeId=1; this.nodeZCounter=10; this.zoom=1; this.panX=0; this.panY=0;
 
