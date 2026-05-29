@@ -1,6 +1,10 @@
 import { GPTClient } from './gpt-client.js';
 import { validateGeneratedCode } from './code-validator.js';
 import { validateGeneratedCodeTypes, formatMismatchHint } from './type-validator.js';
+import { extractPlanFromResponse } from './plan-extractor.js';
+import { validatePlanShape } from './plan-schema.js';
+import { validatePlanAgainstRegistry } from './plan-validator.js';
+import { buildGraphFromPlan, planToPython } from './plan-builder.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   app.respond = function(ch, txt) {
@@ -112,6 +116,19 @@ document.addEventListener('DOMContentLoaded', () => {
           bubble.removeAttribute('id');
         }
         app.chatHistories[ch].push({ role: 'ai', text: fullText });
+
+        // Phase 7: if the AI emitted a nova-plan, route through the
+        // plan-mode pipeline (validate against registry → build graph
+        // mechanically). Falls back to the legacy code-mode pipeline
+        // when no plan is present so existing flows keep working
+        // during the transition.
+        const planExtract = extractPlanFromResponse(fullText);
+        if (planExtract && ch === 'workspace') {
+          app._handleNovaPlan(planExtract, fullText, bubble, msgContainer, ch, txt);
+          msgContainer.scrollTop = msgContainer.scrollHeight;
+          return;
+        }
+
         const parsed = GPTClient.parseResponse(fullText);
         if (parsed && parsed.code && ch === 'workspace') {
           app._validateAndPresent(parsed, bubble, msgContainer, ch, txt);
@@ -441,6 +458,97 @@ document.addEventListener('DOMContentLoaded', () => {
       inp.value = reply;
       app.sendChat(ch);
     }
+  };
+
+  // ──────────────────────────────────────────────────────────────────
+  // Phase 7: nova-plan handler. Validates a plan emitted by the AI, builds
+  // the graph mechanically, and surfaces validation failures back to the
+  // AI as a smart fix-retry. The plan path is gated by extractPlanFromResponse
+  // upstream — this function only runs when a fenced ```nova-plan block
+  // was found in the response.
+  app._handleNovaPlan = function(planExtract, fullText, bubble, msgContainer, ch, originalPrompt) {
+    const intro = planExtract.narrationBefore || 'Here is the plan.';
+
+    // 1) JSON parse failure
+    if (planExtract.parseError || !planExtract.plan) {
+      if (bubble) {
+        bubble.innerHTML = app.fmt('⚠️ The AI emitted a `nova-plan` block but it isn\'t valid JSON.\n\n```\n' + (planExtract.parseError || 'unknown parse error') + '\n```\n\nAsking it to fix...');
+      }
+      app._novaPlanFixRetry(planExtract.raw, 'JSON parse error: ' + (planExtract.parseError || 'malformed'), bubble, msgContainer, ch, originalPrompt);
+      return;
+    }
+
+    const plan = planExtract.plan;
+
+    // 2) Refusal — AI says it can't build with available nodes.
+    const shape = validatePlanShape(plan);
+    if (shape.refused) {
+      const reason = (plan.refused && plan.refused.reason) || 'No reason given';
+      const suggestions = (plan.refused && Array.isArray(plan.refused.suggestions)) ? plan.refused.suggestions : [];
+      let html = '🛑 **I can\'t build this with Nova\'s current nodes.**\n\n**Reason:** ' + reason;
+      if (suggestions.length) {
+        html += '\n\n**Try one of these alternatives:**\n' + suggestions.map(function(s) { return '• ' + s; }).join('\n');
+      }
+      if (bubble) bubble.innerHTML = app.fmt(html);
+      return;
+    }
+
+    // 3) Shape validation
+    if (!shape.ok) {
+      if (bubble) {
+        bubble.innerHTML = app.fmt('⚠️ The plan has structural issues:\n\n' + shape.issues.map(function(i) { return '• ' + i; }).join('\n') + '\n\nAsking the AI to fix...');
+      }
+      app._novaPlanFixRetry(JSON.stringify(plan, null, 2), shape.issues.join('\n'), bubble, msgContainer, ch, originalPrompt);
+      return;
+    }
+
+    // 4) Registry validation
+    const reg = validatePlanAgainstRegistry(plan);
+    if (!reg.ok) {
+      if (bubble) {
+        bubble.innerHTML = app.fmt('⚠️ The plan references things that aren\'t real:\n\n' + reg.issues.map(function(i) { return '• ' + i; }).join('\n') + '\n\nAsking the AI to fix...');
+      }
+      app._novaPlanFixRetry(JSON.stringify(plan, null, 2), reg.issues.join('\n'), bubble, msgContainer, ch, originalPrompt);
+      return;
+    }
+
+    // 5) Build the graph and present for approval
+    const graph = buildGraphFromPlan(plan);
+    const canonicalPy = planToPython(plan);
+    app._pendingPlanGraph = { plan, graph, canonicalPy };
+    if (typeof app.showCodeViewer === 'function') app.showCodeViewer(canonicalPy, null);
+    if (bubble) {
+      bubble.innerHTML = app.fmt('✨ ' + intro + '\n\nReady to build: **' + graph.nodes.length + ' nodes**, **' + graph.wires.length + ' wires**. Click **Approve** to drop them on the canvas.');
+    }
+    if (typeof app.showApproveButtons === 'function') app.showApproveButtons();
+  };
+
+  app._novaPlanFixRetry = function(originalPlanText, issuesText, bubble, msgContainer, ch, originalPrompt) {
+    if (!app._planFixRetries) app._planFixRetries = 0;
+    app._planFixRetries++;
+    if (app._planFixRetries > 2) {
+      app._planFixRetries = 0;
+      if (bubble) {
+        bubble.innerHTML = app.fmt('⚠️ Couldn\'t produce a valid plan after retries. You can try rephrasing the request.');
+      }
+      return;
+    }
+    const fixPrompt = 'The nova-plan you just emitted is invalid:\n\n' + issuesText + '\n\nOriginal plan:\n```\n' + originalPlanText + '\n```\n\nRe-emit ONLY the corrected plan in a ```nova-plan fenced block. No explanation, no other text.';
+    GPTClient.callStream(
+      fixPrompt, ch, '',
+      function() {},
+      function(fullText) {
+        const planExtract = extractPlanFromResponse(fullText);
+        if (planExtract) {
+          app._handleNovaPlan(planExtract, fullText, bubble, msgContainer, ch, originalPrompt);
+        } else if (bubble) {
+          bubble.innerHTML = app.fmt('⚠️ AI retry did not include a nova-plan block. Try rephrasing.');
+        }
+      },
+      function(errMsg) {
+        if (bubble) bubble.innerHTML = app.fmt('❌ Plan fix failed: ' + errMsg);
+      }
+    );
   };
 
   app._updateChatStatus();

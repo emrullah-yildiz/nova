@@ -1505,6 +1505,38 @@ const app = {
 
 
 
+    // Phase 7: if a nova-plan handler stashed a built graph, prefer it
+    // over re-parsing Python. We synthesise canonical Python from the
+    // plan (using each node's codegen.python) and feed that through the
+    // existing canvas-build pipeline — keeps a single battle-tested code
+    // path while eliminating the "lossy parse" failure mode.
+
+    if (this._pendingPlanGraph && this._pendingPlanGraph.plan) {
+
+      const canonicalPy = this._pendingPlanGraph.canonicalPy;
+
+      const codeEl = document.getElementById('cv-code');
+
+      if (codeEl && canonicalPy) {
+
+        codeEl.value = canonicalPy;
+
+      }
+
+      this.runEditedCode();
+
+      this._pendingPlanGraph = null;
+
+      this._pendingCode = null;
+
+      this.addAIMessage('workspace', '✅ **Applied!** Graph built from the nova-plan.');
+
+      return;
+
+    }
+
+
+
     // The code is already in the code editor — run it to build nodes
 
     this.runEditedCode();
