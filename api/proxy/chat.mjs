@@ -29,7 +29,12 @@ const PROVIDERS = [
     envKey: 'OPENROUTER_API_KEY',
     altEnvKey: 'NOVA_OPENROUTER_API_KEY',
     defaultModel: 'meta-llama/llama-3.3-70b-instruct:free',
-    allowedModels: null,
+    allowedModels: new Set([
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'meta-llama/llama-3.1-8b-instruct:free',
+      'google/gemini-2.0-flash-exp:free',
+      'deepseek/deepseek-chat:free'
+    ]),
     extraHeaders: () => ({
       'HTTP-Referer': process.env.NOVA_PUBLIC_URL || 'https://nova.app',
       'X-Title': 'Nova'
@@ -111,8 +116,13 @@ function resolveProvider(p) {
 }
 
 function pickModel(provider, requested) {
-  if (requested && provider.allowedModels === null) return requested;
-  if (requested && provider.allowedModels && provider.allowedModels.has(requested)) return requested;
+  // Only honor the client's requested model if THIS provider explicitly
+  // recognizes it. Without the allowlist gate, a fallback chain would
+  // forward Groq-style IDs (e.g. "llama-3.1-8b-instant") to OpenRouter,
+  // which then returns 400 "not a valid model ID" and dead-ends the user.
+  if (requested && provider.allowedModels && provider.allowedModels.has(requested)) {
+    return requested;
+  }
   return provider.defaultModel;
 }
 
