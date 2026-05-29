@@ -244,4 +244,111 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     );
   };
+
+  // Strips code/JSON blocks (complete and still-streaming) and any raw
+  // JSON-shaped tail. Used by the chat bubble to render only the
+  // human-readable narration while a response is in flight.
+  app._extractDisplayText = function(text) {
+    if (!text) return '';
+    let display = text;
+    display = display.replace(/```(?:python|json)?[\s\S]*?```/g, '');
+    display = display.replace(/```(?:python|json)?\s*\n[\s\S]*$/, '');
+    display = display.replace(/\{\s*"code"\s*:[\s\S]*$/g, '');
+    display = display.replace(/\n{3,}/g, '\n\n').trim();
+    if (!display || display.length < 2) display = '✨ Thinking...';
+    return display;
+  };
+
+  app._updateChatStatus = function() {
+    const hasKey = GPTClient.hasApiKey();
+    const provider = GPTClient.getProvider();
+    const prov = GPTClient.PROVIDERS[provider];
+    const provName = prov ? prov.name : provider;
+    document.querySelectorAll('.chat-header-text p').forEach(function(el) {
+      if (hasKey) {
+        el.innerHTML = '● Online — <strong>' + provName + '</strong>';
+        el.style.color = 'var(--accent-green)';
+      } else if (GPTClient.isProxyMode && GPTClient.isProxyMode()) {
+        el.innerHTML = '● Free tier — <strong>Groq Llama 3.3 70B</strong>';
+        el.style.color = 'var(--accent-blue)';
+      } else {
+        el.innerHTML = '● Local AI only';
+        el.style.color = 'var(--accent-yellow)';
+      }
+    });
+  };
+
+  // Scans the AI reply for `[1] Option — description` patterns and renders
+  // them as inline clickable cards below the chat bubble. No-op when the
+  // reply has fewer than two such items.
+  app._showOptionButtons = function(fullText, ch) {
+    if (!fullText) return;
+    var options = [];
+    var lines = fullText.split('\n');
+    var currentGroup = '';
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      var groupMatch = line.match(/^\*\*([^*]+)\*\*\s*:?\s*$/);
+      if (groupMatch) { currentGroup = groupMatch[1].trim(); continue; }
+      var m = line.match(/^\[(\d)\]\s*\*?\*?([^—–\n]+?)(?:\*?\*?)(?:\s*[—–-]\s*(.+))?$/);
+      if (m && m[2]) {
+        var label = m[2].replace(/\*\*/g, '').trim();
+        var desc = m[3] ? m[3].trim() : '';
+        if (label.length >= 2 && label.length < 100) {
+          options.push({ num: m[1], label: label, desc: desc, group: currentGroup });
+        }
+      }
+    }
+    if (options.length < 2) return;
+
+    var msgContainer = document.getElementById(ch === 'landing' ? 'landing-chat-messages' : 'ws-chat-messages');
+    if (!msgContainer) return;
+
+    var cardEl = document.createElement('div');
+    cardEl.className = 'chat-msg ai';
+    var cardHtml = '<div class="chat-avatar">✦</div><div class="chat-bubble" style="padding:6px 0">';
+
+    var groups = {};
+    var groupOrder = [];
+    options.forEach(function(opt) {
+      var g = opt.group || 'Options';
+      if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
+      groups[g].push(opt);
+    });
+
+    groupOrder.forEach(function(gName) {
+      cardHtml += '<div style="font-size:10px;font-weight:700;color:var(--accent-blue);text-transform:uppercase;letter-spacing:0.5px;padding:6px 12px 4px;opacity:0.8">' + gName + '</div>';
+      groups[gName].forEach(function(opt) {
+        var safeReply = (gName + ': ' + opt.num + '. ' + opt.label).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        cardHtml += '<button class="nf-option-card" onclick="app._selectOption(\'' + ch + '\',\'' + safeReply + '\')" style="display:flex;align-items:flex-start;gap:8px;width:100%;padding:7px 12px;border:none;background:transparent;cursor:pointer;text-align:left;border-radius:0;transition:background 0.15s"'
+          + ' onmouseover="this.style.background=\'rgba(137,180,250,0.08)\'" onmouseout="this.style.background=\'transparent\'">';
+        cardHtml += '<span style="min-width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:6px;background:rgba(137,180,250,0.12);color:var(--accent-blue);font-size:11px;font-weight:700">' + opt.num + '</span>';
+        cardHtml += '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text-primary)">' + opt.label + '</div>';
+        if (opt.desc) cardHtml += '<div style="font-size:11px;color:var(--text-muted);margin-top:1px">' + opt.desc + '</div>';
+        cardHtml += '</div></button>';
+      });
+    });
+
+    cardHtml += '</div>';
+    cardEl.innerHTML = cardHtml;
+    msgContainer.appendChild(cardEl);
+    msgContainer.scrollTop = msgContainer.scrollHeight;
+  };
+
+  app._selectOption = function(ch, reply) {
+    document.querySelectorAll('.nf-option-card').forEach(function(btn) {
+      btn.disabled = true;
+      btn.style.opacity = '0.4';
+      btn.style.cursor = 'default';
+      btn.onmouseover = null;
+      btn.onmouseout = null;
+    });
+    var inp = document.getElementById(ch === 'landing' ? 'landing-chat-input' : 'ws-chat-input');
+    if (inp) {
+      inp.value = reply;
+      app.sendChat(ch);
+    }
+  };
+
+  app._updateChatStatus();
 });
