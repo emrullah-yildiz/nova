@@ -1,5 +1,6 @@
 import { AIEngine } from '../ai/ai-engine.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from '../core/nodes.js';
+import { describeWireTypeMismatch } from '../core/wire-type-check.js';
 import { CodeParser } from '../runtime/parser.js';
 import { Viewer3D } from '../viewer/viewer3d.js';
 
@@ -228,7 +229,12 @@ const app = {
 
     this.wires = this.wires.filter(w => !(w.toNode===tn && w.toPort===tp));
 
-    this.wires.push({fromNode:fn,fromPort:fp,toNode:tn,toPort:tp}); if(typeof Viewer3D!=='undefined') Viewer3D._needsRebuild=true;
+    const wire = {fromNode:fn,fromPort:fp,toNode:tn,toPort:tp};
+    // Phase 5: flag type mismatches at connect time. Renderer reads
+    // wire.typeMismatch to draw the wire in red/dashed with a tooltip.
+    const mm = describeWireTypeMismatch(wire, this.nodes);
+    if (mm) wire.typeMismatch = mm;
+    this.wires.push(wire); if(typeof Viewer3D!=='undefined') Viewer3D._needsRebuild=true;
 
     if(this.invalidateCompute) this.invalidateCompute();
 
@@ -941,9 +947,16 @@ const app = {
 
       const d=`M${x1},${y1} C${x1+dx},${y1} ${x2-dx},${y2} ${x2},${y2}`;
 
-      // Wire path + animated data dot
-
-      s+=`<path d="${d}" fill="none" stroke="${c}" stroke-width="2.5" opacity="0.7"/>`;
+      // Wire path + animated data dot. Phase 5: when wire.typeMismatch
+      // is set, draw red+dashed and embed an SVG <title> tooltip so the
+      // user can hover for the reason.
+      const mm = w.typeMismatch;
+      if (mm) {
+        const tip = (mm.reason || 'Type mismatch').replace(/[<&>]/g, ch => ({'<':'&lt;','&':'&amp;','>':'&gt;'}[ch]));
+        s+=`<g class="wire-mismatch"><title>${tip}</title><path d="${d}" fill="none" stroke="#f38ba8" stroke-width="2.5" stroke-dasharray="6 4" opacity="0.85"/></g>`;
+      } else {
+        s+=`<path d="${d}" fill="none" stroke="${c}" stroke-width="2.5" opacity="0.7"/>`;
+      }
 
       // Data dot: fades in at start, fades out at end (respects wire animations setting) — like data flowing through the wire
 
