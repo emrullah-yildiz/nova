@@ -144,12 +144,6 @@ export function installLoggerPatch(targetApp = getRuntimeApp()) {
     this.newProject();
 
     var templates = {
-      // ── Twisted Tower: rotating floor plates ──
-      list: {
-        code: 'import math\n\n# Tower parameters\nfloors = 20\nfloor_height = 3.5\nbase_width = 18\nbase_depth = 12\ntwist_total = 30\ntaper = 0.15\nresolution = 48\n\n# Generate clean elliptical floor profiles with twist\nprofiles = []\nfor i in range(floors):\n    z = i * floor_height\n    t = i / (floors - 1)\n    angle = math.radians(twist_total * t)\n    w = base_width * (1 - taper * t) / 2\n    d = base_depth * (1 - taper * t) / 2\n    cos_a = math.cos(angle)\n    sin_a = math.sin(angle)\n    pts = []\n    for j in range(resolution):\n        a = 2 * math.pi * j / resolution\n        x = w * math.cos(a)\n        y = d * math.sin(a)\n        rx = x * cos_a - y * sin_a\n        ry = x * sin_a + y * cos_a\n        pts.append(Geo.Point3(rx, ry, z))\n    profiles.append(pts)\n\ntower = Geo.loft(profiles)\nprint(tower)',
-        msg: '⧘ **Twisted Tower** loaded!\n\nA tower with rotating elliptical floor plates that taper toward the top. Clean solid form.\n\n**Key nodes:** floors, base_width, base_depth, twist_total, taper → Loop generates rotated elliptical profiles → Loft\n\nSwitch to **3D** to see the tower. Try changing twist_total (0-90) and taper (0-0.3).'
-      },
-
       // ── Geometry Test: every basic type spread on XZ plane ──
       blank: {
         code: 'import math\n\n# === ROW 1: SOLID PRIMITIVES spaced along X ===\nbox = Geo.createBox(Geo.Point3(0, 0, 4), 8, 8, 8)\nsphere = Geo.createSphere(Geo.Point3(20, 0, 4), 4)\ncylinder = Geo.createCylinder(Geo.Point3(40, 0, 0), 3, 8)\ncone = Geo.createCone(Geo.Point3(60, 0, 0), 4, 8)\ntorus = Geo.createTorus(Geo.Point3(80, 0, 4), 5, 1.5)\n\n# === ROW 2: OPERATIONS spaced along X, offset in Y ===\nextrude_circle = Geo.Circle3(Geo.Point3(0, 25, 0), 4)\nextrude_dir = Geo.Vector3(0, 0, 10)\ntest_extrude = Geo.extrude(extrude_circle, extrude_dir)\nmoved_box = Geo.move(Geo.createBox(Geo.Point3(20, 25, 2.5), 5, 5, 5), Geo.Vector3(0, 0, 3))\nthick_surface = Geo.thicken(Geo.createBox(Geo.Point3(40, 25, 1), 10, 10, 0.1), 2)\n\nprint(box)\nprint(sphere)\nprint(cylinder)\nprint(cone)\nprint(torus)\nprint(test_extrude)\nprint(moved_box)\nprint(thick_surface)',
@@ -214,7 +208,6 @@ export function installLoggerPatch(targetApp = getRuntimeApp()) {
     var grid = document.getElementById('templates-grid');
     if (!grid) return;
     var cards = [
-      { id: 'list', name: 'Twisted Tower', desc: 'Rotating floor plates with taper', icon: '⧘', color: 'var(--accent-peach)' },
       { id: 'blank', name: 'Geometry Test', desc: 'Test all geometry types', icon: '🔬', color: 'var(--accent-teal)' }
     ];
     grid.innerHTML = cards.map(function(x) {

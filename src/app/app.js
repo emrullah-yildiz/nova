@@ -141,8 +141,6 @@ const app = {
 
     const t = [
 
-      {id:'list',name:'Twisted Tower',desc:'Rotating floor plates with taper',icon:'⧘',color:'var(--accent-peach)'},
-
       {id:'blank',name:'Blank Canvas',desc:'Start from scratch',icon:'✦',color:'var(--accent-teal)'}
 
     ];
@@ -218,18 +216,9 @@ const app = {
   openTemplate(id) {
 
     this.newProject();
-
-    const L = {
-
-      list: [{type:'number-input',x:80,y:80},{type:'number-input',x:80,y:220},{type:'number-input',x:80,y:360},{type:'list-range',x:340,y:60},{type:'list-create',x:340,y:260},{type:'output-watch',x:600,y:160}]
-
-    };
-
-    const items = L[id]; if (!items) return;
-
-    items.map(i => this.addNodeToCanvas(i.type,i.x,i.y)).filter(Boolean);
-
-    this.updatePortDots(); this.renderWires(); this.updateMenuState();
+    // Legacy fallback retained only so callers don't crash; the modern
+    // landing-page templates live in node-library.js and logger-patch.js.
+    void id;
 
   },
 
