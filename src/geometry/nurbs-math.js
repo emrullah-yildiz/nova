@@ -796,9 +796,13 @@ import { Geo } from './geometry-lib.js';
   // Panel arrays, diamond grids, hexagonal patterns
   // ══════════════════════════════════════
 
-  // Parametric panel array on a surface mesh
+  // Parametric panel array on a surface mesh.
+  // Returns a list of filled Mesh3 quads (2 triangles each) so the panels
+  // shade properly in the 3D preview. Each panel is inset toward its
+  // centre by `scaleFn` (default 0.9) to leave architectural gaps.
   G.facadePanels = function(mesh, uPanels, vPanels, scaleFn) {
     if (!mesh || mesh._type !== 'Mesh3') return [];
+    var color = mesh.color || 0xfab387; // peach by default — matches the "extrusion" family in NovaPalette3D
     var panels = [];
     for (var i = 0; i < uPanels; i++) {
       for (var j = 0; j < vPanels; j++) {
@@ -809,25 +813,24 @@ import { Geo } from './geometry-lib.js';
         var p01 = G.evaluateSurface(mesh, u0, v1);
         var p11 = G.evaluateSurface(mesh, u1, v1);
 
-        // Center of panel
         var cx = (p00.x + p10.x + p01.x + p11.x) / 4;
         var cy = (p00.y + p10.y + p01.y + p11.y) / 4;
         var cz = (p00.z + p10.z + p01.z + p11.z) / 4;
         var center = P(cx, cy, cz);
 
-        // Scale factor
         var scale = scaleFn ? scaleFn(center, i, j, uPanels, vPanels) : 0.9;
 
-        // Scale corners toward center
-        var corners = [p00, p10, p11, p01].map(function(p) {
+        var inset = [p00, p10, p11, p01].map(function(p) {
           return P(
             center.x + (p.x - center.x) * scale,
             center.y + (p.y - center.y) * scale,
             center.z + (p.z - center.z) * scale
           );
         });
-        corners.push(corners[0]); // close
-        panels.push(new G.Polyline3(corners, true));
+
+        var panel = new G.Mesh3(inset, [[0, 1, 2], [0, 2, 3]], color);
+        panel._solidType = 'FacadePanel';
+        panels.push(panel);
       }
     }
     return panels;
