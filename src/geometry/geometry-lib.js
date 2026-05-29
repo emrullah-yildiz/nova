@@ -438,9 +438,9 @@ class _Mesh3 {
 
     }
 
-    g.computeVertexNormals();
-
-    return g;
+    // Crease-angle normals: smooth where adjacent faces meet shallowly,
+    // hard otherwise — fixes the amorphous look at sharp extrusion corners.
+    return Geo._applyCreaseNormals(g, 30);
 
   }
 
@@ -450,19 +450,35 @@ class _Mesh3 {
 
     const c = color || this.color;
 
-    const mat = new THREE.MeshPhongMaterial({ color: c, transparent: true, opacity: 0.85, side: THREE.DoubleSide, flatShading: true });
+    // Clay-like Phong, opaque queue so depth writes are on (transparent + DoubleSide caused front/back z-fighting flicker during orbit).
+    const mat = new THREE.MeshPhongMaterial({ color: c, transparent: false, opacity: 1.0, side: THREE.DoubleSide, flatShading: false, shininess: 18, specular: 0x252538 });
+
+    mat.polygonOffset = true;
+
+    mat.polygonOffsetFactor = 1;
+
+    mat.polygonOffsetUnits = 1;
 
     const mesh = new THREE.Mesh(g, mat);
 
-    const wire = new THREE.WireframeGeometry(g);
+    mesh.userData.isMeshBody = true;
 
-    const wMat = new THREE.LineBasicMaterial({ color: 0x45475a, linewidth: 1 });
+    // EdgesGeometry: only emits edges where the dihedral angle > 30°. A box gets its 12 corners, a sphere gets nothing, parametric surfaces show their boundary curves.
+    const edges = new THREE.EdgesGeometry(g, 30);
+
+    const eMat = new THREE.LineBasicMaterial({ color: 0x313244, linewidth: 1, transparent: true, opacity: 0.7 });
+
+    const edgeLines = new THREE.LineSegments(edges, eMat);
+
+    edgeLines.userData.isMeshEdges = true;
+
+    edgeLines.visible = !(typeof window !== 'undefined' && window.Viewer3D && window.Viewer3D._edgesVisible === false);
 
     const group = new THREE.Group();
 
     group.add(mesh);
 
-    group.add(new THREE.LineSegments(wire, wMat));
+    group.add(edgeLines);
 
     return group;
 
@@ -1079,9 +1095,9 @@ const Geo = {
       group.add(geoObj.toMesh(color));
     } else if (geoObj._type === 'Point3') {
 
-      const g = new THREE.SphereGeometry(0.3, 8, 8);
+      const g = new THREE.SphereGeometry(0.12, 16, 12);
 
-      const m = new THREE.MeshPhongMaterial({ color: color || 0x89b4fa, emissive: color || 0x89b4fa, emissiveIntensity: 0.3 });
+      const m = new THREE.MeshPhongMaterial({ color: color || 0x89b4fa, emissive: color || 0x89b4fa, emissiveIntensity: 0.4, shininess: 60 });
 
       const mesh = new THREE.Mesh(g, m);
 
@@ -1111,6 +1127,67 @@ const Geo = {
       return centerA.distanceTo(centerB);
     }
     return 0;
+  },
+
+  // Crease-angle vertex normals. Adjacent faces are smoothed when their
+  // dihedral angle is below `angleDeg`, otherwise the edge stays hard —
+  // a single mesh therefore renders smooth on curved regions and faceted
+  // on prismatic ones (Rhino-style).
+  _applyCreaseNormals(geometry, angleDeg) {
+    if (typeof THREE === 'undefined' || !geometry) return geometry;
+    var threshold = Math.cos(((angleDeg == null ? 30 : angleDeg)) * Math.PI / 180);
+    var g = geometry.index ? geometry.toNonIndexed() : geometry;
+    var pos = g.attributes.position.array;
+    var triCount = pos.length / 9;
+    if (triCount === 0) return g;
+
+    var faceN = new Float32Array(triCount * 3);
+    for (var t = 0; t < triCount; t++) {
+      var ax = pos[t*9],   ay = pos[t*9+1], az = pos[t*9+2];
+      var bx = pos[t*9+3], by = pos[t*9+4], bz = pos[t*9+5];
+      var cx = pos[t*9+6], cy = pos[t*9+7], cz = pos[t*9+8];
+      var ex = bx - ax, ey = by - ay, ez = bz - az;
+      var fx = cx - ax, fy = cy - ay, fz = cz - az;
+      var nx = ey*fz - ez*fy;
+      var ny = ez*fx - ex*fz;
+      var nz = ex*fy - ey*fx;
+      var fl = Math.sqrt(nx*nx + ny*ny + nz*nz) || 1;
+      faceN[t*3] = nx/fl; faceN[t*3+1] = ny/fl; faceN[t*3+2] = nz/fl;
+    }
+
+    // Bucket every triangle-vertex by its rounded position.
+    var buckets = new Map();
+    for (var ti = 0; ti < triCount; ti++) {
+      for (var v = 0; v < 3; v++) {
+        var i = ti*9 + v*3;
+        var key = pos[i].toFixed(5) + ',' + pos[i+1].toFixed(5) + ',' + pos[i+2].toFixed(5);
+        var bucket = buckets.get(key);
+        if (!bucket) { bucket = []; buckets.set(key, bucket); }
+        bucket.push(ti * 3 + v); // packed (triIdx, vertOffset)
+      }
+    }
+
+    var vN = new Float32Array(pos.length);
+    buckets.forEach(function(refs) {
+      for (var k = 0; k < refs.length; k++) {
+        var refTri = (refs[k] / 3) | 0;
+        var mx = faceN[refTri*3], my = faceN[refTri*3+1], mz = faceN[refTri*3+2];
+        var sx = 0, sy = 0, sz = 0;
+        for (var j = 0; j < refs.length; j++) {
+          var otherTri = (refs[j] / 3) | 0;
+          var ox = faceN[otherTri*3], oy = faceN[otherTri*3+1], oz = faceN[otherTri*3+2];
+          if (mx*ox + my*oy + mz*oz >= threshold) {
+            sx += ox; sy += oy; sz += oz;
+          }
+        }
+        var l = Math.sqrt(sx*sx + sy*sy + sz*sz) || 1;
+        var idx = refs[k] * 3; // (triIdx*3 + v) * 3 — same as triIdx*9 + v*3
+        vN[idx] = sx/l; vN[idx+1] = sy/l; vN[idx+2] = sz/l;
+      }
+    });
+
+    g.setAttribute('normal', new THREE.BufferAttribute(vN, 3));
+    return g;
   }
 
 };

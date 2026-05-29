@@ -144,36 +144,6 @@ export function installLoggerPatch(targetApp = getRuntimeApp()) {
     this.newProject();
 
     var templates = {
-      // ── NURBS Canopy: smooth roof with control points ──
-      math: {
-        code: 'import math\n\n# Canopy parameters\nspan = 30\nheight = 6\nu_count = 20\nv_count = 20\n\n# Build surface point grid\npoints = []\nfor i in range(u_count):\n    for j in range(v_count):\n        x = span * (i / (u_count - 1) - 0.5)\n        y = span * (j / (v_count - 1) - 0.5)\n        dist = math.sqrt(x * x + y * y)\n        z = height * math.cos(dist * 0.15) + Geo.perlin2(x * 0.1, y * 0.1) * 1.5\n        points.append(Geo.Point3(x, y, z))\n\ncanopy = Geo.surfaceFromGrid(points, u_count, v_count)\nshell = Geo.thicken(canopy, 0.3)\nprint(shell)',
-        msg: '🏗️ **NURBS Canopy** loaded!\n\nA smooth roof shell using a surface grid with cosine curvature and Perlin noise.\n\n**Key nodes:** span, height, u_count, v_count → Point grid loop → Surface From Grid → Thicken\n\nSwitch to **3D** to see the canopy. Edit span and height to reshape.'
-      },
-
-      // ── Parametric Facade: attractor-driven panels ──
-      geometry: {
-        code: 'import math\n\n# Facade dimensions\nfacade_width = 30\nfacade_height = 20\npanels_x = 12\npanels_y = 8\n\n# Attractor point\nattr_x = facade_width * 0.7\nattr_y = facade_height * 0.3\nattractor = Geo.Point3(attr_x, 0, attr_y)\n\n# Generate panels\npanels = []\nfor i in range(panels_x):\n    for j in range(panels_y):\n        cx = facade_width * (i + 0.5) / panels_x\n        cz = facade_height * (j + 0.5) / panels_y\n        center = Geo.Point3(cx, 0, cz)\n        influence = Geo.pointAttractor(center, attractor, 20, 2)\n        noise = Geo.perlin2(cx * 0.2, cz * 0.2) * 0.15\n        scale = 0.3 + 0.6 * influence + noise\n        pw = facade_width / panels_x * scale * 0.85\n        ph = facade_height / panels_y * scale * 0.85\n        depth = 0.2 + influence * 1.5\n        panel = Geo.createBox(Geo.Point3(cx, 0 - depth / 2, cz), pw, depth, ph)\n        panels.append(panel)\nfacade = Geo.combineAll(panels)\nprint(facade)',
-        msg: '▦ **Parametric Facade** loaded!\n\nPanels vary in size and depth based on an attractor point + Perlin noise.\n\n**Key nodes:** Facade dimensions → Attractor position → Panel loop (size driven by distance to attractor) → Combine All\n\nSwitch to **3D** to see the facade. Move the attractor by changing attr_x and attr_y.'
-      },
-
-      // ── Twisted Tower: rotating floor plates ──
-      list: {
-        code: 'import math\n\n# Tower parameters\nfloors = 20\nfloor_height = 3.5\nbase_width = 18\nbase_depth = 12\ntwist_total = 30\ntaper = 0.15\nresolution = 48\n\n# Generate clean elliptical floor profiles with twist\nprofiles = []\nfor i in range(floors):\n    z = i * floor_height\n    t = i / (floors - 1)\n    angle = math.radians(twist_total * t)\n    w = base_width * (1 - taper * t) / 2\n    d = base_depth * (1 - taper * t) / 2\n    cos_a = math.cos(angle)\n    sin_a = math.sin(angle)\n    pts = []\n    for j in range(resolution):\n        a = 2 * math.pi * j / resolution\n        x = w * math.cos(a)\n        y = d * math.sin(a)\n        rx = x * cos_a - y * sin_a\n        ry = x * sin_a + y * cos_a\n        pts.append(Geo.Point3(rx, ry, z))\n    profiles.append(pts)\n\ntower = Geo.loft(profiles)\nprint(tower)',
-        msg: '⧘ **Twisted Tower** loaded!\n\nA tower with rotating elliptical floor plates that taper toward the top. Clean solid form.\n\n**Key nodes:** floors, base_width, base_depth, twist_total, taper → Loop generates rotated elliptical profiles → Loft\n\nSwitch to **3D** to see the tower. Try changing twist_total (0-90) and taper (0-0.3).'
-      },
-
-      // ── Voronoi Facade: real voronoi cells extruded on a wall ──
-      logic: {
-        code: 'import math\n\n# Wall base\nwall_width = 24\nwall_height = 16\nwall_thickness = 0.3\nwall_center = Geo.Point3(wall_width / 2, 0, wall_height / 2)\nwall = Geo.createBox(wall_center, wall_width, wall_thickness, wall_height)\n\n# Generate random Voronoi sites on the wall face\nsite_count = 30\ncell_depth = 1.5\ncell_gap = 0.15\nsites = []\nfor i in range(site_count):\n    sx = 1 + (wall_width - 2) * (0.5 + 0.5 * math.sin(i * 1.7 + 0.3))\n    sz = 1 + (wall_height - 2) * (0.5 + 0.5 * math.cos(i * 2.3 + 0.7))\n    sites.append(Geo.Point3(sx, 0, sz))\n\n# Create Voronoi cell outlines and extrude each one\ncells = Geo.voronoiOutlines(sites, None, 0.5)\npanels = []\nfor i in range(len(cells)):\n    depth = 0.3 + cell_depth * (0.5 + 0.5 * Geo.perlin2(i * 0.5, 0))\n    extruded = Geo.extrude(cells[i], Geo.Vector3(0, 0 - depth, 0))\n    if extruded:\n        panels.append(extruded)\n\nfacade = Geo.combineAll(panels)\nresult = Geo.booleanUnion(wall, facade)\nprint(result)',
-        msg: '⬡ **Voronoi Facade** loaded!\n\nA building wall with **real Voronoi cells** extruded to varying depths using Perlin noise.\n\n**Key nodes:** wall dimensions → site_count random points → Geo.voronoiOutlines generates irregular cells → Extrude each cell by noise-driven depth → Combine All + wall\n\nSwitch to **3D** to see the facade. Try site_count (15-50), cell_depth (0.5-3.0).'
-      },
-
-      // ── Organic Pavilion: NURBS lofted form ──
-      data: {
-        code: 'import math\n\n# Pavilion parameters\nnum_profiles = 10\nbase_radius = 10\nmax_height = 20\nresolution = 48\n\n# Create smooth circular profiles that vary in radius\nprofiles = []\nfor i in range(num_profiles):\n    t = i / (num_profiles - 1)\n    z = t * max_height\n    r = base_radius * (0.3 + 0.7 * math.sin(t * math.pi))\n    pts = []\n    for j in range(resolution):\n        a = 2 * math.pi * j / resolution\n        pts.append(Geo.Point3(r * math.cos(a), r * math.sin(a), z))\n    profiles.append(pts)\n\npavilion = Geo.loft(profiles)\nprint(pavilion)',
-        msg: '◇ **Organic Pavilion** loaded!\n\nA smooth vase-like form — profiles expand in the middle and narrow at top/bottom.\n\n**Key nodes:** num_profiles, base_radius, max_height → Loop creates circular profiles with sinusoidal radius → Loft\n\nSwitch to **3D** to see the pavilion. Try changing num_profiles (5-20) and base_radius.'
-      },
-
       // ── Geometry Test: every basic type spread on XZ plane ──
       blank: {
         code: 'import math\n\n# === ROW 1: SOLID PRIMITIVES spaced along X ===\nbox = Geo.createBox(Geo.Point3(0, 0, 4), 8, 8, 8)\nsphere = Geo.createSphere(Geo.Point3(20, 0, 4), 4)\ncylinder = Geo.createCylinder(Geo.Point3(40, 0, 0), 3, 8)\ncone = Geo.createCone(Geo.Point3(60, 0, 0), 4, 8)\ntorus = Geo.createTorus(Geo.Point3(80, 0, 4), 5, 1.5)\n\n# === ROW 2: OPERATIONS spaced along X, offset in Y ===\nextrude_circle = Geo.Circle3(Geo.Point3(0, 25, 0), 4)\nextrude_dir = Geo.Vector3(0, 0, 10)\ntest_extrude = Geo.extrude(extrude_circle, extrude_dir)\nmoved_box = Geo.move(Geo.createBox(Geo.Point3(20, 25, 2.5), 5, 5, 5), Geo.Vector3(0, 0, 3))\nthick_surface = Geo.thicken(Geo.createBox(Geo.Point3(40, 25, 1), 10, 10, 0.1), 2)\n\nprint(box)\nprint(sphere)\nprint(cylinder)\nprint(cone)\nprint(torus)\nprint(test_extrude)\nprint(moved_box)\nprint(thick_surface)',
@@ -203,8 +173,8 @@ export function installLoggerPatch(targetApp = getRuntimeApp()) {
           Object.keys(gn.controls).forEach(function(k) {
             if (k !== '_dynInputs') nd.controlValues[k] = gn.controls[k];
           });
-          if (gn.type === 'custom-python' && gn.rawCode) nd.controlValues.code = gn.rawCode;
-          if (gn.type === 'custom-python' && gn.controls._dynInputs) nd._dynInputs = gn.controls._dynInputs;
+          if ((gn.type === 'custom-python' || gn.type === 'Custom.Python') && gn.rawCode) nd.controlValues.code = gn.rawCode;
+          if ((gn.type === 'custom-python' || gn.type === 'Custom.Python') && gn.controls._dynInputs) nd._dynInputs = gn.controls._dynInputs;
           if (gn.outputVars && gn.outputVars.length > 0) nd._dynOutputs = gn.outputVars;
           app.nodes.push(nd);
           app.renderNode(nd);
@@ -238,11 +208,6 @@ export function installLoggerPatch(targetApp = getRuntimeApp()) {
     var grid = document.getElementById('templates-grid');
     if (!grid) return;
     var cards = [
-      { id: 'math', name: 'NURBS Canopy', desc: 'Smooth roof shell with Perlin noise', icon: '〰', color: 'var(--accent-green)' },
-      { id: 'geometry', name: 'Parametric Facade', desc: 'Attractor-driven panel array', icon: '▦', color: 'var(--accent-blue)' },
-      { id: 'list', name: 'Twisted Tower', desc: 'Rotating floor plates with taper', icon: '⧘', color: 'var(--accent-peach)' },
-      { id: 'logic', name: 'Voronoi Facade', desc: 'Elevated cells on building wall', icon: '⬡', color: 'var(--accent-red)' },
-      { id: 'data', name: 'Organic Shell', desc: 'NURBS lofted flowing form', icon: '◇', color: 'var(--accent-purple)' },
       { id: 'blank', name: 'Geometry Test', desc: 'Test all geometry types', icon: '🔬', color: 'var(--accent-teal)' }
     ];
     grid.innerHTML = cards.map(function(x) {

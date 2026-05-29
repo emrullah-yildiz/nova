@@ -85,7 +85,7 @@
 
     </div>
 
-    <div class="menu-item disabled" id="menu-view">View
+    <div class="menu-item" id="menu-view">View
 
       <div class="menu-dropdown">
 
@@ -96,6 +96,14 @@
         <div class="menu-separator"></div>
 
         <button class="menu-dropdown-item" onclick="app.fitAll()">Zoom to Fit</button>
+
+        <div class="menu-separator"></div>
+
+        <button class="menu-dropdown-item" id="menu-toggle-grid" onclick="app.toggleViewerGrid()"><span>Grid</span><span class="menu-check" data-on="1">▰</span></button>
+
+        <button class="menu-dropdown-item" id="menu-toggle-axes" onclick="app.toggleViewerAxes()"><span>Axes</span><span class="menu-check" data-on="1">▰</span></button>
+
+        <button class="menu-dropdown-item" id="menu-toggle-edges" onclick="app.toggleViewerEdges()"><span>Mesh Edges</span><span class="menu-check" data-on="1">▰</span></button>
 
       </div>
 
@@ -201,11 +209,13 @@
 
       <div id="wire-ai-badge">✦ AI</div>
 
-      <div id="viewport-3d" style="position:absolute;inset:0;z-index:5;display:none;"></div>
+      <div id="viewport-3d" style="position:absolute;inset:0;"></div>
 
       <div class="canvas-toolbar">
 
         <button class="canvas-tool-btn" id="btn-view-nodes" title="Node View" onclick="app.setView('nodes')" style="color:var(--accent-blue);font-weight:700;font-size:12px;">2D</button>
+
+        <button class="canvas-tool-btn" id="btn-view-split" title="Split View — toggle node + 3D side by side" onclick="app.toggleSplit()" style="font-size:14px;">⊟</button>
 
         <button class="canvas-tool-btn" id="btn-view-3d" title="3D Viewport" onclick="app.setView('3d')" style="font-size:12px;">3D</button>
 

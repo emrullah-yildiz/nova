@@ -583,163 +583,133 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
   });
 
   // ═══════════════════════════════════════
-  // TEST TEMPLATES
+  // SHOWCASE TEMPLATES — pure-JS, no Python required
+  // Each template wires modern Surface/Pattern nodes into an
+  // Output.Watch so the 3D viewer renders immediately.
   // ═══════════════════════════════════════
-  app._testMathNodes = function() {
-    this.newProject();
-    var tests = [
-      ['math-add',[['a',25],['b',17]],'42'],['math-subtract',[['a',100],['b',37]],'63'],['math-multiply',[['a',6],['b',7]],'42'],['math-divide',[['a',355],['b',113]],'≈3.14'],
-      ['math-power',[['base',2],['exp',10]],'1024'],['math-modulo',[['a',17],['b',5]],'2'],['math-negate',[['a',-42]],'42'],['math-abs',[['a',-3.7]],'3.7'],
-      ['math-reciprocal',[['a',4]],'0.25'],['math-remap',[['value',0.5]],'50'],['math-floor',[['a',3.7]],'3'],['math-ceil',[['a',3.2]],'4'],
-      ['math-round',[['a',3.14159]],'3'],['math-min',[['a',10],['b',3]],'3'],['math-max',[['a',10],['b',3]],'10'],['math-clamp',[['value',1.5]],'1']
-    ];
-    var created = [], self = this;
-    tests.forEach(function(test, row) {
-      var mathNd = self.addNodeToCanvas(test[0], 280, 60 + row * 200); if (!mathNd) return; created.push(mathNd);
-      test[1].forEach(function(inp, j) {
-        var numNd = self.addNodeToCanvas('number-input', -j * 20, 60 + row * 200 + j * 80);
-        if (numNd) { numNd.controlValues.val = inp[1]; var el = document.getElementById(numNd.id); if (el) { var ni = el.querySelector('.node-control input[type="number"]'); if (ni) ni.value = inp[1]; } self.addWire(numNd.id, 'value', mathNd.id, inp[0]); created.push(numNd); }
-      });
-    });
-    self.updatePortDots(); updatePortDataStates(); setTimeout(function() { self.renderWires(); }, 100);
-    if (self.autoLayout) setTimeout(function() { self.autoLayout(); }, 200);
-    self.addAIMessage('workspace', '🧪 **Math Node Test** — ' + tests.length + ' nodes created.\n\n**Shortcuts:** **P** = Properties, **D** = Data Inspector, **L** = Auto Layout');
-    return created.length + ' nodes created';
-  };
 
-  app._testLogicNodes = function() {
-    this.newProject();
-    var self = this;
-    var tests = [['logic-and',[['a',1],['b',1]],{}],['logic-or',[['a',0],['b',1]],{}],['logic-not',[['value',1]],{}],['logic-xor',[['a',1],['b',0]],{}],['logic-compare',[['a',10],['b',5]],{op:'>'}],['logic-if',[['condition',1],['ifTrue',42],['ifFalse',0]],{}],['logic-isnull',[['value',0]],{}],['logic-gate',[['value',99],['pass',1]],{}]];
+  function makeTemplateHelpers(self) {
     var created = [];
-    tests.forEach(function(test, row) {
-      var logicNd = self.addNodeToCanvas(test[0], 320, 60 + row * 200); if (!logicNd) return; created.push(logicNd);
-      var extras = test[2] || {}; Object.keys(extras).forEach(function(k) { logicNd.controlValues[k] = extras[k]; });
-      test[1].forEach(function(inp, j) {
-        var numNd = self.addNodeToCanvas('number-input', 40, 60 + row * 200 + j * 80);
-        if (numNd) { numNd.controlValues.val = inp[1]; self.addWire(numNd.id, 'value', logicNd.id, inp[0]); created.push(numNd); }
-      });
-      var watchNd = self.addNodeToCanvas('output-watch', 600, 60 + row * 200);
-      if (watchNd && logicNd) { self.addWire(logicNd.id, logicNd.def.outputs[0] ? logicNd.def.outputs[0].id : 'result', watchNd.id, 'value'); created.push(watchNd); }
-    });
-    self.updatePortDots(); updatePortDataStates(); setTimeout(function() { self.renderWires(); }, 100);
-    self.addAIMessage('workspace', '🧪 **Logic Test!** Created ' + tests.length + ' logic nodes.\n\n**Shortcuts:** **P** = Properties, **D** = Inspector, **L** = Auto Layout');
-    return created.length + ' nodes created';
-  };
-
-  app._testListNodes = function() {
-    this.newProject();
-    var self = this, created = [], row = 0;
-    function mkNum(x, y, val) { var nd = self.addNodeToCanvas('number-input', x, y); if (nd) { nd.controlValues.val = val; created.push(nd); } return nd; }
-    function mkRange(x, y, s, e, st) {
-      var rNd = self.addNodeToCanvas('list-range', x, y); if (!rNd) return null;
-      var n1 = mkNum(x-260, y, s), n2 = mkNum(x-260, y+60, e), n3 = mkNum(x-260, y+120, st);
-      if (n1) self.addWire(n1.id, 'value', rNd.id, 'start'); if (n2) self.addWire(n2.id, 'value', rNd.id, 'end'); if (n3) self.addWire(n3.id, 'value', rNd.id, 'step');
-      created.push(rNd); return rNd;
-    }
-    var rangeA = mkRange(60, 60, 0, 10, 1), rangeB = mkRange(60, 300, 10, 40, 10);
-    var nodes = ['list-first','list-last','list-take','list-skip','list-slice','list-sort','list-shuffle','list-unique','list-reverse','list-count','list-sum','list-average','list-minval','list-maxval','list-chunk','list-pairs'];
-    nodes.forEach(function(type) {
-      var nd = self.addNodeToCanvas(type, 400, 60 + row * 260);
-      if (nd && rangeA) { self.addWire(rangeA.id, 'list', nd.id, 'list'); created.push(nd); } row++;
-    });
-    self.updatePortDots(); updatePortDataStates(); setTimeout(function() { self.renderWires(); }, 100);
-    self.addAIMessage('workspace', '🧪 **List Test!** ' + created.length + ' nodes created.\n\n**Shortcuts:** **P** = Properties, **D** = Inspector, **L** = Auto Layout');
-    return created.length + ' nodes created';
-  };
-
-  // ═══════════════════════════════════════
-  // SURFACE TEST TEMPLATE
-  // ═══════════════════════════════════════
-  app._testSurfaceNodes = function() {
-    this.newProject();
-    var self = this, created = [], row = 0, rowH = 280;
-    var srcCol = 60, nodeCol = 400;
-
-    function mkNum(x, y, val) { var nd = self.addNodeToCanvas('number-input', x, y); if (nd) { nd.controlValues.val = val; created.push(nd); } return nd; }
-    function mkPt(x, y, px, py, pz) {
-      var nd = self.addNodeToCanvas('point-bycoordinates', x, y);
-      if (nd) { nd.controlValues.x = px; nd.controlValues.y = py; nd.controlValues.z = pz; created.push(nd); }
+    function add(type, x, y) {
+      var nd = self.addNodeToCanvas(type, x, y);
+      if (nd) created.push(nd);
       return nd;
     }
-
-    // ── 1. Surface.Plane — origin + normal ──
-    var planeY = 60 + row * rowH;
-    var planeOrigin = mkPt(srcCol, planeY, 0, 0, 0);
-    var planeNd = self.addNodeToCanvas('surf-plane', nodeCol, planeY);
-    if (planeNd && planeOrigin) { self.addWire(planeOrigin.id, 'point', planeNd.id, 'origin'); created.push(planeNd); }
-    row++;
-
-    // ── 2. Surface.ByPointGrid — 5×5 grid of points ──
-    var gridY = 60 + row * rowH;
-    var gridOrigin = mkPt(srcCol - 200, gridY, 0, 0, 0);
-    var gridNode = self.addNodeToCanvas('op-point-grid', srcCol, gridY);
-    if (gridNode && gridOrigin) {
-      self.addWire(gridOrigin.id, 'point', gridNode.id, 'origin');
-      var uNum = mkNum(srcCol - 200, gridY + 80, 5);
-      var vNum = mkNum(srcCol - 200, gridY + 140, 5);
-      var spNum = mkNum(srcCol - 200, gridY + 200, 2);
-      if (uNum) self.addWire(uNum.id, 'value', gridNode.id, 'uCount');
-      if (vNum) self.addWire(vNum.id, 'value', gridNode.id, 'vCount');
-      if (spNum) self.addWire(spNum.id, 'value', gridNode.id, 'spacing');
-      created.push(gridNode);
+    function setCtrl(nd, key, val) {
+      if (!nd) return;
+      nd.controlValues[key] = val;
+      var el = document.getElementById(nd.id);
+      if (!el) return;
+      var inputs = el.querySelectorAll('.node-control input, .node-control select');
+      inputs.forEach(function(inp) {
+        if (inp.dataset && inp.dataset.ctrl === key) inp.value = val;
+      });
     }
-    var surfGridNd = self.addNodeToCanvas('surf-from-grid', nodeCol, gridY);
-    if (surfGridNd && gridNode) {
-      self.addWire(gridNode.id, 'points', surfGridNd.id, 'points');
-      var uCnt = mkNum(nodeCol - 100, gridY + 80, 5);
-      var vCnt = mkNum(nodeCol - 100, gridY + 140, 5);
-      if (uCnt) self.addWire(uCnt.id, 'value', surfGridNd.id, 'uCount');
-      if (vCnt) self.addWire(vCnt.id, 'value', surfGridNd.id, 'vCount');
-      created.push(surfGridNd);
+    function wire(a, ap, b, bp) {
+      if (a && b) self.addWire(a.id, ap, b.id, bp);
     }
-    row++;
-
-    // ── 3. Surface.ByRuledLoft — two lines as curves ──
-    var ruledY = 60 + row * rowH;
-    var pt1 = mkPt(srcCol - 200, ruledY, 0, 0, 0);
-    var pt2 = mkPt(srcCol - 200, ruledY + 60, 10, 0, 0);
-    var pt3 = mkPt(srcCol - 200, ruledY + 120, 0, 10, 5);
-    var pt4 = mkPt(srcCol - 200, ruledY + 180, 10, 10, 5);
-    var line1 = self.addNodeToCanvas('line-bystartpointendpoint', srcCol, ruledY);
-    var line2 = self.addNodeToCanvas('line-bystartpointendpoint', srcCol, ruledY + 120);
-    if (line1 && pt1 && pt2) { self.addWire(pt1.id, 'point', line1.id, 'startPoint'); self.addWire(pt2.id, 'point', line1.id, 'endPoint'); created.push(line1); }
-    if (line2 && pt3 && pt4) { self.addWire(pt3.id, 'point', line2.id, 'startPoint'); self.addWire(pt4.id, 'point', line2.id, 'endPoint'); created.push(line2); }
-    var ruledNd = self.addNodeToCanvas('op-ruled-surface', nodeCol, ruledY + 60);
-    if (ruledNd && line1 && line2) { self.addWire(line1.id, 'line', ruledNd.id, 'curve1'); self.addWire(line2.id, 'line', ruledNd.id, 'curve2'); created.push(ruledNd); }
-    row++;
-
-    // ── 4. Surface.Isolines — from the grid surface ──
-    var isoY = 60 + row * rowH;
-    var isoNd = self.addNodeToCanvas('op-isolines', nodeCol, isoY);
-    if (isoNd && surfGridNd) {
-      self.addWire(surfGridNd.id, 'surface', isoNd.id, 'mesh');
-      var isoCnt = mkNum(nodeCol - 100, isoY + 60, 8);
-      if (isoCnt) self.addWire(isoCnt.id, 'value', isoNd.id, 'count');
-      created.push(isoNd);
+    function num(x, y, val) {
+      var nd = add('Input.Number', x, y);
+      setCtrl(nd, 'val', val);
+      return nd;
     }
-    row++;
-
-    // ── 5. Surface.ByNURBS — 3×3 control grid ──
-    var nurbsY = 60 + row * rowH;
-    var nurbsNd = self.addNodeToCanvas('nurbs-surface', nodeCol, nurbsY);
-    if (nurbsNd) {
-      var degU = mkNum(nodeCol - 100, nurbsY + 60, 2);
-      var degV = mkNum(nodeCol - 100, nurbsY + 120, 2);
-      if (degU) self.addWire(degU.id, 'value', nurbsNd.id, 'degU');
-      if (degV) self.addWire(degV.id, 'value', nurbsNd.id, 'degV');
-      created.push(nurbsNd);
+    function intInput(x, y, val) {
+      var nd = add('Input.Integer', x, y);
+      setCtrl(nd, 'val', val);
+      return nd;
     }
-    row++;
+    function finish(message) {
+      self.updatePortDots();
+      if (typeof updatePortDataStates === 'function') updatePortDataStates();
+      setTimeout(function() { self.renderWires(); }, 100);
+      if (self.autoLayout) setTimeout(function() { self.autoLayout(); }, 200);
+      if (message) self.addAIMessage('workspace', message);
+      return created.length + ' nodes created';
+    }
+    return { add: add, setCtrl: setCtrl, wire: wire, num: num, intInput: intInput, finish: finish, created: created };
+  }
 
-    self.updatePortDots();
-    setTimeout(function() { self.renderWires(); }, 100);
-    if (self.autoLayout) setTimeout(function() { self.autoLayout(); }, 200);
-    self.addAIMessage('workspace', '🧪 **Surface Test!** ' + created.length + ' nodes created.\n\n• **Surface.Plane** — origin + normal\n• **Surface.ByPointGrid** — 5×5 point grid → surface\n• **Surface.ByRuledLoft** — two lines → ruled surface\n• **Surface.Isolines** — extract U isolines from grid surface\n• **Surface.ByNURBS** — NURBS surface from control grid\n\n**Shortcuts:** **P** = Properties, **D** = Inspector, **L** = Auto Layout');
-    return created.length + ' nodes created';
+  // ── 1. Hyperboloid Tower (cooling-tower aesthetic) ──
+  app._templateHyperboloidTower = function() {
+    this.newProject();
+    var h = makeTemplateHelpers(this);
+    var radius = h.num(40, 60, 8);
+    var waist  = h.num(40, 160, 4);
+    var height = h.num(40, 260, 20);
+    var tower  = h.add('Surface.Hyperboloid', 320, 160);
+    var smooth = h.add('Surface.Subdivide', 600, 160);
+    h.setCtrl(smooth, 'iterations', 1);
+    var watch  = h.add('Output.Watch', 880, 160);
+    h.wire(radius, 'value', tower, 'radius');
+    h.wire(waist,  'value', tower, 'waist');
+    h.wire(height, 'value', tower, 'height');
+    h.wire(tower,  'surface', smooth, 'mesh');
+    h.wire(smooth, 'result', watch, 'value');
+    return h.finish('🗼 **Hyperboloid Tower** loaded. Tweak Radius, Waist and Height to morph the cooling-tower silhouette; the Subdivide node smooths the tessellation.');
   };
 
-  app._testLargeGeometryPipeline = function() {
+  // ── 2. Catenary Pavilion (HyPar saddle with façade panels) ──
+  app._templateCatenaryPavilion = function() {
+    this.newProject();
+    var h = makeTemplateHelpers(this);
+    var span    = h.num(40, 60, 20);
+    var height  = h.num(40, 160, 10);
+    var shell   = h.add('Surface.CatenaryShell', 320, 110);
+    var uPanels = h.intInput(320, 280, 8);
+    var vPanels = h.intInput(320, 380, 8);
+    var panels  = h.add('Pattern.FacadePanels', 600, 220);
+    var watch   = h.add('Output.Watch', 880, 220);
+    h.wire(span,    'value', shell, 'span');
+    h.wire(height,  'value', shell, 'height');
+    h.wire(shell,   'surface', panels, 'mesh');
+    h.wire(uPanels, 'value', panels, 'uPanels');
+    h.wire(vPanels, 'value', panels, 'vPanels');
+    h.wire(panels,  'panels', watch, 'value');
+    return h.finish('⛺ **Catenary Pavilion** loaded. The Catenary Shell drives a U×V grid of façade panels — change Span / Height for a stretched vault, U/V for tile density.');
+  };
+
+  // ── 3. Voronoi Crater (Phyllotaxis sites → Voronoi mesh) ──
+  app._templateVoronoiCrater = function() {
+    this.newProject();
+    var h = makeTemplateHelpers(this);
+    var count  = h.intInput(40, 60, 80);
+    var radius = h.num(40, 160, 10);
+    var sites  = h.add('Pattern.Phyllotaxis', 320, 110);
+    var depth  = h.num(320, 280, 2);
+    var gap    = h.num(320, 380, 0.15);
+    var cells  = h.add('Pattern.VoronoiMesh', 600, 220);
+    var watch  = h.add('Output.Watch', 880, 220);
+    h.wire(count,  'value', sites, 'count');
+    h.wire(radius, 'value', sites, 'radius');
+    h.wire(sites,  'points', cells, 'sites');
+    h.wire(depth,  'value', cells, 'height');
+    h.wire(gap,    'value', cells, 'gap');
+    h.wire(cells,  'meshes', watch, 'value');
+    return h.finish('⬢ **Voronoi Crater** loaded. Phyllotaxis seeds an organic 2D point cloud; Voronoi Mesh extrudes each cell into a faceted crater.');
+  };
+
+  // ── 4. Möbius Sculpture (Möbius strip + noise deform) ──
+  app._templateMobiusSculpture = function() {
+    this.newProject();
+    var h = makeTemplateHelpers(this);
+    var radius = h.num(40, 60, 5);
+    var width  = h.num(40, 160, 2);
+    var strip  = h.add('Surface.MobiusStrip', 320, 110);
+    var amp    = h.num(320, 280, 0.2);
+    var freq   = h.num(320, 380, 1);
+    var deform = h.add('Pattern.NoiseDeform', 600, 220);
+    var watch  = h.add('Output.Watch', 880, 220);
+    h.wire(radius, 'value', strip, 'radius');
+    h.wire(width,  'value', strip, 'width');
+    h.wire(strip,  'surface', deform, 'mesh');
+    h.wire(amp,    'value', deform, 'amplitude');
+    h.wire(freq,   'value', deform, 'frequency');
+    h.wire(deform, 'result', watch, 'value');
+    return h.finish('∞ **Möbius Sculpture** loaded. A Möbius strip wrapped in a Perlin-noise displacement field — sweep Amplitude and Frequency for organic variations.');
+  };
+
+  // ── 5. Large Mesh Geometry (10k mesh refs, kept as a performance test) ──
+  app._templateLargeMesh = function() {
     this.newProject();
     var self = this;
     var created = [];
@@ -768,11 +738,11 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
       }
     }
 
-    var title = add('custom-comment', 40, 40);
+    var title = add('Custom.Comment', 40, 40);
     setCtrl(title, 'text', 'Pure mesh stress template: generate 10,000 Nova geometry refs, show bounds first, then preview meshes. Full mesh sample is left unconnected for on-demand loading.');
     customize(title);
 
-    var boundsGenerator = add('custom-python', 80, 165);
+    var boundsGenerator = add('Custom.Python', 80, 165);
     setCtrl(boundsGenerator, 'code', [
       '_count = 10000',
       'bounds_refs = []',
@@ -787,7 +757,7 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
       outputs: [{ id: 'output0', name: 'Bounds Refs', type: 'list' }]
     });
 
-    var previewGenerator = add('custom-python', 395, 165);
+    var previewGenerator = add('Custom.Python', 395, 165);
     setCtrl(previewGenerator, 'code', [
       'preview_meshes = []',
       'for ref in input0:',
@@ -804,7 +774,7 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
       outputs: [{ id: 'output0', name: 'Preview Meshes', type: 'list' }]
     });
 
-    var fullGenerator = add('custom-python', 395, 440);
+    var fullGenerator = add('Custom.Python', 395, 440);
     setCtrl(fullGenerator, 'code', [
       '# Connect Bounds Refs to this input only when you want the heavier mesh sample.',
       'full_mesh_sample = []',
@@ -823,12 +793,12 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
       outputs: [{ id: 'output0', name: 'Full Mesh Sample', type: 'list' }]
     });
 
-    var fullNote = add('custom-comment', 705, 440);
+    var fullNote = add('Custom.Comment', 705, 440);
     setCtrl(fullNote, 'text', 'Full mesh is intentionally unconnected. Wire Bounds Refs into Mesh.FullMeshSample and then to a Watch when you want to test the expensive path.');
     customize(fullNote);
 
-    var boundsWatch = add('output-watch', 705, 115);
-    var previewWatch = add('output-watch', 705, 260);
+    var boundsWatch = add('Output.Watch', 705, 115);
+    var previewWatch = add('Output.Watch', 705, 260);
 
     if (boundsGenerator && previewGenerator) self.addWire(boundsGenerator.id, 'output0', previewGenerator.id, 'input0');
     if (boundsGenerator && boundsWatch) self.addWire(boundsGenerator.id, 'output0', boundsWatch.id, 'value');
@@ -848,12 +818,12 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
     if (origRenderTemplates) origRenderTemplates();
     var grid = document.getElementById('templates-grid'); if (!grid) return;
     var templates = [
-      { fn: '_testMathNodes', color: 'var(--accent-green)', icon: 'Σ', name: 'Math Nodes Test', desc: 'All 16 math nodes with formulas' },
-      { fn: '_testLogicNodes', color: 'var(--accent-red)', icon: '⊻', name: 'Logic Nodes Test', desc: 'AND, OR, XOR, Compare, If, Gate' },
-      { fn: '_testListNodes', color: 'var(--accent-peach)', icon: '☰', name: 'List Nodes Test', desc: '16 list operations with Range source' },
-      { fn: '_testSurfaceNodes', color: 'var(--accent-teal)', icon: '◇', name: 'Surface Nodes Test', desc: 'All 5 surface nodes with geometry' }
+      { fn: '_templateHyperboloidTower', color: 'var(--accent-teal)',   icon: '⧘', name: 'Hyperboloid Tower',  desc: 'Cooling-tower silhouette, smoothed via Subdivide' },
+      { fn: '_templateCatenaryPavilion', color: 'var(--accent-peach)',  icon: '⌓', name: 'Catenary Pavilion',  desc: 'Catenary shell paneled into an 8×8 façade grid' },
+      { fn: '_templateVoronoiCrater',    color: 'var(--accent-red)',    icon: '⬢', name: 'Voronoi Crater',     desc: 'Phyllotaxis seeds an extruded Voronoi mesh' },
+      { fn: '_templateMobiusSculpture',  color: 'var(--accent-green)',  icon: '∞', name: 'Möbius Sculpture',   desc: 'Möbius strip warped by a Perlin-noise field' },
+      { fn: '_templateLargeMesh',        color: 'var(--accent-blue)',   icon: '⚡', name: 'Large Mesh Stress',  desc: '10 000 mesh refs — performance test for the engine' }
     ];
-    templates.push({ fn: '_testLargeGeometryPipeline', color: 'var(--accent-blue)', icon: '10k', name: 'Large Mesh Geometry', desc: '10k mesh refs, preview meshes, full mesh on demand' });
     templates.forEach(function(t) {
       var card = document.createElement('div'); card.className = 'template-card'; card.style.setProperty('--card-accent', t.color);
       card.onclick = function() { app[t.fn](); };

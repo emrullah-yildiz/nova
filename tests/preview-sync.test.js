@@ -117,4 +117,64 @@ describe('3D preview sync', () => {
     expect(documentRef.eye.className).toBe('node-preview-eye');
     expect(documentRef.nodeEl.classList.contains('node-3d-hidden')).toBe(false);
   });
+
+  it('re-renders the panel even when called without an options object', () => {
+    // The geo-selector eye-button handler calls these helpers without an
+    // options arg; the panel still needs to redraw so the OFF glyph
+    // appears immediately instead of waiting for the next selection.
+    const { app, viewer } = createPreviewFixture();
+
+    setPreviewItemVisibility(app, viewer, viewer._sceneItems[0], false);
+    expect(viewer._renderCount).toBe(1);
+
+    setPreviewItemVisibility(app, viewer, viewer._sceneItems[0], true);
+    expect(viewer._renderCount).toBe(2);
+
+    setNodePreviewState(app, viewer, 'node-1', false);
+    expect(viewer._renderCount).toBe(3);
+
+    showAllPreviews(app, viewer);
+    expect(viewer._renderCount).toBe(4);
+  });
+
+  it('hides engine-tracked items (app._sceneItems with idx) when toggling node preview off', () => {
+    const { app, documentRef } = createPreviewFixture();
+    const child0 = { visible: true };
+    const child1 = { visible: true };
+    const child2 = { visible: true };
+    const child3 = { visible: true };
+
+    const viewer = {
+      _selectedItem: null,
+      _renderCount: 0,
+      _renderGeoList() { this._renderCount += 1; },
+      _sceneItems: [],
+      geometryGroup: { children: [child0, child1, child2, child3] }
+    };
+
+    app._sceneItems = [
+      { nodeId: 'node-1', visible: true, idx: 0 },
+      { nodeId: 'node-1', visible: true, idxStart: 1, idxEnd: 2 },
+      { nodeId: 'node-2', visible: true, idx: 3 }
+    ];
+
+    setNodePreviewState(app, viewer, 'node-1', false, { documentRef });
+
+    expect(app.nodes[0]._preview3d).toBe(false);
+    expect(app._sceneItems[0].visible).toBe(false);
+    expect(app._sceneItems[1].visible).toBe(false);
+    expect(child0.visible).toBe(false);
+    expect(child1.visible).toBe(false);
+    expect(child2.visible).toBe(false);
+    // Other node's items untouched
+    expect(app._sceneItems[2].visible).toBe(true);
+    expect(child3.visible).toBe(true);
+
+    showAllPreviews(app, viewer, { documentRef });
+
+    expect(app._sceneItems[0].visible).toBe(true);
+    expect(child0.visible).toBe(true);
+    expect(child1.visible).toBe(true);
+    expect(child2.visible).toBe(true);
+  });
 });

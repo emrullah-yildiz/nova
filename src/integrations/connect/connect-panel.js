@@ -150,7 +150,9 @@ function getPendingApprovalsForDisplay() {
   try {
     const mod = window.__revitWriteApproval;
     if (mod && mod.getPendingApprovals) return mod.getPendingApprovals();
-  } catch (e) {}
+  } catch (e) {
+    // Approvals module may not be installed; render empty list instead of crashing the panel.
+  }
   return [];
 }
 

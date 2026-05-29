@@ -50,6 +50,43 @@ describe('NodeRegistry', () => {
       .toThrow('Node type already registered: math.add');
   });
 
+  it('resolves nodes by registered alias', () => {
+    const registry = createNodeRegistry();
+    registry.registerNode({
+      type: 'Math.Add',
+      name: 'Math.Add',
+      category: 'math',
+      aliases: ['math.add', 'math-add'],
+      inputs: [{ id: 'a', type: 'number' }, { id: 'b', type: 'number' }],
+      outputs: [{ id: 'result', type: 'number' }]
+    });
+
+    expect(registry.resolveType('Math.Add')).toBe('Math.Add');
+    expect(registry.resolveType('math.add')).toBe('Math.Add');
+    expect(registry.resolveType('math-add')).toBe('Math.Add');
+    expect(registry.resolveType('unknown.type')).toBeNull();
+    expect(registry.hasNode('math-add')).toBe(true);
+    expect(registry.getNode('math.add')).toMatchObject({ type: 'Math.Add' });
+  });
+
+  it('rejects an alias that collides with a canonical node type', () => {
+    const registry = createNodeRegistry();
+    registry.registerNode({ type: 'Math.Add', category: 'math' });
+
+    expect(() => registry.registerAlias('Math.Add', 'Math.Sum'))
+      .toThrow('Cannot register alias "Math.Add": already used as a canonical node type.');
+  });
+
+  it('rejects an alias re-registered to a different canonical type', () => {
+    const registry = createNodeRegistry();
+    registry.registerNode({ type: 'Math.Add', category: 'math' });
+    registry.registerNode({ type: 'Math.Sum', category: 'math' });
+    registry.registerAlias('math-add', 'Math.Add');
+
+    expect(() => registry.registerAlias('math-add', 'Math.Sum'))
+      .toThrow('Alias "math-add" already points to "Math.Add".');
+  });
+
   it('exports a legacy NODE_LIBRARY compatible shape', () => {
     const registry = createNodeRegistry();
     registry.registerCategory({ id: 'list', name: 'List', color: '#fab387', icon: '☰' });

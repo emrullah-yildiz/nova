@@ -23,6 +23,14 @@ export function executeRegistryNode(nodeDefinition, nodeInstance, getInput, getV
   return applyNodeOutputs(nodeDefinition, nodeInstance, outputs);
 }
 
+export function executeRegistryNodeUnlaced(nodeDefinition, nodeInstance, getInput, getVal, context = {}) {
+  const controls = resolveControls(nodeDefinition, nodeInstance, getVal);
+  const inputs = resolveInputs(nodeDefinition, nodeInstance, getInput, getVal, controls);
+  const outputs = nodeDefinition.execute(context, inputs, controls, nodeInstance);
+
+  return applyNodeOutputs(nodeDefinition, nodeInstance, outputs);
+}
+
 export function executeWithLacing(nodeDefinition, context, inputs, controls, nodeInstance) {
   const instanceLacingMode = nodeInstance && nodeInstance.controlValues
     ? nodeInstance.controlValues._lacingMode

@@ -5,7 +5,12 @@ export function buildNodeHelpDoc(nodeDefinition, explicitHelp) {
     if (control.default !== undefined) controls[control.id] = control.default;
   });
 
-  var doc = explicitHelp ? { ...explicitHelp } : {};
+  // Modern category nodes ship docs inline on the definition. Prefer that
+  // over the legacy window.NODE_HELP map so the panel shows the authored
+  // workflow rather than the auto-stub fallback.
+  var inlineHelp = nodeDefinition.help || null;
+  var primary = inlineHelp || explicitHelp || null;
+  var doc = primary ? { ...primary } : {};
   var meta = nodeDefinition.meta || {};
 
   return {
@@ -79,7 +84,9 @@ export function validateHelpExample(helpDoc, nodeTypeMap) {
 
 export function isNodeOutputExempt(nodeDefinition) {
   var type = nodeDefinition && nodeDefinition.type;
-  return type === 'custom-comment' || (typeof type === 'string' && type.indexOf('output-') === 0);
+  if (type === 'custom-comment' || type === 'Custom.Comment') return true;
+  if (typeof type !== 'string') return false;
+  return type.indexOf('output-') === 0 || type.indexOf('Output.') === 0;
 }
 
 function normalizePortDocs(explicitPorts, definitionPorts) {

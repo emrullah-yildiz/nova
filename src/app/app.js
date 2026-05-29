@@ -141,16 +141,6 @@ const app = {
 
     const t = [
 
-      {id:'math',name:'NURBS Canopy',desc:'Smooth roof with Perlin noise',icon:'〰',color:'var(--accent-green)'},
-
-      {id:'geometry',name:'Parametric Facade',desc:'Building with attractor-driven panels',icon:'▦',color:'var(--accent-blue)'},
-
-      {id:'list',name:'Twisted Tower',desc:'Rotating floor plates with taper',icon:'⧘',color:'var(--accent-peach)'},
-
-      {id:'logic',name:'Voronoi Structure',desc:'Biomimetic cellular pavilion',icon:'⬡',color:'var(--accent-red)'},
-
-      {id:'data',name:'Organic Pavilion',desc:'NURBS lofted flowing form',icon:'◇',color:'var(--accent-purple)'},
-
       {id:'blank',name:'Blank Canvas',desc:'Start from scratch',icon:'✦',color:'var(--accent-teal)'}
 
     ];
@@ -226,52 +216,9 @@ const app = {
   openTemplate(id) {
 
     this.newProject();
-
-    const L = {
-
-      math: [{type:'number-input',x:80,y:80},{type:'number-input',x:80,y:260},{type:'math-add',x:340,y:120},{type:'math-multiply',x:340,y:300},{type:'output-watch',x:600,y:200}],
-
-      geometry: [{type:'number-input',x:60,y:60},{type:'number-input',x:60,y:200},{type:'number-input',x:60,y:340},{type:'geo-point',x:320,y:100},{type:'geo-point',x:320,y:300},{type:'geo-distance',x:580,y:190},{type:'output-watch',x:820,y:200}],
-
-      list: [{type:'number-input',x:80,y:80},{type:'number-input',x:80,y:220},{type:'number-input',x:80,y:360},{type:'list-range',x:340,y:60},{type:'list-create',x:340,y:260},{type:'output-watch',x:600,y:160}],
-
-      logic: [{type:'number-input',x:60,y:80},{type:'number-input',x:60,y:240},{type:'logic-compare',x:320,y:100},{type:'text-input',x:60,y:400},{type:'text-input',x:300,y:400},{type:'logic-if',x:560,y:200},{type:'output-watch',x:800,y:220}],
-
-      data: [{type:'number-input',x:80,y:120},{type:'number-input',x:80,y:280},{type:'custom-formula',x:340,y:160},{type:'custom-code',x:580,y:160},{type:'output-watch',x:820,y:180}]
-
-    };
-
-    const items = L[id]; if (!items) return;
-
-    const placed = items.map(i => this.addNodeToCanvas(i.type,i.x,i.y)).filter(Boolean);
-
-    if (id==='math' && placed.length>=5) {
-
-      this.addWire(placed[0].id,'value',placed[2].id,'a');
-
-      this.addWire(placed[1].id,'value',placed[2].id,'b');
-
-      this.addWire(placed[2].id,'result',placed[4].id,'value');
-
-    }
-
-    if (id==='geometry' && placed.length>=7) {
-
-      this.addWire(placed[0].id,'value',placed[3].id,'x');
-
-      this.addWire(placed[1].id,'value',placed[3].id,'y');
-
-      this.addWire(placed[2].id,'value',placed[3].id,'z');
-
-      this.addWire(placed[3].id,'point',placed[5].id,'a');
-
-      this.addWire(placed[4].id,'point',placed[5].id,'b');
-
-      this.addWire(placed[5].id,'distance',placed[6].id,'value');
-
-    }
-
-    this.updatePortDots(); this.renderWires(); this.updateMenuState();
+    // Legacy fallback retained only so callers don't crash; the modern
+    // landing-page templates live in node-library.js and logger-patch.js.
+    void id;
 
   },
 
@@ -313,7 +260,7 @@ const app = {
       // Group nodes by their 'group' property
       var groups = {};
       cat.nodes.forEach(function(n) {
-        var g = n.group || '_ungrouped';
+        var g = n.subGroup || n.group || '_ungrouped';
         if (!groups[g]) groups[g] = [];
         groups[g].push(n);
       });
@@ -323,6 +270,11 @@ const app = {
         if (b === '_ungrouped') return -1;
         return a.localeCompare(b);
       });
+      // Skip the sub-folder header when the category contains only one
+      // non-ungrouped group — a single sub-folder under a category just
+      // adds a click for no organizational value.
+      var namedGroupCount = groupKeys.filter(function(g) { return g !== '_ungrouped'; }).length;
+      var skipSubgroupHeaders = namedGroupCount <= 1;
 
       html += `<div class="node-category open" data-cat="${cat.id}">
         <button class="node-category-header" onclick="app.toggleCategory('${cat.id}')">
@@ -334,7 +286,8 @@ const app = {
         <div class="node-category-items">`;
 
       groupKeys.forEach(function(g) {
-        if (g !== '_ungrouped') {
+        var renderSubgroupHeader = g !== '_ungrouped' && !skipSubgroupHeaders;
+        if (renderSubgroupHeader) {
           html += `<div class="node-subgroup">
             <button class="node-subgroup-header" onclick="app.toggleSubGroup(this)">
               <svg class="node-subgroup-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
@@ -345,7 +298,7 @@ const app = {
         groups[g].forEach(function(n) {
           html += `<button class="node-lib-item" draggable="true" ondragstart="app.onLibDragStart(event,'${n.type}')" onclick="app.addNodeFromLib('${n.type}')"><span class="nli-icon" style="color:${cat.color}">${n.icon}</span>${n.name}</button>`;
         });
-        if (g !== '_ungrouped') {
+        if (renderSubgroupHeader) {
           html += `</div></div>`;
         }
       });
@@ -382,6 +335,37 @@ const app = {
     const l=document.getElementById('node-library');
     l.style.display=l.style.display==='none'?'':'none';
     this.syncWorkspaceLayout();
+  },
+
+  toggleViewerGrid() {
+    if (typeof Viewer3D === 'undefined') return;
+    Viewer3D.setGridVisible(!Viewer3D._gridVisible);
+    this._syncViewerMenuChecks();
+  },
+
+  toggleViewerAxes() {
+    if (typeof Viewer3D === 'undefined') return;
+    Viewer3D.setAxesVisible(!Viewer3D._axesVisible);
+    this._syncViewerMenuChecks();
+  },
+
+  toggleViewerEdges() {
+    if (typeof Viewer3D === 'undefined') return;
+    Viewer3D.setEdgesVisible(!Viewer3D._edgesVisible);
+    this._syncViewerMenuChecks();
+  },
+
+  _syncViewerMenuChecks() {
+    if (typeof Viewer3D === 'undefined') return;
+    const set = (id, on) => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      const mark = btn.querySelector('.menu-check');
+      if (mark) mark.setAttribute('data-on', on ? '1' : '0');
+    };
+    set('menu-toggle-grid',  Viewer3D._gridVisible);
+    set('menu-toggle-axes',  Viewer3D._axesVisible);
+    set('menu-toggle-edges', Viewer3D._edgesVisible);
   },
 
   onLibDragStart(e,type) { e.dataTransfer.setData('text/plain',type); e.dataTransfer.effectAllowed='copy'; },
@@ -516,7 +500,7 @@ const app = {
 
       if(c.type==='dropdown') h+=`<select onchange="app.onCtrl('${nd.id}','${c.id}',this.value)">${c.options.map(o=>`<option value="${o}" ${o===nd.controlValues[c.id]?'selected':''}>${o}</option>`).join('')}</select>`;
 
-      else if(c.type==='number') h+=`<input type="number" value="${nd.controlValues[c.id]}" onchange="app.onCtrl('${nd.id}','${c.id}',this.value)" placeholder="${c.label}">`;
+      else if(c.type==='number') h+=`<input type="number" step="any" value="${nd.controlValues[c.id]}" onchange="app.onCtrl('${nd.id}','${c.id}',this.value)" placeholder="${c.label}">`;
 
       else if(c.type==='text') h+=`<input type="text" value="${nd.controlValues[c.id]}" onchange="app.onCtrl('${nd.id}','${c.id}',this.value)" placeholder="${c.label}">`;
 
@@ -999,6 +983,11 @@ const app = {
 
     area.addEventListener('mousedown',e=>{
 
+      // Anything inside the 3D viewport is owned by OrbitControls — the 2D
+      // canvas must not pan, deselect, or otherwise react when the user is
+      // working in 3D (including split mode with 3D as the active layer).
+      if(e.target.closest('#viewport-3d')) return;
+
       if(e.target.closest('.node')||e.target.closest('.canvas-toolbar')||e.target.closest('.canvas-zoom')) return;
 
       this.deselectAll();
@@ -1045,6 +1034,10 @@ const app = {
 
     area.addEventListener('wheel',e=>{
 
+      // Wheel over the 3D viewport belongs to OrbitControls — don't dolly
+      // both views at once.
+      if(e.target.closest('#viewport-3d')) return;
+
       e.preventDefault();this.zoom=Math.max(0.25,Math.min(3,this.zoom+(e.deltaY>0?-0.08:0.08)));
 
       this.applyTransform();document.getElementById('zoom-indicator').textContent=Math.round(this.zoom*100)+'%';
@@ -1063,7 +1056,18 @@ const app = {
 
     });
 
-    area.addEventListener('contextmenu',e=>{if(e.target.closest('.node'))return;e.preventDefault();this.showContextMenu(e.clientX,e.clientY);});
+    area.addEventListener('contextmenu',e=>{
+
+      // OrbitControls uses right-mouse for PAN. Suppressing the browser
+      // context menu over the 3D viewport prevents the node search popup
+      // from appearing the moment the user releases a right-drag pan.
+      if(e.target.closest('#viewport-3d')){e.preventDefault();return;}
+
+      if(e.target.closest('.node'))return;
+
+      e.preventDefault();this.showContextMenu(e.clientX,e.clientY);
+
+    });
 
   },
 
@@ -1265,7 +1269,7 @@ const app = {
 
     this.addAIMessage('workspace',"🎨 **Workspace ready!** Connected to **gpt-4o**.\n\n• **Drag** nodes from the library on the left\n• **Connect** ports by dragging between dots\n• **Ask me anything** — I'll generate the code for you\n\nI specialize in **parametric design** — NURBS, organic forms, Voronoi, attractor facades, twisted towers, and more.\n\nTry asking me to build something!");
 
-    this.setChatSuggestions('workspace',['Create a parametric building with facade','Design a flowing organic pavilion','Build a NURBS canopy with noise','Create a Voronoi structure']);
+    this.setChatSuggestions('workspace',['Show me a hyperboloid tower','Build a catenary pavilion','Run the large mesh stress test','Start a blank canvas']);
 
   },
 
@@ -1610,7 +1614,7 @@ const app = {
 
     // Python/Custom nodes: output their raw code directly for perfect round-trip
 
-    if ((nd.type === 'custom-python' || nd.type === 'custom-code') && nd.controlValues.code) {
+    if ((nd.type === 'custom-python' || nd.type === 'custom-code' || nd.type === 'Custom.Python') && nd.controlValues.code) {
 
       return nd.controlValues.code;
 
@@ -2624,7 +2628,7 @@ const app = {
 
         // For Python nodes, store rawCode so Canvas→Code can reproduce it exactly
 
-        if (gn.type === 'custom-python' && gn.rawCode) {
+        if ((gn.type === 'custom-python' || gn.type === 'Custom.Python') && gn.rawCode) {
 
           nd.controlValues.code = gn.rawCode;
 
@@ -2702,91 +2706,78 @@ const app = {
 
 // ══════════════════════════════════════
 
+// The actual app.setView, app.toggleSplit, and app._applyViewState are
+// installed by core/engine.js installEngine() — defining duplicates here
+// would only fight that ownership. We keep the divider drag and the
+// split-mode live rebuild watcher below; those don't conflict.
+
 app.currentView = 'nodes';
 
-app.setView = function(mode) {
+// The viewport divider is gone — split view now stacks 2D and 3D on the
+// same rectangle (layered, not side-by-side), so there's nothing to drag.
 
-  this.currentView = mode;
+// ── Live 3D rebuild for split view ──
 
-  const nodeCanvas = document.getElementById('node-canvas');
+// A requestAnimationFrame watcher that observes the engine's version
+// counter (ExecutionEngine v2 bumps `_version` on every invalidate) or
+// falls back to `app._graphDirty`. When the value changes while split
+// view is active, rebuild the 3D scene. Cheap when idle (one compare
+// per frame), avoids the ordering hassle of patching invalidateCompute
+// after ExecutionEngine v2 has already wrapped it.
 
-  const wireSvg = document.getElementById('wire-svg');
+app._runSplitWatcher = function() {
 
-  const gridSvg = document.getElementById('canvas-grid-svg');
+  if (this._splitWatcherRunning) return;
 
-  const viewport = document.getElementById('viewport-3d');
+  this._splitWatcherRunning = true;
 
-  const btn2D = document.getElementById('btn-view-nodes');
+  let lastSeenVersion = -1;
 
-  const btn3D = document.getElementById('btn-view-3d');
+  const tick = () => {
 
+    try {
 
+      if (this.splitMode && typeof Viewer3D !== 'undefined' && Viewer3D.isInitialized) {
 
-  if (mode === '3d') {
+        const ee = typeof window !== 'undefined' ? window.__executionEngineV2 : null;
 
-    if (nodeCanvas) nodeCanvas.style.display = 'none';
+        const v = ee && typeof ee._version === 'number' ? ee._version : (this._graphDirty ? 1 : 0);
 
-    if (wireSvg) wireSvg.style.display = 'none';
+        if (v !== lastSeenVersion) {
 
-    if (gridSvg) gridSvg.style.display = 'none';
+          lastSeenVersion = v;
 
-    if (viewport) viewport.style.display = 'block';
+          try {
 
-    if (btn2D) { btn2D.style.color = ''; btn2D.style.fontWeight = ''; }
+            Viewer3D.buildFromGraph(this.nodes, this.wires, (nd) => this.computeNodeValue(nd));
 
-    if (btn3D) { btn3D.style.color = 'var(--accent-blue)'; btn3D.style.fontWeight = '700'; }
+          } catch (e) { /* skip rebuild errors */ }
 
+          Viewer3D._needsRebuild = false;
 
+        }
 
-    if (!Viewer3D.isInitialized) Viewer3D.init(viewport);
+      }
 
-    Viewer3D.show();
+    } catch (e) { /* never let the watcher die */ }
 
-    if (app._manualRunMode && !app._hasRun) {
-      if (Viewer3D.clearGeometry) Viewer3D.clearGeometry();
-      Viewer3D._needsRebuild = false;
-      return;
-    }
+    requestAnimationFrame(tick);
 
-    if (app._manualRunMode && app._graphDirty) {
-      return;
-    }
+  };
 
-    // Only rebuild 3D if the graph has changed since last build.
-
-    // Otherwise just show/hide with existing visibility state preserved.
-
-    if (Viewer3D._needsRebuild !== false) {
-
-      Viewer3D.buildFromGraph(app.nodes, app.wires, (nd) => app.computeNodeValue(nd));
-
-      Viewer3D.fitAll();
-
-      Viewer3D._needsRebuild = false;
-
-    }
-
-  } else {
-
-    if (nodeCanvas) nodeCanvas.style.display = '';
-
-    if (wireSvg) wireSvg.style.display = '';
-
-    if (gridSvg) gridSvg.style.display = '';
-
-    if (viewport) viewport.style.display = 'none';
-
-    if (btn2D) { btn2D.style.color = 'var(--accent-blue)'; btn2D.style.fontWeight = '700'; }
-
-    if (btn3D) { btn3D.style.color = ''; btn3D.style.fontWeight = ''; }
-
-    Viewer3D.hide();
-
-    setTimeout(() => app.renderWires(), 50);
-
-  }
+  requestAnimationFrame(tick);
 
 };
+
+if (typeof document !== 'undefined') {
+
+  document.addEventListener('DOMContentLoaded', () => {
+
+    if (app._runSplitWatcher) app._runSplitWatcher();
+
+  });
+
+}
 
 
 

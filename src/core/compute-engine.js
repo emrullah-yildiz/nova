@@ -23,7 +23,7 @@ export function getInput(ctx, nd, portId) {
     return srcNd._portValues[wire.fromPort];
   }
 
-  if ((srcNd.type === 'custom-python' || srcNd.type === 'custom-code') && srcNd._pyResults) {
+  if ((srcNd.type === 'custom-python' || srcNd.type === 'custom-code' || srcNd.type === 'Custom.Python') && srcNd._pyResults) {
     if (srcNd._pyResults[wire.fromPort] !== undefined) return srcNd._pyResults[wire.fromPort];
     const keys = Object.keys(srcNd._pyResults).filter(k => !k.startsWith('_') && k.length > 1);
     if (keys.length > 0) return srcNd._pyResults[keys[0]];

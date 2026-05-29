@@ -718,7 +718,7 @@ import { Geo } from './geometry-lib.js';
         faces.push([ai + 1, ai + n, ai + n + 1]);
       }
     }
-    var m = new G.Mesh3(verts, faces, 0xf2cdcd);
+    var m = new G.Mesh3(verts, faces, 0xcba6f7);
     m._solidType = 'CatenaryShell';
     return m;
   };
@@ -750,7 +750,7 @@ import { Geo } from './geometry-lib.js';
         faces.push([ai + 1, ai + n, ai + n + 1]);
       }
     }
-    var m = new G.Mesh3(verts, faces, 0xcdd6f4);
+    var m = new G.Mesh3(verts, faces, 0xcba6f7);
     m._solidType = 'Hyperboloid';
     return m;
   };
@@ -786,7 +786,7 @@ import { Geo } from './geometry-lib.js';
         faces.push([a + 1, a + nv, a + nv + 1]);
       }
     }
-    var m = new G.Mesh3(verts, faces, 0xf2cdcd);
+    var m = new G.Mesh3(verts, faces, 0xcba6f7);
     m._solidType = 'Seashell';
     return m;
   };
@@ -796,9 +796,13 @@ import { Geo } from './geometry-lib.js';
   // Panel arrays, diamond grids, hexagonal patterns
   // ══════════════════════════════════════
 
-  // Parametric panel array on a surface mesh
+  // Parametric panel array on a surface mesh.
+  // Returns a list of filled Mesh3 quads (2 triangles each) so the panels
+  // shade properly in the 3D preview. Each panel is inset toward its
+  // centre by `scaleFn` (default 0.9) to leave architectural gaps.
   G.facadePanels = function(mesh, uPanels, vPanels, scaleFn) {
     if (!mesh || mesh._type !== 'Mesh3') return [];
+    var color = mesh.color || 0xfab387; // peach by default — matches the "extrusion" family in NovaPalette3D
     var panels = [];
     for (var i = 0; i < uPanels; i++) {
       for (var j = 0; j < vPanels; j++) {
@@ -809,36 +813,39 @@ import { Geo } from './geometry-lib.js';
         var p01 = G.evaluateSurface(mesh, u0, v1);
         var p11 = G.evaluateSurface(mesh, u1, v1);
 
-        // Center of panel
         var cx = (p00.x + p10.x + p01.x + p11.x) / 4;
         var cy = (p00.y + p10.y + p01.y + p11.y) / 4;
         var cz = (p00.z + p10.z + p01.z + p11.z) / 4;
         var center = P(cx, cy, cz);
 
-        // Scale factor
         var scale = scaleFn ? scaleFn(center, i, j, uPanels, vPanels) : 0.9;
 
-        // Scale corners toward center
-        var corners = [p00, p10, p11, p01].map(function(p) {
+        var inset = [p00, p10, p11, p01].map(function(p) {
           return P(
             center.x + (p.x - center.x) * scale,
             center.y + (p.y - center.y) * scale,
             center.z + (p.z - center.z) * scale
           );
         });
-        corners.push(corners[0]); // close
-        panels.push(new G.Polyline3(corners, true));
+
+        var panel = new G.Mesh3(inset, [[0, 1, 2], [0, 2, 3]], color);
+        panel._solidType = 'FacadePanel';
+        panels.push(panel);
       }
     }
     return panels;
   };
 
-  // Hexagonal grid on XY plane
+  // Hexagonal grid of FILLED tiles on the XY plane. Each tile is a
+  // Mesh3 (fan-triangulated from its centre) so it shades like a panel
+  // and picks up the Edges-on-by-default overlay instead of rendering
+  // as a 1-pixel WebGL line outline.
   G.hexGrid = function(origin, radius, rows, cols) {
     origin = origin || P(0, 0, 0);
     radius = radius || 2;
     rows = rows || 10;
     cols = cols || 10;
+    var color = 0xfab387; // NovaPalette3D.extrusion
     var hexes = [];
     var dx = radius * 1.5;
     var dy = radius * Math.sqrt(3);
@@ -846,37 +853,48 @@ import { Geo } from './geometry-lib.js';
       for (var c = 0; c < cols; c++) {
         var cx = origin.x + c * dx;
         var cy = origin.y + r * dy + (c % 2 === 1 ? dy / 2 : 0);
-        var pts = [];
-        for (var k = 0; k <= 6; k++) {
+        var center = P(cx, cy, origin.z);
+        var verts = [center];
+        for (var k = 0; k < 6; k++) {
           var angle = Math.PI / 3 * k + Math.PI / 6;
-          pts.push(P(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle), origin.z));
+          verts.push(P(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle), origin.z));
         }
-        hexes.push(new G.Polyline3(pts, true));
+        var faces = [];
+        for (var k2 = 0; k2 < 6; k2++) {
+          faces.push([0, k2 + 1, ((k2 + 1) % 6) + 1]);
+        }
+        var hex = new G.Mesh3(verts, faces, color);
+        hex._solidType = 'HexTile';
+        hexes.push(hex);
       }
     }
     return hexes;
   };
 
-  // Diamond grid
+  // Diamond grid of FILLED tiles on the XY plane. Each tile is a
+  // Mesh3 (two triangles) for the same reason as hexGrid above.
   G.diamondGrid = function(origin, width, height, rows, cols) {
     origin = origin || P(0, 0, 0);
     width = width || 2;
     height = height || 2;
     rows = rows || 10;
     cols = cols || 10;
+    var color = 0xfab387;
     var diamonds = [];
     for (var r = 0; r < rows; r++) {
       for (var c = 0; c < cols; c++) {
         var cx = origin.x + c * width + (r % 2 === 1 ? width / 2 : 0);
         var cy = origin.y + r * height * 0.5;
-        var pts = [
-          P(cx, cy - height / 2, origin.z),
-          P(cx + width / 2, cy, origin.z),
-          P(cx, cy + height / 2, origin.z),
-          P(cx - width / 2, cy, origin.z),
-          P(cx, cy - height / 2, origin.z)
+        var verts = [
+          P(cx, cy - height / 2, origin.z), // 0 bottom
+          P(cx + width / 2, cy, origin.z),  // 1 right
+          P(cx, cy + height / 2, origin.z), // 2 top
+          P(cx - width / 2, cy, origin.z)   // 3 left
         ];
-        diamonds.push(new G.Polyline3(pts, true));
+        var faces = [[0, 1, 2], [0, 2, 3]];
+        var diamond = new G.Mesh3(verts, faces, color);
+        diamond._solidType = 'DiamondTile';
+        diamonds.push(diamond);
       }
     }
     return diamonds;
@@ -990,13 +1008,17 @@ import { Geo } from './geometry-lib.js';
   G.phyllotaxis = function(count, radius, spacing) {
     count = count || 200;
     radius = radius || 10;
-    spacing = spacing || 0.5;
+    // Derive spacing so the OUTERMOST point lands on `radius` — otherwise
+    // `radius` is just a cutoff and the visible disk is much smaller than
+    // the user asked for (with the old default spacing=0.5 a 200-point
+    // pattern only reached r≈7).
+    var divisor = Math.sqrt(Math.max(1, count - 1));
+    spacing = spacing || (radius / divisor);
     var goldenAngle = Math.PI * (3 - Math.sqrt(5)); // 137.5°
     var pts = [];
     for (var i = 0; i < count; i++) {
       var r = spacing * Math.sqrt(i);
       var theta = i * goldenAngle;
-      if (r > radius) break;
       pts.push(P(r * Math.cos(theta), r * Math.sin(theta), 0));
     }
     return pts;
