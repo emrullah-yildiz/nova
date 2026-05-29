@@ -718,7 +718,7 @@ import { Geo } from './geometry-lib.js';
         faces.push([ai + 1, ai + n, ai + n + 1]);
       }
     }
-    var m = new G.Mesh3(verts, faces, 0xf2cdcd);
+    var m = new G.Mesh3(verts, faces, 0xcba6f7);
     m._solidType = 'CatenaryShell';
     return m;
   };
@@ -750,7 +750,7 @@ import { Geo } from './geometry-lib.js';
         faces.push([ai + 1, ai + n, ai + n + 1]);
       }
     }
-    var m = new G.Mesh3(verts, faces, 0xcdd6f4);
+    var m = new G.Mesh3(verts, faces, 0xcba6f7);
     m._solidType = 'Hyperboloid';
     return m;
   };
@@ -786,7 +786,7 @@ import { Geo } from './geometry-lib.js';
         faces.push([a + 1, a + nv, a + nv + 1]);
       }
     }
-    var m = new G.Mesh3(verts, faces, 0xf2cdcd);
+    var m = new G.Mesh3(verts, faces, 0xcba6f7);
     m._solidType = 'Seashell';
     return m;
   };

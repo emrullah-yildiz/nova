@@ -1,3 +1,22 @@
+// Nova 3D palette — sourced from the CSS accent variables in style.css.
+// Keep these in sync with --accent-* / --bg-* / --text-* when the design
+// system changes.
+export const NovaPalette3D = {
+  solid:        0x89b4fa,
+  curve:        0xf9e2af,
+  surface:      0x94e2d5,
+  parametric:   0xcba6f7,
+  extrusion:    0xfab387,
+  deformation:  0xf5c2e7,
+  union:        0xa6e3a1,
+  subtract:     0xf38ba8,
+  point:        0x89b4fa,
+  vector:       0x94e2d5,
+  edges:        0x313244,
+  background:   0x1e1e2e,
+  ambient:      0xcdd6f4
+};
+
 export const Viewer3D = {
   scene: null,
   camera: null,
@@ -10,9 +29,10 @@ export const Viewer3D = {
   isUnavailable: false,
   isVisible: false,
   animFrameId: null,
+  palette: NovaPalette3D,
   _gridVisible: true,
   _axesVisible: true,
-  _wireframeVisible: false,
+  _edgesVisible: true,
 
   init(container) {
     if (this.isInitialized) return;
@@ -23,9 +43,9 @@ export const Viewer3D = {
       return;
     }
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1e1e2e);
-    // Pulled the fog density back so the grid and distant geometry don't fade out before they're useful.
-    this.scene.fog = new THREE.FogExp2(0x1e1e2e, 0.0007);
+    this.scene.background = new THREE.Color(NovaPalette3D.background);
+    // Lighter fog so the grid and distant geometry don't fade out at typical fit-all zooms.
+    this.scene.fog = new THREE.FogExp2(NovaPalette3D.background, 0.0007);
     this.camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 10000);
     this.camera.position.set(30, 25, 30);
     this.camera.lookAt(0, 0, 0);
@@ -41,7 +61,6 @@ export const Viewer3D = {
     this.controls.dampingFactor = 0.08;
     this.controls.screenSpacePanning = true;
     this.controls.maxPolarAngle = Math.PI;
-    // Brighter grid — the previous values were almost the background colour.
     this.gridHelper = new THREE.GridHelper(100, 100, 0x6c7086, 0x45475a);
     if (this.gridHelper.material) {
       this.gridHelper.material.transparent = true;
@@ -54,13 +73,20 @@ export const Viewer3D = {
     this.axisHelper.renderOrder = 999;
     this.axisHelper.visible = this._axesVisible;
     this.scene.add(this.axisHelper);
-    this._installOverlay(container);
-    const ambient = new THREE.AmbientLight(0x89b4fa, 0.4);
+
+    // Three-point lighting for a clay-render feel: warm key, cool fill, gentle rim, neutral ambient.
+    const ambient = new THREE.AmbientLight(NovaPalette3D.ambient, 0.35);
     this.scene.add(ambient);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(20, 30, 20);
-    this.scene.add(dirLight);
-    const hemiLight = new THREE.HemisphereLight(0x89b4fa, 0x1e1e2e, 0.3);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    keyLight.position.set(20, 30, 20);
+    this.scene.add(keyLight);
+    const fillLight = new THREE.DirectionalLight(0xb8c8ff, 0.32);
+    fillLight.position.set(-18, 12, -16);
+    this.scene.add(fillLight);
+    const rimLight = new THREE.DirectionalLight(0xffd1a4, 0.22);
+    rimLight.position.set(0, -8, -28);
+    this.scene.add(rimLight);
+    const hemiLight = new THREE.HemisphereLight(0x89b4fa, 0x1e1e2e, 0.25);
     this.scene.add(hemiLight);
     this.geometryGroup = new THREE.Group();
     this.scene.add(this.geometryGroup);
@@ -79,7 +105,6 @@ export const Viewer3D = {
   show() {
     this.isVisible = true;
     if (this.renderer) this.renderer.domElement.style.display = 'block';
-    if (this._overlay) this._overlay.style.display = 'flex';
     this.animate();
     if (this._onResize) this._onResize();
   },
@@ -87,7 +112,6 @@ export const Viewer3D = {
   hide() {
     this.isVisible = false;
     if (this.renderer) this.renderer.domElement.style.display = 'none';
-    if (this._overlay) this._overlay.style.display = 'none';
     if (this.animFrameId) { cancelAnimationFrame(this.animFrameId); this.animFrameId = null; }
   },
 
@@ -101,47 +125,12 @@ export const Viewer3D = {
     if (this.axisHelper) this.axisHelper.visible = this._axesVisible;
   },
 
-  setWireframeVisible(v) {
-    this._wireframeVisible = !!v;
+  setEdgesVisible(v) {
+    this._edgesVisible = !!v;
     if (!this.geometryGroup) return;
     this.geometryGroup.traverse(function(obj) {
-      if (obj.userData && obj.userData.isMeshWireframe) obj.visible = !!v;
+      if (obj.userData && obj.userData.isMeshEdges) obj.visible = !!v;
     });
-  },
-
-  _installOverlay(container) {
-    if (typeof document === 'undefined' || !container) return;
-    if (this._overlay) return;
-    var overlay = document.createElement('div');
-    overlay.className = 'viewer3d-overlay';
-    overlay.style.cssText = 'position:absolute;top:50px;right:12px;z-index:8;display:none;flex-direction:column;gap:4px;background:rgba(30,30,46,0.78);border:1px solid var(--border, #45475a);border-radius:6px;padding:8px 10px;backdrop-filter:blur(6px);font-size:11px;color:var(--text, #cdd6f4);pointer-events:auto;user-select:none;';
-    overlay.innerHTML = '<div style="font-weight:700;letter-spacing:0.4px;color:var(--text-muted,#a6adc8);font-size:9px;text-transform:uppercase;margin-bottom:2px;">View</div>';
-
-    var self = this;
-    function row(labelText, key, initial) {
-      var lbl = document.createElement('label');
-      lbl.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;line-height:1.2;';
-      var cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = !!initial;
-      cb.style.cssText = 'accent-color:var(--accent-blue,#89b4fa);margin:0;';
-      cb.addEventListener('change', function() {
-        if (key === 'grid') self.setGridVisible(cb.checked);
-        else if (key === 'axes') self.setAxesVisible(cb.checked);
-        else if (key === 'wireframe') self.setWireframeVisible(cb.checked);
-      });
-      var span = document.createElement('span');
-      span.textContent = labelText;
-      lbl.appendChild(cb);
-      lbl.appendChild(span);
-      overlay.appendChild(lbl);
-    }
-    row('Grid', 'grid', this._gridVisible);
-    row('Axes', 'axes', this._axesVisible);
-    row('Wireframe', 'wireframe', this._wireframeVisible);
-
-    container.appendChild(overlay);
-    this._overlay = overlay;
   },
 
   animate() {
@@ -235,22 +224,23 @@ export const Viewer3D = {
       faces.forEach(f => { indices.push(f[0], f[1], f[2]); });
       geo.setIndex(indices);
     }
-    // Crease-angle normals — matches Mesh3.toThreeGeometry so sharp edges
-    // stay sharp while curved regions still get smooth shading.
     const Geo = (typeof window !== 'undefined' && window.Geo) || null;
     const shadedGeo = (Geo && typeof Geo._applyCreaseNormals === 'function')
       ? Geo._applyCreaseNormals(geo, 30)
       : (geo.computeVertexNormals(), geo);
-    const mat = new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.95, side: THREE.DoubleSide, flatShading: false, shininess: 35 });
+    const mat = new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 1.0, side: THREE.DoubleSide, flatShading: false, shininess: 18, specular: 0x252538 });
+    mat.polygonOffset = true;
+    mat.polygonOffsetFactor = 1;
+    mat.polygonOffsetUnits = 1;
     const meshObj = new THREE.Mesh(shadedGeo, mat);
     meshObj.userData.isMeshBody = true;
     this.geometryGroup.add(meshObj);
-    const wire = new THREE.WireframeGeometry(shadedGeo);
-    const wireMat = new THREE.LineBasicMaterial({ color: 0x45475a, linewidth: 1, transparent: true, opacity: 0.45 });
-    const wireLines = new THREE.LineSegments(wire, wireMat);
-    wireLines.userData.isMeshWireframe = true;
-    wireLines.visible = !!this._wireframeVisible;
-    this.geometryGroup.add(wireLines);
+    const edges = new THREE.EdgesGeometry(shadedGeo, 30);
+    const eMat = new THREE.LineBasicMaterial({ color: NovaPalette3D.edges, linewidth: 1, transparent: true, opacity: 0.7 });
+    const edgeLines = new THREE.LineSegments(edges, eMat);
+    edgeLines.userData.isMeshEdges = true;
+    edgeLines.visible = !!this._edgesVisible;
+    this.geometryGroup.add(edgeLines);
   },
 
   addPointGrid(rows, cols, spacing, color) {

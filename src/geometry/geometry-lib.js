@@ -450,27 +450,35 @@ class _Mesh3 {
 
     const c = color || this.color;
 
-    const mat = new THREE.MeshPhongMaterial({ color: c, transparent: true, opacity: 0.95, side: THREE.DoubleSide, flatShading: false, shininess: 35 });
+    // Clay-like Phong: matte shininess, full opacity, polygon-offset so the edge overlay sits on top without z-fighting.
+    const mat = new THREE.MeshPhongMaterial({ color: c, transparent: true, opacity: 1.0, side: THREE.DoubleSide, flatShading: false, shininess: 18, specular: 0x252538 });
+
+    mat.polygonOffset = true;
+
+    mat.polygonOffsetFactor = 1;
+
+    mat.polygonOffsetUnits = 1;
 
     const mesh = new THREE.Mesh(g, mat);
 
     mesh.userData.isMeshBody = true;
 
-    const wire = new THREE.WireframeGeometry(g);
+    // EdgesGeometry: only emits edges where the dihedral angle > 30°. A box gets its 12 corners, a sphere gets nothing, parametric surfaces show their boundary curves.
+    const edges = new THREE.EdgesGeometry(g, 30);
 
-    const wMat = new THREE.LineBasicMaterial({ color: 0x45475a, linewidth: 1, transparent: true, opacity: 0.45 });
+    const eMat = new THREE.LineBasicMaterial({ color: 0x313244, linewidth: 1, transparent: true, opacity: 0.7 });
 
-    const wireLines = new THREE.LineSegments(wire, wMat);
+    const edgeLines = new THREE.LineSegments(edges, eMat);
 
-    wireLines.userData.isMeshWireframe = true;
+    edgeLines.userData.isMeshEdges = true;
 
-    wireLines.visible = !!(typeof window !== 'undefined' && window.Viewer3D && window.Viewer3D._wireframeVisible);
+    edgeLines.visible = !(typeof window !== 'undefined' && window.Viewer3D && window.Viewer3D._edgesVisible === false);
 
     const group = new THREE.Group();
 
     group.add(mesh);
 
-    group.add(wireLines);
+    group.add(edgeLines);
 
     return group;
 
