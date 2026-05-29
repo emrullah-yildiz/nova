@@ -12,7 +12,9 @@ const GPTClient = {
   MAX_TOKENS: 2048,
   TEMPERATURE: 0.7,
 
-  // Free-tier proxy used when the user has not configured a BYOK provider.
+  // Free-tier proxy — when the user has no API key configured we POST to
+  // Nova's own Cloudflare Pages Function, which forwards to Groq with the
+  // server-side GROQ_API_KEY. Lets first-time visitors chat without signup.
   PROXY_URL: '/api/proxy/chat',
   PROXY_MODEL: 'llama-3.3-70b-versatile',
 
@@ -77,6 +79,12 @@ const GPTClient = {
     var k = this.getApiKey();
     return k && k.length > 10;
   },
+
+  // Returns true when the assistant can actually attempt a request. BYOK and
+  // enterprise modes always qualify; in proxy mode we optimistically allow
+  // the call too — if the deployment hasn't configured GROQ_API_KEY the
+  // Function returns 503 and the chat surfaces a clear "owner needs to set
+  // env var" message instead of being silently blocked at the door.
   canChat() {
     return this.hasApiKey() || this.isEnterpriseAiEnabled() || this.isProxyMode();
   },
@@ -509,13 +517,12 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
         }
         if (response.status === 429) {
           if (proxyMode) {
-            NFLogger.aiError('Rate limit 429', providerLabel);
             onError('__PROXY_RATE_LIMIT__');
-            return;
+          } else {
+            var switched = this.switchToFreeModel();
+            if (switched) { onError('__RATE_LIMIT_SWITCHED__' + switched); }
+            else { onError('__RATE_LIMIT_NO_FREE__'); }
           }
-          var switched = this.switchToFreeModel();
-          if (switched) { onError('__RATE_LIMIT_SWITCHED__' + switched); }
-          else { onError('__RATE_LIMIT_NO_FREE__'); }
           return;
         }
         const errBody = await response.text().catch(() => '');
@@ -623,7 +630,9 @@ const SettingsDialog = {
               ${(GPTClient.PROVIDERS[currentProvider] || GPTClient.PROVIDERS.openai).models.map(function(m) { var sel = m.id === currentModel ? 'selected' : ''; var ft = m.free ? ' 🟢 FREE' : ''; return '<option value="' + m.id + '" ' + sel + '>' + m.name + ft + '</option>'; }).join('')}
             </select>
             <div class="settings-status" id="settings-status">
-              ${currentKey ? '<span style="color:var(--accent-green)">✓ API key configured</span>' : '<span style="color:var(--accent-yellow)">⚠ No API key — using local AI only</span>'}
+              ${currentKey
+                ? '<span style="color:var(--accent-green)">✓ Using your ' + (GPTClient.PROVIDERS[currentProvider] && GPTClient.PROVIDERS[currentProvider].name || currentProvider) + ' key</span>'
+                : '<span style="color:var(--accent-blue)">🆓 No key — using free shared model (Groq Llama 3.3 70B). Bring your own key above for unlimited use.</span>'}
             </div>
             <button class="settings-test-btn" id="settings-test-btn" onclick="SettingsDialog.testConnection()">Test Connection</button>
           </div>

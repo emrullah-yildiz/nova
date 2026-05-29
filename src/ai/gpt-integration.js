@@ -68,6 +68,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (GPTClient.canChat()) {
       this._gptChat(ch, txt);
     } else {
+      // canChat() is effectively always true while a proxy is wired up, so
+      // this branch only runs in offline / non-deployed builds. Fall back to
+      // the local operator-swap engine when it can answer, otherwise show
+      // the BYOK help message.
       const existingCode = document.getElementById('cv-code') ? document.getElementById('cv-code').value : '';
       const aiResult = AIEngine.generateCode(txt, existingCode);
       if (aiResult) {
@@ -149,7 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (bubble) {
             bubble.classList.remove('streaming');
             bubble.removeAttribute('id');
-            bubble.innerHTML = app.fmt("**Free-tier limit hit.** Nova's shared free model is at capacity for the moment.\n\nWait a few seconds and try again, or bring your own free Groq key in **Settings -> Preferences**: [console.groq.com/keys](https://console.groq.com/keys)");
+            bubble.innerHTML = app.fmt('⏳ **Free-tier limit hit.** Nova\'s shared free model is at capacity for the moment.\n\n• **Wait a few seconds and try again** — the limit resets quickly.\n• Or bring your own free **Groq** key in **Settings → Preferences** for unlimited use → [console.groq.com/keys](https://console.groq.com/keys)');
           }
           msgContainer.scrollTop = msgContainer.scrollHeight;
           return;
@@ -158,7 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (bubble) {
             bubble.classList.remove('streaming');
             bubble.removeAttribute('id');
-            bubble.innerHTML = app.fmt('**Free model not available on this deployment.**\n\nThe site owner needs to set `GROQ_API_KEY` in Cloudflare Pages environment variables, or you can bring your own free API key in **Settings -> Preferences**.');
+            bubble.innerHTML = app.fmt('⚙️ **Free model not available on this deployment.**\n\nThe site owner needs to set `GROQ_API_KEY` in Cloudflare Pages environment variables, or you can bring your own free API key in **Settings → Preferences** (Groq is free, no card needed).');
           }
           msgContainer.scrollTop = msgContainer.scrollHeight;
           return;
