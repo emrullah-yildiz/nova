@@ -27,6 +27,7 @@
 import { createLacingFrames, hasListInput, mapLacingFrames } from './lacing.js';
 import { hostRegistry } from '../hosts/HostRegistry.js';
 import { setPreviewItemVisibility } from '../viewer/preview-sync.js';
+import { NODE_TYPE_MAP } from './nodes.js';
 import { getLiveCoreRegistry } from '../nodes/coreNodes.js';
 import { executeRegistryNodeUnlaced } from '../nodes/runtimeAdapter.js';
 
@@ -211,6 +212,18 @@ export function installEngine(targetApp = getRuntimeApp()) {
       return self.getLastRunNodeValue(nd);
     }
 
+    // Lazily resolve nd.def from NODE_TYPE_MAP for nodes constructed without
+    // going through addNodeToCanvas (e.g. test fixtures, programmatic graph
+    // imports). The generic lacing path relies on nd.def.inputs.
+    if (!nd.def && nd.type && typeof NODE_TYPE_MAP !== 'undefined' && NODE_TYPE_MAP[nd.type]) {
+      var resolvedDef = NODE_TYPE_MAP[nd.type];
+      nd.def = {
+        ...resolvedDef,
+        inputs: (resolvedDef.inputs || []).map(function(inp) { return { ...inp }; }),
+        outputs: (resolvedDef.outputs || []).map(function(out) { return { ...out }; })
+      };
+    }
+
     var cache = self._computeCache;
 
 
@@ -263,7 +276,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       // Python node results
 
-      if ((srcNd.type === 'custom-python' || srcNd.type === 'custom-code') && srcNd._pyResults) {
+      if ((srcNd.type === 'custom-python' || srcNd.type === 'custom-code' || srcNd.type === 'Custom.Python') && srcNd._pyResults) {
 
         if (srcNd._pyResults[wire.fromPort] !== undefined) return srcNd._pyResults[wire.fromPort];
 
@@ -434,7 +447,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
     if (!srcNd) return undefined;
     this.computeNodeValue(srcNd);
     if (srcNd._portValues && srcNd._portValues[wire.fromPort] !== undefined) return srcNd._portValues[wire.fromPort];
-    if ((srcNd.type === 'custom-python' || srcNd.type === 'custom-code') && srcNd._pyResults) {
+    if ((srcNd.type === 'custom-python' || srcNd.type === 'custom-code' || srcNd.type === 'Custom.Python') && srcNd._pyResults) {
       if (srcNd._pyResults[wire.fromPort] !== undefined) return srcNd._pyResults[wire.fromPort];
       var keys = Object.keys(srcNd._pyResults).filter(function(k) { return !k.startsWith('_') && k.length > 1; });
       if (keys.length > 0) return srcNd._pyResults[keys[0]];
@@ -613,231 +626,19 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-      // ── Point nodes ──
+      // Point nodes migrated to src/nodes/categories/point.js.
 
-      case 'point-origin': return new Geo.Point3(0, 0, 0);
 
-      case 'point-bycoordinates': return new Geo.Point3(getVal('x', 0), getVal('y', 0), getVal('z', 0));
 
-      case 'point-deconstruct': {
+      // Curve / Line nodes migrated to src/nodes/categories/curves.js.
 
-        var pt = getInput('point');
 
-        if (!pt) return undefined;
 
-        nd._portValues = { x: pt.x !== undefined ? pt.x : 0, y: pt.y !== undefined ? pt.y : 0, z: pt.z !== undefined ? pt.z : 0 };
+      // Input nodes migrated to src/nodes/categories/input.js.
 
-        return nd._portValues;
 
-      }
 
-      case 'point-x': { var p = getInput('point'); return p ? (p.x !== undefined ? p.x : 0) : undefined; }
-
-      case 'point-y': { var p = getInput('point'); return p ? (p.y !== undefined ? p.y : 0) : undefined; }
-
-      case 'point-z': { var p = getInput('point'); return p ? (p.z !== undefined ? p.z : 0) : undefined; }
-
-
-
-      // ── Line nodes ──
-
-      case 'line-bystartpointendpoint': {
-
-        var sp = getInput('startPoint'), ep = getInput('endPoint');
-
-        if (sp && ep) {
-
-          var s = sp instanceof Geo.Point3 ? sp : new Geo.Point3(sp.x||0, sp.y||0, sp.z||0);
-
-          var e = ep instanceof Geo.Point3 ? ep : new Geo.Point3(ep.x||0, ep.y||0, ep.z||0);
-
-          return new Geo.Line3(s, e);
-
-        }
-
-        return undefined;
-
-      }
-
-      case 'line-bypointanddirection': {
-
-        var orig = getInput('origin'), dir = getInput('direction'), len = getVal('length', 10);
-
-        if (orig && dir) {
-
-          var o = orig instanceof Geo.Point3 ? orig : new Geo.Point3(orig.x||0, orig.y||0, orig.z||0);
-
-          var d = dir instanceof Geo.Vector3 ? dir : new Geo.Vector3(dir.x||1, dir.y||0, dir.z||0);
-
-          var dn = d.normalize().scale(len);
-
-          return new Geo.Line3(o, o.add(dn));
-
-        }
-
-        return undefined;
-
-      }
-
-      case 'line-startpoint': return curveStart(getInput('curve'));
-
-      case 'line-endpoint': return curveEnd(getInput('curve'));
-
-      case 'line-direction': return curveDir(getInput('curve'));
-
-      case 'line-length': return curveLen(getInput('curve'));
-
-      case 'curve-startpoint': return curveStart(getInput('curve'));
-
-      case 'curve-endpoint': return curveEnd(getInput('curve'));
-
-      case 'curve-chord-direction': return curveDir(getInput('curve'));
-
-      case 'curve-length': return curveLen(getInput('curve'));
-
-      case 'curve-tangent': return curveTangent(getInput('curve'), getVal('param', 0.5));
-
-      case 'line-deconstruct': {
-
-        var c = getInput('curve'); if (!c) return undefined;
-
-        nd._portValues = { start: curveStart(c), end: curveEnd(c), length: curveLen(c), midpoint: curveMid(c), direction: curveDir(c) };
-
-        return nd._portValues;
-
-      }
-
-      case 'curve-deconstruct': {
-
-        var c = getInput('curve'); if (!c) return undefined;
-
-        nd._portValues = { start: curveStart(c), end: curveEnd(c), length: curveLen(c), midpoint: curveMid(c), direction: curveDir(c) };
-
-        return nd._portValues;
-
-      }
-
-
-
-      // ── Input nodes ──
-
-      case 'number-input': case 'slider-input': return parseFloat(ctrl.val) || 0;
-
-      case 'integer-input': return parseInt(ctrl.val) || 0;
-
-      case 'text-input': return ctrl.val || '';
-
-      case 'boolean-input': return ctrl.val === 'True';
-
-
-
-      // ── Math (extended) ──
-
-      case 'math-modulo': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined && b !== 0) ? a % b : undefined; }
-
-      case 'math-negate': { var a = getVal('a',undefined); return a !== undefined ? -a : undefined; }
-
-      case 'math-abs': { var a = getVal('a',undefined); return a !== undefined ? Math.abs(a) : undefined; }
-
-      case 'math-reciprocal': { var a = getVal('a',undefined); return (a !== undefined && a !== 0) ? 1 / a : undefined; }
-
-      case 'math-remap': {
-
-        var v = getVal('value', undefined);
-
-        var tMin = getVal('toMin', 0), tMax = getVal('toMax', 100);
-
-        var fMinRaw = nd.controlValues ? nd.controlValues['fromMin'] : '0';
-
-        var fMaxRaw = nd.controlValues ? nd.controlValues['fromMax'] : '1';
-
-        var fMinAuto = (fMinRaw === 'auto' || fMinRaw === undefined);
-
-        var fMaxAuto = (fMaxRaw === 'auto' || fMaxRaw === undefined);
-
-        if (v === undefined) return undefined;
-
-        // List of numbers
-
-        if (Array.isArray(v)) {
-
-          var nums = v.filter(function(x) { return typeof x === 'number'; });
-
-          if (nums.length === 0) return undefined;
-
-          var fMin = fMinAuto ? Math.min.apply(null, nums) : getVal('fromMin', 0);
-
-          var fMax = fMaxAuto ? Math.max.apply(null, nums) : getVal('fromMax', 1);
-
-          if (fMax === fMin) fMax = fMin + 1;
-
-          return nums.map(function(n) { return tMin + (n - fMin) / (fMax - fMin) * (tMax - tMin); });
-
-        }
-
-        // Single number
-
-        if (typeof v === 'number') {
-
-          var fMin = fMinAuto ? 0 : getVal('fromMin', 0);
-
-          var fMax = fMaxAuto ? 1 : getVal('fromMax', 1);
-
-          if (fMax === fMin) fMax = fMin + 1;
-
-          return tMin + (v - fMin) / (fMax - fMin) * (tMax - tMin);
-
-        }
-
-        return undefined;
-
-      }
-
-      case 'math-floor': { var a = getVal('a',undefined); return a !== undefined ? Math.floor(a) : undefined; }
-
-      case 'math-ceil': { var a = getVal('a',undefined); return a !== undefined ? Math.ceil(a) : undefined; }
-
-      case 'math-round': { var a = getVal('a',undefined), d = getVal('digits',0); return a !== undefined ? parseFloat(a.toFixed(Math.max(0,Math.round(d)))) : undefined; }
-
-      case 'math-min': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined) ? Math.min(a, b) : undefined; }
-
-      case 'math-max': { var a = getVal('a',undefined), b = getVal('b',undefined); return (a !== undefined && b !== undefined) ? Math.max(a, b) : undefined; }
-
-      case 'math-clamp': { var v = getInput('value'), mn = getVal('min',0), mx = getVal('max',1); return v !== undefined ? Math.max(mn, Math.min(mx, v)) : undefined; }
-
-
-
-      // ── Math (v1+v2 unified — uses getVal for formula/control fallback) ──
-      // Array-aware arithmetic: broadcasts scalars, adds element-wise for arrays
-
-      case 'math-add': {
-        var a = getVal('a',undefined), b = getVal('b',undefined);
-        return executeBinaryLacedMath(nd, a, b, function(x, y) { return x + y; });
-      }
-
-      case 'math-subtract': {
-        var a = getVal('a',undefined), b = getVal('b',undefined);
-        return executeBinaryLacedMath(nd, a, b, function(x, y) { return x - y; });
-      }
-
-      case 'math-multiply': {
-        var a = getVal('a',undefined), b = getVal('b',undefined);
-        return executeBinaryLacedMath(nd, a, b, function(x, y) { return x * y; });
-      }
-
-      case 'math-divide': {
-        var a = getVal('a',undefined), b = getVal('b',undefined);
-        return executeBinaryLacedMath(nd, a, b, function(x, y) { return y !== 0 ? x / y : undefined; });
-      }
-
-      case 'math-power': {
-        var base = getVal('base',undefined), exp = getVal('exp',undefined);
-        if (base === undefined || exp === undefined) return undefined;
-        if (Array.isArray(base) && Array.isArray(exp)) { var powArr = []; for (var pi = 0; pi < Math.min(base.length, exp.length); pi++) powArr.push(Math.pow(base[pi], exp[pi])); return powArr; }
-        if (Array.isArray(base)) { var powArrA = []; for (var pi2 = 0; pi2 < base.length; pi2++) powArrA.push(Math.pow(base[pi2], exp)); return powArrA; }
-        if (Array.isArray(exp)) { var powArrB = []; for (var pi3 = 0; pi3 < exp.length; pi3++) powArrB.push(Math.pow(base, exp[pi3])); return powArrB; }
-        return Math.pow(base, exp);
-      }
+      // Math nodes migrated to src/nodes/categories/math.js (executed via registry fallback).
 
 
 
@@ -845,259 +646,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-      // ── List (extended) ──
-
-      case 'list-first': { var lst = getInput('list'); return Array.isArray(lst) && lst.length > 0 ? lst[0] : undefined; }
-
-      case 'list-last': { var lst = getInput('list'); return Array.isArray(lst) && lst.length > 0 ? lst[lst.length - 1] : undefined; }
-
-      case 'list-take': { var lst = getInput('list'), n = getVal('count', 5); return Array.isArray(lst) ? lst.slice(0, Math.max(0, Math.round(n))) : undefined; }
-
-      case 'list-skip': { var lst = getInput('list'), n = getVal('count', 1); return Array.isArray(lst) ? lst.slice(Math.max(0, Math.round(n))) : undefined; }
-
-      case 'list-slice': { var lst = getInput('list'), f = getVal('from', 0), t = getVal('to', 5); return Array.isArray(lst) ? lst.slice(Math.max(0, Math.round(f)), Math.round(t)) : undefined; }
-
-      case 'list-sort': { var lst = getInput('list'); if (!Array.isArray(lst)) return undefined; var sorted = lst.slice().sort(function(a,b){return a-b;}); return ctrl.desc === 'Descending' ? sorted.reverse() : sorted; }
-
-      case 'list-shuffle': {
-
-        var lst = getInput('list'); if (!Array.isArray(lst)) return undefined;
-
-        var seed = getVal('seed', 0); var s = lst.slice();
-
-        // Seeded pseudo-random shuffle (mulberry32)
-
-        var t = Math.abs(Math.round(seed)) + 1;
-
-        function seedRand() { t = (t + 0x6D2B79F5) | 0; var x = Math.imul(t ^ (t >>> 15), 1 | t); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; }
-
-        for (var si = s.length - 1; si > 0; si--) { var sj = Math.floor(seedRand() * (si + 1)); var tmp = s[si]; s[si] = s[sj]; s[sj] = tmp; }
-
-        return s;
-
-      }
-
-      case 'list-unique': { var lst = getInput('list'); if (!Array.isArray(lst)) return undefined; var seen = []; lst.forEach(function(v) { if (seen.indexOf(v) < 0) seen.push(v); }); return seen; }
-
-      case 'list-zip': { var a = getInput('listA'), b = getInput('listB'); if (Array.isArray(a) && Array.isArray(b)) { var r = []; for (var zi = 0; zi < Math.min(a.length, b.length); zi++) r.push([a[zi], b[zi]]); return r; } return undefined; }
-
-      case 'list-join': { var a = getInput('listA'), b = getInput('listB'); if (Array.isArray(a) && Array.isArray(b)) return a.concat(b); return undefined; }
-
-      case 'list-insert': { var lst = getInput('list'), item = getInput('item'), idx = getVal('index', 0); if (Array.isArray(lst)) { var r = lst.slice(); r.splice(Math.round(idx), 0, item); return r; } return undefined; }
-
-      case 'list-remove': { var lst = getInput('list'), idx = getVal('index', 0); if (Array.isArray(lst) && lst.length > 0) { var r = lst.slice(); var i = Math.max(0, Math.min(r.length - 1, Math.round(idx))); nd._portValues = { result: r.slice(0, i).concat(r.slice(i + 1)), removed: r[i] }; return nd._portValues; } return undefined; }
-
-      case 'list-sum': { var lst = getInput('list'); if (Array.isArray(lst)) { var s = 0; lst.forEach(function(v) { if (typeof v === 'number') s += v; }); return s; } return undefined; }
-
-      case 'list-average': { var lst = getInput('list'); if (Array.isArray(lst) && lst.length > 0) { var s = 0, c = 0; lst.forEach(function(v) { if (typeof v === 'number') { s += v; c++; } }); return c > 0 ? s / c : 0; } return undefined; }
-
-      case 'list-minval': { var lst = getInput('list'); if (Array.isArray(lst) && lst.length > 0) { var nums = lst.filter(function(v) { return typeof v === 'number'; }); return nums.length > 0 ? Math.min.apply(null, nums) : undefined; } return undefined; }
-
-      case 'list-maxval': { var lst = getInput('list'); if (Array.isArray(lst) && lst.length > 0) { var nums = lst.filter(function(v) { return typeof v === 'number'; }); return nums.length > 0 ? Math.max.apply(null, nums) : undefined; } return undefined; }
-
-      case 'list-groupby': {
-
-        var lst = getInput('list');
-
-        if (!Array.isArray(lst)) return undefined;
-
-        var keysList = getInput('keys'); // optional parallel keys list
-
-        var exprStr = ctrl.expr || 'x%3';
-
-        var gdict = {}, gorder = [];
-
-        // Build key function from expression
-
-        var keyFn;
-
-        try {
-
-          if (typeof FormulaEval !== 'undefined') {
-
-            keyFn = function(x) {
-
-              // Replace 'x' in expression with the value, then eval
-
-              var expr = String(exprStr).replace(/\bx\b/g, typeof x === 'number' ? String(x) : '"' + String(x) + '"');
-
-              return FormulaEval.eval(expr).value;
-
-            };
-
-          } else {
-
-            keyFn = function(x) { return typeof x === 'number' ? Math.floor(x) : String(x).charAt(0); };
-
-          }
-
-        } catch(e) { keyFn = function(x) { return 0; }; }
-
-        for (var gi = 0; gi < lst.length; gi++) {
-
-          var k;
-
-          if (Array.isArray(keysList) && gi < keysList.length) {
-
-            k = keysList[gi]; // use provided keys
-
-          } else {
-
-            try { k = keyFn(lst[gi]); } catch(e2) { k = 0; }
-
-          }
-
-          var ks = String(k);
-
-          if (!gdict[ks]) { gdict[ks] = []; gorder.push(ks); }
-
-          gdict[ks].push(lst[gi]);
-
-        }
-
-        var groups = gorder.map(function(ks) { return gdict[ks]; });
-
-        var groupKeys = gorder.map(function(ks) { return isNaN(Number(ks)) ? ks : Number(ks); });
-
-        nd._portValues = { groups: groups, groupKeys: groupKeys };
-
-        return nd._portValues;
-
-      }
-
-      case 'list-chunk': {
-
-        var lst = getInput('list'), sz = Math.max(1, Math.round(getVal('size', 3)));
-
-        if (!Array.isArray(lst)) return undefined;
-
-        var chunks = [];
-
-        for (var ci = 0; ci < lst.length; ci += sz) chunks.push(lst.slice(ci, ci + sz));
-
-        return chunks;
-
-      }
-
-      case 'list-transpose': {
-
-        var lst = getInput('list');
-
-        if (!Array.isArray(lst) || lst.length === 0 || !Array.isArray(lst[0])) return undefined;
-
-        var maxLen = 0; lst.forEach(function(r) { if (Array.isArray(r) && r.length > maxLen) maxLen = r.length; });
-
-        var result = [];
-
-        for (var ti = 0; ti < maxLen; ti++) { var row = []; lst.forEach(function(r) { row.push(Array.isArray(r) && ti < r.length ? r[ti] : undefined); }); result.push(row); }
-
-        return result;
-
-      }
-
-      case 'list-pairs': {
-
-        var lst = getInput('list');
-
-        if (!Array.isArray(lst) || lst.length < 2) return undefined;
-
-        var pairs = [];
-
-        for (var pi = 0; pi < lst.length - 1; pi++) pairs.push([lst[pi], lst[pi + 1]]);
-
-        return pairs;
-
-      }
-
-      case 'list-indexof': {
-
-        var lst = getInput('list'), item = getVal('item', 0);
-
-        if (!Array.isArray(lst)) return -1;
-
-        var idx = lst.indexOf(item);
-
-        return idx;
-
-      }
-
-      case 'list-contains': {
-
-        var lst = getInput('list'), item = getVal('item', 0);
-
-        if (!Array.isArray(lst)) return false;
-
-        return lst.indexOf(item) >= 0;
-
-      }
-
-      case 'list-filterbool': {
-
-        var lst = getInput('list'), mask = getInput('mask');
-
-        if (!Array.isArray(lst)) return undefined;
-
-        // Mask can be a list of booleans, numbers (0/1), or any truthy/falsy values
-
-        if (!Array.isArray(mask)) mask = [];
-
-        var inL = [], outL = [];
-
-        for (var fi = 0; fi < lst.length; fi++) {
-
-          var m = fi < mask.length ? mask[fi] : false;
-
-          // Treat as boolean: true, 1, "true", non-zero = true; false, 0, "false", null, undefined = false
-
-          var isTruthy = !!m && m !== 'false' && m !== 'False' && m !== 0;
-
-          if (isTruthy) inL.push(lst[fi]); else outL.push(lst[fi]);
-
-        }
-
-        nd._portValues = { inList: inL, outList: outL }; return nd._portValues;
-
-      }
-
-
-
-      // ── List (core — unified with formula support) ──
-
-      case 'list-create': {
-
-        var items = [];
-
-        // Collect all item inputs (dynamic)
-
-        var dynInputs = nd._dynInputIds || (nd.def.inputs || []).map(function(inp) { return inp.id; });
-
-        for (var di = 0; di < dynInputs.length; di++) {
-
-          var v = getInput(dynInputs[di]);
-
-          if (v !== undefined) items.push(v);
-
-        }
-
-        return items;
-
-      }
-
-      case 'list-get': { var lst = getInput('list'), idx = getVal('index', 0); return Array.isArray(lst) && idx !== undefined ? lst[Math.max(0, Math.floor(idx))] : undefined; }
-
-      case 'list-length': case 'list-count': { var lst = getInput('list'); return Array.isArray(lst) ? lst.length : undefined; }
-
-      case 'list-range': { var s = getVal('start',0), e = getVal('end',10), st = getVal('step',1); if (s !== undefined && e !== undefined) { var r = []; st = st || 1; for (var i = s; st > 0 ? i < e : i > e; i += st) { r.push(i); if (r.length > 10000) break; } return r; } return undefined; }
-
-      case 'list-reverse': { var lst = getInput('list'); return Array.isArray(lst) ? lst.slice().reverse() : undefined; }
-
-      case 'list-sequence': { var start = getVal('start',0), step = getVal('step',1), count = getVal('count',10); if (count !== undefined) { var r = []; for (var i = 0; i < Math.min(count, 10000); i++) r.push(start + step * i); return r; } return undefined; }
-
-      case 'list-flatten': { var lst = getInput('list'); if (Array.isArray(lst)) { var flat = []; lst.forEach(function(item) { if (Array.isArray(item)) item.forEach(function(sub) { flat.push(sub); }); else flat.push(item); }); return flat; } return undefined; }
-
-      case 'list-cross-ref': { var a = getInput('listA'), b = getInput('listB'); if (Array.isArray(a) && Array.isArray(b)) { var pA = [], pB = []; a.forEach(function(av) { b.forEach(function(bv) { pA.push(av); pB.push(bv); }); }); nd._portValues = { pairsA: pA, pairsB: pB }; return nd._portValues; } return undefined; }
-
-      case 'list-repeat': { var item = getInput('item'), count = getVal('count', 5); if (count !== undefined) { var r = []; for (var i = 0; i < Math.min(count, 10000); i++) r.push(item); return r; } return undefined; }
+      // List nodes migrated to src/nodes/categories/list.js (executed via registry fallback).
 
 
 
@@ -1109,138 +658,76 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       case 'geo-line': { var s = getInput('start'), e = getInput('end'); if (s && e) { var sp = s instanceof Geo.Point3 ? s : new Geo.Point3(s.x||0,s.y||0,s.z||0); var ep = e instanceof Geo.Point3 ? e : new Geo.Point3(e.x||0,e.y||0,e.z||0); return new Geo.Line3(sp,ep); } return undefined; }
 
-      case 'geo-circle': { var c = getInput('center'), r = getInput('radius'); if (c) return new Geo.Circle3(c instanceof Geo.Point3 ? c : new Geo.Point3(0,0,0), r||5); return undefined; }
 
       case 'geo-distance': { var a = getInput('a'), b = getInput('b'); if (a && b) { var ap = a instanceof Geo.Point3 ? a : new Geo.Point3(a.x||0,a.y||0,a.z||0); var bp = b instanceof Geo.Point3 ? b : new Geo.Point3(b.x||0,b.y||0,b.z||0); return ap.distanceTo(bp); } return undefined; }
-      case 'geometry-distance': { var a = getInput('a'), b = getInput('b'); if (a && b && typeof Geo !== 'undefined' && Geo.distanceBetween) { return Geo.distanceBetween(a, b); } if (a && b && typeof a.distanceTo === 'function') { return a.distanceTo(b); } return undefined; }
 
 
 
       // ── Solids ──
 
-      case 'solid-box': { var c = getInput('center')||new Geo.Point3(0,0,0); return Geo.createBox(c instanceof Geo.Point3?c:new Geo.Point3(0,0,0), getInput('width')||10, getInput('depth')||10, getInput('height')||10); }
 
-      case 'solid-sphere': { var c = getInput('center')||new Geo.Point3(0,0,0); return Geo.createSphere(c instanceof Geo.Point3?c:new Geo.Point3(0,0,0), getInput('radius')||5); }
 
-      case 'solid-cylinder': { var b = getInput('base')||new Geo.Point3(0,0,0); return Geo.createCylinder(b instanceof Geo.Point3?b:new Geo.Point3(0,0,0), getInput('radius')||5, getInput('height')||10); }
 
-      case 'solid-cone': { var b = getInput('base')||new Geo.Point3(0,0,0); return Geo.createCone(b instanceof Geo.Point3?b:new Geo.Point3(0,0,0), getInput('radius')||5, getInput('height')||10); }
 
-      case 'solid-torus': { var c = getInput('center')||new Geo.Point3(0,0,0); return Geo.createTorus(c instanceof Geo.Point3?c:new Geo.Point3(0,0,0), getInput('majorR')||5, getInput('minorR')||1.5); }
 
 
 
       // ── Operations ──
 
-      case 'op-extrude': { var curve = getInput('curve'), vec = getInput('vector'); if (curve && vec) return Geo.extrude(curve, vec instanceof Geo.Vector3 ? vec : new Geo.Vector3(vec.x||0,vec.y||0,vec.z||0)); return undefined; }
 
-      case 'op-revolve': { var curve = getInput('curve'), ao = getInput('axisOrigin'), ad = getInput('axisDir'), angle = getInput('angle'); if (curve) return Geo.revolve(curve, ao, ad, (angle||360)*Math.PI/180); return undefined; }
 
-      case 'op-loft': { var profiles = getInput('profiles'); if (profiles) return Geo.loft(profiles); return undefined; }
 
-      case 'op-sweep': { var profile = getInput('profile'), path = getInput('path'); if (profile && path) return Geo.sweep(profile, path); return undefined; }
 
-      case 'op-pipe': { var curve = getInput('curve'), r = getInput('radius'); if (curve) return Geo.pipe(curve, r||0.5); return undefined; }
 
-      case 'op-boolean-union': { var a = getInput('a'), b = getInput('b'); if (a && b) return Geo.booleanUnion(a,b); return undefined; }
 
-      case 'op-boolean-intersect': { var a = getInput('a'), b = getInput('b'); if (a && b) return Geo.booleanIntersect(a,b); return undefined; }
 
-      case 'op-boolean-subtract': { var a = getInput('a'), b = getInput('b'); if (a && b) return Geo.booleanSubtract(a,b); return undefined; }
 
-      case 'op-combine-all': { var meshes = getInput('meshes'); if (meshes && Array.isArray(meshes)) return Geo.combineAll(meshes); return undefined; }
 
-      case 'op-move': { var geo = getInput('geometry'), vec = getInput('vector'); if (geo && vec) return Geo.move(geo, vec instanceof Geo.Vector3 ? vec : new Geo.Vector3(vec.x||0,vec.y||0,vec.z||0)); return undefined; }
 
-      case 'op-rotate': { var geo = getInput('geometry'), ao = getInput('axisOrigin'), ad = getInput('axisDir'), angle = getInput('angle'); if (geo) return Geo.rotate(geo, ao, ad, (angle||0)*Math.PI/180); return undefined; }
 
-      case 'op-scale': { var geo = getInput('geometry'), f = getInput('factor'), o = getInput('origin'); if (geo && f) return Geo.scaleGeo(geo, f, o); return undefined; }
 
-      case 'op-mirror': { var geo = getInput('geometry'), po = getInput('planeOrigin'), pn = getInput('planeNormal'); if (geo) return Geo.mirror(geo, po, pn); return undefined; }
 
-      case 'op-array-linear': { var geo = getInput('geometry'), dir = getInput('direction'), cnt = getInput('count'), sp = getInput('spacing'); if (geo && dir) return Geo.arrayLinear(geo, dir, cnt||3, sp||1); return undefined; }
 
-      case 'op-array-polar': { var geo = getInput('geometry'), c = getInput('center'), ax = getInput('axis'), cnt = getInput('count'); if (geo) return Geo.arrayPolar(geo, c, ax, cnt||6); return undefined; }
 
-      case 'op-thicken': { var mesh = getInput('mesh'), t = getInput('thickness'); if (mesh) return Geo.thicken(mesh, t||1); return undefined; }
-
-      case 'op-smooth': { var mesh = getInput('mesh'), it = getInput('iterations'); if (mesh) return Geo.smooth(mesh, Math.min(it||1, 20)); return undefined; }
-
-      case 'op-subdivide': { var mesh = getInput('mesh'), it = getInput('iterations'); if (mesh) return Geo.subdivide(mesh, Math.min(it||1, 5)); return undefined; }
-
-      case 'op-offset': { var curve = getInput('curve'), d = getInput('distance'); if (curve && d) return Geo.offsetCurve(curve, d); return undefined; }
-
-      case 'op-trim': { var line = getInput('line'), t0 = getInput('t0'), t1 = getInput('t1'); if (line) return Geo.trimLine(line, t0||0, t1||1); return undefined; }
+      // op-thicken → Solid.BySurfaceThicken, op-smooth → Solid.Smooth,
+      // op-subdivide → Surface.Subdivide, op-offset → Curve.Offset,
+      // op-trim → Curve.Trim. Registry default handles them.
 
       case 'op-bezier': { var pts = getInput('points'); if (pts) return Geo.bezier(pts); return undefined; }
 
-      case 'curve-bezier-by-control-points': { var pts = getInput('points'); if (pts) return Geo.bezier(pts); return undefined; }
 
-      case 'op-interpolate': { var pts = getInput('points'); if (pts) return Geo.interpolate(pts); return undefined; }
 
-      case 'nurbs-interpolate': { var pts = getInput('points'); if (pts && Array.isArray(pts)) return Geo.nurbsInterpolate(pts, getInput('degree')||3); return undefined; }
 
-      case 'nurbs-blend': { var c1 = getInput('curve1'), c2 = getInput('curve2'); if (c1 && c2) return Geo.blendCurves(c1, c2, getInput('t')||0); return undefined; }
 
-      case 'nurbs-tween': { var c1 = getInput('curve1'), c2 = getInput('curve2'); if (c1 && c2) return Geo.tweenCurves(c1, c2, getInput('count')||10); return undefined; }
 
-      case 'op-ruled-surface': { var c1 = getInput('curve1'), c2 = getInput('curve2'); if (c1 && c2) return Geo.ruledSurface(c1, c2); return undefined; }
 
-      case 'op-isolines': { var mesh = getInput('mesh'), cnt = getInput('count'); var dir = ctrl.dir; if (mesh) return dir === 'V' ? Geo.getIsolinesV(mesh, cnt||10) : Geo.getIsolinesU(mesh, cnt||10); return undefined; }
 
-      case 'op-point-grid': { var o = getInput('origin')||new Geo.Point3(0,0,0); return Geo.pointGrid(o instanceof Geo.Point3?o:new Geo.Point3(0,0,0), new Geo.Vector3(1,0,0), new Geo.Vector3(0,1,0), getInput('uCount')||5, getInput('vCount')||5, getInput('spacing')||1, getInput('spacing')||1); }
+      // op-point-grid removed (use Geo.pointGrid directly via custom nodes if needed).
 
 
 
       // ── Surfaces ──
 
-      case 'surf-plane': { var o = getInput('origin')||new Geo.Point3(0,0,0), n = getInput('normal')||new Geo.Vector3(0,0,1); return new Geo.Plane(o instanceof Geo.Point3?o:new Geo.Point3(0,0,0), n instanceof Geo.Vector3?n:new Geo.Vector3(0,0,1)); }
 
-      case 'surf-from-grid': { var pts = getInput('points'), u = getInput('uCount'), v = getInput('vCount'); if (pts && u && v) return Geo.surfaceFromGrid(pts, u, v); return undefined; }
 
-      case 'surf-polyline': { var pts = getInput('points'), closed = getInput('closed'); if (pts && Array.isArray(pts)) return new Geo.Polyline3(pts, !!closed); return undefined; }
 
       case 'surf-arc': { var c = getInput('center')||new Geo.Point3(0,0,0), r = getInput('radius'), sa = getInput('startAngle'), ea = getInput('endAngle'); return new Geo.Arc3(c instanceof Geo.Point3?c:new Geo.Point3(0,0,0), r||5, (sa||0)*Math.PI/180, (ea||360)*Math.PI/180); }
 
-      case 'curve-arc-by-center-radius-angles': { var c = getInput('center')||new Geo.Point3(0,0,0), r = getInput('radius'), sa = getInput('startAngle'), ea = getInput('endAngle'); return new Geo.Arc3(c instanceof Geo.Point3?c:new Geo.Point3(0,0,0), r||5, (sa||0)*Math.PI/180, (ea||360)*Math.PI/180); }
 
 
 
       // ── Patterns ──
 
-      case 'pat-voronoi-outlines': { var sites = getInput('sites'); if (sites && Array.isArray(sites)) return Geo.voronoiOutlines(sites, null, 0.5); return undefined; }
+      // Pattern.* nodes migrated to src/nodes/categories/patterns.js.
 
-      case 'pat-voronoi-mesh': { var sites = getInput('sites'), h = getInput('height'), gap = getInput('gap'); if (sites && Array.isArray(sites)) return Geo.voronoiMesh(sites, null, h||3, gap||0.1); return undefined; }
 
-      case 'pat-hex-grid': { var o = getInput('origin'); if (o) return Geo.hexGrid(o, getInput('radius')||2, getInput('rows')||5, getInput('cols')||5); return undefined; }
-
-      case 'pat-perlin2': { var x = getInput('x'), y = getInput('y'); return (x !== undefined && y !== undefined) ? Geo.perlin2(x, y) : undefined; }
-
-      case 'pat-perlin3': { var x = getInput('x'), y = getInput('y'), z = getInput('z'); return (x !== undefined) ? Geo.perlin3(x||0, y||0, z||0) : undefined; }
-
-      case 'pat-fbm': { return Geo.fbm(getInput('x')||0, getInput('y')||0, getInput('z')||0, getInput('octaves')||4); }
-
-      case 'pat-point-attractor': { var pt = getInput('point'), attr = getInput('attractor'); if (pt && attr) return Geo.pointAttractor(pt, attr, getInput('radius')||10, getInput('falloff')||2); return undefined; }
-
-      case 'pat-noise-deform': { var mesh = getInput('mesh'); if (mesh) return Geo.noiseDeform(mesh, getInput('amplitude')||1, getInput('frequency')||0.1); return undefined; }
-
-      case 'pat-phyllotaxis': return Geo.phyllotaxis(getInput('count')||100, getInput('radius')||10);
-
-      case 'pat-fibonacci-sphere': return Geo.fibonacciSphere(getInput('count')||100, getInput('radius')||10);
-
-      case 'nurbs-curve': { var pts = getInput('points'); if (pts && Array.isArray(pts)) return Geo.createNurbsCurve(pts, getInput('degree')||3); return undefined; }
-
-      case 'nurbs-surface': { var grid = getInput('grid'); if (grid && Array.isArray(grid)) return Geo.createNurbsSurface(grid, getInput('degreeU')||3, getInput('degreeV')||3); return undefined; }
 
 
 
       // ── Profiles ──
 
-      case 'prof-circle': { var c = getInput('center')||new Geo.Point3(0,0,0), r = getInput('radius')||5, res = Math.max(8, parseInt(getInput('resolution'))||32); var pts = []; for (var j = 0; j < res; j++) { var a = 2*Math.PI*j/res; pts.push(new Geo.Point3(c.x+r*Math.cos(a), c.y+r*Math.sin(a), c.z)); } return pts; }
 
-      case 'prof-ellipse': { var c = getInput('center')||new Geo.Point3(0,0,0), w = (getInput('width')||10)/2, d = (getInput('depth')||6)/2, rot = (getInput('rotation')||0)*Math.PI/180, res = Math.max(8, parseInt(getInput('resolution'))||32); var cosR = Math.cos(rot), sinR = Math.sin(rot); var pts = []; for (var j = 0; j < res; j++) { var a = 2*Math.PI*j/res; var x = w*Math.cos(a), y = d*Math.sin(a); pts.push(new Geo.Point3(c.x+x*cosR-y*sinR, c.y+x*sinR+y*cosR, c.z)); } return pts; }
 
-      case 'prof-rect': { var c = getInput('center')||new Geo.Point3(0,0,0), hw = (getInput('width')||10)/2, hd = (getInput('depth')||6)/2; return [new Geo.Point3(c.x-hw,c.y-hd,c.z), new Geo.Point3(c.x+hw,c.y-hd,c.z), new Geo.Point3(c.x+hw,c.y+hd,c.z), new Geo.Point3(c.x-hw,c.y+hd,c.z)]; }
 
       // ── Revit typed element nodes ──
       case 'host-get-elements': {
@@ -1394,16 +881,12 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-      // ── Output ──
-
-      case 'output-watch': case 'output-display': case 'output-log':
-
-        return getInput('value');
+      // Output nodes migrated to src/nodes/categories/output.js.
 
 
 
       // ── Slow Compute (test cancellation) ──
-      case 'slow-compute': {
+      case 'slow-compute': case 'Testing.SlowCompute': {
         var delayMs = parseInt(ctrl.delayMs) || 5000;
         var inputVal = getInput('value');
         // Return a Promise that resolves after delayMs, giving the event loop
@@ -1426,7 +909,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       // ── Python / Code ──
 
-      case 'custom-python': case 'custom-code': {
+      case 'custom-python': case 'custom-code': case 'Custom.Python': {
 
         if (nd._pyResults) {
 
@@ -1865,7 +1348,17 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     }
 
+    // Snapshot the panel's visibility state so user toggles survive the
+    // rebuild. The panel reads viewer._sceneItems; each item is keyed by
+    // a stable nodeId:varName id assigned by Viewer3D.addTaggedGeo.
+    var prevVisibility = {};
+    if (Viewer3D && Array.isArray(Viewer3D._sceneItems)) {
+      Viewer3D._sceneItems.forEach(function(it) { prevVisibility[it.id] = it.visible; });
+    }
+
     Viewer3D.clearGeometry();
+    if (Viewer3D && Array.isArray(Viewer3D._sceneItems)) Viewer3D._sceneItems = [];
+    if (Viewer3D) Viewer3D._selectedItem = null;
 
 
 
@@ -1877,11 +1370,24 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     var self = this;
 
+    var canTag = Viewer3D && typeof Viewer3D.addTaggedGeo === 'function';
+
+    function pushTagged(value, nd, varName) {
+      if (!canTag) return null;
+      var label = nd && nd.def ? nd.def.name : (nd && nd.id ? nd.id : '');
+      if (varName) label += '.' + varName;
+      var item = Viewer3D.addTaggedGeo(value, nd.id, varName || '', label);
+      if (item) rendered++;
+      return item;
+    }
+
 
 
     this.nodes.forEach(function(nd) {
 
-      if (nd._preview3d === false) return;
+      // Always tag the items so the panel can keep showing them. Items for
+      // nodes flagged hidden (or panel-toggled hidden) are marked invisible
+      // below; the user can toggle them back on without another Run.
 
       var val = self.computeNodeValue(nd);
       nd._lastComputedValue = val;
@@ -1892,38 +1398,34 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       if (val && val._type) {
 
-        Geo.addToScene(Viewer3D.geometryGroup, val);
-
-        var startIdx = Viewer3D.geometryGroup.children.length - 1;
-
-        app._sceneItems.push({ varName: nd.def.name, nodeId: nd.id, type: val._solidType || val._type, visible: true, idx: startIdx });
-
-        rendered++;
+        if (canTag) {
+          pushTagged(val, nd, '');
+        } else {
+          Geo.addToScene(Viewer3D.geometryGroup, val);
+          var startIdx = Viewer3D.geometryGroup.children.length - 1;
+          app._sceneItems.push({ varName: nd.def.name, nodeId: nd.id, type: val._solidType || val._type, visible: true, idx: startIdx });
+          rendered++;
+        }
 
       }
 
       // Array of geometry
 
-      else if (Array.isArray(val)) {
+      else if (Array.isArray(val) && val.length > 0 && val[0] && (val[0]._type || val[0] instanceof Geo.Point3)) {
 
-        var startIdx = Viewer3D.geometryGroup.children.length;
-
-        val.forEach(function(v) {
-
-          if (v && (v._type || v instanceof Geo.Point3)) {
-
-            Geo.addToScene(Viewer3D.geometryGroup, v);
-
-            rendered++;
-
+        if (canTag) {
+          pushTagged(val, nd, '');
+        } else {
+          var startIdx = Viewer3D.geometryGroup.children.length;
+          val.forEach(function(v) {
+            if (v && (v._type || v instanceof Geo.Point3)) {
+              Geo.addToScene(Viewer3D.geometryGroup, v);
+              rendered++;
+            }
+          });
+          if (Viewer3D.geometryGroup.children.length > startIdx) {
+            app._sceneItems.push({ varName: nd.def.name, nodeId: nd.id, type: 'Array[' + (Viewer3D.geometryGroup.children.length - startIdx) + ']', visible: true, idxStart: startIdx, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
           }
-
-        });
-
-        if (Viewer3D.geometryGroup.children.length > startIdx) {
-
-          app._sceneItems.push({ varName: nd.def.name, nodeId: nd.id, type: 'Array[' + (Viewer3D.geometryGroup.children.length - startIdx) + ']', visible: true, idxStart: startIdx, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
-
         }
 
       }
@@ -1938,32 +1440,35 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
           var pv = nd._portValues[key];
 
+          // For single-output nodes, val and the port value are the same
+          // reference — don't tag it twice. (Avoids duplicates like
+          // "Solid.BooleanUnion" + "Solid.BooleanUnion.result".)
+          if (pv === val) return;
+
           if (pv && pv._type) {
 
-            Geo.addToScene(Viewer3D.geometryGroup, pv);
+            if (canTag) {
+              pushTagged(pv, nd, key);
+            } else {
+              Geo.addToScene(Viewer3D.geometryGroup, pv);
+              rendered++;
+            }
 
-            rendered++;
+          } else if (Array.isArray(pv) && pv.length > 0 && pv[0] && (pv[0]._type || pv[0] instanceof Geo.Point3)) {
 
-          } else if (Array.isArray(pv)) {
-
-            var arrStart = Viewer3D.geometryGroup.children.length;
-
-            pv.forEach(function(v) {
-
-              if (v && (v._type || v instanceof Geo.Point3)) {
-
-                Geo.addToScene(Viewer3D.geometryGroup, v);
-
-                rendered++;
-
+            if (canTag) {
+              pushTagged(pv, nd, key);
+            } else {
+              var arrStart = Viewer3D.geometryGroup.children.length;
+              pv.forEach(function(v) {
+                if (v && (v._type || v instanceof Geo.Point3)) {
+                  Geo.addToScene(Viewer3D.geometryGroup, v);
+                  rendered++;
+                }
+              });
+              if (Viewer3D.geometryGroup.children.length > arrStart) {
+                app._sceneItems.push({ varName: nd.def.name + '.' + key, nodeId: nd.id, type: 'Array[' + (Viewer3D.geometryGroup.children.length - arrStart) + ']', visible: true, idxStart: arrStart, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
               }
-
-            });
-
-            if (Viewer3D.geometryGroup.children.length > arrStart) {
-
-              app._sceneItems.push({ varName: nd.def.name + '.' + key, nodeId: nd.id, type: 'Array[' + (Viewer3D.geometryGroup.children.length - arrStart) + ']', visible: true, idxStart: arrStart, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
-
             }
 
           }
@@ -1973,6 +1478,29 @@ export function installEngine(targetApp = getRuntimeApp()) {
       }
 
     });
+
+    // Apply visibility: items inherit the previous panel-toggle state
+    // (so user selections survive the rebuild) and any item whose owning
+    // node is currently flagged hidden (nd._preview3d === false) starts
+    // hidden — but the item itself stays in the panel so the user can
+    // toggle it back on without another Run.
+    if (canTag && Array.isArray(Viewer3D._sceneItems)) {
+      var nodesById = {};
+      self.nodes.forEach(function(n) { nodesById[n.id] = n; });
+      Viewer3D._sceneItems.forEach(function(it) {
+        var owner = nodesById[it.nodeId];
+        var hideFromNode = owner && owner._preview3d === false;
+        var hideFromPanel = prevVisibility[it.id] === false;
+        if (hideFromNode || hideFromPanel) {
+          it.visible = false;
+          if (it.group) it.group.visible = false;
+        }
+      });
+    }
+
+    if (canTag && typeof Viewer3D._renderGeoList === 'function') {
+      Viewer3D._renderGeoList();
+    }
 
 
 
@@ -2628,8 +2156,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
         var nd = { id: gn.id, type: gn.type, x: gn.x, y: gn.y, def: Object.assign({}, def), controlValues: {}, dataPanelOpen: false, zIndex: self.nodeZCounter };
         def.controls.forEach(function(c) { nd.controlValues[c.id] = c.default; });
         Object.keys(gn.controls).forEach(function(k) { if (k !== '_dynInputs') nd.controlValues[k] = gn.controls[k]; });
-        if (gn.type === 'custom-python' && gn.rawCode) nd.controlValues.code = gn.rawCode;
-        if (gn.type === 'custom-python' && gn.controls._dynInputs) nd._dynInputs = gn.controls._dynInputs;
+        if ((gn.type === 'custom-python' || gn.type === 'Custom.Python') && gn.rawCode) nd.controlValues.code = gn.rawCode;
+        if ((gn.type === 'custom-python' || gn.type === 'Custom.Python') && gn.controls._dynInputs) nd._dynInputs = gn.controls._dynInputs;
         if (gn.outputVars && gn.outputVars.length > 0) nd._dynOutputs = gn.outputVars;
         self.nodes.push(nd); self.renderNode(nd); created.push(nd.def.name);
       });
@@ -2673,8 +2201,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
         var nd = { id: gn.id, type: gn.type, x: gn.x, y: gn.y, def: Object.assign({}, def), controlValues: {}, dataPanelOpen: false, zIndex: self.nodeZCounter };
         def.controls.forEach(function(c) { nd.controlValues[c.id] = c.default; });
         Object.keys(gn.controls).forEach(function(k) { if (k !== '_dynInputs') nd.controlValues[k] = gn.controls[k]; });
-        if (gn.type === 'custom-python' && gn.rawCode) nd.controlValues.code = gn.rawCode;
-        if (gn.type === 'custom-python' && gn.controls._dynInputs) nd._dynInputs = gn.controls._dynInputs;
+        if ((gn.type === 'custom-python' || gn.type === 'Custom.Python') && gn.rawCode) nd.controlValues.code = gn.rawCode;
+        if ((gn.type === 'custom-python' || gn.type === 'Custom.Python') && gn.controls._dynInputs) nd._dynInputs = gn.controls._dynInputs;
         if (gn.outputVars && gn.outputVars.length > 0) nd._dynOutputs = gn.outputVars;
         self.nodes.push(nd); self.renderNode(nd); created.push(nd.def.name);
       });

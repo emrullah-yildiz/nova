@@ -60,7 +60,6 @@ export const logicNodes = [
       csharp: 'bool {{result}} = {{a}} && {{b}};'
     },
     help: {
-      description: 'Eligibility workflow: a customer earns the bulk discount only when their cart total exceeds the threshold AND they are a member. Logic.And combines both checks and Logic.If returns the discounted price (or the original).',
       inputs: [
         { name: 'A', description: 'First boolean operand' },
         { name: 'B', description: 'Second boolean operand' }
@@ -69,15 +68,15 @@ export const logicNodes = [
       example: {
         title: 'Bulk discount when cart > $100 AND member',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 120 } },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 100 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 120 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 100 } },
           { type: 'Logic.Compare', x: 220, y: 30, controls: { op: '>' } },
-          { type: 'boolean-input', x: 0, y: 160, controls: { val: 'True' } },
+          { type: 'Input.Boolean', x: 0, y: 160, controls: { val: 'True' } },
           { type: 'Logic.And', x: 440, y: 90 },
-          { type: 'number-input', x: 220, y: 220, controls: { val: 80 } },
-          { type: 'number-input', x: 220, y: 290, controls: { val: 120 } },
+          { type: 'Input.Number', x: 220, y: 220, controls: { val: 80 } },
+          { type: 'Input.Number', x: 220, y: 290, controls: { val: 120 } },
           { type: 'Logic.If', x: 660, y: 160 },
-          { type: 'output-watch', x: 880, y: 160 }
+          { type: 'Output.Watch', x: 880, y: 160 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -121,7 +120,6 @@ export const logicNodes = [
       csharp: 'bool {{result}} = {{a}} || {{b}};'
     },
     help: {
-      description: 'Thermal-break workflow: specify a thicker wall assembly when the facade faces north OR when the outdoor temperature drops below freezing. Logic.Or fires when either condition is satisfied, and Logic.If picks the assembly thickness.',
       inputs: [
         { name: 'A', description: 'First boolean operand' },
         { name: 'B', description: 'Second boolean operand' }
@@ -130,15 +128,15 @@ export const logicNodes = [
       example: {
         title: 'Thicker wall when north-facing OR temp < 0°C',
         nodes: [
-          { type: 'boolean-input', x: 0, y: 0, controls: { val: 'False' } },
-          { type: 'number-input', x: 0, y: 80, controls: { val: -5 } },
-          { type: 'number-input', x: 0, y: 160, controls: { val: 0 } },
+          { type: 'Input.Boolean', x: 0, y: 0, controls: { val: 'False' } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: -5 } },
+          { type: 'Input.Number', x: 0, y: 160, controls: { val: 0 } },
           { type: 'Logic.Compare', x: 220, y: 110, controls: { op: '<' } },
           { type: 'Logic.Or', x: 440, y: 60 },
-          { type: 'number-input', x: 220, y: 220, controls: { val: 250 } },
-          { type: 'number-input', x: 220, y: 290, controls: { val: 150 } },
+          { type: 'Input.Number', x: 220, y: 220, controls: { val: 250 } },
+          { type: 'Input.Number', x: 220, y: 290, controls: { val: 150 } },
           { type: 'Logic.If', x: 660, y: 140 },
-          { type: 'output-watch', x: 880, y: 140 }
+          { type: 'Output.Watch', x: 880, y: 140 }
         ],
         wires: [
           [0, 'value', 4, 'a'],
@@ -182,7 +180,6 @@ export const logicNodes = [
       csharp: 'bool {{result}} = {{a}} ^ {{b}};'
     },
     help: {
-      description: 'Ballot-validation workflow: a ballot is valid only when exactly one option is chosen (not zero, not both). Logic.Xor flags valid ballots and Logic.If returns the score (1 valid, 0 invalid).',
       inputs: [
         { name: 'A', description: 'First boolean operand' },
         { name: 'B', description: 'Second boolean operand' }
@@ -191,13 +188,13 @@ export const logicNodes = [
       example: {
         title: 'Valid ballot: exactly one option checked',
         nodes: [
-          { type: 'boolean-input', x: 0, y: 0, controls: { val: 'True' } },
-          { type: 'boolean-input', x: 0, y: 80, controls: { val: 'False' } },
+          { type: 'Input.Boolean', x: 0, y: 0, controls: { val: 'True' } },
+          { type: 'Input.Boolean', x: 0, y: 80, controls: { val: 'False' } },
           { type: 'Logic.Xor', x: 220, y: 30 },
-          { type: 'number-input', x: 220, y: 150, controls: { val: 1 } },
-          { type: 'number-input', x: 220, y: 220, controls: { val: 0 } },
+          { type: 'Input.Number', x: 220, y: 150, controls: { val: 1 } },
+          { type: 'Input.Number', x: 220, y: 220, controls: { val: 0 } },
           { type: 'Logic.If', x: 440, y: 90 },
-          { type: 'output-watch', x: 660, y: 90 }
+          { type: 'Output.Watch', x: 660, y: 90 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -236,20 +233,19 @@ export const logicNodes = [
       csharp: 'bool {{result}} = !{{value}};'
     },
     help: {
-      description: 'Inventory workflow: a reorder may be sent only when the warehouse is NOT empty. Logic.Compare flags an empty warehouse, Logic.Not inverts it, and Logic.If forwards the reorder quantity (or zero when blocked).',
       inputs: [{ name: 'Value', description: 'Boolean to invert' }],
       outputs: [{ name: 'Result', description: 'Inverted boolean value' }],
       example: {
         title: 'Send order only when stock is NOT zero',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 10 } },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 0 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 10 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 0 } },
           { type: 'Logic.Compare', x: 220, y: 30, controls: { op: '==' } },
           { type: 'Logic.Not', x: 420, y: 30 },
-          { type: 'number-input', x: 420, y: 130, controls: { val: 5 } },
-          { type: 'number-input', x: 420, y: 200, controls: { val: 0 } },
+          { type: 'Input.Number', x: 420, y: 130, controls: { val: 5 } },
+          { type: 'Input.Number', x: 420, y: 200, controls: { val: 0 } },
           { type: 'Logic.If', x: 640, y: 80 },
-          { type: 'output-watch', x: 860, y: 80 }
+          { type: 'Output.Watch', x: 860, y: 80 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -293,7 +289,6 @@ export const logicNodes = [
       csharp: 'var {{result}} = {{condition}} ? {{ifTrue}} : {{ifFalse}};'
     },
     help: {
-      description: 'Pricing tier workflow: charge the bulk price when the order quantity clears the bulk threshold, otherwise charge the regular price. Logic.Compare drives Logic.If and the chosen unit price is forwarded downstream.',
       inputs: [
         { name: 'Test', description: 'Boolean selector' },
         { name: 'True', description: 'Returned when test is true' },
@@ -303,13 +298,13 @@ export const logicNodes = [
       example: {
         title: 'Bulk price $80 when qty > 10, else $100',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 15 } },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 10 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 15 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 10 } },
           { type: 'Logic.Compare', x: 220, y: 30, controls: { op: '>' } },
-          { type: 'number-input', x: 220, y: 130, controls: { val: 80 } },
-          { type: 'number-input', x: 220, y: 200, controls: { val: 100 } },
+          { type: 'Input.Number', x: 220, y: 130, controls: { val: 80 } },
+          { type: 'Input.Number', x: 220, y: 200, controls: { val: 100 } },
           { type: 'Logic.If', x: 440, y: 80 },
-          { type: 'output-watch', x: 640, y: 80 }
+          { type: 'Output.Watch', x: 640, y: 80 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -351,7 +346,6 @@ export const logicNodes = [
       csharp: 'bool {{result}} = {{a}} {{op}} {{b}};'
     },
     help: {
-      description: 'Reorder-alert workflow: forward the current stock count downstream (where a notification or restock job picks it up) only when stock falls below the reorder threshold. Logic.Compare tests the threshold and Logic.Gate forwards the value.',
       inputs: [
         { name: 'A', description: 'Left side of the comparison' },
         { name: 'B', description: 'Right side of the comparison' }
@@ -360,11 +354,11 @@ export const logicNodes = [
       example: {
         title: 'Forward stock count when below reorder level',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 45 } },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 50 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 45 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 50 } },
           { type: 'Logic.Compare', x: 220, y: 30, controls: { op: '<' } },
           { type: 'Logic.Gate', x: 420, y: 30 },
-          { type: 'output-watch', x: 640, y: 30 }
+          { type: 'Output.Watch', x: 640, y: 30 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -403,7 +397,6 @@ export const logicNodes = [
       csharp: 'var {{result}} = {{pass}} ? {{value}} : null;'
     },
     help: {
-      description: 'QA workflow: a calibrated sensor reading should only continue into the rest of the graph when it falls within tolerance. Logic.Compare checks the tolerance and Logic.Gate forwards the reading downstream when the check passes.',
       inputs: [
         { name: 'Value', description: 'Value to forward' },
         { name: 'Pass', description: 'Open/close the gate' }
@@ -412,11 +405,11 @@ export const logicNodes = [
       example: {
         title: 'Forward sensor reading only when within tolerance',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 4.95 } },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 5.0 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 4.95 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 5.0 } },
           { type: 'Logic.Compare', x: 220, y: 30, controls: { op: '<=' } },
           { type: 'Logic.Gate', x: 420, y: 30 },
-          { type: 'output-watch', x: 640, y: 30 }
+          { type: 'Output.Watch', x: 640, y: 30 }
         ],
         wires: [
           [0, 'value', 2, 'a'],
@@ -450,17 +443,16 @@ export const logicNodes = [
       csharp: 'bool {{result}} = {{value}} == null;'
     },
     help: {
-      description: 'Fallback workflow: when a sensor reading is missing the dashboard should display a safe default temperature instead of a blank. Logic.IsNull detects the missing reading and Logic.If picks the default or the live value.',
       inputs: [{ name: 'Value', description: 'Value to inspect' }],
       outputs: [{ name: 'Result', description: 'True if the value is null or undefined' }],
       example: {
         title: 'Default temperature when sensor reading is missing',
         nodes: [
-          { type: 'number-input', x: 0, y: 0, controls: { val: 22 } },
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 22 } },
           { type: 'Logic.IsNull', x: 220, y: 0 },
-          { type: 'number-input', x: 0, y: 80, controls: { val: 20 } },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 20 } },
           { type: 'Logic.If', x: 420, y: 30 },
-          { type: 'output-watch', x: 640, y: 30 }
+          { type: 'Output.Watch', x: 640, y: 30 }
         ],
         wires: [
           [0, 'value', 1, 'value'],

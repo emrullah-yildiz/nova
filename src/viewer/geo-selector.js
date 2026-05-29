@@ -8,6 +8,17 @@ function getRuntimeApp() {
   return null;
 }
 
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function getRuntimeGlobal() {
   if (typeof window !== 'undefined') return window;
   return globalThis;
@@ -127,11 +138,12 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
           'math-add','math-subtract','math-multiply','math-divide','math-power',
           'logic-and','logic-or','logic-not','logic-compare','logic-if',
           'list-get','list-length','list-range','list-reverse','list-create',
-          'custom-formula','custom-comment','custom-ainode'];
+          'custom-formula','custom-comment','custom-ainode',
+          'Custom.Formula','Custom.Comment','Custom.AI'];
         if (passTypes.indexOf(nd.type) >= 0) return;
 
         // ── Python/Code nodes: render EACH output variable as separate group ──
-        if ((nd.type === 'custom-python' || nd.type === 'custom-code') && nd._pyResults) {
+        if ((nd.type === 'custom-python' || nd.type === 'custom-code' || nd.type === 'Custom.Python') && nd._pyResults) {
           var keys = Object.keys(nd._pyResults).filter(function(k) {
             return !k.startsWith('_') && k !== 'i' && k !== 'j' && k !== 'k';
           });
@@ -221,9 +233,13 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
 
       self._raycaster.setFromCamera(self._mouse, self.camera);
 
-      // Only intersect geometry group children
+      // Only intersect VISIBLE geometry-group descendants. THREE.Object3D
+      // .traverse() walks into invisible subtrees, and Raycaster's per-mesh
+      // intersect routine doesn't check object.visible — so a hidden mesh
+      // would still be clickable and select its panel row. traverseVisible
+      // skips any subtree rooted at an invisible Object3D.
       var allMeshes = [];
-      self.geometryGroup.traverse(function(obj) {
+      self.geometryGroup.traverseVisible(function(obj) {
         if (obj.isMesh || obj.isLine || obj.isLineSegments) allMeshes.push(obj);
       });
 
@@ -265,6 +281,20 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
 
     item.selected = true;
     this._selectedItem = item;
+
+    // When the user selects a hidden row the focal item won't appear in
+    // the scene, so dimming everything else just washes out the visible
+    // geometry for no gain — skip the dim pass in that case.
+    if (!item.visible) {
+      this._renderGeoList();
+      if (item.nodeId && typeof app !== 'undefined') {
+        app.deselectAll();
+        app.selectNode(item.nodeId, false);
+        var hiddenNodeEl = document.getElementById(item.nodeId);
+        if (hiddenNodeEl) hiddenNodeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
 
     // Highlight: make selected opaque/bright, dim all others
     this._sceneItems.forEach(function(it) {
@@ -372,8 +402,9 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
     }
     panel.style.display = 'flex';
 
-    // ── Position the panel based on AI chat dock location ──
-    // Default: top-right. If chat is docked right and visible, move panel to left of chat.
+    // ── Position the panel: default top-left of the viewport. If the AI
+    // chat is docked on the left and visible, push the panel to the right
+    // of the chat so they don't overlap.
     var chatDock = (typeof app !== 'undefined') ? app.chatDock : 'right';
     var chatVisible = (typeof app !== 'undefined') ? app.chatVisible : false;
     var chatWidth = (typeof app !== 'undefined') ? app.chatWidth : 360;
@@ -383,14 +414,14 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
     panel.style.right = '';
     panel.style.top = '12px';
 
-    if (chatDock === 'right' && chatVisible) {
-      // Chat is on the right — place panel just before the chat panel
-      panel.style.right = (chatWidth + 16) + 'px';
-      panel.style.left = '';
+    if (chatDock === 'left' && chatVisible) {
+      // Chat is on the left — place panel just after the chat panel
+      panel.style.left = (chatWidth + 16) + 'px';
+      panel.style.right = '';
     } else {
-      // Chat is on left, bottom, float, or hidden — panel goes to top-right
-      panel.style.right = '12px';
-      panel.style.left = '';
+      // Chat is on the right, bottom, float, or hidden — panel pins left
+      panel.style.left = '12px';
+      panel.style.right = '';
     }
 
     var html = '<div class="geolist-header">' +
@@ -424,13 +455,19 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       item.group.traverse(function(obj) { if (obj.isMesh) childCount++; });
       var info = childCount > 1 ? childCount + ' meshes' : '';
 
+      // Visible / hidden eye glyphs: open eye for ON, prohibition symbol for
+      // OFF \u2014 the previous "eye in speech bubble" variant was nearly
+      // identical to the open eye at this font size.
+      // Show the full label as a native browser tooltip on the info area so
+      // users can read names that were truncated by the 22-char cap.
+      var fullLabel = escapeAttr(item.label || '');
       html += '<div class="' + cls + '" data-idx="' + idx + '">' +
-        '<button class="geolist-eye" onclick="event.stopPropagation();Viewer3D._toggleItemVisibility(Viewer3D._sceneItems[' + idx + '])" title="Toggle Visibility">' +
-        (item.visible ? '\uD83D\uDC41' : '\uD83D\uDC41\u200D\uD83D\uDDE8') + '</button>' +
-        '<div class="geolist-info" onclick="Viewer3D._selectItem(Viewer3D._sceneItems[' + idx + '])">' +
+        '<button class="geolist-eye" onclick="event.stopPropagation();Viewer3D._toggleItemVisibility(Viewer3D._sceneItems[' + idx + '])" title="' + (item.visible ? 'Hide' : 'Show') + '">' +
+        (item.visible ? '\uD83D\uDC41' : '\u2298') + '</button>' +
+        '<div class="geolist-info" title="' + fullLabel + '" onclick="Viewer3D._selectItem(Viewer3D._sceneItems[' + idx + '])">' +
         '<span class="geolist-icon">' + icon + '</span>' +
-        '<span class="geolist-label">' + label + '</span>' +
-        (info ? '<span class="geolist-meta">' + info + '</span>' : '') +
+        '<span class="geolist-label">' + escapeHtml(label) + '</span>' +
+        (info ? '<span class="geolist-meta">' + escapeHtml(info) + '</span>' : '') +
         '</div>' +
         '<button class="geolist-isolate" onclick="event.stopPropagation();Viewer3D._isolateItem(Viewer3D._sceneItems[' + idx + '])" title="Isolate (solo)">\u25CE</button>' +
         '</div>';

@@ -682,6 +682,47 @@ import { Geo } from './geometry-lib.js';
     return m;
   };
 
+  // ── Patch from a single closed boundary (fan triangulation) ──
+  G.surfaceByPatch = function(closedBoundary, segments) {
+    segments = segments || 32;
+    let pts;
+    if (Array.isArray(closedBoundary)) {
+      pts = closedBoundary.filter(function(p) { return p && typeof p === 'object' && p.x !== undefined; });
+    } else if (closedBoundary && typeof G._curvePoints === 'function') {
+      pts = G._curvePoints(closedBoundary, segments);
+    } else {
+      return undefined;
+    }
+    if (!pts || pts.length < 3) return undefined;
+
+    // Drop a trailing duplicate if the curve closes back to its start.
+    const first = pts[0];
+    const last = pts[pts.length - 1];
+    if (Math.abs(first.x - last.x) < 1e-9 && Math.abs(first.y - last.y) < 1e-9 && Math.abs(first.z - last.z) < 1e-9) {
+      pts = pts.slice(0, -1);
+    }
+    const n = pts.length;
+    if (n < 3) return undefined;
+
+    // Centroid
+    let cx = 0, cy = 0, cz = 0;
+    for (let i = 0; i < n; i++) { cx += pts[i].x; cy += pts[i].y; cz += pts[i].z; }
+    const center = P(cx / n, cy / n, cz / n);
+
+    // Fan triangulation: vertex 0 is the centroid, vertices 1..n are the boundary.
+    const verts = [center];
+    for (let i = 0; i < n; i++) verts.push(pts[i]);
+    const faces = [];
+    for (let i = 0; i < n; i++) {
+      const next = (i + 1) % n;
+      faces.push([0, i + 1, next + 1]);
+    }
+
+    const m = new G.Mesh3(verts, faces, 0x94e2d5);
+    m._solidType = 'Patch';
+    return m;
+  };
+
   // ══════════════════════════════════════
   // Update PythonRunner wrapper with new functions
   // ══════════════════════════════════════

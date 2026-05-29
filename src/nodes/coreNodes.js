@@ -1,10 +1,38 @@
 import { NODE_LIBRARY, NODE_TYPE_MAP } from '../core/nodes.js';
+import { curvesCategory, curvesNodes } from './categories/curves.js';
+import { geometryCategory, geometryNodes } from './categories/geometry.js';
+import { inputCategory, inputNodes } from './categories/input.js';
+import { listCategory, listNodes } from './categories/list.js';
 import { logicCategory, logicNodes } from './categories/logic.js';
+import { mathCategory, mathNodes } from './categories/math.js';
+import { outputCategory, outputNodes } from './categories/output.js';
+import { customCategory, customNodes } from './categories/custom.js';
+import { patternsCategory, patternsNodes } from './categories/patterns.js';
+import { planeCategory, planeNodes } from './categories/plane.js';
+import { pointCategory, pointNodes } from './categories/point.js';
+import { solidsCategory, solidsNodes } from './categories/solids.js';
+import { surfacesCategory, surfacesNodes } from './categories/surfaces.js';
+import { testingCategory, testingNodes } from './categories/testing.js';
+import { vectorCategory, vectorNodes } from './categories/vector.js';
 import { legacyCoreCategories, legacyCoreNodes } from './legacyCoreNodes.js';
 import { createNodeRegistry, toLegacyNodeDefinition } from './registry.js';
 
 const modernCategories = [
-  logicCategory
+  curvesCategory,
+  customCategory,
+  geometryCategory,
+  inputCategory,
+  listCategory,
+  logicCategory,
+  mathCategory,
+  outputCategory,
+  patternsCategory,
+  planeCategory,
+  pointCategory,
+  solidsCategory,
+  surfacesCategory,
+  testingCategory,
+  vectorCategory
 ];
 
 const modernCategoryIds = new Set(modernCategories.map((category) => category.id));
@@ -15,7 +43,21 @@ export const coreCategories = [
 ];
 
 export const coreNodes = [
+  ...curvesNodes,
+  ...customNodes,
+  ...geometryNodes,
+  ...inputNodes,
+  ...listNodes,
   ...logicNodes,
+  ...mathNodes,
+  ...outputNodes,
+  ...patternsNodes,
+  ...planeNodes,
+  ...pointNodes,
+  ...solidsNodes,
+  ...surfacesNodes,
+  ...testingNodes,
+  ...vectorNodes,
   ...legacyCoreNodes
 ];
 

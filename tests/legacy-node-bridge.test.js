@@ -52,11 +52,15 @@ describe('legacy node library bridge', () => {
     const registry = createRegistryFromNodeLibrary(NODE_LIBRARY);
     const nodeTypeMap = createNodeTypeMapFromRegistry(registry);
 
-    expect(Object.keys(nodeTypeMap)).toEqual(Object.keys(NODE_TYPE_MAP));
-    expect(nodeTypeMap['list-create']).toMatchObject({
-      type: 'list-create',
-      name: 'List.Create',
-      dynamicInputs: true
+    expect(Object.keys(nodeTypeMap).sort()).toEqual(
+      Object.keys(NODE_TYPE_MAP)
+        .filter((type) => Object.prototype.hasOwnProperty.call(NODE_TYPE_MAP, type))
+        .sort()
+    );
+    // Picks a canonical legacy entry that has not been migrated yet.
+    expect(nodeTypeMap['revit-send-geometry']).toMatchObject({
+      type: 'revit-send-geometry',
+      name: 'Revit.SendGeometry'
     });
   });
 });

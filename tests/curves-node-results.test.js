@@ -1,5 +1,11 @@
 import { FormulaEval } from '../src/core/formula-eval.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP } from '../src/core/nodes.js';
+import { getLiveCoreRegistry } from '../src/nodes/coreNodes.js';
+
+// Ensure modern category nodes and their aliases are registered into
+// NODE_TYPE_MAP so legacy NODE_HELP examples that reference aliases
+// like "list-create" resolve correctly.
+getLiveCoreRegistry();
 import { Geo } from '../src/geometry/index.js';
 import { buildNodeHelpDoc } from '../src/ui/node-help-docs.js';
 import { installNodeHelp } from '../src/ui/node-help.js';

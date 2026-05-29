@@ -36,6 +36,14 @@ export function updateNodeHiddenClass(nodeId, hidden, options) {
   return true;
 }
 
+function setSceneChildVisible(viewer, idx, visible) {
+  if (!viewer || !viewer.geometryGroup || !viewer.geometryGroup.children) return false;
+  var child = viewer.geometryGroup.children[idx];
+  if (!child) return false;
+  child.visible = visible;
+  return true;
+}
+
 export function setNodePreviewState(app, viewer, nodeId, visible, options) {
   var nextVisible = visible !== false;
   var changed = false;
@@ -59,6 +67,25 @@ export function setNodePreviewState(app, viewer, nodeId, visible, options) {
     });
   }
 
+  // engine._renderFromCompute tracks its scene items on app._sceneItems
+  // (separate list from viewer._sceneItems), referencing THREE.js children
+  // by index instead of group. Toggle them via the children array.
+  if (app && viewer && Array.isArray(app._sceneItems)) {
+    app._sceneItems.forEach(function(item) {
+      if (item.nodeId !== nodeId) return;
+      if (item.visible !== nextVisible) changed = true;
+      item.visible = nextVisible;
+      if (typeof item.idx === 'number') {
+        setSceneChildVisible(viewer, item.idx, nextVisible);
+      }
+      if (typeof item.idxStart === 'number' && typeof item.idxEnd === 'number') {
+        for (var i = item.idxStart; i <= item.idxEnd; i++) {
+          setSceneChildVisible(viewer, i, nextVisible);
+        }
+      }
+    });
+  }
+
   if (viewer && !nextVisible && viewer._selectedItem && viewer._selectedItem.nodeId === nodeId) {
     viewer._selectedItem = null;
     changed = true;
@@ -67,7 +94,9 @@ export function setNodePreviewState(app, viewer, nodeId, visible, options) {
   updateNodePreviewControl(nodeId, nextVisible, options);
   updateNodeHiddenClass(nodeId, !nextVisible, options);
 
-  if (viewer && changed && options && options.renderList !== false && typeof viewer._renderGeoList === 'function') {
+  // Re-render the in-viewport list by default; only skip when the caller
+  // passes { renderList: false } (e.g. during a batched rebuild).
+  if (viewer && changed && (!options || options.renderList !== false) && typeof viewer._renderGeoList === 'function') {
     viewer._renderGeoList();
   }
 
@@ -107,7 +136,9 @@ export function setPreviewItemVisibility(app, viewer, item, visible, options) {
     updateNodeHiddenClass(item.nodeId, !nodeVisible, options);
   }
 
-  if (viewer && changed && options && options.renderList !== false && typeof viewer._renderGeoList === 'function') {
+  // Re-render the in-viewport list by default; only skip when the caller
+  // passes { renderList: false } (e.g. during a batched rebuild).
+  if (viewer && changed && (!options || options.renderList !== false) && typeof viewer._renderGeoList === 'function') {
     viewer._renderGeoList();
   }
 
@@ -126,6 +157,23 @@ export function showAllPreviews(app, viewer, options) {
     });
   }
 
+  // Engine-tracked items live in app._sceneItems and reference THREE.js
+  // children by index; restore those too.
+  if (app && viewer && Array.isArray(app._sceneItems)) {
+    app._sceneItems.forEach(function(item) {
+      if (item.visible !== true) changed = true;
+      item.visible = true;
+      if (typeof item.idx === 'number') {
+        setSceneChildVisible(viewer, item.idx, true);
+      }
+      if (typeof item.idxStart === 'number' && typeof item.idxEnd === 'number') {
+        for (var i = item.idxStart; i <= item.idxEnd; i++) {
+          setSceneChildVisible(viewer, i, true);
+        }
+      }
+    });
+  }
+
   if (app && Array.isArray(app.nodes)) {
     app.nodes.forEach(function(node) {
       if (node._preview3d !== true) changed = true;
@@ -136,7 +184,9 @@ export function showAllPreviews(app, viewer, options) {
   }
 
   if (viewer) viewer._selectedItem = null;
-  if (viewer && changed && options && options.renderList !== false && typeof viewer._renderGeoList === 'function') {
+  // Re-render the in-viewport list by default; only skip when the caller
+  // passes { renderList: false } (e.g. during a batched rebuild).
+  if (viewer && changed && (!options || options.renderList !== false) && typeof viewer._renderGeoList === 'function') {
     viewer._renderGeoList();
   }
 

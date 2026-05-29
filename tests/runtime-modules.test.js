@@ -1,5 +1,11 @@
 import { CodeParser } from '../src/runtime/parser.js';
 import { PythonRunner } from '../src/runtime/pyrunner.js';
+import { getLiveCoreRegistry } from '../src/nodes/coreNodes.js';
+
+// Ensure modern category nodes (and their legacy aliases like
+// 'number-input' -> 'Input.Number') are merged into NODE_TYPE_MAP so the
+// parser can find their port definitions.
+getLiveCoreRegistry();
 
 describe('Runtime parser and Python runner modules', () => {
   it('parses simple Python assignments into graph nodes', () => {

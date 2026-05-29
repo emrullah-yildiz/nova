@@ -1,4 +1,5 @@
 import { NODE_TYPE_MAP } from '../src/core/nodes.js';
+import { getLiveCoreRegistry } from '../src/nodes/coreNodes.js';
 import { installNodeHelp } from '../src/ui/node-help.js';
 import {
   buildNodeHelpDoc,
@@ -6,6 +7,13 @@ import {
   validateHelpExample,
   validateNodeHelpDoc
 } from '../src/ui/node-help-docs.js';
+
+// Trigger the live registry so modern category nodes and their legacy
+// aliases are present in NODE_TYPE_MAP. Without this the legacy
+// NODE_HELP sample graphs that reference the alias type IDs (e.g.
+// "list-create" used inside curve-bezier-by-control-points example)
+// would resolve to undefined.
+getLiveCoreRegistry();
 
 function createHelpRuntime() {
   const runtime = {};

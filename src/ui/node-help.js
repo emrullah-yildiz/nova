@@ -348,11 +348,20 @@ window.buildExampleGraph = function(helpData) {
   }
   ex.nodes.forEach(function(nDef) {
     var nd = app.addNodeToCanvas(nDef.type, nDef.x + offsetX, nDef.y + offsetY);
-    if (nd && nDef.controls) Object.keys(nDef.controls).forEach(function(k) { nd.controlValues[k] = nDef.controls[k]; });
+    if (nd && nDef.controls) {
+      Object.keys(nDef.controls).forEach(function(k) { nd.controlValues[k] = nDef.controls[k]; });
+      // The node was rendered with the definition's defaults; re-render so
+      // the textbox / dropdown / slider reflects the example's overrides.
+      var el = document.getElementById(nd.id);
+      if (el) {
+        el.remove();
+        app.renderNode(nd);
+      }
+    }
     created.push(nd);
   });
   created.forEach(function(nd, i) {
-    if (!nd || ex.nodes[i].type !== 'list-create') return;
+    if (!nd || !nd.def || !nd.def.dynamicInputs) return;
     var maxIdx = 0;
     ex.wires.forEach(function(w) { if (w[2] === i) { var m = w[3].match(/^item(\d+)$/); if (m && parseInt(m[1]) > maxIdx) maxIdx = parseInt(m[1]); } });
     while (nd.def.inputs.length <= maxIdx) app._addDynInput(nd.id);
