@@ -1,4 +1,4 @@
-import { PROVIDERS, pickModel, shouldFallthrough } from '../api/proxy/chat.mjs';
+import { PROVIDERS, pickModel, shouldFallthrough, resolveProvider } from '../api/proxy/chat.mjs';
 
 describe('proxy chat — pickModel', () => {
   const groq = PROVIDERS.find(p => p.name === 'groq-8b');
@@ -91,5 +91,29 @@ describe('proxy chat — shouldFallthrough', () => {
   it('does not fall through on success', () => {
     expect(shouldFallthrough(200, '')).toBe(false);
     expect(shouldFallthrough(201, '')).toBe(false);
+  });
+});
+
+describe('proxy chat — resolveProvider', () => {
+  const groq = PROVIDERS.find(p => p.name === 'groq-8b');
+
+  it('returns null when no env var is set', () => {
+    expect(resolveProvider(groq, {})).toBe(null);
+  });
+
+  it('trims leading and trailing whitespace from keys', () => {
+    // Regression: when users paste API keys from web dashboards they often
+    // include a leading space or newline. Without trimming, the
+    // Authorization header becomes "Bearer  key..." (double space) and the
+    // upstream returns 401 with confusing "missing auth" messages,
+    // dead-ending the whole chain on the very first 4xx.
+    const resolved = resolveProvider(groq, { GROQ_API_KEY: '  gsk_abcdefghij\n' });
+    expect(resolved.apiKey).toBe('gsk_abcdefghij');
+    expect(resolved.headers.Authorization).toBe('Bearer gsk_abcdefghij');
+  });
+
+  it('falls back to the alt env key when the primary is missing', () => {
+    const resolved = resolveProvider(groq, { NOVA_GROQ_API_KEY: 'gsk_alt_key_value' });
+    expect(resolved.apiKey).toBe('gsk_alt_key_value');
   });
 });

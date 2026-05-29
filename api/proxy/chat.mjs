@@ -105,8 +105,13 @@ function sendJson(res, status, payload, extraHeaders) {
   res.end(JSON.stringify(payload));
 }
 
-function resolveProvider(p) {
-  const key = process.env[p.envKey] || process.env[p.altEnvKey];
+export function resolveProvider(p, env = process.env) {
+  // Trim whitespace defensively — keys pasted from web dashboards often
+  // carry leading/trailing whitespace or newlines, which silently corrupts
+  // the Authorization header into "Bearer  sk-..." (double space) and
+  // the provider returns 401. Strip it once at config time.
+  const raw = env[p.envKey] || env[p.altEnvKey];
+  const key = raw ? String(raw).trim() : '';
   if (!key) return null;
   return {
     ...p,
@@ -205,6 +210,7 @@ export default async function handler(req, res) {
   }
 
   const body = req.body || {};
+  const attempts = [];
   let lastError;
   for (const provider of available) {
     let upstream;
@@ -212,16 +218,18 @@ export default async function handler(req, res) {
       upstream = await tryProvider(provider, body);
     } catch (err) {
       lastError = { provider: provider.name, message: err && err.message || 'network error' };
+      attempts.push(lastError);
+      console.error('[nova-proxy] %s network error: %s', provider.name, lastError.message);
       continue;
     }
 
-    // Read the body once so we can both inspect it (for fallthrough decisions)
-    // and pass it through if we end up keeping this provider's response.
     let cachedBody = null;
     if (upstream.status >= 400) {
       try { cachedBody = await upstream.text(); } catch { cachedBody = ''; }
       if (shouldFallthrough(upstream.status, cachedBody)) {
         lastError = { provider: provider.name, status: upstream.status, message: (cachedBody || '').slice(0, 200) };
+        attempts.push(lastError);
+        console.error('[nova-proxy] %s %d → fallthrough: %s', provider.name, upstream.status, lastError.message);
         continue;
       }
     }
@@ -250,10 +258,12 @@ export default async function handler(req, res) {
   }
 
   // All providers failed.
+  console.error('[nova-proxy] all providers failed:', JSON.stringify(attempts));
   sendJson(res, 502, {
     error: {
       message: 'All free-tier providers are temporarily unavailable. Bring your own API key in Settings → Preferences for direct access.',
       code: 'ALL_PROVIDERS_FAILED',
+      attempts,
       lastError
     }
   });
