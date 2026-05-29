@@ -235,12 +235,17 @@ export const Viewer3D = {
       faces.forEach(f => { indices.push(f[0], f[1], f[2]); });
       geo.setIndex(indices);
     }
-    geo.computeVertexNormals();
+    // Crease-angle normals — matches Mesh3.toThreeGeometry so sharp edges
+    // stay sharp while curved regions still get smooth shading.
+    const Geo = (typeof window !== 'undefined' && window.Geo) || null;
+    const shadedGeo = (Geo && typeof Geo._applyCreaseNormals === 'function')
+      ? Geo._applyCreaseNormals(geo, 30)
+      : (geo.computeVertexNormals(), geo);
     const mat = new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.95, side: THREE.DoubleSide, flatShading: false, shininess: 35 });
-    const meshObj = new THREE.Mesh(geo, mat);
+    const meshObj = new THREE.Mesh(shadedGeo, mat);
     meshObj.userData.isMeshBody = true;
     this.geometryGroup.add(meshObj);
-    const wire = new THREE.WireframeGeometry(geo);
+    const wire = new THREE.WireframeGeometry(shadedGeo);
     const wireMat = new THREE.LineBasicMaterial({ color: 0x45475a, linewidth: 1, transparent: true, opacity: 0.45 });
     const wireLines = new THREE.LineSegments(wire, wireMat);
     wireLines.userData.isMeshWireframe = true;
