@@ -696,8 +696,6 @@ const app = {
 
         const srcVal = srcNd ? this.computeNodeValue(srcNd) : undefined;
 
-        const srcName = srcNd ? srcNd.def.name : '?';
-
         r += `<div class="data-row"><span class="data-label">⊙ ${inp.name}</span>${this.formatValue(srcVal)}</div>`;
 
       } else {
@@ -2127,12 +2125,6 @@ const app = {
         // Check if followed by ( → function call
 
         const isCall = i < code.length && code[i] === '(';
-
-        // Check if preceded by . → module attribute
-
-        const dotBefore = result.endsWith('.');
-
-
 
         if (keywords.has(id)) result += '<span class="sh-kw">' + esc(id) + '</span>';
 

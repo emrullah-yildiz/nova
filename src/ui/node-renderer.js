@@ -284,8 +284,6 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
 
       // Generic controls: number (with spin), dropdown, text, range
 
-      var self = this;
-
       (def.controls || []).forEach(function(c) {
 
         // Skip controls that go in Properties section
@@ -840,81 +838,6 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
       }
       var controlIds = nd.def.controls ? nd.def.controls.map(function(c) { return c.id; }) : [];
       if (!nd._inspStates) nd._inspStates = { inputs: true, output: true };
-
-      function valueTypeOf(value) {
-        if (value === undefined) return 'missing';
-        if (value === null) return 'null';
-        if (Array.isArray(value)) return 'list';
-        if (typeof value === 'number') return 'number';
-        if (typeof value === 'boolean') return 'boolean';
-        if (typeof value === 'string') return 'string';
-        if (value && value.type === 'GeometryRef') return 'geometry';
-        if (value && value.type === 'ElementRef') return 'element';
-        if (value && value._type) {
-          var t = String(value._type).toLowerCase();
-          if (t.indexOf('point') >= 0) return 'point';
-          if (t.indexOf('vector') >= 0) return 'vector';
-          if (t.indexOf('mesh') >= 0 || t.indexOf('solid') >= 0 || t.indexOf('surface') >= 0) return 'mesh';
-          if (t.indexOf('line') >= 0) return 'line';
-          if (t.indexOf('curve') >= 0 || t.indexOf('circle') >= 0 || t.indexOf('arc') >= 0) return 'curve';
-          if (t.indexOf('revit') >= 0) return 'element';
-          return t;
-        }
-        if (typeof value === 'object') return 'object';
-        return typeof value;
-      }
-
-      function typeMatches(expected, actual, value) {
-        if (!expected || expected === 'any' || actual === 'missing' || actual === 'null') return true;
-        if (expected === actual) return true;
-        if (expected === 'number' && actual === 'string' && value !== '' && !isNaN(Number(value))) return true;
-        if (expected === 'list') return actual === 'list';
-        if (expected === 'mesh') return actual === 'mesh' || actual === 'geometry';
-        if (expected === 'surface') return actual === 'mesh' || actual === 'surface' || actual === 'geometry';
-        if (expected === 'solid') return actual === 'mesh' || actual === 'solid' || actual === 'geometry';
-        if (expected === 'curve') return actual === 'curve' || actual === 'line';
-        if (expected === 'point') return actual === 'point';
-        if (expected === 'vector') return actual === 'vector';
-        if (expected === 'string') return actual === 'string';
-        if (expected === 'boolean') return actual === 'boolean';
-        return false;
-      }
-
-      function inputValueFor(inp) {
-        var wire = app.wires.find(function(w) { return w.toNode === nd.id && w.toPort === inp.id; });
-        if (wire) {
-          var srcNd = app.nodes.find(function(n) { return n.id === wire.fromNode; });
-          if (!srcNd) return { wired: true, value: undefined };
-          if (srcNd._lastRunPortValues && srcNd._lastRunPortValues[wire.fromPort] !== undefined) return { wired: true, value: srcNd._lastRunPortValues[wire.fromPort] };
-          return { wired: true, value: app.computeNodeValue(srcNd) };
-        }
-        if (controlIds.indexOf(inp.id) >= 0) {
-          return { wired: false, value: nd.controlValues['_eval_' + inp.id] !== undefined ? nd.controlValues['_eval_' + inp.id] : nd.controlValues[inp.id] };
-        }
-        return { wired: false, value: undefined };
-      }
-
-      function collectWarnings() {
-        var warnings = [];
-        (nd.def.inputs || []).forEach(function(inp) {
-          if (!inp.type || inp.type === 'any') return;
-          var input = inputValueFor(inp);
-          if (!input.wired && input.value === undefined) return;
-          var actual = valueTypeOf(input.value);
-          if (!typeMatches(inp.type, actual, input.value)) {
-            warnings.push({
-              port: inp.name || inp.id,
-              expected: inp.type,
-              actual: actual,
-              message: (inp.name || inp.id) + ' expects ' + inp.type + ' but received ' + actual + '.'
-            });
-          }
-        });
-        if (nd._lastRunValue === undefined && nd.def.outputs && nd.def.outputs.length > 0) {
-          warnings.push({ port: 'Output', expected: 'value', actual: 'undefined', message: 'Node produced no output on the last Run.' });
-        }
-        return warnings;
-      }
 
       // Inputs (collapsible)
       if (nd.def.inputs && nd.def.inputs.length > 0) {

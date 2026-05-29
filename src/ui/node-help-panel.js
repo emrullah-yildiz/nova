@@ -115,9 +115,6 @@ export function installNodeHelpPanel(targetApp = getRuntimeApp()) {
 
     // Helper: port Y position
     function portY(nodeIdx, portIdx, isOutput) {
-      var info = nodeInfo[nodeIdx];
-      var inputs = info.inputs, outputs = info.outputs;
-      var maxRows = Math.max(inputs.length, outputs.length, 1);
       var idx = isOutput ? portIdx : portIdx;
       return positions[nodeIdx].y + HDR_H + 3 + idx * ROW_H + ROW_H / 2;
     }
