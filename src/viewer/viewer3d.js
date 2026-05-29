@@ -64,6 +64,14 @@ export const Viewer3D = {
     this.controls.dampingFactor = 0.08;
     this.controls.screenSpacePanning = true;
     this.controls.maxPolarAngle = Math.PI;
+    // Match the 2D canvas controls: middle-mouse pans (was DOLLY). Wheel still
+    // zooms. Right-mouse stays on PAN, but app.js suppresses the contextmenu
+    // event over the viewport so the right-pan doesn't end in a search popup.
+    this.controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.PAN,
+      RIGHT: THREE.MOUSE.PAN
+    };
     this.gridHelper = new THREE.GridHelper(100, 100, 0x6c7086, 0x45475a);
     if (this.gridHelper.material) {
       this.gridHelper.material.transparent = true;

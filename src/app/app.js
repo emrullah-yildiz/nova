@@ -983,6 +983,11 @@ const app = {
 
     area.addEventListener('mousedown',e=>{
 
+      // Anything inside the 3D viewport is owned by OrbitControls — the 2D
+      // canvas must not pan, deselect, or otherwise react when the user is
+      // working in 3D (including split mode with 3D as the active layer).
+      if(e.target.closest('#viewport-3d')) return;
+
       if(e.target.closest('.node')||e.target.closest('.canvas-toolbar')||e.target.closest('.canvas-zoom')) return;
 
       this.deselectAll();
@@ -1029,6 +1034,10 @@ const app = {
 
     area.addEventListener('wheel',e=>{
 
+      // Wheel over the 3D viewport belongs to OrbitControls — don't dolly
+      // both views at once.
+      if(e.target.closest('#viewport-3d')) return;
+
       e.preventDefault();this.zoom=Math.max(0.25,Math.min(3,this.zoom+(e.deltaY>0?-0.08:0.08)));
 
       this.applyTransform();document.getElementById('zoom-indicator').textContent=Math.round(this.zoom*100)+'%';
@@ -1047,7 +1056,18 @@ const app = {
 
     });
 
-    area.addEventListener('contextmenu',e=>{if(e.target.closest('.node'))return;e.preventDefault();this.showContextMenu(e.clientX,e.clientY);});
+    area.addEventListener('contextmenu',e=>{
+
+      // OrbitControls uses right-mouse for PAN. Suppressing the browser
+      // context menu over the 3D viewport prevents the node search popup
+      // from appearing the moment the user releases a right-drag pan.
+      if(e.target.closest('#viewport-3d')){e.preventDefault();return;}
+
+      if(e.target.closest('.node'))return;
+
+      e.preventDefault();this.showContextMenu(e.clientX,e.clientY);
+
+    });
 
   },
 
