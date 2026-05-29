@@ -1891,49 +1891,111 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
+  // View model (Dynamo-style):
+  //   splitMode (bool)     — both panes visible side by side?
+  //   activeView ('nodes'|'3d') — which pane is the focused one
+  // 2D / 3D buttons set activeView. Split button toggles splitMode.
+  // When splitMode is false only the active pane shows; when true,
+  // both are visible and the toolbar highlight indicates focus.
+
+  if (typeof app.splitMode !== 'boolean') app.splitMode = false;
+
+  if (app.activeView !== '3d') app.activeView = 'nodes';
+
   app.setView = function(mode) {
 
-    this.currentView = mode;
+    if (mode === 'split') {
 
-    var nc = document.getElementById('node-canvas'), ws = document.getElementById('wire-svg'), gs = document.getElementById('canvas-grid-svg'), vp = document.getElementById('viewport-3d');
+      // Backwards-compat shim: legacy callers using setView('split') toggle splitMode on.
+      this.splitMode = true;
 
-    var b2d = document.getElementById('btn-view-nodes'), b3d = document.getElementById('btn-view-3d');
+    } else {
 
+      this.activeView = (mode === '3d') ? '3d' : 'nodes';
 
+    }
 
-    if (mode === '3d') {
+    this.currentView = this.splitMode ? 'split' : this.activeView; // legacy reads
 
-      if (nc) nc.style.display = 'none'; if (ws) ws.style.display = 'none'; if (gs) gs.style.display = 'none';
+    this._applyViewState();
 
-      if (vp) vp.style.display = 'block';
+  };
 
-      if (b2d) { b2d.style.color = ''; b2d.style.fontWeight = ''; }
+  app.toggleSplit = function(force) {
 
-      if (b3d) { b3d.style.color = 'var(--accent-blue)'; b3d.style.fontWeight = '700'; }
+    this.splitMode = (typeof force === 'boolean') ? force : !this.splitMode;
+
+    this.currentView = this.splitMode ? 'split' : this.activeView;
+
+    this._applyViewState();
+
+  };
+
+  app._applyViewState = function() {
+
+    var canvasArea = document.getElementById('canvas-area');
+
+    var vp = document.getElementById('viewport-3d');
+
+    var b2d = document.getElementById('btn-view-nodes');
+
+    var b3d = document.getElementById('btn-view-3d');
+
+    var bSplit = document.getElementById('btn-view-split');
+
+    var show3D = this.splitMode || this.activeView === '3d';
+
+    // Class-based state: CSS rules in style.css derive display, z-index,
+    // pointer-events and opacity from the .split-view / .view-nodes /
+    // .view-3d trio on .canvas-area. JS just sets the classes.
+    if (canvasArea) {
+
+      canvasArea.classList.toggle('split-view', !!this.splitMode);
+
+      canvasArea.classList.toggle('view-nodes', this.activeView === 'nodes');
+
+      canvasArea.classList.toggle('view-3d',    this.activeView === '3d');
+
+    }
+
+    if (show3D) {
 
       if (!Viewer3D.isInitialized && vp) Viewer3D.init(vp);
 
       Viewer3D.show();
 
-      var sp = document.getElementById('scene-tree-panel');
+      if (Viewer3D._needsRebuild !== false) {
 
-      if (sp && Viewer3D.geometryGroup && Viewer3D.geometryGroup.children.length > 0) sp.style.display = 'block';
+        try { Viewer3D.buildFromGraph(this.nodes, this.wires, function(nd) { return app.computeNodeValue(nd); }); } catch (e) { /* skip */ }
+
+        Viewer3D.fitAll();
+
+        Viewer3D._needsRebuild = false;
+
+      }
 
     } else {
 
-      if (nc) nc.style.display = ''; if (ws) ws.style.display = ''; if (gs) gs.style.display = '';
-
-      if (vp) vp.style.display = 'none';
-
-      if (b2d) { b2d.style.color = 'var(--accent-blue)'; b2d.style.fontWeight = '700'; }
-
-      if (b3d) { b3d.style.color = ''; b3d.style.fontWeight = ''; }
-
       Viewer3D.hide();
 
-      setTimeout(function() { app.renderWires(); }, 50);
-
     }
+
+    var self = this;
+
+    setTimeout(function() {
+
+      if (Viewer3D._onResize) Viewer3D._onResize();
+
+      if (typeof self.renderWires === 'function') self.renderWires();
+
+    }, 30);
+
+    // Toolbar highlight — 2D/3D show which layer is active, Split shows whether the overlay is on.
+    if (b2d)    { b2d.style.color    = this.activeView === 'nodes' ? 'var(--accent-blue)' : ''; b2d.style.fontWeight    = this.activeView === 'nodes' ? '700' : ''; }
+
+    if (b3d)    { b3d.style.color    = this.activeView === '3d'    ? 'var(--accent-blue)' : ''; b3d.style.fontWeight    = this.activeView === '3d'    ? '700' : ''; }
+
+    if (bSplit) { bSplit.style.color = this.splitMode               ? 'var(--accent-blue)' : ''; bSplit.style.fontWeight = this.splitMode               ? '700' : ''; }
 
   };
 
@@ -2097,7 +2159,11 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       area.addEventListener('wheel', function(e) {
 
-        if (app.currentView === '3d') return;
+        // Defer to OrbitControls whenever the cursor is over the 3D viewport,
+        // regardless of view mode. The previous check (app.currentView === '3d')
+        // missed split mode (currentView is 'split' there), so split+3D was
+        // zooming the node canvas instead of the 3D scene.
+        if (e.target.closest && e.target.closest('#viewport-3d')) return;
 
         e.preventDefault(); e.stopImmediatePropagation();
 

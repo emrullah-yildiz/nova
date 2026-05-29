@@ -320,6 +320,42 @@ input:focus, textarea:focus { border-color: var(--accent-blue); }
 
 .wire-layer { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
 
+/* ── Layered view modes ──
+ * Both panes sit at inset:0 and overlap. Classes on .canvas-area pick who's
+ * on top and who's interactive. The 3D scene background is transparent
+ * (set in viewer3d.js), so the 2D layer underneath shows through cleanly
+ * in split mode.
+ *
+ *   .view-nodes / .view-3d : which layer is active (toolbar focus)
+ *   .split-view            : show BOTH layers; without it only the active
+ *                             one renders.
+ */
+
+/* viewport-3d default stack position. Inline z-index was removed from
+ * index.html so class-based rules below can change it without an
+ * !important arms race. */
+#viewport-3d { display: none; z-index: 5; }
+.canvas-area.view-3d #viewport-3d,
+.canvas-area.split-view #viewport-3d { display: block; }
+
+/* 3D-only mode: hide every 2D layer entirely (matches today's clean 3D view). */
+.canvas-area.view-3d:not(.split-view) #node-canvas,
+.canvas-area.view-3d:not(.split-view) .wire-layer,
+.canvas-area.view-3d:not(.split-view) .canvas-grid-svg { display: none; }
+
+/* Split-on: drop the 2D grid (it would compete with the 3D content). */
+.canvas-area.split-view .canvas-grid-svg { display: none; }
+
+/* Split-on + 2D active: nodes overlay 3D, both fully opaque, 2D interactive. */
+.canvas-area.split-view.view-nodes #viewport-3d { z-index: 1; pointer-events: none; opacity: 1; }
+.canvas-area.split-view.view-nodes .wire-layer { z-index: 2; opacity: 1; }
+.canvas-area.split-view.view-nodes #node-canvas { z-index: 3; pointer-events: auto; opacity: 1; }
+
+/* Split-on + 3D active: 3D on top, 2D nodes ghost behind and stop receiving input. */
+.canvas-area.split-view.view-3d #viewport-3d { z-index: 5; pointer-events: auto; opacity: 1; }
+.canvas-area.split-view.view-3d #node-canvas { pointer-events: none; opacity: 0.4; }
+.canvas-area.split-view.view-3d .wire-layer { opacity: 0.4; }
+
 
 
 /* Portal overlay */

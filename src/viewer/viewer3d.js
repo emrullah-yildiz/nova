@@ -43,15 +43,18 @@ export const Viewer3D = {
       return;
     }
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(NovaPalette3D.background);
-    // Lighter fog so the grid and distant geometry don't fade out at typical fit-all zooms.
+    // Transparent scene so the 2D node canvas underneath shows through in
+    // split mode. In 3D-only mode the canvas-area's own dark background
+    // (var(--bg-primary)) shows through identically, so the look is unchanged
+    // there. Fog still fades distant geometry to the Nova dark colour.
     this.scene.fog = new THREE.FogExp2(NovaPalette3D.background, 0.0007);
     this.camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 10000);
     this.camera.position.set(30, 25, 30);
     this.camera.lookAt(0, 0, 0);
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     this.renderer.setSize(container.clientWidth, container.clientHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setClearColor(NovaPalette3D.background, 0);
     this.renderer.shadowMap.enabled = false;
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.style.position = 'absolute';
@@ -61,6 +64,14 @@ export const Viewer3D = {
     this.controls.dampingFactor = 0.08;
     this.controls.screenSpacePanning = true;
     this.controls.maxPolarAngle = Math.PI;
+    // Match the 2D canvas controls: middle-mouse pans (was DOLLY). Wheel still
+    // zooms. Right-mouse stays on PAN, but app.js suppresses the contextmenu
+    // event over the viewport so the right-pan doesn't end in a search popup.
+    this.controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.PAN,
+      RIGHT: THREE.MOUSE.PAN
+    };
     this.gridHelper = new THREE.GridHelper(100, 100, 0x6c7086, 0x45475a);
     if (this.gridHelper.material) {
       this.gridHelper.material.transparent = true;

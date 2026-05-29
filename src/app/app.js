@@ -983,6 +983,11 @@ const app = {
 
     area.addEventListener('mousedown',e=>{
 
+      // Anything inside the 3D viewport is owned by OrbitControls — the 2D
+      // canvas must not pan, deselect, or otherwise react when the user is
+      // working in 3D (including split mode with 3D as the active layer).
+      if(e.target.closest('#viewport-3d')) return;
+
       if(e.target.closest('.node')||e.target.closest('.canvas-toolbar')||e.target.closest('.canvas-zoom')) return;
 
       this.deselectAll();
@@ -1029,6 +1034,10 @@ const app = {
 
     area.addEventListener('wheel',e=>{
 
+      // Wheel over the 3D viewport belongs to OrbitControls — don't dolly
+      // both views at once.
+      if(e.target.closest('#viewport-3d')) return;
+
       e.preventDefault();this.zoom=Math.max(0.25,Math.min(3,this.zoom+(e.deltaY>0?-0.08:0.08)));
 
       this.applyTransform();document.getElementById('zoom-indicator').textContent=Math.round(this.zoom*100)+'%';
@@ -1047,7 +1056,18 @@ const app = {
 
     });
 
-    area.addEventListener('contextmenu',e=>{if(e.target.closest('.node'))return;e.preventDefault();this.showContextMenu(e.clientX,e.clientY);});
+    area.addEventListener('contextmenu',e=>{
+
+      // OrbitControls uses right-mouse for PAN. Suppressing the browser
+      // context menu over the 3D viewport prevents the node search popup
+      // from appearing the moment the user releases a right-drag pan.
+      if(e.target.closest('#viewport-3d')){e.preventDefault();return;}
+
+      if(e.target.closest('.node'))return;
+
+      e.preventDefault();this.showContextMenu(e.clientX,e.clientY);
+
+    });
 
   },
 
@@ -2686,91 +2706,78 @@ const app = {
 
 // ══════════════════════════════════════
 
+// The actual app.setView, app.toggleSplit, and app._applyViewState are
+// installed by core/engine.js installEngine() — defining duplicates here
+// would only fight that ownership. We keep the divider drag and the
+// split-mode live rebuild watcher below; those don't conflict.
+
 app.currentView = 'nodes';
 
-app.setView = function(mode) {
+// The viewport divider is gone — split view now stacks 2D and 3D on the
+// same rectangle (layered, not side-by-side), so there's nothing to drag.
 
-  this.currentView = mode;
+// ── Live 3D rebuild for split view ──
 
-  const nodeCanvas = document.getElementById('node-canvas');
+// A requestAnimationFrame watcher that observes the engine's version
+// counter (ExecutionEngine v2 bumps `_version` on every invalidate) or
+// falls back to `app._graphDirty`. When the value changes while split
+// view is active, rebuild the 3D scene. Cheap when idle (one compare
+// per frame), avoids the ordering hassle of patching invalidateCompute
+// after ExecutionEngine v2 has already wrapped it.
 
-  const wireSvg = document.getElementById('wire-svg');
+app._runSplitWatcher = function() {
 
-  const gridSvg = document.getElementById('canvas-grid-svg');
+  if (this._splitWatcherRunning) return;
 
-  const viewport = document.getElementById('viewport-3d');
+  this._splitWatcherRunning = true;
 
-  const btn2D = document.getElementById('btn-view-nodes');
+  let lastSeenVersion = -1;
 
-  const btn3D = document.getElementById('btn-view-3d');
+  const tick = () => {
 
+    try {
 
+      if (this.splitMode && typeof Viewer3D !== 'undefined' && Viewer3D.isInitialized) {
 
-  if (mode === '3d') {
+        const ee = typeof window !== 'undefined' ? window.__executionEngineV2 : null;
 
-    if (nodeCanvas) nodeCanvas.style.display = 'none';
+        const v = ee && typeof ee._version === 'number' ? ee._version : (this._graphDirty ? 1 : 0);
 
-    if (wireSvg) wireSvg.style.display = 'none';
+        if (v !== lastSeenVersion) {
 
-    if (gridSvg) gridSvg.style.display = 'none';
+          lastSeenVersion = v;
 
-    if (viewport) viewport.style.display = 'block';
+          try {
 
-    if (btn2D) { btn2D.style.color = ''; btn2D.style.fontWeight = ''; }
+            Viewer3D.buildFromGraph(this.nodes, this.wires, (nd) => this.computeNodeValue(nd));
 
-    if (btn3D) { btn3D.style.color = 'var(--accent-blue)'; btn3D.style.fontWeight = '700'; }
+          } catch (e) { /* skip rebuild errors */ }
 
+          Viewer3D._needsRebuild = false;
 
+        }
 
-    if (!Viewer3D.isInitialized) Viewer3D.init(viewport);
+      }
 
-    Viewer3D.show();
+    } catch (e) { /* never let the watcher die */ }
 
-    if (app._manualRunMode && !app._hasRun) {
-      if (Viewer3D.clearGeometry) Viewer3D.clearGeometry();
-      Viewer3D._needsRebuild = false;
-      return;
-    }
+    requestAnimationFrame(tick);
 
-    if (app._manualRunMode && app._graphDirty) {
-      return;
-    }
+  };
 
-    // Only rebuild 3D if the graph has changed since last build.
-
-    // Otherwise just show/hide with existing visibility state preserved.
-
-    if (Viewer3D._needsRebuild !== false) {
-
-      Viewer3D.buildFromGraph(app.nodes, app.wires, (nd) => app.computeNodeValue(nd));
-
-      Viewer3D.fitAll();
-
-      Viewer3D._needsRebuild = false;
-
-    }
-
-  } else {
-
-    if (nodeCanvas) nodeCanvas.style.display = '';
-
-    if (wireSvg) wireSvg.style.display = '';
-
-    if (gridSvg) gridSvg.style.display = '';
-
-    if (viewport) viewport.style.display = 'none';
-
-    if (btn2D) { btn2D.style.color = 'var(--accent-blue)'; btn2D.style.fontWeight = '700'; }
-
-    if (btn3D) { btn3D.style.color = ''; btn3D.style.fontWeight = ''; }
-
-    Viewer3D.hide();
-
-    setTimeout(() => app.renderWires(), 50);
-
-  }
+  requestAnimationFrame(tick);
 
 };
+
+if (typeof document !== 'undefined') {
+
+  document.addEventListener('DOMContentLoaded', () => {
+
+    if (app._runSplitWatcher) app._runSplitWatcher();
+
+  });
+
+}
 
 
 
