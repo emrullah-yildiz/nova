@@ -890,5 +890,267 @@ export const patternsNodes = [
       },
       sampleCode: '{{outlines}} = Geo.voronoiOutlines({{sites}}, None, 0.5)'
     }
+  },
+
+  // ─── Architectural composites (Phase 8) ───────────────────
+  // These nodes absorb the for-loop patterns the AI used to dump into a
+  // Custom.Python block. A single Geo.* call replaces a 15-line manual
+  // construction, so plan-mode can express the request without falling
+  // back to opaque Python.
+
+  {
+    type: 'Pattern.TwistedEllipsePlates',
+    name: 'Pattern.TwistedEllipsePlates',
+    category: 'patterns',
+    subGroup: 'Composite',
+    icon: '🌀',
+    description: 'Stacked elliptical floor profiles with per-floor twist and linear taper. Output is a list of point rings ready to feed Solid.ByLoft for a continuous twisted-tower mesh. Encapsulates what would otherwise be a manual nested for-loop.',
+    inputs: [
+      { id: 'floors', name: 'Floors', type: 'number', description: 'Number of floor plates (>=1)' },
+      { id: 'height', name: 'Height', type: 'number', description: 'Total vertical height' },
+      { id: 'baseWidth', name: 'Base Width', type: 'number', description: 'Width of the base ellipse' },
+      { id: 'baseDepth', name: 'Base Depth', type: 'number', description: 'Depth of the base ellipse' },
+      { id: 'twistDeg', name: 'Twist (deg)', type: 'number', description: 'Total twist from base to top in degrees' },
+      { id: 'taper', name: 'Taper', type: 'number', description: 'Taper amount 0..1 (0 = no taper, 1 = converges at top)' },
+      { id: 'resolution', name: 'Resolution', type: 'number', description: 'Points per profile ring' }
+    ],
+    outputs: [{ id: 'profiles', name: 'Profiles', type: 'list', description: 'List of profile rings (point[][])' }],
+    controls: [
+      { id: 'floors', type: 'formula', default: '20', label: 'Floors' },
+      { id: 'height', type: 'formula', default: '100', label: 'Height' },
+      { id: 'baseWidth', type: 'formula', default: '18', label: 'Base Width' },
+      { id: 'baseDepth', type: 'formula', default: '12', label: 'Base Depth' },
+      { id: 'twistDeg', type: 'formula', default: '60', label: 'Twist (deg)' },
+      { id: 'taper', type: 'formula', default: '0.2', label: 'Taper' },
+      { id: 'resolution', type: 'formula', default: '48', label: 'Resolution' }
+    ],
+    execute(context, inputs) {
+      return {
+        profiles: Geo.twistedEllipsePlates(
+          toInteger(inputs.floors, 20),
+          toNumber(inputs.height, 100),
+          toNumber(inputs.baseWidth, 18),
+          toNumber(inputs.baseDepth, 12),
+          toNumber(inputs.twistDeg, 60),
+          toNumber(inputs.taper, 0.2),
+          toInteger(inputs.resolution, 48)
+        )
+      };
+    },
+    codegen: {
+      python: '{{profiles}} = Geo.twistedEllipsePlates(int({{floors}}), {{height}}, {{baseWidth}}, {{baseDepth}}, {{twistDeg}}, {{taper}}, int({{resolution}}))',
+      csharp: 'var {{profiles}} = Geo.twistedEllipsePlates((int){{floors}}, {{height}}, {{baseWidth}}, {{baseDepth}}, {{twistDeg}}, {{taper}}, (int){{resolution}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Floors', description: 'Number of floor plates' },
+        { name: 'Height', description: 'Total tower height' },
+        { name: 'Twist (deg)', description: 'Per-floor twist amount in degrees' }
+      ],
+      outputs: [{ name: 'Profiles', description: 'List of point rings' }],
+      example: {
+        title: '20-floor twisted tower — produces a smooth twisted-prism mesh',
+        nodes: [
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 20 } },
+          { type: 'Input.Number', x: 0, y: 60, controls: { val: 100 } },
+          { type: 'Input.Number', x: 0, y: 120, controls: { val: 18 } },
+          { type: 'Input.Number', x: 0, y: 180, controls: { val: 12 } },
+          { type: 'Input.Number', x: 0, y: 240, controls: { val: 60 } },
+          { type: 'Pattern.TwistedEllipsePlates', x: 260, y: 100 },
+          { type: 'Solid.ByLoft', x: 540, y: 100 },
+          { type: 'Output.Watch', x: 760, y: 100 }
+        ],
+        wires: [
+          [0, 'value', 5, 'floors'],
+          [1, 'value', 5, 'height'],
+          [2, 'value', 5, 'baseWidth'],
+          [3, 'value', 5, 'baseDepth'],
+          [4, 'value', 5, 'twistDeg'],
+          [5, 'profiles', 6, 'profiles'],
+          [6, 'solid', 7, 'value']
+        ]
+      },
+      sampleCode: '{{profiles}} = Geo.twistedEllipsePlates({{floors}}, {{height}}, {{baseWidth}}, {{baseDepth}}, {{twistDeg}}, 0.2, 48)'
+    }
+  },
+
+  {
+    type: 'Pattern.OrganicProfileStack',
+    name: 'Pattern.OrganicProfileStack',
+    category: 'patterns',
+    subGroup: 'Composite',
+    icon: '🏺',
+    description: 'Sin-modulated stack of circular profiles — produces a pavilion or vase silhouette. Pinch controls how aggressively the middle pulls in (0 = cylinder, 1 = bottleneck). Output feeds Solid.ByLoft to make a smooth organic form.',
+    inputs: [
+      { id: 'count', name: 'Count', type: 'number', description: 'Number of profile rings' },
+      { id: 'baseRadius', name: 'Base Radius', type: 'number', description: 'Radius of the widest part' },
+      { id: 'height', name: 'Height', type: 'number', description: 'Total height' },
+      { id: 'resolution', name: 'Resolution', type: 'number', description: 'Points per profile ring' },
+      { id: 'pinch', name: 'Pinch', type: 'number', description: 'Middle-pinch amount 0..1' }
+    ],
+    outputs: [{ id: 'profiles', name: 'Profiles', type: 'list', description: 'List of profile rings (point[][])' }],
+    controls: [
+      { id: 'count', type: 'formula', default: '12', label: 'Count' },
+      { id: 'baseRadius', type: 'formula', default: '10', label: 'Base Radius' },
+      { id: 'height', type: 'formula', default: '8', label: 'Height' },
+      { id: 'resolution', type: 'formula', default: '48', label: 'Resolution' },
+      { id: 'pinch', type: 'formula', default: '0.7', label: 'Pinch' }
+    ],
+    execute(context, inputs) {
+      return {
+        profiles: Geo.organicProfileStack(
+          toInteger(inputs.count, 12),
+          toNumber(inputs.baseRadius, 10),
+          toNumber(inputs.height, 8),
+          toInteger(inputs.resolution, 48),
+          toNumber(inputs.pinch, 0.7)
+        )
+      };
+    },
+    codegen: {
+      python: '{{profiles}} = Geo.organicProfileStack(int({{count}}), {{baseRadius}}, {{height}}, int({{resolution}}), {{pinch}})',
+      csharp: 'var {{profiles}} = Geo.organicProfileStack((int){{count}}, {{baseRadius}}, {{height}}, (int){{resolution}}, {{pinch}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Count', description: 'Number of profile rings' },
+        { name: 'Pinch', description: 'Middle pinch amount' }
+      ],
+      outputs: [{ name: 'Profiles', description: 'List of point rings' }],
+      example: {
+        title: 'Pavilion with 12 profile rings — vase silhouette',
+        nodes: [
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 12 } },
+          { type: 'Input.Number', x: 0, y: 60, controls: { val: 10 } },
+          { type: 'Pattern.OrganicProfileStack', x: 260, y: 30 },
+          { type: 'Solid.ByLoft', x: 540, y: 30 },
+          { type: 'Output.Watch', x: 760, y: 30 }
+        ],
+        wires: [
+          [0, 'value', 2, 'count'],
+          [1, 'value', 2, 'baseRadius'],
+          [2, 'profiles', 3, 'profiles'],
+          [3, 'solid', 4, 'value']
+        ]
+      },
+      sampleCode: '{{profiles}} = Geo.organicProfileStack({{count}}, {{baseRadius}}, 8, 48, 0.7)'
+    }
+  },
+
+  {
+    type: 'Pattern.HelicalCurve',
+    name: 'Pattern.HelicalCurve',
+    category: 'patterns',
+    subGroup: 'Composite',
+    icon: '🌀',
+    description: 'Helical polyline with `turns` revolutions over `height`, sampled at `segments` points. Useful as a sweep path for staircases, structural spines, or decorative spirals. Output is a polyline curve.',
+    inputs: [
+      { id: 'turns', name: 'Turns', type: 'number', description: 'Number of revolutions (can be fractional)' },
+      { id: 'height', name: 'Height', type: 'number', description: 'Total vertical rise' },
+      { id: 'radius', name: 'Radius', type: 'number', description: 'Helix radius' },
+      { id: 'segments', name: 'Segments', type: 'number', description: 'Number of polyline segments' }
+    ],
+    outputs: [{ id: 'curve', name: 'Curve', type: 'list', description: 'Helical polyline as a list of points' }],
+    controls: [
+      { id: 'turns', type: 'formula', default: '3', label: 'Turns' },
+      { id: 'height', type: 'formula', default: '20', label: 'Height' },
+      { id: 'radius', type: 'formula', default: '5', label: 'Radius' },
+      { id: 'segments', type: 'formula', default: '60', label: 'Segments' }
+    ],
+    execute(context, inputs) {
+      return {
+        curve: Geo.helicalCurve(
+          toNumber(inputs.turns, 3),
+          toNumber(inputs.height, 20),
+          toNumber(inputs.radius, 5),
+          toInteger(inputs.segments, 60)
+        )
+      };
+    },
+    codegen: {
+      python: '{{curve}} = Geo.helicalCurve({{turns}}, {{height}}, {{radius}}, int({{segments}}))',
+      csharp: 'var {{curve}} = Geo.helicalCurve({{turns}}, {{height}}, {{radius}}, (int){{segments}});'
+    },
+    help: {
+      inputs: [{ name: 'Turns', description: 'Revolutions' }],
+      outputs: [{ name: 'Curve', description: 'Helical polyline' }],
+      example: {
+        title: '3-turn helix counted to show point density',
+        nodes: [
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 3 } },
+          { type: 'Input.Number', x: 0, y: 60, controls: { val: 20 } },
+          { type: 'Pattern.HelicalCurve', x: 260, y: 30 },
+          { type: 'List.Count', x: 540, y: 30 },
+          { type: 'Output.Watch', x: 760, y: 30 }
+        ],
+        wires: [
+          [0, 'value', 2, 'turns'],
+          [1, 'value', 2, 'height'],
+          [2, 'curve', 3, 'list'],
+          [3, 'count', 4, 'value']
+        ]
+      },
+      sampleCode: '{{curve}} = Geo.helicalCurve({{turns}}, {{height}}, 5, 60)'
+    }
+  },
+
+  {
+    type: 'Pattern.DiagridFacade',
+    name: 'Pattern.DiagridFacade',
+    category: 'patterns',
+    subGroup: 'Composite',
+    icon: '◇',
+    description: 'Diagrid line pattern for a facade or structural skin. Returns a list of diagonal polylines that span the given width/height rectangle. Drop the lines into Curve.Bezier or Solid.ByPipe for a structural rendering.',
+    inputs: [
+      { id: 'width', name: 'Width', type: 'number', description: 'Facade width' },
+      { id: 'height', name: 'Height', type: 'number', description: 'Facade height' },
+      { id: 'cellsX', name: 'Cells X', type: 'number', description: 'Diagonal cells across the width' },
+      { id: 'cellsY', name: 'Cells Y', type: 'number', description: 'Diagonal cells across the height' }
+    ],
+    outputs: [{ id: 'lines', name: 'Lines', type: 'list', description: 'List of polyline curves forming the diagrid' }],
+    controls: [
+      { id: 'width', type: 'formula', default: '40', label: 'Width' },
+      { id: 'height', type: 'formula', default: '30', label: 'Height' },
+      { id: 'cellsX', type: 'formula', default: '10', label: 'Cells X' },
+      { id: 'cellsY', type: 'formula', default: '12', label: 'Cells Y' }
+    ],
+    execute(context, inputs) {
+      return {
+        lines: Geo.diagridPattern(
+          toNumber(inputs.width, 40),
+          toNumber(inputs.height, 30),
+          toInteger(inputs.cellsX, 10),
+          toInteger(inputs.cellsY, 12)
+        )
+      };
+    },
+    codegen: {
+      python: '{{lines}} = Geo.diagridPattern({{width}}, {{height}}, int({{cellsX}}), int({{cellsY}}))',
+      csharp: 'var {{lines}} = Geo.diagridPattern({{width}}, {{height}}, (int){{cellsX}}, (int){{cellsY}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Width', description: 'Facade width' },
+        { name: 'Cells X', description: 'Diagonal cell count' }
+      ],
+      outputs: [{ name: 'Lines', description: 'Diagonal polylines' }],
+      example: {
+        title: '40×30 diagrid pattern — line count via List.Count',
+        nodes: [
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 40 } },
+          { type: 'Input.Number', x: 0, y: 60, controls: { val: 30 } },
+          { type: 'Pattern.DiagridFacade', x: 260, y: 30 },
+          { type: 'List.Count', x: 540, y: 30 },
+          { type: 'Output.Watch', x: 760, y: 30 }
+        ],
+        wires: [
+          [0, 'value', 2, 'width'],
+          [1, 'value', 2, 'height'],
+          [2, 'lines', 3, 'list'],
+          [3, 'count', 4, 'value']
+        ]
+      },
+      sampleCode: '{{lines}} = Geo.diagridPattern({{width}}, {{height}}, 10, 12)'
+    }
   }
 ];
