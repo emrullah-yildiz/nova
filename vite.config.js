@@ -13,7 +13,13 @@ function vercelFunctionsDev() {
     apply: 'serve',
     configureServer(server) {
       const env = loadEnv('development', process.cwd(), '');
-      for (const key of ['GROQ_API_KEY', 'NOVA_GROQ_API_KEY', 'NOVA_CORS_ORIGIN']) {
+      const passthrough = [
+        'GROQ_API_KEY', 'NOVA_GROQ_API_KEY',
+        'OPENROUTER_API_KEY', 'NOVA_OPENROUTER_API_KEY',
+        'CEREBRAS_API_KEY', 'NOVA_CEREBRAS_API_KEY',
+        'NOVA_CORS_ORIGIN', 'NOVA_PUBLIC_URL'
+      ];
+      for (const key of passthrough) {
         if (env[key] && !process.env[key]) process.env[key] = env[key];
       }
 

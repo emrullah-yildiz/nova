@@ -16,7 +16,11 @@ const GPTClient = {
   // Nova's own serverless API route, which forwards to Groq with a
   // server-side GROQ_API_KEY. Lets first-time visitors chat without signup.
   PROXY_URL: '/api/proxy/chat',
-  PROXY_MODEL: 'llama-3.3-70b-versatile',
+  // 8B-Instant has dramatically higher TPM than 70B on Groq's free tier and
+  // is plenty for chat triage. The proxy will upgrade to a larger model for
+  // code generation if/when the user message implies a build intent.
+  PROXY_MODEL: 'llama-3.1-8b-instant',
+  PROXY_MAX_TOKENS: 512,
 
   // ── PROVIDER REGISTRY ──
   PROVIDERS: {
@@ -149,6 +153,46 @@ const GPTClient = {
       return;
     }
     throw new Error('Nova Cloud sign-in required.');
+  },
+
+  // Lightweight prompt used for free-tier chitchat — greetings, clarifying
+  // questions, design-direction discussions. The full Geo API reference
+  // (~4-5k tokens) is intentionally left out so we don't burn the shared
+  // free tier on small talk; the full prompt kicks in once the user clearly
+  // wants to BUILD something.
+  buildSlimSystemPrompt() {
+    return `You are Nova's AI design assistant. Nova is a browser-based parametric design tool focused on ARCHITECTURE, GEOMETRY, and SPATIAL DESIGN. The user is here to design and build forms, not to take an app tour.
+
+## How to greet a new user
+ASK what kind of DESIGN PROJECT they want to work on. Offer concrete design directions like building, pavilion, facade, structure, surface, parametric form. NEVER offer options like "Get Started", "Tutorials", "Explore Templates", or "Ask Me Anything" — those are app-tour items, not design choices, and the user can't act on them productively.
+
+## Option lists
+When you offer choices, use this format with 2-4 items. Every option must be a CONCRETE design or project decision the user can pick to move the conversation forward:
+[1] Option name — one-line description
+[2] Option name — one-line description
+
+Examples of good options:
+  [1] Building — tower, residential, mixed-use
+  [2] Pavilion — small organic shelter
+  [3] Facade — exterior cladding pattern
+  [4] Surface — NURBS canopy or shell
+
+Examples of BAD options (never offer these):
+  - "Ask me anything" / "Tutorials" / "Get Started" / "Help" — not actionable design choices
+  - "Other" by itself with no specifics
+
+## Code generation
+When the user clearly asks to BUILD, CREATE, GENERATE, MAKE, DESIGN, DRAW, or MODEL something, write a brief explanation then a single \`\`\`python block using Nova's Geo API (Geo.Point3, Geo.createBox, Geo.loft, etc.). Do NOT use \`\`\`json. Never invent Geo methods you aren't sure exist.
+
+Keep replies short and focused on the user's design intent.`;
+  },
+
+  // Heuristic — does this user message imply a code-generation request?
+  // Used to decide between slim and full system prompts in proxy mode.
+  hasBuildIntent(userMessage) {
+    if (!userMessage) return false;
+    const m = String(userMessage).toLowerCase();
+    return /\b(build|create|generate|make|design|draw|model|show me a|show me an|i want a|i want an|add a|add an|let'?s build|let'?s make)\b/.test(m);
   },
 
   buildSystemPrompt(existingCode) {
@@ -404,9 +448,13 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     NFLogger.aiRequest(userMessage, providerLabel, this.getEffectiveModel());
     this._callStart = Date.now();
     const history = this._histories[context] || [];
+    const useSlim = proxyMode && !this.hasBuildIntent(userMessage);
+    const systemContent = useSlim ? this.buildSlimSystemPrompt() : this.buildSystemPrompt(existingCode);
+    const historyDepth = proxyMode ? (useSlim ? 4 : 6) : 10;
+    const maxTokens = proxyMode ? this.PROXY_MAX_TOKENS : this.MAX_TOKENS;
     const messages = [
-      { role: 'system', content: this.buildSystemPrompt(existingCode) },
-      ...history.slice(-10),
+      { role: 'system', content: systemContent },
+      ...history.slice(-historyDepth),
       { role: 'user', content: userMessage }
     ];
     const response = await fetch(this.getEffectiveApiUrl(), {
@@ -415,7 +463,7 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
       body: JSON.stringify({
         model: this.getEffectiveModel(),
         messages: messages,
-        max_tokens: this.MAX_TOKENS,
+        max_tokens: maxTokens,
         temperature: this.TEMPERATURE
       })
     });
@@ -492,9 +540,13 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     NFLogger.aiRequest(userMessage, providerLabel, this.getEffectiveModel());
     var _streamStart = Date.now();
     const history = this._histories[context] || [];
+    const useSlim = proxyMode && !this.hasBuildIntent(userMessage);
+    const systemContent = useSlim ? this.buildSlimSystemPrompt() : this.buildSystemPrompt(existingCode);
+    const historyDepth = proxyMode ? (useSlim ? 4 : 6) : 10;
+    const maxTokens = proxyMode ? this.PROXY_MAX_TOKENS : this.MAX_TOKENS;
     const messages = [
-      { role: 'system', content: this.buildSystemPrompt(existingCode) },
-      ...history.slice(-10),
+      { role: 'system', content: systemContent },
+      ...history.slice(-historyDepth),
       { role: 'user', content: userMessage }
     ];
     try {
@@ -504,7 +556,7 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
         body: JSON.stringify({
           model: this.getEffectiveModel(),
           messages: messages,
-          max_tokens: this.MAX_TOKENS,
+          max_tokens: maxTokens,
           temperature: this.TEMPERATURE,
           stream: true
         })

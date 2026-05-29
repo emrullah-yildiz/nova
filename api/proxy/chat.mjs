@@ -1,24 +1,182 @@
-const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
+// Free-tier AI proxy with provider chain + per-IP rate limit.
+//
+// Tries providers in order. A provider is "tried" only if its env-var key is
+// set. On 429/5xx we move to the next provider so a single overloaded tier
+// doesn't take the whole free experience down.
+//
+// Rate limit is in-memory per IP — Vercel may run multiple instances so the
+// cap is approximate, but it deters casual hammering. Swap to Upstash/Redis
+// if abuse becomes real. See [[ai-free-tier-proxy]].
 
-function setCorsHeaders(req, res) {
-  const origin = process.env.NOVA_CORS_ORIGIN || req.headers.origin || '*';
-  res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cache-Control', 'no-store');
+const PROVIDERS = [
+  // Order: fastest + most generous free tier first.
+  {
+    name: 'groq-8b',
+    url: 'https://api.groq.com/openai/v1/chat/completions',
+    envKey: 'GROQ_API_KEY',
+    altEnvKey: 'NOVA_GROQ_API_KEY',
+    defaultModel: 'llama-3.1-8b-instant',
+    allowedModels: new Set([
+      'llama-3.1-8b-instant',
+      'llama-3.3-70b-versatile',
+      'llama-3.1-70b-versatile',
+      'mixtral-8x7b-32768'
+    ])
+  },
+  {
+    name: 'openrouter-free',
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    envKey: 'OPENROUTER_API_KEY',
+    altEnvKey: 'NOVA_OPENROUTER_API_KEY',
+    defaultModel: 'meta-llama/llama-3.3-70b-instruct:free',
+    allowedModels: new Set([
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'meta-llama/llama-3.1-8b-instruct:free',
+      'google/gemini-2.0-flash-exp:free',
+      'deepseek/deepseek-chat:free'
+    ]),
+    extraHeaders: () => ({
+      'HTTP-Referer': process.env.NOVA_PUBLIC_URL || 'https://nova.app',
+      'X-Title': 'Nova'
+    })
+  },
+  {
+    name: 'cerebras',
+    url: 'https://api.cerebras.ai/v1/chat/completions',
+    envKey: 'CEREBRAS_API_KEY',
+    altEnvKey: 'NOVA_CEREBRAS_API_KEY',
+    // llama3.1-8b is on Cerebras's free tier; llama-3.3-70b often isn't.
+    // shouldFallthrough() will skip Cerebras if it returns "model not found"
+    // or 401 auth errors anyway, but defaulting to 8B avoids dead-ending
+    // the chain when the user's tier is the free one.
+    defaultModel: 'llama3.1-8b',
+    allowedModels: new Set(['llama3.1-8b', 'llama-3.3-70b', 'llama3.1-70b'])
+  }
+];
+
+const MAX_TOKENS_CAP = 512;          // Proxy is for chat, not novel-writing.
+const RATE_LIMIT = 30;               // Requests...
+const RATE_WINDOW_MS = 60 * 60 * 1000; // ...per IP per hour.
+
+// In-memory rate buckets. Survives between requests on a warm instance.
+// Cold start wipes it, which is fine — a fresh instance means the user
+// effectively gets a small grace allowance.
+const rateBuckets = new Map();
+
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': process.env.NOVA_CORS_ORIGIN || '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Cache-Control': 'no-store'
+  };
 }
 
-function sendJson(res, status, payload) {
+function clientIp(req) {
+  const fwd = req.headers['x-forwarded-for'];
+  if (fwd) return String(fwd).split(',')[0].trim();
+  return req.headers['x-real-ip'] || req.socket?.remoteAddress || 'unknown';
+}
+
+function checkRate(ip) {
+  const now = Date.now();
+  let bucket = rateBuckets.get(ip);
+  if (!bucket || bucket.resetAt < now) {
+    bucket = { count: 0, resetAt: now + RATE_WINDOW_MS };
+    rateBuckets.set(ip, bucket);
+  }
+  bucket.count += 1;
+  if (rateBuckets.size > 5000) {
+    for (const [k, v] of rateBuckets) {
+      if (v.resetAt < now) rateBuckets.delete(k);
+    }
+  }
+  return {
+    over: bucket.count > RATE_LIMIT,
+    remaining: Math.max(0, RATE_LIMIT - bucket.count),
+    resetSeconds: Math.ceil((bucket.resetAt - now) / 1000)
+  };
+}
+
+function sendJson(res, status, payload, extraHeaders) {
   res.statusCode = status;
-  res.setHeader('Content-Type', 'application/json');
+  const headers = { 'Content-Type': 'application/json', ...corsHeaders(), ...(extraHeaders || {}) };
+  for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
   res.end(JSON.stringify(payload));
 }
 
-export default async function handler(req, res) {
-  setCorsHeaders(req, res);
+export function resolveProvider(p, env = process.env) {
+  // Trim whitespace defensively — keys pasted from web dashboards often
+  // carry leading/trailing whitespace or newlines, which silently corrupts
+  // the Authorization header into "Bearer  sk-..." (double space) and
+  // the provider returns 401. Strip it once at config time.
+  const raw = env[p.envKey] || env[p.altEnvKey];
+  const key = raw ? String(raw).trim() : '';
+  if (!key) return null;
+  return {
+    ...p,
+    apiKey: key,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${key}`,
+      ...(p.extraHeaders ? p.extraHeaders() : {})
+    }
+  };
+}
 
+export function pickModel(provider, requested) {
+  // Only honor the client's requested model if THIS provider explicitly
+  // recognizes it. Without the allowlist gate, a fallback chain would
+  // forward Groq-style IDs (e.g. "llama-3.1-8b-instant") to OpenRouter,
+  // which then returns 400 "not a valid model ID" and dead-ends the user.
+  if (requested && provider.allowedModels && provider.allowedModels.has(requested)) {
+    return requested;
+  }
+  return provider.defaultModel;
+}
+
+// Treats responses as "this provider can't serve this request, try next"
+// rather than "fatal client error". Covers rate limits, server errors,
+// and model-availability errors (which 4xx surface inconsistently across
+// providers — sometimes 400, sometimes 404).
+export function shouldFallthrough(status, bodyText) {
+  if (status === 429) return true;
+  if (status >= 500) return true;
+  if (status >= 400 && status < 500 && status !== 401 && status !== 403) {
+    if (!bodyText) return false;
+    const lower = String(bodyText).toLowerCase();
+    if (lower.includes('model') && (lower.includes('not exist') || lower.includes('not found') || lower.includes('invalid') || lower.includes('not a valid') || lower.includes('access') || lower.includes('decommissioned'))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export { PROVIDERS };
+
+async function tryProvider(provider, body) {
+  const forwardBody = {
+    model: pickModel(provider, body.model),
+    messages: Array.isArray(body.messages) ? body.messages : [],
+    max_tokens: Math.min(Number(body.max_tokens) || 512, MAX_TOKENS_CAP),
+    temperature: typeof body.temperature === 'number' ? body.temperature : 0.7,
+    stream: body.stream === true
+  };
+  return fetch(provider.url, {
+    method: 'POST',
+    headers: provider.headers,
+    body: JSON.stringify(forwardBody)
+  });
+}
+
+export async function onRequestOptions() {
+  return new Response(null, { status: 204, headers: corsHeaders() });
+}
+
+export default async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
+    for (const [k, v] of Object.entries(corsHeaders())) res.setHeader(k, v);
     res.end();
     return;
   }
@@ -28,48 +186,85 @@ export default async function handler(req, res) {
     return;
   }
 
-  const apiKey = process.env.GROQ_API_KEY || process.env.NOVA_GROQ_API_KEY;
-  if (!apiKey) {
+  const ip = clientIp(req);
+  const rate = checkRate(ip);
+  if (rate.over) {
+    sendJson(res, 429, {
+      error: {
+        message: 'Free-tier rate limit reached for this session. Bring your own API key in Settings → Preferences for unlimited use (Groq is free, no card needed).',
+        code: 'RATE_LIMITED_PER_IP'
+      }
+    }, { 'Retry-After': String(rate.resetSeconds) });
+    return;
+  }
+
+  const available = PROVIDERS.map(resolveProvider).filter(Boolean);
+  if (available.length === 0) {
     sendJson(res, 503, {
       error: {
-        message:
-          'Free-tier proxy is not configured for this deployment. Set GROQ_API_KEY or NOVA_GROQ_API_KEY in Vercel environment variables, or bring your own API key in Nova Settings.',
+        message: 'Free-tier proxy is not configured for this deployment. Set GROQ_API_KEY (and optionally OPENROUTER_API_KEY, CEREBRAS_API_KEY) in Vercel environment variables, or bring your own API key in Nova Settings.',
         code: 'PROXY_NOT_CONFIGURED'
       }
     });
     return;
   }
 
-  let upstream;
-  try {
-    upstream = await fetch(GROQ_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`
-      },
-      body: JSON.stringify(req.body || {})
-    });
-  } catch (err) {
-    sendJson(res, 502, {
-      error: {
-        message: 'Upstream Groq request failed: ' + (err && err.message || 'network error')
+  const body = req.body || {};
+  const attempts = [];
+  let lastError;
+  for (const provider of available) {
+    let upstream;
+    try {
+      upstream = await tryProvider(provider, body);
+    } catch (err) {
+      lastError = { provider: provider.name, message: err && err.message || 'network error' };
+      attempts.push(lastError);
+      console.error('[nova-proxy] %s network error: %s', provider.name, lastError.message);
+      continue;
+    }
+
+    let cachedBody = null;
+    if (upstream.status >= 400) {
+      try { cachedBody = await upstream.text(); } catch { cachedBody = ''; }
+      if (shouldFallthrough(upstream.status, cachedBody)) {
+        lastError = { provider: provider.name, status: upstream.status, message: (cachedBody || '').slice(0, 200) };
+        attempts.push(lastError);
+        console.error('[nova-proxy] %s %d → fallthrough: %s', provider.name, upstream.status, lastError.message);
+        continue;
       }
-    });
+    }
+
+    res.statusCode = upstream.status;
+    const contentType = upstream.headers.get('Content-Type');
+    if (contentType) res.setHeader('Content-Type', contentType);
+    for (const [k, v] of Object.entries(corsHeaders())) res.setHeader(k, v);
+    res.setHeader('X-Nova-Provider', provider.name);
+    res.setHeader('X-Nova-Rate-Remaining', String(rate.remaining));
+
+    // 4xx that didn't trigger fallthrough — already read the body above,
+    // so just pass the buffered text through. Streaming is reserved for 2xx.
+    if (cachedBody !== null) {
+      res.end(cachedBody);
+      return;
+    }
+    if (!upstream.body) {
+      res.end(await upstream.text());
+      return;
+    }
+
+    for await (const chunk of upstream.body) res.write(chunk);
+    res.end();
     return;
   }
 
-  res.statusCode = upstream.status;
-  const contentType = upstream.headers.get('Content-Type');
-  if (contentType) res.setHeader('Content-Type', contentType);
-
-  if (!upstream.body) {
-    res.end(await upstream.text());
-    return;
-  }
-
-  for await (const chunk of upstream.body) {
-    res.write(chunk);
-  }
-  res.end();
+  // All providers failed.
+  console.error('[nova-proxy] all providers failed:', JSON.stringify(attempts));
+  sendJson(res, 502, {
+    error: {
+      message: 'All free-tier providers are temporarily unavailable. Bring your own API key in Settings → Preferences for direct access.',
+      code: 'ALL_PROVIDERS_FAILED',
+      attempts,
+      lastError
+    }
+  });
 }

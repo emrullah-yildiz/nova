@@ -197,11 +197,13 @@ export function installLoggerPatch(targetApp = getRuntimeApp()) {
   };
 
   // ── Patch setView ──
-  var _origSetView = app.setView.bind(app);
-  app.setView = function(mode) {
-    NFLogger.userAction('set-view', { mode: mode });
-    return _origSetView(mode);
-  };
+  if (typeof app.setView === 'function') {
+    var _origSetView = app.setView.bind(app);
+    app.setView = function(mode) {
+      NFLogger.userAction('set-view', { mode: mode });
+      return _origSetView(mode);
+    };
+  }
 
   // ── Update landing page template cards ──
   setTimeout(function() {
