@@ -203,8 +203,8 @@ export function installLoggerPatch(targetApp = getRuntimeApp()) {
           Object.keys(gn.controls).forEach(function(k) {
             if (k !== '_dynInputs') nd.controlValues[k] = gn.controls[k];
           });
-          if (gn.type === 'custom-python' && gn.rawCode) nd.controlValues.code = gn.rawCode;
-          if (gn.type === 'custom-python' && gn.controls._dynInputs) nd._dynInputs = gn.controls._dynInputs;
+          if ((gn.type === 'custom-python' || gn.type === 'Custom.Python') && gn.rawCode) nd.controlValues.code = gn.rawCode;
+          if ((gn.type === 'custom-python' || gn.type === 'Custom.Python') && gn.controls._dynInputs) nd._dynInputs = gn.controls._dynInputs;
           if (gn.outputVars && gn.outputVars.length > 0) nd._dynOutputs = gn.outputVars;
           app.nodes.push(nd);
           app.renderNode(nd);

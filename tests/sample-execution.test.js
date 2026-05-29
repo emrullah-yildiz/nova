@@ -141,6 +141,7 @@ describe('every modern node sample executes end-to-end', () => {
 
   modernNodes.forEach((node) => {
     if (!node.help || !node.help.example) return;
+    if (node.metadata && node.metadata.skipSampleExecution) return;
 
     it(`${node.type} sample produces a defined value at the focal node`, () => {
       const example = node.help.example;

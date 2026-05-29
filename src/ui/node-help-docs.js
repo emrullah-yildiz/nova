@@ -84,7 +84,7 @@ export function validateHelpExample(helpDoc, nodeTypeMap) {
 
 export function isNodeOutputExempt(nodeDefinition) {
   var type = nodeDefinition && nodeDefinition.type;
-  if (type === 'custom-comment') return true;
+  if (type === 'custom-comment' || type === 'Custom.Comment') return true;
   if (typeof type !== 'string') return false;
   return type.indexOf('output-') === 0 || type.indexOf('Output.') === 0;
 }

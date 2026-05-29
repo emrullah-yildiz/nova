@@ -6,17 +6,20 @@ import { listCategory, listNodes } from './categories/list.js';
 import { logicCategory, logicNodes } from './categories/logic.js';
 import { mathCategory, mathNodes } from './categories/math.js';
 import { outputCategory, outputNodes } from './categories/output.js';
+import { customCategory, customNodes } from './categories/custom.js';
 import { patternsCategory, patternsNodes } from './categories/patterns.js';
 import { planeCategory, planeNodes } from './categories/plane.js';
 import { pointCategory, pointNodes } from './categories/point.js';
 import { solidsCategory, solidsNodes } from './categories/solids.js';
 import { surfacesCategory, surfacesNodes } from './categories/surfaces.js';
+import { testingCategory, testingNodes } from './categories/testing.js';
 import { vectorCategory, vectorNodes } from './categories/vector.js';
 import { legacyCoreCategories, legacyCoreNodes } from './legacyCoreNodes.js';
 import { createNodeRegistry, toLegacyNodeDefinition } from './registry.js';
 
 const modernCategories = [
   curvesCategory,
+  customCategory,
   geometryCategory,
   inputCategory,
   listCategory,
@@ -28,6 +31,7 @@ const modernCategories = [
   pointCategory,
   solidsCategory,
   surfacesCategory,
+  testingCategory,
   vectorCategory
 ];
 
@@ -40,6 +44,7 @@ export const coreCategories = [
 
 export const coreNodes = [
   ...curvesNodes,
+  ...customNodes,
   ...geometryNodes,
   ...inputNodes,
   ...listNodes,
@@ -51,6 +56,7 @@ export const coreNodes = [
   ...pointNodes,
   ...solidsNodes,
   ...surfacesNodes,
+  ...testingNodes,
   ...vectorNodes,
   ...legacyCoreNodes
 ];

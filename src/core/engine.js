@@ -276,7 +276,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       // Python node results
 
-      if ((srcNd.type === 'custom-python' || srcNd.type === 'custom-code') && srcNd._pyResults) {
+      if ((srcNd.type === 'custom-python' || srcNd.type === 'custom-code' || srcNd.type === 'Custom.Python') && srcNd._pyResults) {
 
         if (srcNd._pyResults[wire.fromPort] !== undefined) return srcNd._pyResults[wire.fromPort];
 
@@ -447,7 +447,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
     if (!srcNd) return undefined;
     this.computeNodeValue(srcNd);
     if (srcNd._portValues && srcNd._portValues[wire.fromPort] !== undefined) return srcNd._portValues[wire.fromPort];
-    if ((srcNd.type === 'custom-python' || srcNd.type === 'custom-code') && srcNd._pyResults) {
+    if ((srcNd.type === 'custom-python' || srcNd.type === 'custom-code' || srcNd.type === 'Custom.Python') && srcNd._pyResults) {
       if (srcNd._pyResults[wire.fromPort] !== undefined) return srcNd._pyResults[wire.fromPort];
       var keys = Object.keys(srcNd._pyResults).filter(function(k) { return !k.startsWith('_') && k.length > 1; });
       if (keys.length > 0) return srcNd._pyResults[keys[0]];
@@ -886,7 +886,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
       // ── Slow Compute (test cancellation) ──
-      case 'slow-compute': {
+      case 'slow-compute': case 'Testing.SlowCompute': {
         var delayMs = parseInt(ctrl.delayMs) || 5000;
         var inputVal = getInput('value');
         // Return a Promise that resolves after delayMs, giving the event loop
@@ -909,7 +909,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       // ── Python / Code ──
 
-      case 'custom-python': case 'custom-code': {
+      case 'custom-python': case 'custom-code': case 'Custom.Python': {
 
         if (nd._pyResults) {
 
@@ -2156,8 +2156,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
         var nd = { id: gn.id, type: gn.type, x: gn.x, y: gn.y, def: Object.assign({}, def), controlValues: {}, dataPanelOpen: false, zIndex: self.nodeZCounter };
         def.controls.forEach(function(c) { nd.controlValues[c.id] = c.default; });
         Object.keys(gn.controls).forEach(function(k) { if (k !== '_dynInputs') nd.controlValues[k] = gn.controls[k]; });
-        if (gn.type === 'custom-python' && gn.rawCode) nd.controlValues.code = gn.rawCode;
-        if (gn.type === 'custom-python' && gn.controls._dynInputs) nd._dynInputs = gn.controls._dynInputs;
+        if ((gn.type === 'custom-python' || gn.type === 'Custom.Python') && gn.rawCode) nd.controlValues.code = gn.rawCode;
+        if ((gn.type === 'custom-python' || gn.type === 'Custom.Python') && gn.controls._dynInputs) nd._dynInputs = gn.controls._dynInputs;
         if (gn.outputVars && gn.outputVars.length > 0) nd._dynOutputs = gn.outputVars;
         self.nodes.push(nd); self.renderNode(nd); created.push(nd.def.name);
       });
@@ -2201,8 +2201,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
         var nd = { id: gn.id, type: gn.type, x: gn.x, y: gn.y, def: Object.assign({}, def), controlValues: {}, dataPanelOpen: false, zIndex: self.nodeZCounter };
         def.controls.forEach(function(c) { nd.controlValues[c.id] = c.default; });
         Object.keys(gn.controls).forEach(function(k) { if (k !== '_dynInputs') nd.controlValues[k] = gn.controls[k]; });
-        if (gn.type === 'custom-python' && gn.rawCode) nd.controlValues.code = gn.rawCode;
-        if (gn.type === 'custom-python' && gn.controls._dynInputs) nd._dynInputs = gn.controls._dynInputs;
+        if ((gn.type === 'custom-python' || gn.type === 'Custom.Python') && gn.rawCode) nd.controlValues.code = gn.rawCode;
+        if ((gn.type === 'custom-python' || gn.type === 'Custom.Python') && gn.controls._dynInputs) nd._dynInputs = gn.controls._dynInputs;
         if (gn.outputVars && gn.outputVars.length > 0) nd._dynOutputs = gn.outputVars;
         self.nodes.push(nd); self.renderNode(nd); created.push(nd.def.name);
       });

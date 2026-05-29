@@ -1616,7 +1616,7 @@ const app = {
 
     // Python/Custom nodes: output their raw code directly for perfect round-trip
 
-    if ((nd.type === 'custom-python' || nd.type === 'custom-code') && nd.controlValues.code) {
+    if ((nd.type === 'custom-python' || nd.type === 'custom-code' || nd.type === 'Custom.Python') && nd.controlValues.code) {
 
       return nd.controlValues.code;
 
@@ -2630,7 +2630,7 @@ const app = {
 
         // For Python nodes, store rawCode so Canvas→Code can reproduce it exactly
 
-        if (gn.type === 'custom-python' && gn.rawCode) {
+        if ((gn.type === 'custom-python' || gn.type === 'Custom.Python') && gn.rawCode) {
 
           nd.controlValues.code = gn.rawCode;
 

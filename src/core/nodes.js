@@ -19,22 +19,15 @@ export const TYPE_COLORS = {
 
 // ═══════════════════════════════════════
 
-// ═══════════════════════════════════════
-// 2. CUSTOM / AI
-// ═══════════════════════════════════════
-NODE_LIBRARY.categories.push({ id: 'custom', name: 'Custom / AI', color: '#94e2d5', icon: '✦', nodes: [
-  { type: 'custom-ainode', name: 'AI Generated', icon: '✦', inputs: [{ id: 'in0', name: 'Input', type: 'any' }], outputs: [{ id: 'out0', name: 'Output', type: 'any' }], controls: [{ id: 'prompt', type: 'text', default: 'Describe behavior…', label: 'Prompt' }], preview: true, codegen: { python: '# AI: {{ctrl.prompt}}\\n{{out0}} = {{in0}}', csharp: '' } },
-  { type: 'custom-code', name: 'Code Block', icon: '{ }', inputs: [{ id: 'input0', name: 'input0', type: 'any' }], outputs: [{ id: 'output0', name: 'output0', type: 'any' }], controls: [{ id: 'code', type: 'text', default: 'return input0;', label: 'Code' }], preview: true, codegen: { python: '{{output0}} = (lambda input0: {{ctrl.code}})({{input0}})', csharp: '' } },
-  { type: 'custom-comment', name: 'Comment', icon: '💬', inputs: [], outputs: [], controls: [{ id: 'text', type: 'text', default: 'Add notes here…', label: 'Note' }], preview: false, codegen: { python: '# {{ctrl.text}}', csharp: '' } },
-  { type: 'custom-formula', name: 'Formula', icon: 'ƒ', inputs: [{ id: 'x', name: 'x', type: 'number' },{ id: 'y', name: 'y', type: 'number' }], outputs: [{ id: 'result', name: 'Result', type: 'number' }], controls: [{ id: 'expr', type: 'text', default: 'x + y', label: 'Expression' }], preview: true, codegen: { python: '{{result}} = {{ctrl.expr}}', csharp: '' } },
-  { type: 'custom-python', name: 'Python', icon: '🐍', inputs: [{ id: 'input0', name: 'input', type: 'any' }], outputs: [{ id: 'output0', name: 'output', type: 'any' }], controls: [{ id: 'code', type: 'text', default: 'output = input', label: 'Python' }], preview: true, codegen: { python: '# Python block\\n{{ctrl.code}}', csharp: '' } }
-] });
+// Custom / AI category migrated to src/nodes/categories/custom.js
+// (Custom.AI, Custom.Code, Custom.Comment, Custom.Formula, Custom.Python).
+// Engine retains 'custom-python'/'custom-code'/'Custom.Python' case for
+// PythonRunner routing; modern Custom.Code uses native JS via the default
+// registry execute path.
 
-// ═══════════════════════════════════════
-// 3. TESTING / DEBUG (hidden from normal categories)
-NODE_LIBRARY.categories.push({ id: 'testing', name: 'Testing', color: '#f5c2e7', icon: '⚡', nodes: [
-  { type: 'slow-compute', name: 'Slow Compute (test cancel)', icon: '⏱', inputs: [{ id: 'value', name: 'Value', type: 'number' }], outputs: [{ id: 'result', name: 'Result', type: 'number' }], controls: [{ id: 'delayMs', type: 'formula', default: '5000', label: 'Delay (ms)' }], preview: true, codegen: { python: '{{result}} = {{value}}', csharp: '' } }
-] });
+// Testing category migrated to src/nodes/categories/testing.js
+// (Testing.SlowCompute). Engine retains 'slow-compute'/'Testing.SlowCompute'
+// case for the Promise-based cancellation harness.
 
 
 // List category migrated to src/nodes/categories/list.js.

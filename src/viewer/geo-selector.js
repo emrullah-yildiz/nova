@@ -138,11 +138,12 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
           'math-add','math-subtract','math-multiply','math-divide','math-power',
           'logic-and','logic-or','logic-not','logic-compare','logic-if',
           'list-get','list-length','list-range','list-reverse','list-create',
-          'custom-formula','custom-comment','custom-ainode'];
+          'custom-formula','custom-comment','custom-ainode',
+          'Custom.Formula','Custom.Comment','Custom.AI'];
         if (passTypes.indexOf(nd.type) >= 0) return;
 
         // ── Python/Code nodes: render EACH output variable as separate group ──
-        if ((nd.type === 'custom-python' || nd.type === 'custom-code') && nd._pyResults) {
+        if ((nd.type === 'custom-python' || nd.type === 'custom-code' || nd.type === 'Custom.Python') && nd._pyResults) {
           var keys = Object.keys(nd._pyResults).filter(function(k) {
             return !k.startsWith('_') && k !== 'i' && k !== 'j' && k !== 'k';
           });
