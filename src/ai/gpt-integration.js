@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (ch === 'landing') {
       const isInfoQ = (l.includes('started') || l.includes('help') || (l.includes('node') && l.includes('available')) || l.includes('what is') || l.includes('how do'));
       if (isInfoQ) {
-        if (GPTClient.hasApiKey() || GPTClient.isEnterpriseAiEnabled()) { this._gptChat(ch, txt); return; }
+        if (GPTClient.canChat()) { this._gptChat(ch, txt); return; }
         if (l.includes('started') || l.includes('help'))
           this.addAIMessage('landing', "Click **New Project** or choose a **template** to begin!\n\n1. Drag nodes from the library\n2. Connect outputs → inputs\n3. Click **▸ Data Inspector** to see data\n4. Ask me anything!");
         else if (l.includes('node') && l.includes('available'))
@@ -65,9 +65,12 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    if (GPTClient.hasApiKey() || GPTClient.isEnterpriseAiEnabled()) {
+    if (GPTClient.canChat()) {
       this._gptChat(ch, txt);
     } else {
+      // canChat() returns true whenever the proxy is reachable, so this
+      // branch only runs in offline / non-deployed builds. Fall back to
+      // the local operator-swap engine when it can answer.
       const existingCode = document.getElementById('cv-code') ? document.getElementById('cv-code').value : '';
       const aiResult = AIEngine.generateCode(txt, existingCode);
       if (aiResult) {
@@ -141,6 +144,24 @@ document.addEventListener('DOMContentLoaded', () => {
             bubble.classList.remove('streaming');
             bubble.removeAttribute('id');
             bubble.innerHTML = app.fmt(GPTClient.getRateLimitMessage(null));
+          }
+          msgContainer.scrollTop = msgContainer.scrollHeight;
+          return;
+        }
+        if (errMsg === '__PROXY_RATE_LIMIT__') {
+          if (bubble) {
+            bubble.classList.remove('streaming');
+            bubble.removeAttribute('id');
+            bubble.innerHTML = app.fmt('⏳ **Free-tier limit hit.** Nova\'s shared free model is at capacity for the moment.\n\n• **Wait a few seconds and try again** — the limit resets quickly.\n• Or bring your own free **Groq** key in **Settings → Preferences** for unlimited use → [console.groq.com/keys](https://console.groq.com/keys)');
+          }
+          msgContainer.scrollTop = msgContainer.scrollHeight;
+          return;
+        }
+        if (errMsg === '__PROXY_NOT_CONFIGURED__') {
+          if (bubble) {
+            bubble.classList.remove('streaming');
+            bubble.removeAttribute('id');
+            bubble.innerHTML = app.fmt('⚙️ **Free model not available on this deployment.**\n\nThe site owner needs to set `GROQ_API_KEY` in Cloudflare Pages environment variables, or you can bring your own free API key in **Settings → Preferences** (Groq is free, no card needed).');
           }
           msgContainer.scrollTop = msgContainer.scrollHeight;
           return;

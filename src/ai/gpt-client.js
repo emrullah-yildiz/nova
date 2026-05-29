@@ -12,6 +12,12 @@ const GPTClient = {
   MAX_TOKENS: 2048,
   TEMPERATURE: 0.7,
 
+  // Free-tier proxy — when the user has no API key configured we POST to
+  // Nova's own Cloudflare Pages Function, which forwards to Groq with the
+  // server-side GROQ_API_KEY. Lets first-time visitors chat without signup.
+  PROXY_URL: '/api/proxy/chat',
+  PROXY_MODEL: 'llama-3.3-70b-versatile',
+
   // ── PROVIDER REGISTRY ──
   PROVIDERS: {
     openai: {
@@ -72,6 +78,47 @@ const GPTClient = {
   hasApiKey() {
     var k = this.getApiKey();
     return k && k.length > 10;
+  },
+
+  // True when the user has no API key and Nova should route through the
+  // Cloudflare Pages free-tier proxy instead.
+  isProxyMode() {
+    return !this.hasApiKey();
+  },
+
+  // Returns true when the assistant can actually attempt a request. BYOK
+  // and enterprise modes qualify; proxy mode always qualifies too — if
+  // the deployment hasn't configured GROQ_API_KEY the Function returns
+  // 503 and the chat surfaces a clear message instead of being silently
+  // blocked at the door.
+  canChat() {
+    return this.hasApiKey() || this.isEnterpriseAiEnabled() || this.isProxyMode();
+  },
+
+  // Endpoint to POST to. In proxy mode this is Nova's own /api/proxy/chat
+  // function which holds GROQ_API_KEY server-side.
+  getEffectiveApiUrl() {
+    return this.isProxyMode() ? this.PROXY_URL : this.getApiUrl();
+  },
+
+  // Model to ask for. In proxy mode the upstream is always Groq, so use
+  // the free Llama 3.3 70B regardless of whatever model the user last
+  // selected in Settings.
+  getEffectiveModel() {
+    return this.isProxyMode() ? this.PROXY_MODEL : this.getModel();
+  },
+
+  // Request headers. In proxy mode we omit Authorization (the Worker adds
+  // its own) and skip provider-specific extras (the proxy speaks only to
+  // Groq).
+  buildRequestHeaders() {
+    if (this.isProxyMode()) {
+      return { 'Content-Type': 'application/json' };
+    }
+    return Object.assign(
+      { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.getApiKey() },
+      this.getExtraHeaders()
+    );
   },
   getModel() {
     return localStorage.getItem('nodeflow_openai_model') || this.MODEL;
@@ -368,32 +415,35 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     if (this.isEnterpriseAiEnabled()) {
       return this.callEnterprise(userMessage, context, existingCode);
     }
-    const apiKey = this.getApiKey();
-    NFLogger.aiRequest(userMessage, this.getProvider(), this.getModel());
+    const proxyMode = this.isProxyMode();
+    const providerLabel = proxyMode ? 'proxy-groq' : this.getProvider();
+    NFLogger.aiRequest(userMessage, providerLabel, this.getEffectiveModel());
     this._callStart = Date.now();
-    if (!apiKey) { NFLogger.aiError('No API key configured', this.getProvider()); throw new Error('No API key configured'); }
     const history = this._histories[context] || [];
     const messages = [
       { role: 'system', content: this.buildSystemPrompt(existingCode) },
       ...history.slice(-10),
       { role: 'user', content: userMessage }
     ];
-    const headers = Object.assign({
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + apiKey
-    }, this.getExtraHeaders());
-    const response = await fetch(this.getApiUrl(), {
+    const response = await fetch(this.getEffectiveApiUrl(), {
       method: 'POST',
-      headers: headers,
+      headers: this.buildRequestHeaders(),
       body: JSON.stringify({
-        model: this.getModel(),
+        model: this.getEffectiveModel(),
         messages: messages,
         max_tokens: this.MAX_TOKENS,
         temperature: this.TEMPERATURE
       })
     });
+    if (response.status === 503 && proxyMode) {
+      NFLogger.aiError('Proxy not configured', providerLabel);
+      throw new Error('__PROXY_NOT_CONFIGURED__');
+    }
     if (response.status === 429) {
-      NFLogger.aiError('Rate limit 429', this.getProvider());
+      NFLogger.aiError('Rate limit 429', providerLabel);
+      if (proxyMode) {
+        throw new Error('__PROXY_RATE_LIMIT__');
+      }
       var switched = this.switchToFreeModel();
       throw new Error(switched ? '__RATE_LIMIT_SWITCHED__' + switched : '__RATE_LIMIT_NO_FREE__');
     }
@@ -402,8 +452,8 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
       var errObj = {};
       try { errObj = JSON.parse(errBody); } catch(e) {}
       const msg = (errObj.error && errObj.error.message) || ('API error ' + response.status);
-      NFLogger.aiError(msg, this.getProvider());
-      NFLogger.error('api', 'HTTP ' + response.status + ' from ' + this.getApiUrl(), { status: response.status, body: errBody.substring(0, 500), provider: this.getProvider(), model: this.getModel() });
+      NFLogger.aiError(msg, providerLabel);
+      NFLogger.error('api', 'HTTP ' + response.status + ' from ' + this.getEffectiveApiUrl(), { status: response.status, body: errBody.substring(0, 500), provider: providerLabel, model: this.getEffectiveModel() });
       throw new Error(msg);
     }
     const data = await response.json();
@@ -453,26 +503,22 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
       }
       return;
     }
-    const apiKey = this.getApiKey();
-    NFLogger.aiRequest(userMessage, this.getProvider(), this.getModel());
+    const proxyMode = this.isProxyMode();
+    const providerLabel = proxyMode ? 'proxy-groq' : this.getProvider();
+    NFLogger.aiRequest(userMessage, providerLabel, this.getEffectiveModel());
     var _streamStart = Date.now();
-    if (!apiKey) { NFLogger.aiError('No API key', this.getProvider()); onError('No API key configured. Go to Settings → Preferences.'); return; }
     const history = this._histories[context] || [];
     const messages = [
       { role: 'system', content: this.buildSystemPrompt(existingCode) },
       ...history.slice(-10),
       { role: 'user', content: userMessage }
     ];
-    const headers = Object.assign({
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + apiKey
-    }, this.getExtraHeaders());
     try {
-      const response = await fetch(this.getApiUrl(), {
+      const response = await fetch(this.getEffectiveApiUrl(), {
         method: 'POST',
-        headers: headers,
+        headers: this.buildRequestHeaders(),
         body: JSON.stringify({
-          model: this.getModel(),
+          model: this.getEffectiveModel(),
           messages: messages,
           max_tokens: this.MAX_TOKENS,
           temperature: this.TEMPERATURE,
@@ -480,17 +526,26 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
         })
       });
       if (!response.ok) {
+        if (response.status === 503 && proxyMode) {
+          NFLogger.aiError('Proxy not configured', providerLabel);
+          onError('__PROXY_NOT_CONFIGURED__');
+          return;
+        }
         if (response.status === 429) {
-          var switched = this.switchToFreeModel();
-          if (switched) { onError('__RATE_LIMIT_SWITCHED__' + switched); }
-          else { onError('__RATE_LIMIT_NO_FREE__'); }
+          if (proxyMode) {
+            onError('__PROXY_RATE_LIMIT__');
+          } else {
+            var switched = this.switchToFreeModel();
+            if (switched) { onError('__RATE_LIMIT_SWITCHED__' + switched); }
+            else { onError('__RATE_LIMIT_NO_FREE__'); }
+          }
           return;
         }
         const errBody = await response.text().catch(() => '');
         var errObj = {};
         try { errObj = JSON.parse(errBody); } catch(e) {}
         const msg = (errObj.error && errObj.error.message) || ('API error ' + response.status);
-        NFLogger.error('api-stream', 'HTTP ' + response.status + ' from ' + this.getApiUrl(), { status: response.status, body: errBody.substring(0, 500), provider: this.getProvider(), model: this.getModel() });
+        NFLogger.error('api-stream', 'HTTP ' + response.status + ' from ' + this.getEffectiveApiUrl(), { status: response.status, body: errBody.substring(0, 500), provider: providerLabel, model: this.getEffectiveModel() });
         onError(msg);
         return;
       }
@@ -525,7 +580,7 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
       NFLogger.aiResponse(fullText, Date.now() - _streamStart);
       onDone(fullText);
     } catch (e) {
-      NFLogger.aiError(e.message || 'Network error', this.getProvider());
+      NFLogger.aiError(e.message || 'Network error', providerLabel);
       onError(e.message || 'Network error');
     }
   },
@@ -591,7 +646,9 @@ const SettingsDialog = {
               ${(GPTClient.PROVIDERS[currentProvider] || GPTClient.PROVIDERS.openai).models.map(function(m) { var sel = m.id === currentModel ? 'selected' : ''; var ft = m.free ? ' 🟢 FREE' : ''; return '<option value="' + m.id + '" ' + sel + '>' + m.name + ft + '</option>'; }).join('')}
             </select>
             <div class="settings-status" id="settings-status">
-              ${currentKey ? '<span style="color:var(--accent-green)">✓ API key configured</span>' : '<span style="color:var(--accent-yellow)">⚠ No API key — using local AI only</span>'}
+              ${currentKey
+                ? '<span style="color:var(--accent-green)">✓ Using your ' + (GPTClient.PROVIDERS[currentProvider] && GPTClient.PROVIDERS[currentProvider].name || currentProvider) + ' key</span>'
+                : '<span style="color:var(--accent-blue)">🆓 No key — using free shared model (Groq Llama 3.3 70B). Bring your own key above for unlimited use.</span>'}
             </div>
             <button class="settings-test-btn" id="settings-test-btn" onclick="SettingsDialog.testConnection()">Test Connection</button>
           </div>

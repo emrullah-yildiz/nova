@@ -71,6 +71,15 @@ module.exports = {
         ecmaVersion: 2021,
         sourceType: 'module'
       }
+    },
+    {
+      // Cloudflare Pages Functions — module syntax, no DOM globals.
+      files: ['functions/**/*.js'],
+      env: { browser: false, node: false, worker: true, es2021: true },
+      parserOptions: {
+        ecmaVersion: 2021,
+        sourceType: 'module'
+      }
     }
   ]
 }
