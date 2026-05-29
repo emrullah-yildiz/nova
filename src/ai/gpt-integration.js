@@ -2,6 +2,7 @@ import { GPTClient } from './gpt-client.js';
 import { validateGeneratedCode } from './code-validator.js';
 import { validateGeneratedCodeTypes, formatMismatchHint } from './type-validator.js';
 import { extractPlanFromResponse } from './plan-extractor.js';
+import { buildCompositeRequestIssue, dedupeKey } from './issue-builder.js';
 import { validatePlanShape } from './plan-schema.js';
 import { validatePlanAgainstRegistry } from './plan-validator.js';
 import { buildGraphFromPlan, planToPython } from './plan-builder.js';
@@ -214,6 +215,66 @@ document.addEventListener('DOMContentLoaded', () => {
   // Nova's Settings dialog or grabbing a personal Groq key (the durable
   // answer to "free tier exhausted"). HTML inlined so it doesn't depend on
   // a separate stylesheet entry.
+  // Phase 9: refusal feedback loop.
+  //
+  // _refusalIssueCardHtml renders the "Request this composite on GitHub"
+  // button under a plan-mode refusal. _rememberRefusal and
+  // _refusalAlreadyRequested manage a small localStorage log so the user
+  // doesn't file the same request twice across retries.
+
+  app._refusalIssueCardHtml = function(issue, alreadyRequested) {
+    const escapedUrl = String(issue.url).replace(/[<>"]/g, function(c) {
+      return c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;';
+    });
+    const button = alreadyRequested
+      ? '<a href="' + escapedUrl + '" target="_blank" rel="noopener" style="flex:1;min-width:160px;padding:8px 12px;border:1px solid var(--accent-yellow,#f9e2af);border-radius:6px;background:transparent;color:var(--accent-yellow,#f9e2af);font-weight:600;font-size:12px;text-align:center;text-decoration:none">Already requested — open again ↗</a>'
+      : '<a href="' + escapedUrl + '" target="_blank" rel="noopener" style="flex:1;min-width:160px;padding:8px 12px;border:none;border-radius:6px;background:var(--accent-green,#a6e3a1);color:#1e1e2e;font-weight:600;font-size:12px;text-align:center;text-decoration:none">Request this composite on GitHub ↗</a>';
+
+    return ''
+      + '<div style="margin-top:10px;padding:12px;border:1px solid var(--accent-green,#a6e3a1);border-radius:8px;background:rgba(166,227,161,0.06);display:flex;flex-direction:column;gap:8px">'
+      + '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">💡</span><strong style="color:var(--text-primary,#fff);font-size:13px">Help Nova learn this pattern</strong></div>'
+      + '<div style="font-size:11px;color:var(--text-muted,#a6adc8);line-height:1.4">Your prompt is what we use to prioritise new composite nodes. Clicking the button opens a GitHub issue pre-filled with the details — you can review and edit it before submitting.</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap">' + button + '</div></div>';
+  };
+
+  app._rememberRefusal = function(userPrompt, reason) {
+    try {
+      const key = dedupeKey(userPrompt);
+      if (!key) return;
+      const raw = localStorage.getItem('nova:refusal-log') || '[]';
+      let log;
+      try { log = JSON.parse(raw); } catch { log = []; }
+      if (!Array.isArray(log)) log = [];
+      const existing = log.find(function(entry) { return entry && entry.key === key; });
+      if (existing) {
+        existing.count = (existing.count || 1) + 1;
+        existing.lastAt = new Date().toISOString();
+      } else {
+        log.unshift({ key: key, prompt: userPrompt, reason: reason, count: 1, firstAt: new Date().toISOString(), lastAt: new Date().toISOString() });
+      }
+      // Cap the log so we never pile up unbounded data in the browser.
+      if (log.length > 100) log.length = 100;
+      localStorage.setItem('nova:refusal-log', JSON.stringify(log));
+    } catch (err) {
+      // Defensive — localStorage can be disabled or full. Don't block chat.
+      if (typeof NFLogger !== 'undefined') NFLogger.warn('refusal-log', 'failed to remember refusal', { error: err && err.message });
+    }
+  };
+
+  app._refusalAlreadyRequested = function(userPrompt) {
+    try {
+      const key = dedupeKey(userPrompt);
+      if (!key) return false;
+      const raw = localStorage.getItem('nova:refusal-log') || '[]';
+      const log = JSON.parse(raw);
+      if (!Array.isArray(log)) return false;
+      const entry = log.find(function(e) { return e && e.key === key; });
+      return !!(entry && entry.count > 1);
+    } catch {
+      return false;
+    }
+  };
+
   app._byokCardHtml = function() {
     return ''
       + '<div style="margin-top:10px;padding:12px;border:1px solid var(--accent-blue,#89b4fa);border-radius:8px;background:rgba(137,180,250,0.06);display:flex;flex-direction:column;gap:8px">'
@@ -489,7 +550,24 @@ document.addEventListener('DOMContentLoaded', () => {
       if (suggestions.length) {
         html += '\n\n**Try one of these alternatives:**\n' + suggestions.map(function(s) { return '• ' + s; }).join('\n');
       }
-      if (bubble) bubble.innerHTML = app.fmt(html);
+      // Phase 9: turn every refusal into actionable feedback. Pre-fills a
+      // GitHub issue with the prompt + reason + suggested composite shape
+      // so the missing capability flows directly into the backlog. Local
+      // dedup avoids the user filing the same refusal twice if they retry.
+      const issue = buildCompositeRequestIssue({
+        userPrompt: originalPrompt,
+        refusalReason: reason,
+        suggestions: suggestions,
+        context: {
+          novaVersion: (typeof window !== 'undefined' && window.NOVA_VERSION) || null,
+          aiProvider: (typeof GPTClient !== 'undefined' && GPTClient.getProvider) ? GPTClient.getProvider() : null,
+          aiModel: (typeof GPTClient !== 'undefined' && GPTClient.getEffectiveModel) ? GPTClient.getEffectiveModel() : null,
+          timestamp: new Date().toISOString()
+        }
+      });
+      app._rememberRefusal(originalPrompt, reason);
+      const alreadyRequested = app._refusalAlreadyRequested(originalPrompt);
+      if (bubble) bubble.innerHTML = app.fmt(html) + app._refusalIssueCardHtml(issue, alreadyRequested);
       return;
     }
 
