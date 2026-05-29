@@ -228,7 +228,7 @@ export const Viewer3D = {
     const shadedGeo = (Geo && typeof Geo._applyCreaseNormals === 'function')
       ? Geo._applyCreaseNormals(geo, 30)
       : (geo.computeVertexNormals(), geo);
-    const mat = new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 1.0, side: THREE.DoubleSide, flatShading: false, shininess: 18, specular: 0x252538 });
+    const mat = new THREE.MeshPhongMaterial({ color, transparent: false, opacity: 1.0, side: THREE.DoubleSide, flatShading: false, shininess: 18, specular: 0x252538 });
     mat.polygonOffset = true;
     mat.polygonOffsetFactor = 1;
     mat.polygonOffsetUnits = 1;

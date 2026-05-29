@@ -450,8 +450,8 @@ class _Mesh3 {
 
     const c = color || this.color;
 
-    // Clay-like Phong: matte shininess, full opacity, polygon-offset so the edge overlay sits on top without z-fighting.
-    const mat = new THREE.MeshPhongMaterial({ color: c, transparent: true, opacity: 1.0, side: THREE.DoubleSide, flatShading: false, shininess: 18, specular: 0x252538 });
+    // Clay-like Phong, opaque queue so depth writes are on (transparent + DoubleSide caused front/back z-fighting flicker during orbit).
+    const mat = new THREE.MeshPhongMaterial({ color: c, transparent: false, opacity: 1.0, side: THREE.DoubleSide, flatShading: false, shininess: 18, specular: 0x252538 });
 
     mat.polygonOffset = true;
 
