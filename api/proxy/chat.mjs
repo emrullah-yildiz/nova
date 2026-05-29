@@ -181,6 +181,41 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Debug probe — GET /api/proxy/chat returns which provider env vars are
+  // visible to this function instance, plus deployment metadata. Never
+  // exposes the values, only the names and a boolean. Remove this block
+  // once we've confirmed env injection is working in production.
+  if (req.method === 'GET') {
+    const checked = ['GROQ_API_KEY', 'NOVA_GROQ_API_KEY', 'OPENROUTER_API_KEY', 'NOVA_OPENROUTER_API_KEY', 'CEREBRAS_API_KEY', 'NOVA_CEREBRAS_API_KEY', 'NOVA_CORS_ORIGIN', 'NOVA_PUBLIC_URL'];
+    const presence = {};
+    for (const k of checked) {
+      const v = process.env[k];
+      presence[k] = {
+        present: typeof v === 'string' && v.length > 0,
+        length: typeof v === 'string' ? v.length : 0,
+        hasLeadingWhitespace: typeof v === 'string' && v.length > 0 && v[0] !== v[0].trimStart(),
+        hasTrailingWhitespace: typeof v === 'string' && v.length > 0 && v[v.length - 1] !== v[v.length - 1].trimEnd()
+      };
+    }
+    const resolved = PROVIDERS.map(p => ({
+      name: p.name,
+      defaultModel: p.defaultModel,
+      resolved: resolveProvider(p) !== null
+    }));
+    sendJson(res, 200, {
+      probe: 'env-visibility',
+      deploymentId: process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_URL || null,
+      gitCommit: process.env.VERCEL_GIT_COMMIT_SHA ? String(process.env.VERCEL_GIT_COMMIT_SHA).slice(0, 7) : null,
+      gitBranch: process.env.VERCEL_GIT_COMMIT_REF || null,
+      environment: process.env.VERCEL_ENV || null,
+      envCount: Object.keys(process.env).length,
+      presence,
+      providers: resolved,
+      anyProviderResolved: resolved.some(p => p.resolved)
+    });
+    return;
+  }
+
   if (req.method !== 'POST') {
     sendJson(res, 405, { error: { message: 'Method not allowed.' } });
     return;
