@@ -1454,26 +1454,6 @@ input[type="number"] {
   color: var(--bg-tertiary);
 }
 
-.project-save-action.primary {
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  border-color: var(--border-color);
-}
-
-.project-save-action.primary span,
-.project-save-action.primary strong {
-  color: inherit;
-}
-
-.project-save-action.primary span {
-  color: var(--text-muted);
-}
-
-.project-save-action.primary:hover span,
-.project-save-action.primary:hover strong {
-  color: var(--bg-tertiary);
-}
-
 .project-save-action:disabled {
   cursor: wait;
   opacity: 0.72;
