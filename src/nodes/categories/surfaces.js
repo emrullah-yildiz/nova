@@ -958,5 +958,78 @@ export const surfacesNodes = [
       },
       sampleCode: '{{surface}} = Geo.createSeashell({{turns}}, {{growth}})'
     }
+  },
+
+  // ─── Architectural composite (Phase 8) ────────────────────
+  // Single-call wavy surface so plan-mode can express "doubly curved
+  // roof / canopy" without falling back to a nested for-loop Python block.
+
+  {
+    type: 'Surface.WavyGrid',
+    name: 'Surface.WavyGrid',
+    category: 'surfaces',
+    subGroup: 'Composite',
+    icon: '🌊',
+    description: 'Doubly curved sin/cos-modulated surface from a width×depth rectangle, sampled on a u_count × v_count grid. Amplitude controls vertical sway; freq_u and freq_v control wave frequency along each axis. Output is a Mesh3.',
+    inputs: [
+      { id: 'width', name: 'Width', type: 'number', description: 'Surface width along X' },
+      { id: 'depth', name: 'Depth', type: 'number', description: 'Surface depth along Y' },
+      { id: 'uCount', name: 'U Count', type: 'number', description: 'Samples along width' },
+      { id: 'vCount', name: 'V Count', type: 'number', description: 'Samples along depth' },
+      { id: 'amplitude', name: 'Amplitude', type: 'number', description: 'Vertical sway amount' },
+      { id: 'freqU', name: 'Freq U', type: 'number', description: 'Wave frequency along width' },
+      { id: 'freqV', name: 'Freq V', type: 'number', description: 'Wave frequency along depth' }
+    ],
+    outputs: [{ id: 'surface', name: 'Surface', type: 'mesh', description: 'Resulting wavy mesh' }],
+    controls: [
+      { id: 'width', type: 'formula', default: '30', label: 'Width' },
+      { id: 'depth', type: 'formula', default: '30', label: 'Depth' },
+      { id: 'uCount', type: 'formula', default: '20', label: 'U Count' },
+      { id: 'vCount', type: 'formula', default: '20', label: 'V Count' },
+      { id: 'amplitude', type: 'formula', default: '4', label: 'Amplitude' },
+      { id: 'freqU', type: 'formula', default: '0.3', label: 'Freq U' },
+      { id: 'freqV', type: 'formula', default: '0.3', label: 'Freq V' }
+    ],
+    execute(context, inputs) {
+      return {
+        surface: Geo.wavyGrid(
+          toNumber(inputs.width, 30),
+          toNumber(inputs.depth, 30),
+          toInteger(inputs.uCount, 20),
+          toInteger(inputs.vCount, 20),
+          toNumber(inputs.amplitude, 4),
+          toNumber(inputs.freqU, 0.3),
+          toNumber(inputs.freqV, 0.3)
+        )
+      };
+    },
+    codegen: {
+      python: '{{surface}} = Geo.wavyGrid({{width}}, {{depth}}, int({{uCount}}), int({{vCount}}), {{amplitude}}, {{freqU}}, {{freqV}})',
+      csharp: 'var {{surface}} = Geo.wavyGrid({{width}}, {{depth}}, (int){{uCount}}, (int){{vCount}}, {{amplitude}}, {{freqU}}, {{freqV}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Width', description: 'Surface width' },
+        { name: 'Amplitude', description: 'Vertical sway' }
+      ],
+      outputs: [{ name: 'Surface', description: 'Wavy mesh' }],
+      example: {
+        title: 'Wavy 30×30 surface with amplitude 4 — typical canopy shape',
+        nodes: [
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 30 } },
+          { type: 'Input.Number', x: 0, y: 60, controls: { val: 30 } },
+          { type: 'Input.Number', x: 0, y: 120, controls: { val: 4 } },
+          { type: 'Surface.WavyGrid', x: 260, y: 60 },
+          { type: 'Output.Watch', x: 540, y: 60 }
+        ],
+        wires: [
+          [0, 'value', 3, 'width'],
+          [1, 'value', 3, 'depth'],
+          [2, 'value', 3, 'amplitude'],
+          [3, 'surface', 4, 'value']
+        ]
+      },
+      sampleCode: '{{surface}} = Geo.wavyGrid({{width}}, {{depth}}, 20, 20, {{amplitude}}, 0.3, 0.3)'
+    }
   }
 ];
