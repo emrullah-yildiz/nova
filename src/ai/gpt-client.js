@@ -107,6 +107,22 @@ const GPTClient = {
     }
     return {};
   },
+  isProxyMode() {
+    return !this.hasApiKey();
+  },
+  getEffectiveApiUrl() {
+    return this.isProxyMode() ? this.PROXY_URL : this.getApiUrl();
+  },
+  getEffectiveModel() {
+    return this.isProxyMode() ? this.PROXY_MODEL : this.getModel();
+  },
+  buildRequestHeaders() {
+    if (this.isProxyMode()) return { 'Content-Type': 'application/json' };
+    return Object.assign({
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + this.getApiKey()
+    }, this.getExtraHeaders());
+  },
   detectProvider(key) {
     if (!key) return 'openai';
     if (key.startsWith('sk-ant-')) return 'openrouter';
