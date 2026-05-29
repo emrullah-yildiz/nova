@@ -6,6 +6,7 @@
 
 import { createNovaCloudClient } from '../enterprise/cloud-client.js';
 import { getRuntimeConfig } from '../config/runtime-config.js';
+import { buildNodeCatalog } from './node-catalog.js';
 
 const GPTClient = {
   MODEL: 'anthropic/claude-sonnet-4.5',
@@ -261,8 +262,6 @@ Example pattern for clean lofted tower:
       pts.append(Geo.Point3(rx, ry, z))
   profiles.append(pts)
 
-\` + buildNodeReference() + \`
-
 **KEY RULES:**
 1. Decompose into single-line assignments → each becomes a visual node
 2. Only use for-loops when building arrays with .append() — the loop + list init merge into ONE Python block node
@@ -271,22 +270,12 @@ Example pattern for clean lofted tower:
 5. If you MUST use a Python block, add a comment: # Python block: <reason>
 6. The MORE single-line assignments you use, the MORE visual nodes appear on the canvas
 
-## GEO API (built-in geometry kernel)
-**Primitives:** Point3(x,y,z) | Vector3(x,y,z) | Line3(pt,pt) | Polyline3(pts,closed) | Circle3(center,r,normal)
-**Solids:** createBox(center,w,d,h) | createSphere(center,r) | createCylinder(base,r,h) | createCone(base,r,h) | createTorus(center,R,r)
-**Ops:** extrude(curve,vec) | revolve(curve,axisOrigin,axisDir,angle) | loft(profiles[]) | sweep(profile,path,segs) | pipe(curve,r)
-**Boolean:** booleanUnion(a,b) | booleanIntersect(a,b) | booleanSubtract(a,b) | combineAll(meshes[])
-**Transform:** move(geo,vec) | rotate(geo,axisOrigin,axisDir,angle) | scaleGeo(geo,factor,origin) | mirror(geo,planeOrigin,planeNormal)
-**Array:** arrayLinear(geo,dir,count,spacing) | arrayPolar(geo,center,axis,count) | arrayAlongCurve(geo,curve,count)
-**Surface:** surfaceFromGrid(pts[],uCount,vCount) | thicken(mesh,thickness) | smooth(mesh,iterations,factor) | subdivide(mesh,iterations)
-**NURBS:** createNurbsCurve(ctrlPts[],degree) → .toPolyline(segs) | createNurbsSurface(grid[][],degU,degV) → .toMesh(uSegs,vSegs)
-**Curves:** interpolate(pts[],segsPerSpan,closed) | bezier(ctrlPts[],segs) | offsetCurve(polyline,dist)
-**Isolines:** getIsolinesU(mesh,count) | getIsolinesV(mesh,count)
-**Noise:** perlin2(x,y) | perlin3(x,y,z) | fbm(x,y,z,octaves) → float -1..1
-**Attractors:** pointAttractor(pt,attractorPos,radius,falloff) → 0..1 | multiAttractor(pt,attractors[],r,falloff)
-**Deform:** noiseDeform(mesh,amplitude,freq) | attractorDeform(mesh,attractorPts[],r,strength,dir)
-**Patterns:** voronoiOutlines(sites[],bounds,res) | voronoiMesh(sites[],bounds,h,gap) | hexGrid(origin,r,rows,cols) | phyllotaxis(count,r)
-**Exotic:** createHyperbolicParaboloid(w,d,curv) | createCatenaryShell(span,h) | createHyperboloid(r,waist,h) | createGyroid(scale) | createMobiusStrip(r,w) | createKleinBottle(s) | createEnneperSurface(s) | createDiniSurface(a,b) | createSeashell(turns,growth)
+\` + buildNodeCatalog() + \`
+
+## ADDITIONAL Geo NAMESPACES (no direct node mapping — use sparingly)
+**Boolean:** Geo.booleanUnion(a,b) | Geo.booleanIntersect(a,b) | Geo.booleanSubtract(a,b)
+**Noise:** Geo.perlin2(x,y) | Geo.perlin3(x,y,z) | Geo.fbm(x,y,z,octaves) → float -1..1
+**Attractors:** Geo.pointAttractor(pt,attractorPos,radius,falloff) → 0..1 | Geo.multiAttractor(pt,attractors[],r,falloff)
 **Revit (browser only):** RevitBridge.getElements("Walls") | .getSheets() | .getLevels() | .getParam(el,"Mark") — NEVER use FilteredElementCollector/\\_\\_currentdoc\\_\\_ in browser code
 
 ## FEW-SHOT EXAMPLES
