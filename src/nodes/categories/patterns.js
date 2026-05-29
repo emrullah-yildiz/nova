@@ -1152,5 +1152,70 @@ export const patternsNodes = [
       },
       sampleCode: '{{lines}} = Geo.diagridPattern({{width}}, {{height}}, 10, 12)'
     }
+  },
+
+  {
+    type: 'Pattern.HexPanelGrid',
+    name: 'Pattern.HexPanelGrid',
+    category: 'patterns',
+    subGroup: 'Composite',
+    icon: '⬡',
+    description: 'Wraps a stack of profile rings (e.g. from Pattern.TwistedEllipsePlates) with diamond / hexagonal panel polylines that twist with the underlying tower. Use stagger=true for a brick-laid honeycomb look. Output is a list of closed polylines, one per panel cell.',
+    inputs: [
+      { id: 'profiles', name: 'Profiles', type: 'list', description: 'Stack of profile rings — each ring is a list of Point3' },
+      { id: 'stagger', name: 'Stagger', type: 'boolean', description: 'Offset every other row by half a cell for a honeycomb look' },
+      { id: 'skipRings', name: 'Skip Rings', type: 'number', description: 'Panel height in rings (1 = one panel per profile gap, 2 = every other ring)' }
+    ],
+    outputs: [{ id: 'panels', name: 'Panels', type: 'list', description: 'List of closed polylines (one per panel cell)' }],
+    controls: [
+      { id: 'stagger', type: 'checkbox', default: true, label: 'Stagger' },
+      { id: 'skipRings', type: 'formula', default: '1', label: 'Skip Rings' }
+    ],
+    execute(context, inputs) {
+      return {
+        panels: Geo.hexPanelGrid(
+          toList(inputs.profiles),
+          inputs.stagger !== false,
+          toInteger(inputs.skipRings, 1)
+        )
+      };
+    },
+    codegen: {
+      python: '{{panels}} = Geo.hexPanelGrid({{profiles}}, {{stagger}}, int({{skipRings}}))',
+      csharp: 'var {{panels}} = Geo.hexPanelGrid({{profiles}}, {{stagger}}, (int){{skipRings}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Profiles', description: 'Stack of profile rings' },
+        { name: 'Stagger', description: 'Half-cell offset per row' },
+        { name: 'Skip Rings', description: 'Panel height in rings' }
+      ],
+      outputs: [{ name: 'Panels', description: 'Closed polylines' }],
+      example: {
+        title: 'Twisted tower with hex panel skin',
+        nodes: [
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 20 } },
+          { type: 'Input.Number', x: 0, y: 60, controls: { val: 100 } },
+          { type: 'Input.Number', x: 0, y: 120, controls: { val: 18 } },
+          { type: 'Input.Number', x: 0, y: 180, controls: { val: 12 } },
+          { type: 'Input.Number', x: 0, y: 240, controls: { val: 60 } },
+          { type: 'Pattern.TwistedEllipsePlates', x: 260, y: 100 },
+          { type: 'Pattern.HexPanelGrid', x: 540, y: 100 },
+          { type: 'List.Count', x: 760, y: 100 },
+          { type: 'Output.Watch', x: 980, y: 100 }
+        ],
+        wires: [
+          [0, 'value', 5, 'floors'],
+          [1, 'value', 5, 'height'],
+          [2, 'value', 5, 'baseWidth'],
+          [3, 'value', 5, 'baseDepth'],
+          [4, 'value', 5, 'twistDeg'],
+          [5, 'profiles', 6, 'profiles'],
+          [6, 'panels', 7, 'list'],
+          [7, 'count', 8, 'value']
+        ]
+      },
+      sampleCode: '{{panels}} = Geo.hexPanelGrid({{profiles}}, True, 1)'
+    }
   }
 ];
