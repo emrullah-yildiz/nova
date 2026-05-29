@@ -1,4 +1,5 @@
 import { GPTClient } from './gpt-client.js';
+import { validateGeneratedCode } from './code-validator.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   app.respond = function(ch, txt) {
@@ -209,6 +210,17 @@ document.addEventListener('DOMContentLoaded', () => {
   app._validateAndPresent = function(parsed, bubble, msgContainer, ch, originalPrompt) {
     const code = parsed.code;
     const explanation = parsed.explanation || 'Generated code for your request.';
+    // Catch hallucinated Geo.* method names BEFORE running. Doesn't block
+    // execution — PythonRunner will fail anyway and the fix-retry kicks in
+    // — but it gives the fix prompt a head start by saying exactly which
+    // calls don't exist and what the closest real methods are.
+    const validation = validateGeneratedCode(code);
+    if (!validation.ok && typeof NFLogger !== 'undefined') {
+      NFLogger.warn('code-validator', 'Hallucinated Geo.* calls detected', {
+        unknowns: validation.unknowns.map(u => u.method),
+        suggestions: validation.unknowns.map(u => u.suggestions)
+      });
+    }
     const mockInputs = {};
     code.split('\n').forEach(line => {
       const m = line.trim().match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(-?[\d.]+)\s*$/);
@@ -228,7 +240,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const errorMsg = testResult.error;
     console.warn('[NodeFlow] Code validation failed:', errorMsg);
     if (bubble) {
-      bubble.innerHTML = app.fmt('🔧 Testing code... found an issue, asking AI to fix it...');
+      // Surface validator findings inline so the user sees "AI hallucinated
+      // Geo.Edge → did you mean Geo.bezier?" before the retry runs. The
+      // information is already in the fix prompt; this just makes it
+      // visible in the chat too.
+      let note = '🔧 Testing code... found an issue, asking AI to fix it...';
+      if (validation && !validation.ok) {
+        const items = validation.unknowns.slice(0, 3).map(u => {
+          const suggest = u.suggestions && u.suggestions.length
+            ? ' → did you mean **' + u.suggestions[0] + '**?'
+            : '';
+          return '• `Geo.' + u.method + '` is not a real Nova method' + suggest;
+        });
+        note += '\n\n' + items.join('\n');
+      }
+      bubble.innerHTML = app.fmt(note);
     }
     msgContainer.scrollTop = msgContainer.scrollHeight;
     if (!app._fixRetries) app._fixRetries = 0;
@@ -244,7 +270,21 @@ document.addEventListener('DOMContentLoaded', () => {
       msgContainer.scrollTop = msgContainer.scrollHeight;
       return;
     }
-    const fixPrompt = 'The code you generated has a runtime error:\n\nError: ' + errorMsg + '\n\nOriginal code:\n```python\n' + code + '\n```\n\nIMPORTANT CONSTRAINTS of our JavaScript-based Python runner:\n- .pop() is not available, use index access instead\n- list() constructor not available, use [] and .push()\n- Geo classes (Geo.Point3, Geo.createBox, etc.) are available\n- math module functions available: math.sin, math.cos, math.pi, math.sqrt, etc.\n- range() returns an array\n- .append() works (transpiled to .push())\n- No try/except support\n- No dictionary comprehensions\n- Keep it simple — avoid advanced Python features\n\nPlease fix the code and return ONLY the fixed version. Brief explanation first, then ```python block.';
+    // If validation flagged unknown methods, hand the AI a precise list of
+    // bad calls + closest matches. Without this the retry typically loops
+    // on the same hallucination because the raw runtime error
+    // ("Geo.Edge is not a function") doesn't say what to use instead.
+    let validatorHint = '';
+    if (validation && !validation.ok) {
+      const lines = validation.unknowns.map(u => {
+        const suggest = u.suggestions && u.suggestions.length
+          ? ' — closest real methods: ' + u.suggestions.join(', ')
+          : ' — no close match; remove the call or wrap in a Custom.Python fallback with a `# fallback: <reason>` comment';
+        return '  • line ' + u.line + ': `Geo.' + u.method + '` does NOT exist' + suggest;
+      });
+      validatorHint = '\n\nCRITICAL — your code uses Geo.* methods that do not exist in Nova:\n' + lines.join('\n') + '\nReplace each with a real method from the inventory in your system prompt, or use a Custom.Python block as a last resort.\n';
+    }
+    const fixPrompt = 'The code you generated has a runtime error:\n\nError: ' + errorMsg + '\n\nOriginal code:\n```python\n' + code + '\n```' + validatorHint + '\n\nIMPORTANT CONSTRAINTS of our JavaScript-based Python runner:\n- .pop() is not available, use index access instead\n- list() constructor not available, use [] and .push()\n- Geo classes (Geo.Point3, Geo.createBox, etc.) are available\n- math module functions available: math.sin, math.cos, math.pi, math.sqrt, etc.\n- range() returns an array\n- .append() works (transpiled to .push())\n- No try/except support\n- No dictionary comprehensions\n- Keep it simple — avoid advanced Python features\n\nPlease fix the code and return ONLY the fixed version. Brief explanation first, then ```python block.';
     GPTClient.callStream(
       fixPrompt, ch, '',
       function(chunk, fullText) {
