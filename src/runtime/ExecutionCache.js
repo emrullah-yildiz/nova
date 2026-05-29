@@ -217,7 +217,6 @@ export class ExecutionCache {
    * @returns {{ value: ReadableStream|AsyncIterable|null, found: boolean }}
    */
   getStream(nodeId, version) {
-    const key = this._key(nodeId, '__stream__');
     return this.get(nodeId, version, '__stream__');
   }
 

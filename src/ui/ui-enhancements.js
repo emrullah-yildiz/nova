@@ -156,7 +156,6 @@ export function installUiEnhancements(targetApp = getRuntimeApp()) {
   };
 
   // Patch showNodeMenu to include Preview toggle
-  const origShowNodeMenu = app.showNodeMenu.bind(app);
   app.showNodeMenu = function(id) {
     const nd = this.nodes.find(n => n.id === id);
     const el = document.getElementById(id);

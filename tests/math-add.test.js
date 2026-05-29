@@ -115,7 +115,6 @@ describe('Math.Add number coercion', () => {
     // Simulate: two Number Input nodes (output 10 each) wired to Math.Add A and B
     const src1 = { id: 'n1', type: 'number-input', controlValues: { val: '10' } };
     const src2 = { id: 'n2', type: 'number-input', controlValues: { val: '10' } };
-    const add = { id: 'n3', type: 'math-add', controlValues: {} };
 
     // Simulate Number input compute: parseFloat
     function computeSrc(nd) {

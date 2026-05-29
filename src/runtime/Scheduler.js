@@ -86,12 +86,12 @@ export class Scheduler {
     // Sort levels ascending
     const sortedLevels = Array.from(levels.entries()).sort((a, b) => a[0] - b[0]);
 
-    for (const [level, nodeIds] of sortedLevels) {
+    for (const [, nodeIds] of sortedLevels) {
       if (signal?.aborted) break;
       if (this._paused) await this._waitForResume();
 
       // Execute all nodes at this level in parallel, with concurrency limit
-      const results = await this._runBatched(nodeIds, async (nodeId) => {
+      await this._runBatched(nodeIds, async (nodeId) => {
         if (signal?.aborted) return;
         if (this._paused) await this._waitForResume();
 

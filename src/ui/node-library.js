@@ -26,15 +26,6 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
   app.toggleV2Props = function(nid) { app.toggleProps(nid); };
   app.toggleV2Inspector = function(nid) { app.toggleInspector(nid); };
 
-  // Re-render a node in-place (preserves position, panel states)
-  function reRenderV2Node(nd) {
-    var el = document.getElementById(nd.id);
-    if (el) el.remove();
-    app.renderNode(nd);
-    app.updatePortDots();
-    setTimeout(function() { app.renderWires(); }, 30);
-  }
-
   // Update has-data class on all port dots based on computed values
   function updatePortDataStates() {
     app.nodes.forEach(function(nd) {
