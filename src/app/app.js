@@ -2641,6 +2641,30 @@ const app = {
 
         }
 
+        // Phase 6: carry dynamic port info from the parser to the node so
+        // enhancePythonNode renders ports matching the variables the block
+        // actually exposes. Without this, multi-line Python blocks fall
+        // back to a generic `output0` port and downstream wires drawn by
+        // the parser point at a non-existent port — the result is a
+        // dangling input on the next node (e.g. Solid.ByLoft "Profiles"
+        // shows a warning badge because nothing flows in).
+
+        if (gn.type === 'custom-python' || gn.type === 'Custom.Python') {
+
+          if (Array.isArray(gn.controls && gn.controls._dynInputs) && gn.controls._dynInputs.length > 0) {
+
+            nd._dynInputs = gn.controls._dynInputs.slice();
+
+          }
+
+          if (Array.isArray(gn.outputVars) && gn.outputVars.length > 0) {
+
+            nd._dynOutputs = gn.outputVars.slice();
+
+          }
+
+        }
+
 
 
         this.nodes.push(nd);
