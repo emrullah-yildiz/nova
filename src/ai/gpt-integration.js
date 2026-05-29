@@ -5,6 +5,7 @@ import { extractPlanFromResponse } from './plan-extractor.js';
 import { validatePlanShape } from './plan-schema.js';
 import { validatePlanAgainstRegistry } from './plan-validator.js';
 import { buildGraphFromPlan, planToPython } from './plan-builder.js';
+import { getConsent, setConsent, queueRefusal, peekBuffer, flushSession } from './feedback-client.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   app.respond = function(ch, txt) {
@@ -214,6 +215,73 @@ document.addEventListener('DOMContentLoaded', () => {
   // Nova's Settings dialog or grabbing a personal Groq key (the durable
   // answer to "free tier exhausted"). HTML inlined so it doesn't depend on
   // a separate stylesheet entry.
+  // Phase 10: refusal auto-feedback consent flow.
+  //
+  // _refusalConsentCardHtml — shown only on the FIRST refusal of a
+  // user's lifetime (until they choose). Three buttons map to three
+  // localStorage values: auto / manual / never.
+  // _refusalQueueIndicatorHtml — small "📨 N queued" pill shown on
+  // every subsequent auto-share refusal so the user knows what's
+  // accumulating.
+  // _onRefusalConsentChoice — the click handler; persists choice and
+  // queues the just-shown refusal if the user picked auto.
+
+  app._pendingRefusalForConsent = null;
+
+  app._refusalConsentCardHtml = function(refusal) {
+    // Stash the refusal so the Auto button can queue it immediately
+    // after the user opts in.
+    app._pendingRefusalForConsent = refusal;
+    return ''
+      + '<div style="margin-top:10px;padding:12px;border:1px solid var(--accent-green,#a6e3a1);border-radius:8px;background:rgba(166,227,161,0.06);display:flex;flex-direction:column;gap:10px">'
+      + '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">💡</span><strong style="color:var(--text-primary,#fff);font-size:13px">Help Nova learn this pattern</strong></div>'
+      + '<div style="font-size:11px;color:var(--text-muted,#a6adc8);line-height:1.5">Refusals tell us which composite nodes to build next. Nova can auto-share refusals from this session (and future sessions) so the team can prioritise. Only the prompt, the AI\'s reason, and its suggestions are sent — nothing else.</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      + '<button onclick="app._onRefusalConsentChoice(\'auto\')" style="flex:1;min-width:140px;padding:8px 12px;border:none;border-radius:6px;background:var(--accent-green,#a6e3a1);color:#1e1e2e;font-weight:600;font-size:12px;cursor:pointer">Auto-share refusals</button>'
+      + '<button onclick="app._onRefusalConsentChoice(\'manual\')" style="flex:1;min-width:140px;padding:8px 12px;border:1px solid var(--accent-blue,#89b4fa);border-radius:6px;background:transparent;color:var(--accent-blue,#89b4fa);font-weight:600;font-size:12px;cursor:pointer">Show me each time</button>'
+      + '<button onclick="app._onRefusalConsentChoice(\'never\')" style="flex:1;min-width:140px;padding:8px 12px;border:1px solid var(--text-muted,#a6adc8);border-radius:6px;background:transparent;color:var(--text-muted,#a6adc8);font-weight:600;font-size:12px;cursor:pointer">Don\'t share</button>'
+      + '</div>'
+      + '<div style="font-size:10px;color:var(--text-muted,#a6adc8);opacity:0.7">You can change this any time by clearing browser data. Honors GDPR-friendly defaults.</div>'
+      + '</div>';
+  };
+
+  app._refusalQueueIndicatorHtml = function(count) {
+    return ''
+      + '<div style="margin-top:10px;padding:8px 12px;border:1px solid var(--accent-green,#a6e3a1);border-radius:6px;background:rgba(166,227,161,0.04);display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-muted,#a6adc8)">'
+      + '<span style="font-size:14px">📨</span>'
+      + '<span><strong style="color:var(--accent-green,#a6e3a1)">' + count + '</strong> refusal' + (count === 1 ? '' : 's') + ' queued — will be summarised into one GitHub issue when you close this tab.</span>'
+      + '</div>';
+  };
+
+  app._onRefusalConsentChoice = function(choice) {
+    setConsent(choice);
+    const pending = app._pendingRefusalForConsent;
+    app._pendingRefusalForConsent = null;
+    if (choice === 'auto' && pending) {
+      // Backfill the refusal the user was just looking at when they
+      // opted in — otherwise the buffer would skip the very first one.
+      queueRefusal(pending);
+    }
+    // Reflect the decision in the chat so they see what changed.
+    const msg = choice === 'auto'
+      ? '✓ Auto-sharing enabled. The current refusal has been queued.'
+      : choice === 'manual'
+        ? '✓ We\'ll show a manual GitHub link on each refusal from now on.'
+        : '✓ Sharing disabled. No refusals will be sent.';
+    if (typeof app.addAIMessage === 'function') app.addAIMessage('workspace', msg);
+  };
+
+  // Optional: manually flush the buffer mid-session, e.g. from a Settings
+  // dialog or a "Send refusals now" link in a future UI.
+  app._flushRefusalSession = function() {
+    return flushSession({ useBeacon: false }).then(function(result) {
+      if (result && result.ok && result.issueUrl && typeof app.addAIMessage === 'function') {
+        app.addAIMessage('workspace', '✓ Submitted to GitHub: [Issue #' + result.issueNumber + '](' + result.issueUrl + ')');
+      }
+      return result;
+    });
+  };
+
   app._byokCardHtml = function() {
     return ''
       + '<div style="margin-top:10px;padding:12px;border:1px solid var(--accent-blue,#89b4fa);border-radius:8px;background:rgba(137,180,250,0.06);display:flex;flex-direction:column;gap:8px">'
@@ -489,7 +557,28 @@ document.addEventListener('DOMContentLoaded', () => {
       if (suggestions.length) {
         html += '\n\n**Try one of these alternatives:**\n' + suggestions.map(function(s) { return '• ' + s; }).join('\n');
       }
-      if (bubble) bubble.innerHTML = app.fmt(html);
+      const refusalRecord = {
+        prompt: originalPrompt,
+        reason: reason,
+        suggestions: suggestions,
+        aiProvider: (typeof GPTClient !== 'undefined' && GPTClient.getProvider) ? GPTClient.getProvider() : '',
+        aiModel: (typeof GPTClient !== 'undefined' && GPTClient.getEffectiveModel) ? GPTClient.getEffectiveModel() : '',
+        timestamp: new Date().toISOString()
+      };
+      const consent = getConsent();
+      let extras = '';
+      if (consent === null) {
+        // First refusal — ask once. Their answer is remembered for future
+        // sessions; the refusal itself isn't queued until consent='auto'.
+        extras = app._refusalConsentCardHtml(refusalRecord);
+      } else if (consent === 'auto') {
+        queueRefusal(refusalRecord);
+        const count = peekBuffer().length;
+        extras = app._refusalQueueIndicatorHtml(count);
+      }
+      // 'manual' and 'never' add no extras here; Phase 9's per-refusal
+      // button will provide the manual path independently when merged.
+      if (bubble) bubble.innerHTML = app.fmt(html) + extras;
       return;
     }
 
