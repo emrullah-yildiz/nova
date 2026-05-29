@@ -522,5 +522,441 @@ export const surfacesNodes = [
       },
       sampleCode: '{{result}} = Geo.subdivide({{mesh}}, {{iterations}})'
     }
+  },
+
+  // ─── Parametric ──────────────────────────────────────────
+  {
+    type: 'Surface.CatenaryShell',
+    name: 'Surface.CatenaryShell',
+    category: 'surfaces',
+    subGroup: 'Parametric',
+    icon: '⌓',
+    aliases: ['param-catenary'],
+    description: 'Generates an inverted catenary shell — the curve a hanging chain assumes, flipped to form a compressive arch surface. Span sets the footprint width; Height sets the rise at the apex.',
+    inputs: [
+      { id: 'span', name: 'Span', type: 'number', description: 'Footprint span' },
+      { id: 'height', name: 'Height', type: 'number', description: 'Apex height above the base' }
+    ],
+    outputs: [{ id: 'surface', name: 'Surface', type: 'mesh', description: 'Catenary shell mesh' }],
+    controls: [
+      { id: 'span', type: 'formula', default: '20', label: 'Span' },
+      { id: 'height', type: 'formula', default: '10', label: 'Height' }
+    ],
+    execute(context, inputs) {
+      return { surface: Geo.createCatenaryShell(toNumber(inputs.span, 20), toNumber(inputs.height, 10)) };
+    },
+    codegen: {
+      python: '{{surface}} = Geo.createCatenaryShell({{span}}, {{height}})',
+      csharp: 'var {{surface}} = Geo.createCatenaryShell({{span}}, {{height}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Span', description: 'Footprint span' },
+        { name: 'Height', description: 'Apex rise' }
+      ],
+      outputs: [{ name: 'Surface', description: 'Catenary shell' }],
+      example: {
+        title: 'Catenary shell — span 20, height 10',
+        nodes: [
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 20 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 10 } },
+          { type: 'Surface.CatenaryShell', x: 240, y: 30 },
+          { type: 'Output.Watch', x: 480, y: 30 }
+        ],
+        wires: [
+          [0, 'value', 2, 'span'],
+          [1, 'value', 2, 'height'],
+          [2, 'surface', 3, 'value']
+        ]
+      },
+      sampleCode: '{{surface}} = Geo.createCatenaryShell({{span}}, {{height}})'
+    }
+  },
+  {
+    type: 'Surface.Dini',
+    name: 'Surface.Dini',
+    category: 'surfaces',
+    subGroup: 'Parametric',
+    icon: '⊘',
+    aliases: ['param-dini'],
+    description: 'Generates a Dini surface — a helicoid wrapped around the pseudosphere, defined by the scale A and twist parameter B. Produces a characteristic seashell-like spiraling surface of constant negative curvature.',
+    inputs: [
+      { id: 'a', name: 'A', type: 'number', description: 'Scale parameter' },
+      { id: 'b', name: 'B', type: 'number', description: 'Twist parameter' }
+    ],
+    outputs: [{ id: 'surface', name: 'Surface', type: 'mesh', description: 'Dini surface mesh' }],
+    controls: [
+      { id: 'a', type: 'formula', default: '1', label: 'A' },
+      { id: 'b', type: 'formula', default: '0.2', label: 'B' }
+    ],
+    execute(context, inputs) {
+      return { surface: Geo.createDiniSurface(toNumber(inputs.a, 1), toNumber(inputs.b, 0.2)) };
+    },
+    codegen: {
+      python: '{{surface}} = Geo.createDiniSurface({{a}}, {{b}})',
+      csharp: 'var {{surface}} = Geo.createDiniSurface({{a}}, {{b}});'
+    },
+    help: {
+      inputs: [
+        { name: 'A', description: 'Scale' },
+        { name: 'B', description: 'Twist' }
+      ],
+      outputs: [{ name: 'Surface', description: 'Dini surface' }],
+      example: {
+        title: 'Dini surface — A=1, B=0.2',
+        nodes: [
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 0.2 } },
+          { type: 'Surface.Dini', x: 240, y: 30 },
+          { type: 'Output.Watch', x: 480, y: 30 }
+        ],
+        wires: [
+          [0, 'value', 2, 'a'],
+          [1, 'value', 2, 'b'],
+          [2, 'surface', 3, 'value']
+        ]
+      },
+      sampleCode: '{{surface}} = Geo.createDiniSurface({{a}}, {{b}})'
+    }
+  },
+  {
+    type: 'Surface.Enneper',
+    name: 'Surface.Enneper',
+    category: 'surfaces',
+    subGroup: 'Parametric',
+    icon: '∽',
+    aliases: ['param-enneper'],
+    description: 'Generates an Enneper minimal surface, a self-intersecting minimal surface of degree 6 with a characteristic four-fold petal symmetry. Scale stretches the surface uniformly.',
+    inputs: [
+      { id: 'scale', name: 'Scale', type: 'number', description: 'Uniform scale factor' }
+    ],
+    outputs: [{ id: 'surface', name: 'Surface', type: 'mesh', description: 'Enneper surface mesh' }],
+    controls: [
+      { id: 'scale', type: 'formula', default: '1', label: 'Scale' }
+    ],
+    execute(context, inputs) {
+      return { surface: Geo.createEnneperSurface(toNumber(inputs.scale, 1)) };
+    },
+    codegen: {
+      python: '{{surface}} = Geo.createEnneperSurface({{scale}})',
+      csharp: 'var {{surface}} = Geo.createEnneperSurface({{scale}});'
+    },
+    help: {
+      inputs: [{ name: 'Scale', description: 'Uniform scale' }],
+      outputs: [{ name: 'Surface', description: 'Enneper surface' }],
+      example: {
+        title: 'Enneper surface — scale 1',
+        nodes: [
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 1 } },
+          { type: 'Surface.Enneper', x: 240, y: 0 },
+          { type: 'Output.Watch', x: 480, y: 0 }
+        ],
+        wires: [
+          [0, 'value', 1, 'scale'],
+          [1, 'surface', 2, 'value']
+        ]
+      },
+      sampleCode: '{{surface}} = Geo.createEnneperSurface({{scale}})'
+    }
+  },
+  {
+    type: 'Surface.Gyroid',
+    name: 'Surface.Gyroid',
+    category: 'surfaces',
+    subGroup: 'Parametric',
+    icon: '⎈',
+    aliases: ['param-gyroid'],
+    description: 'Generates a gyroid — a triply periodic minimal surface defined by sin(x)·cos(y) + sin(y)·cos(z) + sin(z)·cos(x) = 0. Widely used in lattice infill, biological structures and metamaterials.',
+    inputs: [
+      { id: 'scale', name: 'Scale', type: 'number', description: 'Cell scale' }
+    ],
+    outputs: [{ id: 'surface', name: 'Surface', type: 'mesh', description: 'Gyroid mesh' }],
+    controls: [
+      { id: 'scale', type: 'formula', default: '5', label: 'Scale' }
+    ],
+    execute(context, inputs) {
+      return { surface: Geo.createGyroid(toNumber(inputs.scale, 5)) };
+    },
+    codegen: {
+      python: '{{surface}} = Geo.createGyroid({{scale}})',
+      csharp: 'var {{surface}} = Geo.createGyroid({{scale}});'
+    },
+    help: {
+      inputs: [{ name: 'Scale', description: 'Cell scale' }],
+      outputs: [{ name: 'Surface', description: 'Gyroid mesh' }],
+      example: {
+        title: 'Gyroid — scale 5',
+        nodes: [
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 5 } },
+          { type: 'Surface.Gyroid', x: 240, y: 0 },
+          { type: 'Output.Watch', x: 480, y: 0 }
+        ],
+        wires: [
+          [0, 'value', 1, 'scale'],
+          [1, 'surface', 2, 'value']
+        ]
+      },
+      sampleCode: '{{surface}} = Geo.createGyroid({{scale}})'
+    }
+  },
+  {
+    type: 'Surface.HyperbolicParaboloid',
+    name: 'Surface.HyperbolicParaboloid',
+    category: 'surfaces',
+    subGroup: 'Parametric',
+    icon: '⌢',
+    aliases: ['param-hypar'],
+    description: 'Generates a hyperbolic paraboloid (saddle / HyPar) surface — a doubly-ruled quadric with two opposing corners raised and two lowered. Curvature controls the saddle depth.',
+    inputs: [
+      { id: 'width', name: 'Width', type: 'number', description: 'Span along X' },
+      { id: 'depth', name: 'Depth', type: 'number', description: 'Span along Y' },
+      { id: 'curvature', name: 'Curvature', type: 'number', description: 'Saddle depth' }
+    ],
+    outputs: [{ id: 'surface', name: 'Surface', type: 'mesh', description: 'HyPar mesh' }],
+    controls: [
+      { id: 'width', type: 'formula', default: '10', label: 'Width' },
+      { id: 'depth', type: 'formula', default: '10', label: 'Depth' },
+      { id: 'curvature', type: 'formula', default: '3', label: 'Curvature' }
+    ],
+    execute(context, inputs) {
+      return {
+        surface: Geo.createHyperbolicParaboloid(
+          toNumber(inputs.width, 10),
+          toNumber(inputs.depth, 10),
+          toNumber(inputs.curvature, 3)
+        )
+      };
+    },
+    codegen: {
+      python: '{{surface}} = Geo.createHyperbolicParaboloid({{width}}, {{depth}}, {{curvature}})',
+      csharp: 'var {{surface}} = Geo.createHyperbolicParaboloid({{width}}, {{depth}}, {{curvature}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Width', description: 'X span' },
+        { name: 'Depth', description: 'Y span' },
+        { name: 'Curvature', description: 'Saddle depth' }
+      ],
+      outputs: [{ name: 'Surface', description: 'HyPar mesh' }],
+      example: {
+        title: 'HyPar — 10×10, curvature 3',
+        nodes: [
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 10 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 10 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 3 } },
+          { type: 'Surface.HyperbolicParaboloid', x: 240, y: 60 },
+          { type: 'Output.Watch', x: 540, y: 60 }
+        ],
+        wires: [
+          [0, 'value', 3, 'width'],
+          [1, 'value', 3, 'depth'],
+          [2, 'value', 3, 'curvature'],
+          [3, 'surface', 4, 'value']
+        ]
+      },
+      sampleCode: '{{surface}} = Geo.createHyperbolicParaboloid({{width}}, {{depth}}, {{curvature}})'
+    }
+  },
+  {
+    type: 'Surface.Hyperboloid',
+    name: 'Surface.Hyperboloid',
+    category: 'surfaces',
+    subGroup: 'Parametric',
+    icon: '⧘',
+    aliases: ['param-hyperboloid'],
+    description: 'Generates a hyperboloid of one sheet — the classic "cooling tower" shape, a doubly-ruled surface defined by an outer Radius, a Waist radius at the narrowest point and total Height.',
+    inputs: [
+      { id: 'radius', name: 'Radius', type: 'number', description: 'Outer radius at top and bottom' },
+      { id: 'waist', name: 'Waist', type: 'number', description: 'Radius at the narrow waist' },
+      { id: 'height', name: 'Height', type: 'number', description: 'Total height' }
+    ],
+    outputs: [{ id: 'surface', name: 'Surface', type: 'mesh', description: 'Hyperboloid mesh' }],
+    controls: [
+      { id: 'radius', type: 'formula', default: '8', label: 'Radius' },
+      { id: 'waist', type: 'formula', default: '4', label: 'Waist' },
+      { id: 'height', type: 'formula', default: '20', label: 'Height' }
+    ],
+    execute(context, inputs) {
+      return {
+        surface: Geo.createHyperboloid(
+          toNumber(inputs.radius, 8),
+          toNumber(inputs.waist, 4),
+          toNumber(inputs.height, 20)
+        )
+      };
+    },
+    codegen: {
+      python: '{{surface}} = Geo.createHyperboloid({{radius}}, {{waist}}, {{height}})',
+      csharp: 'var {{surface}} = Geo.createHyperboloid({{radius}}, {{waist}}, {{height}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Radius', description: 'Outer radius' },
+        { name: 'Waist', description: 'Waist radius' },
+        { name: 'Height', description: 'Total height' }
+      ],
+      outputs: [{ name: 'Surface', description: 'Hyperboloid mesh' }],
+      example: {
+        title: 'Hyperboloid — R=8, waist=4, H=20',
+        nodes: [
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 8 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 4 } },
+          { type: 'Input.Number', x: 0, y: 140, controls: { val: 20 } },
+          { type: 'Surface.Hyperboloid', x: 240, y: 60 },
+          { type: 'Output.Watch', x: 480, y: 60 }
+        ],
+        wires: [
+          [0, 'value', 3, 'radius'],
+          [1, 'value', 3, 'waist'],
+          [2, 'value', 3, 'height'],
+          [3, 'surface', 4, 'value']
+        ]
+      },
+      sampleCode: '{{surface}} = Geo.createHyperboloid({{radius}}, {{waist}}, {{height}})'
+    }
+  },
+  {
+    type: 'Surface.KleinBottle',
+    name: 'Surface.KleinBottle',
+    category: 'surfaces',
+    subGroup: 'Parametric',
+    icon: '⊗',
+    aliases: ['param-klein'],
+    description: 'Generates a Klein bottle — a closed non-orientable surface that has no distinguishable inside or outside. Useful as a topology study object; Scale stretches the bottle uniformly.',
+    inputs: [
+      { id: 'scale', name: 'Scale', type: 'number', description: 'Uniform scale factor' }
+    ],
+    outputs: [{ id: 'surface', name: 'Surface', type: 'mesh', description: 'Klein bottle mesh' }],
+    controls: [
+      { id: 'scale', type: 'formula', default: '3', label: 'Scale' }
+    ],
+    execute(context, inputs) {
+      return { surface: Geo.createKleinBottle(toNumber(inputs.scale, 3)) };
+    },
+    codegen: {
+      python: '{{surface}} = Geo.createKleinBottle({{scale}})',
+      csharp: 'var {{surface}} = Geo.createKleinBottle({{scale}});'
+    },
+    help: {
+      inputs: [{ name: 'Scale', description: 'Uniform scale' }],
+      outputs: [{ name: 'Surface', description: 'Klein bottle mesh' }],
+      example: {
+        title: 'Klein bottle — scale 3',
+        nodes: [
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 3 } },
+          { type: 'Surface.KleinBottle', x: 240, y: 0 },
+          { type: 'Output.Watch', x: 480, y: 0 }
+        ],
+        wires: [
+          [0, 'value', 1, 'scale'],
+          [1, 'surface', 2, 'value']
+        ]
+      },
+      sampleCode: '{{surface}} = Geo.createKleinBottle({{scale}})'
+    }
+  },
+  {
+    type: 'Surface.MobiusStrip',
+    name: 'Surface.MobiusStrip',
+    category: 'surfaces',
+    subGroup: 'Parametric',
+    icon: '∞',
+    aliases: ['param-mobius'],
+    description: 'Generates a Möbius strip — a closed ruled surface with only one side and one edge. Radius sets the centre-line radius; Width sets the cross-strip width.',
+    inputs: [
+      { id: 'radius', name: 'Radius', type: 'number', description: 'Centre-line radius' },
+      { id: 'width', name: 'Width', type: 'number', description: 'Strip width' }
+    ],
+    outputs: [{ id: 'surface', name: 'Surface', type: 'mesh', description: 'Möbius strip mesh' }],
+    controls: [
+      { id: 'radius', type: 'formula', default: '5', label: 'Radius' },
+      { id: 'width', type: 'formula', default: '2', label: 'Width' }
+    ],
+    execute(context, inputs) {
+      return {
+        surface: Geo.createMobiusStrip(
+          toNumber(inputs.radius, 5),
+          toNumber(inputs.width, 2)
+        )
+      };
+    },
+    codegen: {
+      python: '{{surface}} = Geo.createMobiusStrip({{radius}}, {{width}})',
+      csharp: 'var {{surface}} = Geo.createMobiusStrip({{radius}}, {{width}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Radius', description: 'Centre-line radius' },
+        { name: 'Width', description: 'Strip width' }
+      ],
+      outputs: [{ name: 'Surface', description: 'Möbius strip mesh' }],
+      example: {
+        title: 'Möbius strip — radius 5, width 2',
+        nodes: [
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 5 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 2 } },
+          { type: 'Surface.MobiusStrip', x: 240, y: 30 },
+          { type: 'Output.Watch', x: 480, y: 30 }
+        ],
+        wires: [
+          [0, 'value', 2, 'radius'],
+          [1, 'value', 2, 'width'],
+          [2, 'surface', 3, 'value']
+        ]
+      },
+      sampleCode: '{{surface}} = Geo.createMobiusStrip({{radius}}, {{width}})'
+    }
+  },
+  {
+    type: 'Surface.Seashell',
+    name: 'Surface.Seashell',
+    category: 'surfaces',
+    subGroup: 'Parametric',
+    icon: '🐚',
+    aliases: ['param-seashell'],
+    description: 'Generates a seashell / conch surface as a logarithmic-spiral tube. Turns controls the number of spiral revolutions; Growth controls how rapidly the radius grows along the spiral.',
+    inputs: [
+      { id: 'turns', name: 'Turns', type: 'number', description: 'Number of spiral revolutions' },
+      { id: 'growth', name: 'Growth', type: 'number', description: 'Radial growth rate' }
+    ],
+    outputs: [{ id: 'surface', name: 'Surface', type: 'mesh', description: 'Seashell mesh' }],
+    controls: [
+      { id: 'turns', type: 'formula', default: '3', label: 'Turns' },
+      { id: 'growth', type: 'formula', default: '0.1', label: 'Growth' }
+    ],
+    execute(context, inputs) {
+      return {
+        surface: Geo.createSeashell(
+          toNumber(inputs.turns, 3),
+          toNumber(inputs.growth, 0.1)
+        )
+      };
+    },
+    codegen: {
+      python: '{{surface}} = Geo.createSeashell({{turns}}, {{growth}})',
+      csharp: 'var {{surface}} = Geo.createSeashell({{turns}}, {{growth}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Turns', description: 'Spiral revolutions' },
+        { name: 'Growth', description: 'Radial growth rate' }
+      ],
+      outputs: [{ name: 'Surface', description: 'Seashell mesh' }],
+      example: {
+        title: 'Seashell — 3 turns, growth 0.1',
+        nodes: [
+          { type: 'Input.Number', x: 0, y: 0, controls: { val: 3 } },
+          { type: 'Input.Number', x: 0, y: 70, controls: { val: 0.1 } },
+          { type: 'Surface.Seashell', x: 240, y: 30 },
+          { type: 'Output.Watch', x: 480, y: 30 }
+        ],
+        wires: [
+          [0, 'value', 2, 'turns'],
+          [1, 'value', 2, 'growth'],
+          [2, 'surface', 3, 'value']
+        ]
+      },
+      sampleCode: '{{surface}} = Geo.createSeashell({{turns}}, {{growth}})'
+    }
   }
 ];

@@ -718,25 +718,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       // ── Patterns ──
 
-      case 'pat-voronoi-outlines': { var sites = getInput('sites'); if (sites && Array.isArray(sites)) return Geo.voronoiOutlines(sites, null, 0.5); return undefined; }
-
-      case 'pat-voronoi-mesh': { var sites = getInput('sites'), h = getInput('height'), gap = getInput('gap'); if (sites && Array.isArray(sites)) return Geo.voronoiMesh(sites, null, h||3, gap||0.1); return undefined; }
-
-      case 'pat-hex-grid': { var o = getInput('origin'); if (o) return Geo.hexGrid(o, getInput('radius')||2, getInput('rows')||5, getInput('cols')||5); return undefined; }
-
-      case 'pat-perlin2': { var x = getInput('x'), y = getInput('y'); return (x !== undefined && y !== undefined) ? Geo.perlin2(x, y) : undefined; }
-
-      case 'pat-perlin3': { var x = getInput('x'), y = getInput('y'), z = getInput('z'); return (x !== undefined) ? Geo.perlin3(x||0, y||0, z||0) : undefined; }
-
-      case 'pat-fbm': { return Geo.fbm(getInput('x')||0, getInput('y')||0, getInput('z')||0, getInput('octaves')||4); }
-
-      case 'pat-point-attractor': { var pt = getInput('point'), attr = getInput('attractor'); if (pt && attr) return Geo.pointAttractor(pt, attr, getInput('radius')||10, getInput('falloff')||2); return undefined; }
-
-      case 'pat-noise-deform': { var mesh = getInput('mesh'); if (mesh) return Geo.noiseDeform(mesh, getInput('amplitude')||1, getInput('frequency')||0.1); return undefined; }
-
-      case 'pat-phyllotaxis': return Geo.phyllotaxis(getInput('count')||100, getInput('radius')||10);
-
-      case 'pat-fibonacci-sphere': return Geo.fibonacciSphere(getInput('count')||100, getInput('radius')||10);
+      // Pattern.* nodes migrated to src/nodes/categories/patterns.js.
 
 
 
