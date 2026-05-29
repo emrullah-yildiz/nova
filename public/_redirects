@@ -1,3 +1,0 @@
-# Cloudflare Pages SPA routing
-# All routes fall back to index.html so client-side routing works
-/*    /index.html    200

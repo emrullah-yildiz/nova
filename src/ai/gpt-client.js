@@ -13,7 +13,7 @@ const GPTClient = {
   TEMPERATURE: 0.7,
 
   // Free-tier proxy — when the user has no API key configured we POST to
-  // Nova's own Cloudflare Pages Function, which forwards to Groq with the
+  // Nova's own serverless API route, which forwards to Groq with a
   // server-side GROQ_API_KEY. Lets first-time visitors chat without signup.
   PROXY_URL: '/api/proxy/chat',
   PROXY_MODEL: 'llama-3.3-70b-versatile',
@@ -83,7 +83,7 @@ const GPTClient = {
   // Returns true when the assistant can actually attempt a request. BYOK and
   // enterprise modes always qualify; in proxy mode we optimistically allow
   // the call too — if the deployment hasn't configured GROQ_API_KEY the
-  // Function returns 503 and the chat surfaces a clear "owner needs to set
+  // proxy returns 503 and the chat surfaces a clear "owner needs to set
   // env var" message instead of being silently blocked at the door.
   canChat() {
     return this.hasApiKey() || this.isEnterpriseAiEnabled() || this.isProxyMode();
