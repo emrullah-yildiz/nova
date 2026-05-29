@@ -2159,7 +2159,11 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       area.addEventListener('wheel', function(e) {
 
-        if (app.currentView === '3d') return;
+        // Defer to OrbitControls whenever the cursor is over the 3D viewport,
+        // regardless of view mode. The previous check (app.currentView === '3d')
+        // missed split mode (currentView is 'split' there), so split+3D was
+        // zooming the node canvas instead of the 3D scene.
+        if (e.target.closest && e.target.closest('#viewport-3d')) return;
 
         e.preventDefault(); e.stopImmediatePropagation();
 
