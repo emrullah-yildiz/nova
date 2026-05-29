@@ -15,6 +15,11 @@ export class NovaCloudClient {
     return !!this.token;
   }
 
+  clearSession() {
+    this.token = '';
+    storeToken('');
+  }
+
   async devLogin({ email = 'owner@demo.nova', organizationSlug = 'demo' } = {}) {
     const response = await this.request('/api/auth/dev-login', {
       method: 'POST',
