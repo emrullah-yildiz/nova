@@ -1935,12 +1935,6 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     var canvasArea = document.getElementById('canvas-area');
 
-    var nc = document.getElementById('node-canvas');
-
-    var ws = document.getElementById('wire-svg');
-
-    var gs = document.getElementById('canvas-grid-svg');
-
     var vp = document.getElementById('viewport-3d');
 
     var b2d = document.getElementById('btn-view-nodes');
@@ -1949,19 +1943,20 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     var bSplit = document.getElementById('btn-view-split');
 
-    var showNodes = this.splitMode || this.activeView === 'nodes';
-
     var show3D = this.splitMode || this.activeView === '3d';
 
-    if (nc) nc.style.display = showNodes ? '' : 'none';
+    // Class-based state: CSS rules in style.css derive display, z-index,
+    // pointer-events and opacity from the .split-view / .view-nodes /
+    // .view-3d trio on .canvas-area. JS just sets the classes.
+    if (canvasArea) {
 
-    if (ws) ws.style.display = showNodes ? '' : 'none';
+      canvasArea.classList.toggle('split-view', !!this.splitMode);
 
-    if (gs) gs.style.display = showNodes ? '' : 'none';
+      canvasArea.classList.toggle('view-nodes', this.activeView === 'nodes');
 
-    if (vp) vp.style.display = show3D ? 'block' : 'none';
+      canvasArea.classList.toggle('view-3d',    this.activeView === '3d');
 
-    if (canvasArea) canvasArea.classList.toggle('split-view', this.splitMode);
+    }
 
     if (show3D) {
 
@@ -1989,18 +1984,18 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     setTimeout(function() {
 
-      if (self.splitMode && Viewer3D._onResize) Viewer3D._onResize();
+      if (Viewer3D._onResize) Viewer3D._onResize();
 
       if (typeof self.renderWires === 'function') self.renderWires();
 
     }, 30);
 
-    // Toolbar highlight — 2D/3D show which pane is active, Split shows whether the split is on.
-    if (b2d) { b2d.style.color = this.activeView === 'nodes' ? 'var(--accent-blue)' : ''; b2d.style.fontWeight = this.activeView === 'nodes' ? '700' : ''; }
+    // Toolbar highlight — 2D/3D show which layer is active, Split shows whether the overlay is on.
+    if (b2d)    { b2d.style.color    = this.activeView === 'nodes' ? 'var(--accent-blue)' : ''; b2d.style.fontWeight    = this.activeView === 'nodes' ? '700' : ''; }
 
-    if (b3d) { b3d.style.color = this.activeView === '3d'    ? 'var(--accent-blue)' : ''; b3d.style.fontWeight = this.activeView === '3d'    ? '700' : ''; }
+    if (b3d)    { b3d.style.color    = this.activeView === '3d'    ? 'var(--accent-blue)' : ''; b3d.style.fontWeight    = this.activeView === '3d'    ? '700' : ''; }
 
-    if (bSplit) { bSplit.style.color = this.splitMode ? 'var(--accent-blue)' : ''; bSplit.style.fontWeight = this.splitMode ? '700' : ''; }
+    if (bSplit) { bSplit.style.color = this.splitMode               ? 'var(--accent-blue)' : ''; bSplit.style.fontWeight = this.splitMode               ? '700' : ''; }
 
   };
 

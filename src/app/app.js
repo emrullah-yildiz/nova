@@ -2693,61 +2693,8 @@ const app = {
 
 app.currentView = 'nodes';
 
-// ── Viewport divider (split-view) ──
-
-app._initViewportDivider = function() {
-
-  const divider = document.getElementById('viewport-divider');
-
-  const area = document.getElementById('canvas-area');
-
-  if (!divider || !area || divider._wired) return;
-
-  divider._wired = true;
-
-  let dragging = false;
-
-  divider.addEventListener('mousedown', (e) => {
-
-    dragging = true;
-
-    divider.classList.add('dragging');
-
-    document.body.classList.add('dragging-divider');
-
-    e.preventDefault();
-
-  });
-
-  window.addEventListener('mousemove', (e) => {
-
-    if (!dragging) return;
-
-    const rect = area.getBoundingClientRect();
-
-    const x = Math.max(120, Math.min(rect.width - 120, e.clientX - rect.left));
-
-    area.style.setProperty('--split-x', (x / rect.width * 100).toFixed(3) + '%');
-
-    if (Viewer3D._onResize) Viewer3D._onResize();
-
-  });
-
-  window.addEventListener('mouseup', () => {
-
-    if (!dragging) return;
-
-    dragging = false;
-
-    divider.classList.remove('dragging');
-
-    document.body.classList.remove('dragging-divider');
-
-    if (typeof app.renderWires === 'function') app.renderWires();
-
-  });
-
-};
+// The viewport divider is gone — split view now stacks 2D and 3D on the
+// same rectangle (layered, not side-by-side), so there's nothing to drag.
 
 // ── Live 3D rebuild for split view ──
 
@@ -2805,8 +2752,6 @@ app._runSplitWatcher = function() {
 if (typeof document !== 'undefined') {
 
   document.addEventListener('DOMContentLoaded', () => {
-
-    if (app._initViewportDivider) app._initViewportDivider();
 
     if (app._runSplitWatcher) app._runSplitWatcher();
 

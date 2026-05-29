@@ -314,33 +314,45 @@ input:focus, textarea:focus { border-color: var(--accent-blue); }
 
 /* Canvas */
 
-.canvas-area { position: absolute; top: 0; left: var(--canvas-left); right: var(--canvas-right); bottom: var(--canvas-bottom); background: var(--bg-primary); overflow: hidden; z-index: 1; --split-x: 50%; }
-<<<<<<< Updated upstream
-=======
-
-/* Split view: node side anchored to canvas-area left; 3D side anchored right; divider sits between them. Override each side property individually — using `inset: auto !important` here would expand to four `auto` declarations later in the cascade and wipe out the left/right we want. */
-.canvas-area.split-view #node-canvas,
-.canvas-area.split-view .canvas-grid-svg,
-.canvas-area.split-view .wire-layer { right: calc(100% - var(--split-x)) !important; }
-
-.canvas-area.split-view #viewport-3d { top: 0 !important; right: 0 !important; bottom: 0 !important; left: var(--split-x) !important; display: block !important; }
-
-#viewport-divider { display: none; position: absolute; top: 0; bottom: 0; left: calc(var(--split-x) - 3px); width: 6px; z-index: 19; background: transparent; cursor: col-resize; user-select: none; }
-
-#viewport-divider::before { content: ''; position: absolute; left: 2px; top: 0; bottom: 0; width: 2px; background: var(--border-color); transition: background var(--transition-fast); }
-
-#viewport-divider:hover::before, #viewport-divider.dragging::before { background: var(--accent-blue); width: 4px; left: 1px; }
-
-.canvas-area.split-view #viewport-divider { display: block; }
-
-body.dragging-divider, body.dragging-divider * { cursor: col-resize !important; }
->>>>>>> Stashed changes
+.canvas-area { position: absolute; top: 0; left: var(--canvas-left); right: var(--canvas-right); bottom: var(--canvas-bottom); background: var(--bg-primary); overflow: hidden; z-index: 1; }
 
 .canvas-grid-svg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
 
 .wire-layer { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
 
-/* Split-view duplicate removed — the canonical rules live higher up next to .canvas-area, with `inset: auto !important` left out so it doesn't reset left/right on the 3D pane. */
+/* ── Layered view modes ──
+ * Both panes sit at inset:0 and overlap. Classes on .canvas-area pick who's
+ * on top and who's interactive. The 3D scene background is transparent
+ * (set in viewer3d.js), so the 2D layer underneath shows through cleanly
+ * in split mode.
+ *
+ *   .view-nodes / .view-3d : which layer is active (toolbar focus)
+ *   .split-view            : show BOTH layers; without it only the active
+ *                             one renders.
+ */
+
+/* viewport-3d is hidden by default; the active mode below shows it. */
+#viewport-3d { display: none; }
+.canvas-area.view-3d #viewport-3d,
+.canvas-area.split-view #viewport-3d { display: block; }
+
+/* 3D-only mode: hide every 2D layer entirely (matches today's clean 3D view). */
+.canvas-area.view-3d:not(.split-view) #node-canvas,
+.canvas-area.view-3d:not(.split-view) .wire-layer,
+.canvas-area.view-3d:not(.split-view) .canvas-grid-svg { display: none; }
+
+/* Split-on: drop the 2D grid (it would compete with the 3D content). */
+.canvas-area.split-view .canvas-grid-svg { display: none; }
+
+/* Split-on + 2D active: nodes overlay 3D, both fully opaque, 2D interactive. */
+.canvas-area.split-view.view-nodes #viewport-3d { z-index: 1; pointer-events: none; opacity: 1; }
+.canvas-area.split-view.view-nodes .wire-layer { z-index: 2; opacity: 1; }
+.canvas-area.split-view.view-nodes #node-canvas { z-index: 3; pointer-events: auto; opacity: 1; }
+
+/* Split-on + 3D active: 3D on top, 2D nodes ghost behind and stop receiving input. */
+.canvas-area.split-view.view-3d #viewport-3d { z-index: 5; pointer-events: auto; opacity: 1; }
+.canvas-area.split-view.view-3d #node-canvas { pointer-events: none; opacity: 0.4; }
+.canvas-area.split-view.view-3d .wire-layer { opacity: 0.4; }
 
 
 
