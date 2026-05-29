@@ -80,45 +80,13 @@ const GPTClient = {
     return k && k.length > 10;
   },
 
-  // True when the user has no API key and Nova should route through the
-  // Cloudflare Pages free-tier proxy instead.
-  isProxyMode() {
-    return !this.hasApiKey();
-  },
-
-  // Returns true when the assistant can actually attempt a request. BYOK
-  // and enterprise modes qualify; proxy mode always qualifies too — if
-  // the deployment hasn't configured GROQ_API_KEY the Function returns
-  // 503 and the chat surfaces a clear message instead of being silently
-  // blocked at the door.
+  // Returns true when the assistant can actually attempt a request. BYOK and
+  // enterprise modes always qualify; in proxy mode we optimistically allow
+  // the call too — if the deployment hasn't configured GROQ_API_KEY the
+  // Function returns 503 and the chat surfaces a clear "owner needs to set
+  // env var" message instead of being silently blocked at the door.
   canChat() {
     return this.hasApiKey() || this.isEnterpriseAiEnabled() || this.isProxyMode();
-  },
-
-  // Endpoint to POST to. In proxy mode this is Nova's own /api/proxy/chat
-  // function which holds GROQ_API_KEY server-side.
-  getEffectiveApiUrl() {
-    return this.isProxyMode() ? this.PROXY_URL : this.getApiUrl();
-  },
-
-  // Model to ask for. In proxy mode the upstream is always Groq, so use
-  // the free Llama 3.3 70B regardless of whatever model the user last
-  // selected in Settings.
-  getEffectiveModel() {
-    return this.isProxyMode() ? this.PROXY_MODEL : this.getModel();
-  },
-
-  // Request headers. In proxy mode we omit Authorization (the Worker adds
-  // its own) and skip provider-specific extras (the proxy speaks only to
-  // Groq).
-  buildRequestHeaders() {
-    if (this.isProxyMode()) {
-      return { 'Content-Type': 'application/json' };
-    }
-    return Object.assign(
-      { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.getApiKey() },
-      this.getExtraHeaders()
-    );
   },
   getModel() {
     return localStorage.getItem('nodeflow_openai_model') || this.MODEL;

@@ -68,9 +68,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (GPTClient.canChat()) {
       this._gptChat(ch, txt);
     } else {
-      // canChat() returns true whenever the proxy is reachable, so this
-      // branch only runs in offline / non-deployed builds. Fall back to
-      // the local operator-swap engine when it can answer.
+      // canChat() is effectively always true while a proxy is wired up, so
+      // this branch only runs in offline / non-deployed builds. Fall back to
+      // the local operator-swap engine when it can answer, otherwise show
+      // the BYOK help message.
       const existingCode = document.getElementById('cv-code') ? document.getElementById('cv-code').value : '';
       const aiResult = AIEngine.generateCode(txt, existingCode);
       if (aiResult) {
