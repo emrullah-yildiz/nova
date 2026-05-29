@@ -459,5 +459,68 @@ export const surfacesNodes = [
       },
       sampleCode: '{{curves}} = Geo.getIsolinesU({{mesh}}, {{count}})'
     }
+  },
+  // ─── Operations ──────────────────────────────────────────
+  {
+    type: 'Surface.Subdivide',
+    name: 'Surface.Subdivide',
+    category: 'surfaces',
+    subGroup: 'Operations',
+    icon: '◈',
+    aliases: ['op-subdivide'],
+    description: 'Splits every face of the surface mesh into four smaller faces by inserting midpoint vertices on each edge. Iterations are clamped to 5 to keep tessellation tractable.',
+    inputs: [
+      { id: 'mesh', name: 'Surface', type: 'mesh', description: 'Surface mesh to subdivide' },
+      { id: 'iterations', name: 'Iterations', type: 'number', description: 'Subdivision passes (clamped to 5)' }
+    ],
+    outputs: [{ id: 'result', name: 'Result', type: 'mesh', description: 'Subdivided surface mesh' }],
+    controls: [
+      { id: 'iterations', type: 'formula', default: '1', label: 'Iterations' }
+    ],
+    execute(context, inputs) {
+      if (inputs.mesh == null) return { result: undefined };
+      const it = Math.max(0, Math.min(5, toInteger(inputs.iterations, 1)));
+      return { result: Geo.subdivide(inputs.mesh, it) };
+    },
+    codegen: {
+      python: '{{result}} = Geo.subdivide({{mesh}}, int({{iterations}}))',
+      csharp: 'var {{result}} = Geo.subdivide({{mesh}}, (int){{iterations}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Surface', description: 'Surface mesh' },
+        { name: 'Iterations', description: 'Subdivision passes' }
+      ],
+      outputs: [{ name: 'Result', description: 'Subdivided mesh' }],
+      example: {
+        title: 'Subdivide a 2×2 grid surface once',
+        nodes: [
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 0, y: 1, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 1, y: 1, z: 0 } },
+          { type: 'List.Create', x: 240, y: 90 },
+          { type: 'Input.Integer', x: 0, y: 290, controls: { val: 2 } },
+          { type: 'Input.Integer', x: 0, y: 360, controls: { val: 2 } },
+          { type: 'Surface.ByPointGrid', x: 460, y: 150 },
+          { type: 'Input.Integer', x: 460, y: 290, controls: { val: 1 } },
+          { type: 'Surface.Subdivide', x: 700, y: 200 },
+          { type: 'Output.Watch', x: 920, y: 200 }
+        ],
+        wires: [
+          [0, 'point', 4, 'item0'],
+          [1, 'point', 4, 'item1'],
+          [2, 'point', 4, 'item2'],
+          [3, 'point', 4, 'item3'],
+          [4, 'list', 7, 'points'],
+          [5, 'value', 7, 'uCount'],
+          [6, 'value', 7, 'vCount'],
+          [7, 'surface', 9, 'mesh'],
+          [8, 'value', 9, 'iterations'],
+          [9, 'result', 10, 'value']
+        ]
+      },
+      sampleCode: '{{result}} = Geo.subdivide({{mesh}}, {{iterations}})'
+    }
   }
 ];

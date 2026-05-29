@@ -1128,5 +1128,119 @@ export const curvesNodes = [
       },
       sampleCode: '{{curves}} = Geo.tweenCurves({{curve1}}, {{curve2}}, {{count}})'
     }
+  },
+  {
+    type: 'Curve.Offset',
+    name: 'Curve.Offset',
+    category: 'curves',
+    subGroup: 'Utilities',
+    icon: '⟿',
+    aliases: ['op-offset'],
+    description: 'Offsets a polyline curve sideways by the given perpendicular distance in its local plane. Positive values offset to the left of the chord direction; negative values to the right.',
+    inputs: [
+      { id: 'curve', name: 'Curve', type: 'any', description: 'Polyline or curve to offset' },
+      { id: 'distance', name: 'Distance', type: 'number', description: 'Perpendicular offset distance (signed)' }
+    ],
+    outputs: [{ id: 'result', name: 'Result', type: 'curve', description: 'Offset polyline' }],
+    controls: [],
+    execute(context, inputs) {
+      if (inputs.curve == null) return { result: undefined };
+      return { result: Geo.offsetCurve(inputs.curve, toNumber(inputs.distance, 1)) };
+    },
+    codegen: {
+      python: '{{result}} = Geo.offsetCurve({{curve}}, {{distance}})',
+      csharp: 'var {{result}} = Geo.offsetCurve({{curve}}, {{distance}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Curve', description: 'Polyline to offset' },
+        { name: 'Distance', description: 'Perpendicular distance' }
+      ],
+      outputs: [{ name: 'Result', description: 'Offset polyline' }],
+      example: {
+        title: 'Offset a unit-square polyline outward by 0.5',
+        nodes: [
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 1, y: 1, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 0, y: 1, z: 0 } },
+          { type: 'List.Create', x: 240, y: 90 },
+          { type: 'Input.Boolean', x: 240, y: 210, controls: { val: 'True' } },
+          { type: 'Polyline.ByPoints', x: 460, y: 140 },
+          { type: 'Input.Number', x: 460, y: 270, controls: { val: 0.5 } },
+          { type: 'Curve.Offset', x: 680, y: 180 },
+          { type: 'Curve.Length', x: 900, y: 180 },
+          { type: 'Output.Watch', x: 1100, y: 180 }
+        ],
+        wires: [
+          [0, 'point', 4, 'item0'],
+          [1, 'point', 4, 'item1'],
+          [2, 'point', 4, 'item2'],
+          [3, 'point', 4, 'item3'],
+          [4, 'list', 6, 'points'],
+          [5, 'value', 6, 'closed'],
+          [6, 'polyline', 8, 'curve'],
+          [7, 'value', 8, 'distance'],
+          [8, 'result', 9, 'curve'],
+          [9, 'length', 10, 'value']
+        ]
+      },
+      sampleCode: '{{result}} = Geo.offsetCurve({{curve}}, {{distance}})'
+    }
+  },
+  {
+    type: 'Curve.Trim',
+    name: 'Curve.Trim',
+    category: 'curves',
+    subGroup: 'Utilities',
+    icon: '✂',
+    aliases: ['op-trim'],
+    description: 'Returns the portion of a line between two normalised parameters (0 = start, 1 = end). With t0 = 0.25 and t1 = 0.75 you keep the middle 50 percent of the line.',
+    inputs: [
+      { id: 'line', name: 'Line', type: 'line', description: 'Source line to trim' },
+      { id: 't0', name: 'Start t', type: 'number', description: 'Start parameter (0..1)' },
+      { id: 't1', name: 'End t', type: 'number', description: 'End parameter (0..1)' }
+    ],
+    outputs: [{ id: 'result', name: 'Result', type: 'line', description: 'Trimmed sub-line' }],
+    controls: [],
+    execute(context, inputs) {
+      if (inputs.line == null) return { result: undefined };
+      return { result: Geo.trimLine(inputs.line, toNumber(inputs.t0, 0), toNumber(inputs.t1, 1)) };
+    },
+    codegen: {
+      python: '{{result}} = Geo.trimLine({{line}}, {{t0}}, {{t1}})',
+      csharp: 'var {{result}} = Geo.trimLine({{line}}, {{t0}}, {{t1}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Line', description: 'Source line' },
+        { name: 'Start t', description: 'Start parameter 0..1' },
+        { name: 'End t', description: 'End parameter 0..1' }
+      ],
+      outputs: [{ name: 'Result', description: 'Trimmed line' }],
+      example: {
+        title: 'Trim a 10-unit line to its middle 50% — length 5',
+        nodes: [
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 10, y: 0, z: 0 } },
+          { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
+          { type: 'Input.Number', x: 240, y: 150, controls: { val: 0.25 } },
+          { type: 'Input.Number', x: 240, y: 220, controls: { val: 0.75 } },
+          { type: 'Curve.Trim', x: 460, y: 100 },
+          { type: 'Curve.Length', x: 680, y: 100 },
+          { type: 'Output.Watch', x: 880, y: 100 }
+        ],
+        wires: [
+          [0, 'point', 2, 'startPoint'],
+          [1, 'point', 2, 'endPoint'],
+          [2, 'line', 5, 'line'],
+          [3, 'value', 5, 't0'],
+          [4, 'value', 5, 't1'],
+          [5, 'result', 6, 'curve'],
+          [6, 'length', 7, 'value']
+        ]
+      },
+      sampleCode: '{{result}} = Geo.trimLine({{line}}, {{t0}}, {{t1}})'
+    }
   }
 ];

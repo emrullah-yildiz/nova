@@ -11,6 +11,9 @@ function toNumber(value, fallback = 0) {
   const n = Number(value ?? fallback);
   return Number.isNaN(n) ? fallback : n;
 }
+function toInteger(value, fallback = 0) {
+  return Math.max(0, Math.floor(toNumber(value, fallback)));
+}
 function toPoint(value, fallback = new Geo.Point3(0, 0, 0)) {
   if (value && typeof value === 'object' && value.x !== undefined) return value;
   return fallback;
@@ -742,6 +745,121 @@ export const solidsNodes = [
         ]
       },
       sampleCode: '{{result}} = Geo.combineAll({{meshes}})'
+    }
+  },
+
+  // ─── Operations ──────────────────────────────────────────
+  {
+    type: 'Solid.Smooth',
+    name: 'Solid.Smooth',
+    category: 'solids',
+    subGroup: 'Operations',
+    icon: '〰',
+    aliases: ['op-smooth'],
+    description: 'Applies Laplacian smoothing to a solid mesh, pulling each vertex toward the average of its neighbours. Useful for rounding off faceted boolean results and softening hard edges.',
+    inputs: [
+      { id: 'mesh', name: 'Solid', type: 'mesh', description: 'Solid mesh to smooth' },
+      { id: 'iterations', name: 'Iterations', type: 'number', description: 'Smoothing passes (clamped to 20)' }
+    ],
+    outputs: [{ id: 'result', name: 'Result', type: 'mesh', description: 'Smoothed solid mesh' }],
+    controls: [
+      { id: 'iterations', type: 'formula', default: '3', label: 'Iterations' }
+    ],
+    execute(context, inputs) {
+      if (inputs.mesh == null) return { result: undefined };
+      const it = Math.max(0, Math.min(20, toInteger(inputs.iterations, 3)));
+      return { result: Geo.smooth(inputs.mesh, it) };
+    },
+    codegen: {
+      python: '{{result}} = Geo.smooth({{mesh}}, int({{iterations}}))',
+      csharp: 'var {{result}} = Geo.smooth({{mesh}}, (int){{iterations}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Solid', description: 'Solid mesh' },
+        { name: 'Iterations', description: 'Smoothing passes' }
+      ],
+      outputs: [{ name: 'Result', description: 'Smoothed mesh' }],
+      example: {
+        title: 'Smooth a unit cube with 3 passes',
+        nodes: [
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 150, controls: { val: 1 } },
+          { type: 'Input.Number', x: 0, y: 220, controls: { val: 1 } },
+          { type: 'Box.ByCenterWidthDepthHeight', x: 240, y: 90 },
+          { type: 'Input.Integer', x: 240, y: 230, controls: { val: 3 } },
+          { type: 'Solid.Smooth', x: 480, y: 140 },
+          { type: 'Output.Watch', x: 720, y: 140 }
+        ],
+        wires: [
+          [0, 'point', 4, 'center'],
+          [1, 'value', 4, 'width'],
+          [2, 'value', 4, 'depth'],
+          [3, 'value', 4, 'height'],
+          [4, 'solid', 6, 'mesh'],
+          [5, 'value', 6, 'iterations'],
+          [6, 'result', 7, 'value']
+        ]
+      },
+      sampleCode: '{{result}} = Geo.smooth({{mesh}}, {{iterations}})'
+    }
+  },
+  {
+    type: 'Solid.BySurfaceThicken',
+    name: 'Solid.BySurfaceThicken',
+    category: 'solids',
+    subGroup: 'Operations',
+    icon: '⊡',
+    aliases: ['op-thicken'],
+    description: 'Inflates a surface mesh into a closed solid by offsetting both sides along the vertex normals by half of the thickness. Use to turn a patch or extruded ribbon into a printable slab.',
+    inputs: [
+      { id: 'surface', name: 'Surface', type: 'mesh', description: 'Surface mesh to thicken' },
+      { id: 'thickness', name: 'Thickness', type: 'number', description: 'Total wall thickness' }
+    ],
+    outputs: [{ id: 'solid', name: 'Solid', type: 'mesh', description: 'Resulting thickened solid mesh' }],
+    controls: [
+      { id: 'thickness', type: 'formula', default: '0.1', label: 'Thickness' }
+    ],
+    execute(context, inputs) {
+      if (inputs.surface == null) return { solid: undefined };
+      return { solid: Geo.thicken(inputs.surface, toNumber(inputs.thickness, 0.1)) };
+    },
+    codegen: {
+      python: '{{solid}} = Geo.thicken({{surface}}, {{thickness}})',
+      csharp: 'var {{solid}} = Geo.thicken({{surface}}, {{thickness}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Surface', description: 'Surface mesh' },
+        { name: 'Thickness', description: 'Wall thickness' }
+      ],
+      outputs: [{ name: 'Solid', description: 'Thickened solid mesh' }],
+      example: {
+        title: 'Thicken a unit-square patch by 0.1',
+        nodes: [
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 1, y: 1, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 0, y: 1, z: 0 } },
+          { type: 'List.Create', x: 240, y: 90 },
+          { type: 'Surface.ByPatch', x: 460, y: 90 },
+          { type: 'Input.Number', x: 460, y: 230, controls: { val: 0.1 } },
+          { type: 'Solid.BySurfaceThicken', x: 700, y: 140 },
+          { type: 'Output.Watch', x: 940, y: 140 }
+        ],
+        wires: [
+          [0, 'point', 4, 'item0'],
+          [1, 'point', 4, 'item1'],
+          [2, 'point', 4, 'item2'],
+          [3, 'point', 4, 'item3'],
+          [4, 'list', 5, 'boundary'],
+          [5, 'surface', 7, 'surface'],
+          [6, 'value', 7, 'thickness'],
+          [7, 'solid', 8, 'value']
+        ]
+      },
+      sampleCode: '{{solid}} = Geo.thicken({{surface}}, {{thickness}})'
     }
   }
 ];

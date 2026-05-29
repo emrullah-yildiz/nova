@@ -689,15 +689,9 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-      case 'op-thicken': { var mesh = getInput('mesh'), t = getInput('thickness'); if (mesh) return Geo.thicken(mesh, t||1); return undefined; }
-
-      case 'op-smooth': { var mesh = getInput('mesh'), it = getInput('iterations'); if (mesh) return Geo.smooth(mesh, Math.min(it||1, 20)); return undefined; }
-
-      case 'op-subdivide': { var mesh = getInput('mesh'), it = getInput('iterations'); if (mesh) return Geo.subdivide(mesh, Math.min(it||1, 5)); return undefined; }
-
-      case 'op-offset': { var curve = getInput('curve'), d = getInput('distance'); if (curve && d) return Geo.offsetCurve(curve, d); return undefined; }
-
-      case 'op-trim': { var line = getInput('line'), t0 = getInput('t0'), t1 = getInput('t1'); if (line) return Geo.trimLine(line, t0||0, t1||1); return undefined; }
+      // op-thicken → Solid.BySurfaceThicken, op-smooth → Solid.Smooth,
+      // op-subdivide → Surface.Subdivide, op-offset → Curve.Offset,
+      // op-trim → Curve.Trim. Registry default handles them.
 
       case 'op-bezier': { var pts = getInput('points'); if (pts) return Geo.bezier(pts); return undefined; }
 
@@ -708,7 +702,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-      case 'op-point-grid': { var o = getInput('origin')||new Geo.Point3(0,0,0); return Geo.pointGrid(o instanceof Geo.Point3?o:new Geo.Point3(0,0,0), new Geo.Vector3(1,0,0), new Geo.Vector3(0,1,0), getInput('uCount')||5, getInput('vCount')||5, getInput('spacing')||1, getInput('spacing')||1); }
+      // op-point-grid removed (use Geo.pointGrid directly via custom nodes if needed).
 
 
 

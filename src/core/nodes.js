@@ -42,17 +42,9 @@ NODE_LIBRARY.categories.push({ id: 'testing', name: 'Testing', color: '#f5c2e7',
 // Logic category migrated to src/nodes/categories/logic.js.
 
 
-// ═══════════════════════════════════════
-// 8. MODELING
-// ═══════════════════════════════════════
-NODE_LIBRARY.categories.push({ id: 'modeling', name: 'Modeling', color: '#f5c2e7', icon: '⚙', nodes: [
-  { type: 'op-offset', name: 'Offset Curve', icon: '⟿', inputs: [{ id: 'curve', name: 'Curve', type: 'any' },{ id: 'distance', name: 'Distance', type: 'number' }], outputs: [{ id: 'result', name: 'Result', type: 'curve' }], controls: [], preview: true, codegen: { python: '{{result}} = Geo.offsetCurve({{curve}}, {{distance}})', csharp: '' } },
-  { type: 'op-point-grid', name: 'Point Grid', icon: '⊞', inputs: [{ id: 'origin', name: 'Origin', type: 'point' },{ id: 'uCount', name: 'U Count', type: 'number' },{ id: 'vCount', name: 'V Count', type: 'number' },{ id: 'spacing', name: 'Spacing', type: 'number' }], outputs: [{ id: 'points', name: 'Points', type: 'list' }], controls: [], preview: true, codegen: { python: '{{points}} = Geo.pointGrid({{origin}}, Geo.Vector3(1,0,0), Geo.Vector3(0,1,0), {{uCount}}, {{vCount}}, {{spacing}}, {{spacing}})', csharp: '' } },
-  { type: 'op-smooth', name: 'Smooth', icon: '〰', inputs: [{ id: 'mesh', name: 'Mesh', type: 'mesh' },{ id: 'iterations', name: 'Iterations', type: 'number' }], outputs: [{ id: 'result', name: 'Result', type: 'mesh' }], controls: [], preview: true, codegen: { python: '{{result}} = Geo.smooth({{mesh}}, {{iterations}})', csharp: '' } },
-  { type: 'op-subdivide', name: 'Subdivide', icon: '◈', inputs: [{ id: 'mesh', name: 'Mesh', type: 'mesh' },{ id: 'iterations', name: 'Iterations', type: 'number' }], outputs: [{ id: 'result', name: 'Result', type: 'mesh' }], controls: [], preview: true, codegen: { python: '{{result}} = Geo.subdivide({{mesh}}, {{iterations}})', csharp: '' } },
-  { type: 'op-thicken', name: 'Thicken', icon: '⊡', inputs: [{ id: 'mesh', name: 'Mesh', type: 'mesh' },{ id: 'thickness', name: 'Thickness', type: 'number' }], outputs: [{ id: 'result', name: 'Result', type: 'mesh' }], controls: [], preview: true, codegen: { python: '{{result}} = Geo.thicken({{mesh}}, {{thickness}})', csharp: '' } },
-  { type: 'op-trim', name: 'Trim Line', icon: '✂', inputs: [{ id: 'line', name: 'Line', type: 'line' },{ id: 't0', name: 'Start t', type: 'number' },{ id: 't1', name: 'End t', type: 'number' }], outputs: [{ id: 'result', name: 'Result', type: 'line' }], controls: [], preview: true, codegen: { python: '{{result}} = Geo.trimLine({{line}}, {{t0}}, {{t1}})', csharp: '' } }
-] });
+// Modeling category dissolved: op-offset → Curve.Offset, op-trim → Curve.Trim,
+// op-smooth → Solid.Smooth, op-subdivide → Surface.Subdivide,
+// op-thicken → Solid.BySurfaceThicken. op-point-grid removed.
 // ═══════════════════════════════════════
 // 10. PARAMETRIC FORMS
 // ═══════════════════════════════════════
