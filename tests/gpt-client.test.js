@@ -49,7 +49,7 @@ describe('GPTClient', () => {
     expect(GPTClient.isProxyMode()).toBe(true);
     expect(GPTClient.canChat()).toBe(true);
     expect(GPTClient.getEffectiveApiUrl()).toBe('/api/proxy/chat');
-    expect(GPTClient.getEffectiveModel()).toBe('llama-3.3-70b-versatile');
+    expect(GPTClient.getEffectiveModel()).toBe('llama-3.1-8b-instant');
     expect(GPTClient.buildRequestHeaders()).toEqual({ 'Content-Type': 'application/json' });
   });
 
