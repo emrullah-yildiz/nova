@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (ch === 'landing') {
       const isInfoQ = (l.includes('started') || l.includes('help') || (l.includes('node') && l.includes('available')) || l.includes('what is') || l.includes('how do'));
       if (isInfoQ) {
-        if (GPTClient.hasApiKey() || GPTClient.isEnterpriseAiEnabled()) { this._gptChat(ch, txt); return; }
+        if (GPTClient.canChat()) { this._gptChat(ch, txt); return; }
         if (l.includes('started') || l.includes('help'))
           this.addAIMessage('landing', "Click **New Project** or choose a **template** to begin!\n\n1. Drag nodes from the library\n2. Connect outputs → inputs\n3. Click **▸ Data Inspector** to see data\n4. Ask me anything!");
         else if (l.includes('node') && l.includes('available'))
@@ -65,9 +65,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    if (GPTClient.hasApiKey() || GPTClient.isEnterpriseAiEnabled()) {
+    if (GPTClient.canChat()) {
       this._gptChat(ch, txt);
     } else {
+      // canChat() is effectively always true while a proxy is wired up, so
+      // this branch only runs in offline / non-deployed builds. Fall back to
+      // the local operator-swap engine when it can answer, otherwise show
+      // the BYOK help message.
       const existingCode = document.getElementById('cv-code') ? document.getElementById('cv-code').value : '';
       const aiResult = AIEngine.generateCode(txt, existingCode);
       if (aiResult) {
