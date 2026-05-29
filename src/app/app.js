@@ -337,6 +337,37 @@ const app = {
     this.syncWorkspaceLayout();
   },
 
+  toggleViewerGrid() {
+    if (typeof Viewer3D === 'undefined') return;
+    Viewer3D.setGridVisible(!Viewer3D._gridVisible);
+    this._syncViewerMenuChecks();
+  },
+
+  toggleViewerAxes() {
+    if (typeof Viewer3D === 'undefined') return;
+    Viewer3D.setAxesVisible(!Viewer3D._axesVisible);
+    this._syncViewerMenuChecks();
+  },
+
+  toggleViewerEdges() {
+    if (typeof Viewer3D === 'undefined') return;
+    Viewer3D.setEdgesVisible(!Viewer3D._edgesVisible);
+    this._syncViewerMenuChecks();
+  },
+
+  _syncViewerMenuChecks() {
+    if (typeof Viewer3D === 'undefined') return;
+    const set = (id, on) => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      const mark = btn.querySelector('.menu-check');
+      if (mark) mark.setAttribute('data-on', on ? '1' : '0');
+    };
+    set('menu-toggle-grid',  Viewer3D._gridVisible);
+    set('menu-toggle-axes',  Viewer3D._axesVisible);
+    set('menu-toggle-edges', Viewer3D._edgesVisible);
+  },
+
   onLibDragStart(e,type) { e.dataTransfer.setData('text/plain',type); e.dataTransfer.effectAllowed='copy'; },
 
   addNodeFromLib(type) {

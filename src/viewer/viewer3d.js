@@ -1,3 +1,22 @@
+// Nova 3D palette — sourced from the CSS accent variables in style.css.
+// Keep these in sync with --accent-* / --bg-* / --text-* when the design
+// system changes.
+export const NovaPalette3D = {
+  solid:        0x89b4fa,
+  curve:        0xf9e2af,
+  surface:      0x94e2d5,
+  parametric:   0xcba6f7,
+  extrusion:    0xfab387,
+  deformation:  0xf5c2e7,
+  union:        0xa6e3a1,
+  subtract:     0xf38ba8,
+  point:        0x89b4fa,
+  vector:       0x94e2d5,
+  edges:        0x313244,
+  background:   0x1e1e2e,
+  ambient:      0xcdd6f4
+};
+
 export const Viewer3D = {
   scene: null,
   camera: null,
@@ -10,6 +29,10 @@ export const Viewer3D = {
   isUnavailable: false,
   isVisible: false,
   animFrameId: null,
+  palette: NovaPalette3D,
+  _gridVisible: true,
+  _axesVisible: true,
+  _edgesVisible: true,
 
   init(container) {
     if (this.isInitialized) return;
@@ -20,8 +43,9 @@ export const Viewer3D = {
       return;
     }
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1e1e2e);
-    this.scene.fog = new THREE.FogExp2(0x1e1e2e, 0.002);
+    this.scene.background = new THREE.Color(NovaPalette3D.background);
+    // Lighter fog so the grid and distant geometry don't fade out at typical fit-all zooms.
+    this.scene.fog = new THREE.FogExp2(NovaPalette3D.background, 0.0007);
     this.camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 10000);
     this.camera.position.set(30, 25, 30);
     this.camera.lookAt(0, 0, 0);
@@ -37,16 +61,32 @@ export const Viewer3D = {
     this.controls.dampingFactor = 0.08;
     this.controls.screenSpacePanning = true;
     this.controls.maxPolarAngle = Math.PI;
-    this.gridHelper = new THREE.GridHelper(100, 100, 0x313244, 0x252538);
+    this.gridHelper = new THREE.GridHelper(100, 100, 0x6c7086, 0x45475a);
+    if (this.gridHelper.material) {
+      this.gridHelper.material.transparent = true;
+      this.gridHelper.material.opacity = 0.85;
+    }
+    this.gridHelper.visible = this._gridVisible;
     this.scene.add(this.gridHelper);
     this.axisHelper = new THREE.AxesHelper(10);
+    if (this.axisHelper.material) this.axisHelper.material.depthTest = false;
+    this.axisHelper.renderOrder = 999;
+    this.axisHelper.visible = this._axesVisible;
     this.scene.add(this.axisHelper);
-    const ambient = new THREE.AmbientLight(0x89b4fa, 0.4);
+
+    // Three-point lighting for a clay-render feel: warm key, cool fill, gentle rim, neutral ambient.
+    const ambient = new THREE.AmbientLight(NovaPalette3D.ambient, 0.35);
     this.scene.add(ambient);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(20, 30, 20);
-    this.scene.add(dirLight);
-    const hemiLight = new THREE.HemisphereLight(0x89b4fa, 0x1e1e2e, 0.3);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    keyLight.position.set(20, 30, 20);
+    this.scene.add(keyLight);
+    const fillLight = new THREE.DirectionalLight(0xb8c8ff, 0.32);
+    fillLight.position.set(-18, 12, -16);
+    this.scene.add(fillLight);
+    const rimLight = new THREE.DirectionalLight(0xffd1a4, 0.22);
+    rimLight.position.set(0, -8, -28);
+    this.scene.add(rimLight);
+    const hemiLight = new THREE.HemisphereLight(0x89b4fa, 0x1e1e2e, 0.25);
     this.scene.add(hemiLight);
     this.geometryGroup = new THREE.Group();
     this.scene.add(this.geometryGroup);
@@ -75,6 +115,24 @@ export const Viewer3D = {
     if (this.animFrameId) { cancelAnimationFrame(this.animFrameId); this.animFrameId = null; }
   },
 
+  setGridVisible(v) {
+    this._gridVisible = !!v;
+    if (this.gridHelper) this.gridHelper.visible = this._gridVisible;
+  },
+
+  setAxesVisible(v) {
+    this._axesVisible = !!v;
+    if (this.axisHelper) this.axisHelper.visible = this._axesVisible;
+  },
+
+  setEdgesVisible(v) {
+    this._edgesVisible = !!v;
+    if (!this.geometryGroup) return;
+    this.geometryGroup.traverse(function(obj) {
+      if (obj.userData && obj.userData.isMeshEdges) obj.visible = !!v;
+    });
+  },
+
   animate() {
     if (!this.isVisible || this.isUnavailable || !this.controls || !this.renderer) return;
     this.animFrameId = requestAnimationFrame(() => this.animate());
@@ -98,9 +156,9 @@ export const Viewer3D = {
   addPoints(points, color, size) {
     if (!this.scene || !points.length) return;
     color = color || 0x89b4fa;
-    size = size || 0.3;
+    size = size || 0.12;
     if (points.length > 1000) {
-      const geo = new THREE.SphereGeometry(size, 6, 6);
+      const geo = new THREE.SphereGeometry(size, 10, 8);
       const mat = new THREE.MeshBasicMaterial({ color });
       const mesh = new THREE.InstancedMesh(geo, mat, points.length);
       const dummy = new THREE.Object3D();
@@ -112,8 +170,8 @@ export const Viewer3D = {
       mesh.instanceMatrix.needsUpdate = true;
       this.geometryGroup.add(mesh);
     } else {
-      const geo = new THREE.SphereGeometry(size, 8, 8);
-      const mat = new THREE.MeshPhongMaterial({ color, emissive: color, emissiveIntensity: 0.3 });
+      const geo = new THREE.SphereGeometry(size, 16, 12);
+      const mat = new THREE.MeshPhongMaterial({ color, emissive: color, emissiveIntensity: 0.4, shininess: 60 });
       points.forEach(p => {
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.set(p[0] || 0, p[2] || 0, p[1] || 0);
@@ -125,7 +183,7 @@ export const Viewer3D = {
   addLines(lineSegments, color) {
     if (!this.scene || !lineSegments.length) return;
     color = color || 0xa6e3a1;
-    const mat = new THREE.LineBasicMaterial({ color, linewidth: 2 });
+    const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95 });
     lineSegments.forEach(seg => {
       if (!seg.start || !seg.end) return;
       const pts = [
@@ -166,12 +224,23 @@ export const Viewer3D = {
       faces.forEach(f => { indices.push(f[0], f[1], f[2]); });
       geo.setIndex(indices);
     }
-    geo.computeVertexNormals();
-    const mat = new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.85, side: THREE.DoubleSide, flatShading: true });
-    this.geometryGroup.add(new THREE.Mesh(geo, mat));
-    const wire = new THREE.WireframeGeometry(geo);
-    const wireMat = new THREE.LineBasicMaterial({ color: 0x45475a, linewidth: 1 });
-    this.geometryGroup.add(new THREE.LineSegments(wire, wireMat));
+    const Geo = (typeof window !== 'undefined' && window.Geo) || null;
+    const shadedGeo = (Geo && typeof Geo._applyCreaseNormals === 'function')
+      ? Geo._applyCreaseNormals(geo, 30)
+      : (geo.computeVertexNormals(), geo);
+    const mat = new THREE.MeshPhongMaterial({ color, transparent: false, opacity: 1.0, side: THREE.DoubleSide, flatShading: false, shininess: 18, specular: 0x252538 });
+    mat.polygonOffset = true;
+    mat.polygonOffsetFactor = 1;
+    mat.polygonOffsetUnits = 1;
+    const meshObj = new THREE.Mesh(shadedGeo, mat);
+    meshObj.userData.isMeshBody = true;
+    this.geometryGroup.add(meshObj);
+    const edges = new THREE.EdgesGeometry(shadedGeo, 30);
+    const eMat = new THREE.LineBasicMaterial({ color: NovaPalette3D.edges, linewidth: 1, transparent: true, opacity: 0.7 });
+    const edgeLines = new THREE.LineSegments(edges, eMat);
+    edgeLines.userData.isMeshEdges = true;
+    edgeLines.visible = !!this._edgesVisible;
+    this.geometryGroup.add(edgeLines);
   },
 
   addPointGrid(rows, cols, spacing, color) {

@@ -85,7 +85,7 @@
 
     </div>
 
-    <div class="menu-item disabled" id="menu-view">View
+    <div class="menu-item" id="menu-view">View
 
       <div class="menu-dropdown">
 
@@ -96,6 +96,14 @@
         <div class="menu-separator"></div>
 
         <button class="menu-dropdown-item" onclick="app.fitAll()">Zoom to Fit</button>
+
+        <div class="menu-separator"></div>
+
+        <button class="menu-dropdown-item" id="menu-toggle-grid" onclick="app.toggleViewerGrid()"><span>Grid</span><span class="menu-check" data-on="1">▰</span></button>
+
+        <button class="menu-dropdown-item" id="menu-toggle-axes" onclick="app.toggleViewerAxes()"><span>Axes</span><span class="menu-check" data-on="1">▰</span></button>
+
+        <button class="menu-dropdown-item" id="menu-toggle-edges" onclick="app.toggleViewerEdges()"><span>Mesh Edges</span><span class="menu-check" data-on="1">▰</span></button>
 
       </div>
 

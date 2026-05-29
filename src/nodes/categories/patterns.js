@@ -279,7 +279,7 @@ export const patternsNodes = [
     subGroup: 'Grid',
     icon: '◇',
     aliases: ['pat-diamond-grid'],
-    description: 'Builds a Rows×Cols array of diamond-shaped polyline cells with the given Width and Height on the XY plane, with alternating-row offset for a true diamond tiling.',
+    description: 'Builds a Rows×Cols array of filled diamond-shaped tiles with the given Width and Height on the XY plane, with alternating-row offset for a true diamond tiling. Each tile is a mesh that shades like a panel.',
     inputs: [
       { id: 'origin', name: 'Origin', type: 'point', description: 'Grid origin point' },
       { id: 'width', name: 'Width', type: 'number', description: 'Diamond width (X direction)' },
@@ -287,7 +287,7 @@ export const patternsNodes = [
       { id: 'rows', name: 'Rows', type: 'number', description: 'Number of rows' },
       { id: 'cols', name: 'Cols', type: 'number', description: 'Number of columns' }
     ],
-    outputs: [{ id: 'cells', name: 'Cells', type: 'list', description: 'List of diamond polylines' }],
+    outputs: [{ id: 'cells', name: 'Cells', type: 'list', description: 'List of diamond tile meshes' }],
     controls: [
       { id: 'width', type: 'formula', default: '2', label: 'Width' },
       { id: 'height', type: 'formula', default: '2', label: 'Height' },
@@ -317,7 +317,7 @@ export const patternsNodes = [
         { name: 'Rows', description: 'Row count' },
         { name: 'Cols', description: 'Column count' }
       ],
-      outputs: [{ name: 'Cells', description: 'Diamond polylines' }],
+      outputs: [{ name: 'Cells', description: 'Diamond tile meshes' }],
       example: {
         title: '4×4 diamond grid — 16 cells',
         nodes: [
@@ -350,14 +350,14 @@ export const patternsNodes = [
     subGroup: 'Grid',
     icon: '⎔',
     aliases: ['pat-hex-grid'],
-    description: 'Builds a Rows×Cols array of regular hexagonal polyline cells on the XY plane. Adjacent columns are offset by half a hex height so the cells tile without gaps.',
+    description: 'Builds a Rows×Cols array of filled regular hexagonal tiles on the XY plane. Adjacent columns are offset by half a hex height so the cells tile without gaps; each tile is a fan-triangulated mesh that shades like a panel.',
     inputs: [
       { id: 'origin', name: 'Origin', type: 'point', description: 'Grid origin point' },
       { id: 'radius', name: 'Radius', type: 'number', description: 'Hexagon circumradius' },
       { id: 'rows', name: 'Rows', type: 'number', description: 'Number of rows' },
       { id: 'cols', name: 'Cols', type: 'number', description: 'Number of columns' }
     ],
-    outputs: [{ id: 'cells', name: 'Cells', type: 'list', description: 'List of hexagonal polylines' }],
+    outputs: [{ id: 'cells', name: 'Cells', type: 'list', description: 'List of hex tile meshes' }],
     controls: [
       { id: 'radius', type: 'formula', default: '2', label: 'Radius' },
       { id: 'rows', type: 'formula', default: '5', label: 'Rows' },
@@ -384,7 +384,7 @@ export const patternsNodes = [
         { name: 'Rows', description: 'Row count' },
         { name: 'Cols', description: 'Column count' }
       ],
-      outputs: [{ name: 'Cells', description: 'Hex polylines' }],
+      outputs: [{ name: 'Cells', description: 'Hex tile meshes' }],
       example: {
         title: '3×3 hex grid — 9 cells',
         nodes: [
