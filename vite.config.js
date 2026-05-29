@@ -15,6 +15,7 @@ function vercelFunctionsDev() {
       const env = loadEnv('development', process.cwd(), '');
       const passthrough = [
         'GROQ_API_KEY', 'NOVA_GROQ_API_KEY',
+        'GEMINI_API_KEY', 'NOVA_GEMINI_API_KEY',
         'OPENROUTER_API_KEY', 'NOVA_OPENROUTER_API_KEY',
         'CEREBRAS_API_KEY', 'NOVA_CEREBRAS_API_KEY',
         'NOVA_CORS_ORIGIN', 'NOVA_PUBLIC_URL'

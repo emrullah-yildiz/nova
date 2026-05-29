@@ -153,7 +153,18 @@ document.addEventListener('DOMContentLoaded', () => {
           if (bubble) {
             bubble.classList.remove('streaming');
             bubble.removeAttribute('id');
-            bubble.innerHTML = app.fmt('⏳ **Free-tier limit hit.** Nova\'s shared free model is at capacity for the moment.\n\n• **Wait a few seconds and try again** — the limit resets quickly.\n• Or bring your own free **Groq** key in **Settings → Preferences** for unlimited use → [console.groq.com/keys](https://console.groq.com/keys)');
+            bubble.innerHTML = app.fmt('⏳ **Free-tier limit hit.** Nova\'s shared free model is at capacity for the moment.\n\nWait a few seconds and try again, or get unlimited use with your own free key below.')
+              + app._byokCardHtml();
+          }
+          msgContainer.scrollTop = msgContainer.scrollHeight;
+          return;
+        }
+        if (errMsg && errMsg.indexOf('ALL_PROVIDERS_FAILED') !== -1) {
+          if (bubble) {
+            bubble.classList.remove('streaming');
+            bubble.removeAttribute('id');
+            bubble.innerHTML = app.fmt('⚠️ **Every free-tier provider is busy.** All shared models hit their limit for now.\n\nBring your own free key for unlimited access — takes 30 seconds.')
+              + app._byokCardHtml();
           }
           msgContainer.scrollTop = msgContainer.scrollHeight;
           return;
@@ -162,7 +173,8 @@ document.addEventListener('DOMContentLoaded', () => {
           if (bubble) {
             bubble.classList.remove('streaming');
             bubble.removeAttribute('id');
-            bubble.innerHTML = app.fmt('⚙️ **Free model not available on this deployment.**\n\nThe site owner needs to set `GROQ_API_KEY` or `NOVA_GROQ_API_KEY` in Vercel environment variables, or you can bring your own free API key in **Settings → Preferences** (Groq is free, no card needed).');
+            bubble.innerHTML = app.fmt('⚙️ **Free model not available on this deployment.**\n\nThe site owner needs to set `GROQ_API_KEY` in Vercel environment variables, or you can bring your own free key below.')
+              + app._byokCardHtml();
           }
           msgContainer.scrollTop = msgContainer.scrollHeight;
           return;
@@ -170,11 +182,28 @@ document.addEventListener('DOMContentLoaded', () => {
         if (bubble) {
           bubble.classList.remove('streaming');
           bubble.removeAttribute('id');
-          bubble.innerHTML = app.fmt('❌ **API Error:** ' + errMsg + '\n\nCheck your API key and provider in Settings → Preferences.\n\n💡 Try switching to **Groq** or **OpenRouter** for free models.');
+          bubble.innerHTML = app.fmt('❌ **API Error:** ' + errMsg + '\n\nCheck your API key and provider in Settings → Preferences.')
+            + app._byokCardHtml();
         }
         msgContainer.scrollTop = msgContainer.scrollHeight;
       }
     );
+  };
+
+  // Inline BYOK upsell card — appended below the streaming bubble whenever
+  // the free-tier proxy hits a hard cap. One-tap path to either opening
+  // Nova's Settings dialog or grabbing a personal Groq key (the durable
+  // answer to "free tier exhausted"). HTML inlined so it doesn't depend on
+  // a separate stylesheet entry.
+  app._byokCardHtml = function() {
+    return ''
+      + '<div style="margin-top:10px;padding:12px;border:1px solid var(--accent-blue,#89b4fa);border-radius:8px;background:rgba(137,180,250,0.06);display:flex;flex-direction:column;gap:8px">'
+      + '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">🔑</span><strong style="color:var(--text-primary,#fff);font-size:13px">Bring your own free key for unlimited access</strong></div>'
+      + '<div style="font-size:11px;color:var(--text-muted,#a6adc8);line-height:1.4">Groq is free, no card required. Your key stays in your browser — Nova never sees it. Takes about 30 seconds.</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      + '<button onclick="(window.SettingsDialog||{}).open&&SettingsDialog.open()" style="flex:1;min-width:120px;padding:8px 12px;border:none;border-radius:6px;background:var(--accent-blue,#89b4fa);color:#1e1e2e;font-weight:600;font-size:12px;cursor:pointer">Open Settings</button>'
+      + '<a href="https://console.groq.com/keys" target="_blank" rel="noopener" style="flex:1;min-width:120px;padding:8px 12px;border:1px solid var(--accent-blue,#89b4fa);border-radius:6px;background:transparent;color:var(--accent-blue,#89b4fa);font-weight:600;font-size:12px;text-align:center;text-decoration:none">Get Groq key →</a>'
+      + '</div></div>';
   };
 
   app._validateAndPresent = function(parsed, bubble, msgContainer, ch, originalPrompt) {

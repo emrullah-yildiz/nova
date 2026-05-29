@@ -195,6 +195,32 @@ Keep replies short and focused on the user's design intent.`;
     return /\b(build|create|generate|make|design|draw|model|show me a|show me an|i want a|i want an|add a|add an|let'?s build|let'?s make)\b/.test(m);
   },
 
+  // The conversation has shifted into code mode once the assistant has
+  // produced (or been asked to produce) Python. Sticky-upgrade to the
+  // full Geo API prompt for every subsequent turn so option-clicks like
+  // "Geodesic Dome" don't fall back to slim and trigger hallucinations
+  // such as Geo.Edge / Geo.Mesh that the slim prompt's tiny method list
+  // didn't warn against.
+  historyHasCode(history) {
+    if (!Array.isArray(history)) return false;
+    for (let i = history.length - 1; i >= 0 && i >= history.length - 6; i--) {
+      const msg = history[i];
+      const text = (msg && (msg.text || msg.content)) || '';
+      if (typeof text === 'string' && text.indexOf('```python') !== -1) return true;
+    }
+    return false;
+  },
+
+  // The assistant calls back here for code fix retries — those prompts
+  // start with "The code you generated has a runtime error". We detect
+  // them so the fix attempt always gets the full Geo API reference
+  // instead of the slim prompt that almost certainly caused the bug.
+  isFixPrompt(userMessage) {
+    if (!userMessage) return false;
+    const m = String(userMessage);
+    return m.indexOf('runtime error') !== -1 && m.indexOf('Original code') !== -1;
+  },
+
   buildSystemPrompt(existingCode) {
     let sys = `You are the AI for Nova, a visual node-based scripting tool with a 3D viewport (Three.js). You generate Python code that becomes visual nodes on a canvas.
 
@@ -448,7 +474,8 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     NFLogger.aiRequest(userMessage, providerLabel, this.getEffectiveModel());
     this._callStart = Date.now();
     const history = this._histories[context] || [];
-    const useSlim = proxyMode && !this.hasBuildIntent(userMessage);
+    const stickyFull = this.historyHasCode(history) || this.isFixPrompt(userMessage);
+    const useSlim = proxyMode && !this.hasBuildIntent(userMessage) && !stickyFull;
     const systemContent = useSlim ? this.buildSlimSystemPrompt() : this.buildSystemPrompt(existingCode);
     const historyDepth = proxyMode ? (useSlim ? 4 : 6) : 10;
     const maxTokens = proxyMode ? this.PROXY_MAX_TOKENS : this.MAX_TOKENS;
@@ -540,7 +567,8 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     NFLogger.aiRequest(userMessage, providerLabel, this.getEffectiveModel());
     var _streamStart = Date.now();
     const history = this._histories[context] || [];
-    const useSlim = proxyMode && !this.hasBuildIntent(userMessage);
+    const stickyFull = this.historyHasCode(history) || this.isFixPrompt(userMessage);
+    const useSlim = proxyMode && !this.hasBuildIntent(userMessage) && !stickyFull;
     const systemContent = useSlim ? this.buildSlimSystemPrompt() : this.buildSystemPrompt(existingCode);
     const historyDepth = proxyMode ? (useSlim ? 4 : 6) : 10;
     const maxTokens = proxyMode ? this.PROXY_MAX_TOKENS : this.MAX_TOKENS;

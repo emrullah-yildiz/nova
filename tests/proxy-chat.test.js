@@ -2,13 +2,30 @@ import { PROVIDERS, pickModel, shouldFallthrough, resolveProvider } from '../api
 
 describe('proxy chat — pickModel', () => {
   const groq = PROVIDERS.find(p => p.name === 'groq-8b');
+  const gemini = PROVIDERS.find(p => p.name === 'gemini-flash');
   const openrouter = PROVIDERS.find(p => p.name === 'openrouter-free');
   const cerebras = PROVIDERS.find(p => p.name === 'cerebras');
 
-  it('exposes all three providers', () => {
+  it('exposes all four providers', () => {
     expect(groq).toBeDefined();
+    expect(gemini).toBeDefined();
     expect(openrouter).toBeDefined();
     expect(cerebras).toBeDefined();
+  });
+
+  it('places gemini-flash second in the chain (most generous free tier after fastest)', () => {
+    // Groq's 8B is fastest; Gemini's 1500-RPD cap is the largest of the
+    // remaining free tiers, so it should be the first fallback when Groq
+    // throttles. OpenRouter and Cerebras come after.
+    expect(PROVIDERS[0].name).toBe('groq-8b');
+    expect(PROVIDERS[1].name).toBe('gemini-flash');
+  });
+
+  it('Gemini provider has an OpenAI-compatible endpoint and accepts flash models', () => {
+    expect(gemini.url).toBe('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions');
+    expect(gemini.allowedModels.has('gemini-2.0-flash-exp')).toBe(true);
+    expect(gemini.allowedModels.has('gemini-1.5-flash')).toBe(true);
+    expect(gemini.defaultModel).toBe('gemini-2.0-flash-exp');
   });
 
   it('honors the client request only when it is on the provider allowlist', () => {
@@ -45,6 +62,7 @@ describe('proxy chat — pickModel', () => {
     // and be silently mishandled.
     const allIds = [
       ...groq.allowedModels,
+      ...gemini.allowedModels,
       ...openrouter.allowedModels,
       ...cerebras.allowedModels
     ];
@@ -115,5 +133,43 @@ describe('proxy chat — resolveProvider', () => {
   it('falls back to the alt env key when the primary is missing', () => {
     const resolved = resolveProvider(groq, { NOVA_GROQ_API_KEY: 'gsk_alt_key_value' });
     expect(resolved.apiKey).toBe('gsk_alt_key_value');
+  });
+
+  it('ignores non-object env arg and falls back to process.env', () => {
+    // Regression: this is the exact production-handler shape and used to
+    // break the proxy chain because Array.map calls back with
+    // (element, index, array) — the number index overrode the env arg
+    // and every resolveProvider call returned null on POST despite all
+    // keys being present in process.env. The chain returned 503
+    // PROXY_NOT_CONFIGURED to the user.
+    const prevKey = process.env.GROQ_API_KEY;
+    process.env.GROQ_API_KEY = 'gsk_from_env_for_test';
+    try {
+      // .map(resolveProvider) shape — array index gets passed as 2nd arg.
+      const mapped = [groq].map(resolveProvider);
+      expect(mapped[0]).not.toBe(null);
+      expect(mapped[0].apiKey).toBe('gsk_from_env_for_test');
+
+      // Direct call with garbage env arg should also fall back.
+      expect(resolveProvider(groq, 0)).not.toBe(null);
+      expect(resolveProvider(groq, 'not-an-object')).not.toBe(null);
+      expect(resolveProvider(groq, [])).not.toBe(null);
+      expect(resolveProvider(groq, null)).not.toBe(null);
+    } finally {
+      if (prevKey === undefined) delete process.env.GROQ_API_KEY;
+      else process.env.GROQ_API_KEY = prevKey;
+    }
+  });
+
+  it('still uses an explicit object env arg over process.env (test override path)', () => {
+    const prevKey = process.env.GROQ_API_KEY;
+    process.env.GROQ_API_KEY = 'gsk_from_process_env';
+    try {
+      const resolved = resolveProvider(groq, { GROQ_API_KEY: 'gsk_from_override' });
+      expect(resolved.apiKey).toBe('gsk_from_override');
+    } finally {
+      if (prevKey === undefined) delete process.env.GROQ_API_KEY;
+      else process.env.GROQ_API_KEY = prevKey;
+    }
   });
 });
