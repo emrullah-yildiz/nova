@@ -45,8 +45,12 @@ const PROVIDERS = [
     url: 'https://api.cerebras.ai/v1/chat/completions',
     envKey: 'CEREBRAS_API_KEY',
     altEnvKey: 'NOVA_CEREBRAS_API_KEY',
-    defaultModel: 'llama-3.3-70b',
-    allowedModels: new Set(['llama-3.3-70b', 'llama3.1-8b'])
+    // llama3.1-8b is on Cerebras's free tier; llama-3.3-70b often isn't.
+    // shouldFallthrough() will skip Cerebras if it returns "model not found"
+    // or 401 auth errors anyway, but defaulting to 8B avoids dead-ending
+    // the chain when the user's tier is the free one.
+    defaultModel: 'llama3.1-8b',
+    allowedModels: new Set(['llama3.1-8b', 'llama-3.3-70b', 'llama3.1-70b'])
   }
 ];
 
@@ -115,7 +119,7 @@ function resolveProvider(p) {
   };
 }
 
-function pickModel(provider, requested) {
+export function pickModel(provider, requested) {
   // Only honor the client's requested model if THIS provider explicitly
   // recognizes it. Without the allowlist gate, a fallback chain would
   // forward Groq-style IDs (e.g. "llama-3.1-8b-instant") to OpenRouter,
@@ -125,6 +129,25 @@ function pickModel(provider, requested) {
   }
   return provider.defaultModel;
 }
+
+// Treats responses as "this provider can't serve this request, try next"
+// rather than "fatal client error". Covers rate limits, server errors,
+// and model-availability errors (which 4xx surface inconsistently across
+// providers — sometimes 400, sometimes 404).
+export function shouldFallthrough(status, bodyText) {
+  if (status === 429) return true;
+  if (status >= 500) return true;
+  if (status >= 400 && status < 500 && status !== 401 && status !== 403) {
+    if (!bodyText) return false;
+    const lower = String(bodyText).toLowerCase();
+    if (lower.includes('model') && (lower.includes('not exist') || lower.includes('not found') || lower.includes('invalid') || lower.includes('not a valid') || lower.includes('access') || lower.includes('decommissioned'))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export { PROVIDERS };
 
 async function tryProvider(provider, body) {
   const forwardBody = {
@@ -192,11 +215,15 @@ export default async function handler(req, res) {
       continue;
     }
 
-    if (upstream.status === 429 || upstream.status >= 500) {
-      lastError = { provider: provider.name, message: 'upstream ' + upstream.status };
-      // Drain the body so the connection doesn't hang
-      try { await upstream.text(); } catch { /* ignore */ }
-      continue;
+    // Read the body once so we can both inspect it (for fallthrough decisions)
+    // and pass it through if we end up keeping this provider's response.
+    let cachedBody = null;
+    if (upstream.status >= 400) {
+      try { cachedBody = await upstream.text(); } catch { cachedBody = ''; }
+      if (shouldFallthrough(upstream.status, cachedBody)) {
+        lastError = { provider: provider.name, status: upstream.status, message: (cachedBody || '').slice(0, 200) };
+        continue;
+      }
     }
 
     res.statusCode = upstream.status;
@@ -206,6 +233,12 @@ export default async function handler(req, res) {
     res.setHeader('X-Nova-Provider', provider.name);
     res.setHeader('X-Nova-Rate-Remaining', String(rate.remaining));
 
+    // 4xx that didn't trigger fallthrough — already read the body above,
+    // so just pass the buffered text through. Streaming is reserved for 2xx.
+    if (cachedBody !== null) {
+      res.end(cachedBody);
+      return;
+    }
     if (!upstream.body) {
       res.end(await upstream.text());
       return;
