@@ -162,7 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (bubble) {
             bubble.classList.remove('streaming');
             bubble.removeAttribute('id');
-            bubble.innerHTML = app.fmt('⚙️ **Free model not available on this deployment.**\n\nThe site owner needs to set `GROQ_API_KEY` in Cloudflare Pages environment variables, or you can bring your own free API key in **Settings → Preferences** (Groq is free, no card needed).');
+            bubble.innerHTML = app.fmt('⚙️ **Free model not available on this deployment.**\n\nThe site owner needs to set `GROQ_API_KEY` or `NOVA_GROQ_API_KEY` in Vercel environment variables, or you can bring your own free API key in **Settings → Preferences** (Groq is free, no card needed).');
           }
           msgContainer.scrollTop = msgContainer.scrollHeight;
           return;

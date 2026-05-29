@@ -22,6 +22,7 @@ Thumbs.db
 # Environment
 .env
 .env.local
+.data/
 .nova-data/
 integrations/revit-addin/bin/
 integrations/revit-addin/obj/

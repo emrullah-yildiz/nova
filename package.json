@@ -8,6 +8,8 @@
     "start": "vite --host 127.0.0.1",
     "dev": "vite",
     "dev:api": "node scripts/enterprise-api.mjs",
+    "dev:cloud:api": "node scripts/dev-cloud-api.mjs",
+    "dev:neon:api": "node scripts/dev-neon-api.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "release:check": "npm run test && npm run build && npm audit --audit-level=moderate",
@@ -22,6 +24,7 @@
     "test:postgres": "vitest run tests/postgres-persistence.integration.test.js",
     "test:e2e": "node scripts/run-e2e.cjs",
     "migrate": "node scripts/run-migrations.mjs",
+    "migrate:neon": "node scripts/migrate-neon.mjs",
     "db:migrate": "node scripts/run-migrations.mjs"
   },
   "keywords": [
