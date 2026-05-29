@@ -73,6 +73,15 @@ const GPTClient = {
     var k = this.getApiKey();
     return k && k.length > 10;
   },
+
+  // Returns true when the assistant can actually attempt a request. BYOK and
+  // enterprise modes always qualify; in proxy mode we optimistically allow
+  // the call too — if the deployment hasn't configured GROQ_API_KEY the
+  // Function returns 503 and the chat surfaces a clear "owner needs to set
+  // env var" message instead of being silently blocked at the door.
+  canChat() {
+    return this.hasApiKey() || this.isEnterpriseAiEnabled() || this.isProxyMode();
+  },
   getModel() {
     return localStorage.getItem('nodeflow_openai_model') || this.MODEL;
   },

@@ -178,7 +178,6 @@ export class ExecutionEngine {
     };
 
     // ── Patch runGraph ──
-    const origRunGraph = app.runGraph.bind(app);
     app.runGraph = async () => {
       if (Array.isArray(app.wires)) {
         app._lastRunWires = app.wires.map(w => `${w.fromNode}:${w.fromPort}>${w.toNode}:${w.toPort}`);

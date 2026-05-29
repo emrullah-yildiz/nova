@@ -60,9 +60,6 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
   Viewer3D._raycaster = null;
   Viewer3D._mouse = new THREE.Vector2();
 
-  // Colors for selection highlight
-  const SEL_COLOR = 0x89b4fa;
-  const SEL_EMISSIVE = 0x89b4fa;
   const DIM_OPACITY = 0.15;
   const NORMAL_OPACITY = 0.85;
 
@@ -110,8 +107,6 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
   // 3. PATCHED buildFromGraph
   // Uses tagged groups instead of flat addToScene
   // ══════════════════════════════════════
-
-  const origBuildPatched = Viewer3D.buildFromGraph.bind(Viewer3D);
 
   Viewer3D.buildFromGraph = function(nodes, wires, computeFn) {
     // Save previous visibility state so we can restore after rebuild
@@ -353,7 +348,6 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
 
   // Isolate: hide all except this item
   Viewer3D._isolateItem = function(item) {
-    var self = this;
     this._sceneItems.forEach(function(it) {
       if (it === item) {
         it.visible = true;
@@ -431,7 +425,6 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       '</div>';
 
     html += '<div class="geolist-items">';
-    var self = this;
     this._sceneItems.forEach(function(item, idx) {
       var cls = 'geolist-item';
       if (item.selected) cls += ' selected';

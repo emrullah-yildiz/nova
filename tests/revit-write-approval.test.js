@@ -65,7 +65,7 @@ describe('Revit write approval', () => {
   });
 
   it('prevents duplicate resolution of the same approval', () => {
-    const approvalPromise = requestWriteApproval({ description: 'Duplicate test' });
+    requestWriteApproval({ description: 'Duplicate test' });
     const pending = getPendingApprovals();
 
     const first = resolveApproval(pending[0].id, true, 'Approved');
