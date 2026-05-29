@@ -141,15 +141,7 @@ const app = {
 
     const t = [
 
-      {id:'math',name:'NURBS Canopy',desc:'Smooth roof with Perlin noise',icon:'〰',color:'var(--accent-green)'},
-
-      {id:'geometry',name:'Parametric Facade',desc:'Building with attractor-driven panels',icon:'▦',color:'var(--accent-blue)'},
-
       {id:'list',name:'Twisted Tower',desc:'Rotating floor plates with taper',icon:'⧘',color:'var(--accent-peach)'},
-
-      {id:'logic',name:'Voronoi Structure',desc:'Biomimetic cellular pavilion',icon:'⬡',color:'var(--accent-red)'},
-
-      {id:'data',name:'Organic Pavilion',desc:'NURBS lofted flowing form',icon:'◇',color:'var(--accent-purple)'},
 
       {id:'blank',name:'Blank Canvas',desc:'Start from scratch',icon:'✦',color:'var(--accent-teal)'}
 
@@ -229,47 +221,13 @@ const app = {
 
     const L = {
 
-      math: [{type:'number-input',x:80,y:80},{type:'number-input',x:80,y:260},{type:'math-add',x:340,y:120},{type:'math-multiply',x:340,y:300},{type:'output-watch',x:600,y:200}],
-
-      geometry: [{type:'number-input',x:60,y:60},{type:'number-input',x:60,y:200},{type:'number-input',x:60,y:340},{type:'geo-point',x:320,y:100},{type:'geo-point',x:320,y:300},{type:'geo-distance',x:580,y:190},{type:'output-watch',x:820,y:200}],
-
-      list: [{type:'number-input',x:80,y:80},{type:'number-input',x:80,y:220},{type:'number-input',x:80,y:360},{type:'list-range',x:340,y:60},{type:'list-create',x:340,y:260},{type:'output-watch',x:600,y:160}],
-
-      logic: [{type:'number-input',x:60,y:80},{type:'number-input',x:60,y:240},{type:'logic-compare',x:320,y:100},{type:'text-input',x:60,y:400},{type:'text-input',x:300,y:400},{type:'logic-if',x:560,y:200},{type:'output-watch',x:800,y:220}],
-
-      data: [{type:'number-input',x:80,y:120},{type:'number-input',x:80,y:280},{type:'custom-formula',x:340,y:160},{type:'custom-code',x:580,y:160},{type:'output-watch',x:820,y:180}]
+      list: [{type:'number-input',x:80,y:80},{type:'number-input',x:80,y:220},{type:'number-input',x:80,y:360},{type:'list-range',x:340,y:60},{type:'list-create',x:340,y:260},{type:'output-watch',x:600,y:160}]
 
     };
 
     const items = L[id]; if (!items) return;
 
-    const placed = items.map(i => this.addNodeToCanvas(i.type,i.x,i.y)).filter(Boolean);
-
-    if (id==='math' && placed.length>=5) {
-
-      this.addWire(placed[0].id,'value',placed[2].id,'a');
-
-      this.addWire(placed[1].id,'value',placed[2].id,'b');
-
-      this.addWire(placed[2].id,'result',placed[4].id,'value');
-
-    }
-
-    if (id==='geometry' && placed.length>=7) {
-
-      this.addWire(placed[0].id,'value',placed[3].id,'x');
-
-      this.addWire(placed[1].id,'value',placed[3].id,'y');
-
-      this.addWire(placed[2].id,'value',placed[3].id,'z');
-
-      this.addWire(placed[3].id,'point',placed[5].id,'a');
-
-      this.addWire(placed[4].id,'point',placed[5].id,'b');
-
-      this.addWire(placed[5].id,'distance',placed[6].id,'value');
-
-    }
+    items.map(i => this.addNodeToCanvas(i.type,i.x,i.y)).filter(Boolean);
 
     this.updatePortDots(); this.renderWires(); this.updateMenuState();
 
@@ -1271,7 +1229,7 @@ const app = {
 
     this.addAIMessage('workspace',"🎨 **Workspace ready!** Connected to **gpt-4o**.\n\n• **Drag** nodes from the library on the left\n• **Connect** ports by dragging between dots\n• **Ask me anything** — I'll generate the code for you\n\nI specialize in **parametric design** — NURBS, organic forms, Voronoi, attractor facades, twisted towers, and more.\n\nTry asking me to build something!");
 
-    this.setChatSuggestions('workspace',['Create a parametric building with facade','Design a flowing organic pavilion','Build a NURBS canopy with noise','Create a Voronoi structure']);
+    this.setChatSuggestions('workspace',['Show me a hyperboloid tower','Build a catenary pavilion','Run the large mesh stress test','Start a blank canvas']);
 
   },
 
