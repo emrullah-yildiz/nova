@@ -2686,131 +2686,12 @@ const app = {
 
 // ══════════════════════════════════════
 
+// The actual app.setView, app.toggleSplit, and app._applyViewState are
+// installed by core/engine.js installEngine() — defining duplicates here
+// would only fight that ownership. We keep the divider drag and the
+// split-mode live rebuild watcher below; those don't conflict.
+
 app.currentView = 'nodes';
-
-app.setView = function(mode) {
-
-  this.currentView = mode;
-
-  const canvasArea = document.getElementById('canvas-area');
-
-  const nodeCanvas = document.getElementById('node-canvas');
-
-  const wireSvg = document.getElementById('wire-svg');
-
-  const gridSvg = document.getElementById('canvas-grid-svg');
-
-  const viewport = document.getElementById('viewport-3d');
-
-  const btn2D = document.getElementById('btn-view-nodes');
-
-  const btn3D = document.getElementById('btn-view-3d');
-
-  const btnSplit = document.getElementById('btn-view-split');
-
-  // Reset toolbar button highlight + drop the .split-view modifier on every mode change.
-
-  if (canvasArea) canvasArea.classList.remove('split-view');
-
-  if (btn2D)    { btn2D.style.color = '';    btn2D.style.fontWeight = ''; }
-
-  if (btn3D)    { btn3D.style.color = '';    btn3D.style.fontWeight = ''; }
-
-  if (btnSplit) { btnSplit.style.color = ''; btnSplit.style.fontWeight = ''; }
-
-
-
-  if (mode === '3d') {
-
-    if (nodeCanvas) nodeCanvas.style.display = 'none';
-
-    if (wireSvg) wireSvg.style.display = 'none';
-
-    if (gridSvg) gridSvg.style.display = 'none';
-
-    if (viewport) viewport.style.display = 'block';
-
-    if (btn3D) { btn3D.style.color = 'var(--accent-blue)'; btn3D.style.fontWeight = '700'; }
-
-    if (!Viewer3D.isInitialized) Viewer3D.init(viewport);
-
-    Viewer3D.show();
-
-    if (app._manualRunMode && !app._hasRun) {
-      if (Viewer3D.clearGeometry) Viewer3D.clearGeometry();
-      Viewer3D._needsRebuild = false;
-      return;
-    }
-
-    if (app._manualRunMode && app._graphDirty) {
-      return;
-    }
-
-    if (Viewer3D._needsRebuild !== false) {
-
-      Viewer3D.buildFromGraph(app.nodes, app.wires, (nd) => app.computeNodeValue(nd));
-
-      Viewer3D.fitAll();
-
-      Viewer3D._needsRebuild = false;
-
-    }
-
-  } else if (mode === 'split') {
-
-    // Node side + 3D side share canvas-area, separated by the divider.
-
-    if (canvasArea) canvasArea.classList.add('split-view');
-
-    if (nodeCanvas) nodeCanvas.style.display = '';
-
-    if (wireSvg) wireSvg.style.display = '';
-
-    if (gridSvg) gridSvg.style.display = '';
-
-    // .split-view rule forces viewport-3d back to display:block, but keep the inline style honest.
-
-    if (viewport) viewport.style.display = 'block';
-
-    if (btnSplit) { btnSplit.style.color = 'var(--accent-blue)'; btnSplit.style.fontWeight = '700'; }
-
-    if (!Viewer3D.isInitialized) Viewer3D.init(viewport);
-
-    Viewer3D.show();
-
-    if (Viewer3D._needsRebuild !== false) {
-
-      Viewer3D.buildFromGraph(app.nodes, app.wires, (nd) => app.computeNodeValue(nd));
-
-      Viewer3D.fitAll();
-
-      Viewer3D._needsRebuild = false;
-
-    }
-
-    // Renderer needs to know the new (half-width) viewport size.
-
-    setTimeout(() => { if (Viewer3D._onResize) Viewer3D._onResize(); app.renderWires(); }, 30);
-
-  } else {
-
-    if (nodeCanvas) nodeCanvas.style.display = '';
-
-    if (wireSvg) wireSvg.style.display = '';
-
-    if (gridSvg) gridSvg.style.display = '';
-
-    if (viewport) viewport.style.display = 'none';
-
-    if (btn2D) { btn2D.style.color = 'var(--accent-blue)'; btn2D.style.fontWeight = '700'; }
-
-    Viewer3D.hide();
-
-    setTimeout(() => app.renderWires(), 50);
-
-  }
-
-};
 
 // ── Viewport divider (split-view) ──
 
@@ -2889,7 +2770,7 @@ app._runSplitWatcher = function() {
 
     try {
 
-      if (this.currentView === 'split' && typeof Viewer3D !== 'undefined' && Viewer3D.isInitialized) {
+      if (this.splitMode && typeof Viewer3D !== 'undefined' && Viewer3D.isInitialized) {
 
         const ee = typeof window !== 'undefined' ? window.__executionEngineV2 : null;
 
