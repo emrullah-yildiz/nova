@@ -251,11 +251,97 @@ Rules:
 5. The graph must be a DAG — no cycles.
 6. Each op's output should be consumed somewhere (no orphans).
 
-REFUSAL CONTRACT — if you cannot satisfy the request with available nodes, return:
+## HOW TO COMPOSE NODES (read this BEFORE you consider refusing)
+
+Most user requests do NOT have a single matching node. They are EXPRESSIBLE as a CHAIN of 3-7 existing nodes. Your job is to think compositionally: break the request into geometric primitives and figure out which nodes produce each piece.
+
+**Decomposition checklist** — before you emit anything, ask:
+1. What is the PRIMARY FORM the user wants? (tower, pavilion, surface, facade, dome...)
+2. Does a Pattern.* / Surface.* / Solid.* node produce that form? Use it.
+3. Does the request need a TRANSFORM on that form? (boolean, mirror, array, smooth) Chain it.
+4. Does the request need a SKIN or DECORATION on that form? (panels, diagrid, voronoi) Chain another composite.
+5. Does the request need MULTIPLE PIECES combined? Use Solid.BooleanUnion / Solid.CombineAll.
+6. End with Output.Watch.
+
+**COOKBOOK — common requests and their canonical node chains**
+
+These are PROVEN compositions. Adapt them; don't invent new node names.
+
+A) "A twisted tower" → 3 ops
+   Pattern.TwistedEllipsePlates → Solid.ByLoft → Output.Watch
+
+B) "A twisted tower with hex panels" → 4 ops (the panels are a SEPARATE chain reading the SAME profiles)
+   Pattern.TwistedEllipsePlates → Solid.ByLoft → Output.Watch
+   Pattern.TwistedEllipsePlates → Pattern.HexPanelGrid → (panels)
+   (one Output.Watch on the tower OR on a combined list)
+
+C) "An organic pavilion" → 3 ops
+   Pattern.OrganicProfileStack → Solid.ByLoft → Output.Watch
+
+D) "A wavy roof / canopy" → 2 ops
+   Surface.WavyGrid → Output.Watch
+
+E) "A geodesic dome" → 4 ops (sphere with bottom cut off, optionally subdivided)
+   Point.Origin → Sphere.ByCenterRadius → Solid.BooleanSubtract (against a cutter box) → Output.Watch
+
+F) "A diagrid facade" → 2 ops
+   Pattern.DiagridFacade → Output.Watch
+
+G) "A spiral staircase / helix" → 2 ops
+   Pattern.HelicalCurve → Output.Watch
+   (For treads, sweep the helix with a Solid.ByPipe.)
+
+H) "A tower with a diagrid facade" → 5 ops (tower + facade pattern, both watched)
+   Pattern.TwistedEllipsePlates → Solid.ByLoft → Output.Watch (tower)
+   Pattern.DiagridFacade → (facade lines)
+
+I) "Two intersecting boxes" → 4 ops
+   Point.Origin → Box.ByCenterWidthDepthHeight × 2 (different centers) → Solid.BooleanIntersect → Output.Watch
+
+J) "A box with a hole through it" → 4 ops
+   Box.ByCenterWidthDepthHeight (the outer) → Cylinder.ByBaseRadiusHeight (the hole) → Solid.BooleanSubtract → Output.Watch
+
+K) "A field of spheres on a Voronoi grid" → 3 ops
+   Pattern.VoronoiMesh → list of points → (place spheres at each point — needs a per-point Sphere.ByCenterRadius)
+
+L) "Stack of stacked profiles → loft → smooth" → 4 ops
+   Pattern.TwistedEllipsePlates → Solid.ByLoft → Solid.Smooth → Output.Watch
+
+**General composition rules**
+- "X with Y on it" → ONE chain for X, ANOTHER chain for Y reading shared params/inputs
+- "X with a hole" / "X minus Y" → Solid.BooleanSubtract
+- "X combined with Y" → Solid.BooleanUnion or Solid.CombineAll
+- "X arrayed N times" → Pattern.ArrayLinear / ArrayPolar / ArrayAlongCurve
+- "X but smoother" / "X with rounded edges" → chain Solid.Smooth or Surface.Subdivide
+- "Profile rings" or "stacked floors" → Pattern.TwistedEllipsePlates / OrganicProfileStack
+- "Surface" or "shell" or "canopy" → Surface.WavyGrid / Surface.ByPatch
+- "Panels" or "tiles" → Pattern.HexPanelGrid / DiagridFacade / VoronoiMesh
+- "Twist" / "rotate per floor" → use the twistDeg parameter, not custom math
+
+REFUSAL CONTRACT — refusal is the LAST RESORT, not the easy way out.
+
+Before emitting a refusal, you MUST have:
+1. Decomposed the request into geometric primitives
+2. Mapped each primitive to a node from the catalog
+3. Identified the EXACT missing capability — not "I don't know how" but "there is no node for X, and X cannot be built by chaining the nodes I have"
+
+Only THEN return:
 \`\`\`nova-plan
-{ "version": 1, "refused": { "reason": "<one short sentence>", "suggestions": ["<alternative 1>", "<alternative 2>"] } }
+{ "version": 1, "refused": { "reason": "<one short sentence naming the SPECIFIC missing capability, not just 'too complex'>", "suggestions": ["<alternative 1>", "<alternative 2>"] } }
 \`\`\`
-Do NOT fall back to Python. Do NOT invent nodes. Refusal with a clear reason is always better than a broken graph.
+
+DO NOT refuse because:
+- The request has multiple parts (chain them)
+- The request needs transformation (use boolean / array / smooth)
+- The request needs decoration (use panel / diagrid / voronoi nodes)
+- You can't think of a single node (look for chains in the COOKBOOK above)
+
+DO refuse when:
+- The request needs a specific composite that doesn't exist (e.g., "fractal Mandelbox" — no Pattern.Fractal in catalog)
+- The request requires runtime data the system can't provide (e.g., real-time weather data)
+- The request is genuinely outside parametric geometry (e.g., "generate a TikTok video")
+
+Do NOT fall back to Python. Do NOT invent nodes. A specific refusal with a named missing composite is always better than a half-broken graph or a vague "too complex".
 
 Concrete example — "a sphere with another sphere subtracted":
 \`\`\`nova-plan
