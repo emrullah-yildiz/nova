@@ -330,7 +330,9 @@ RevitBridge = {
             description: 'Set ' + paramName + ' on ' + ids.length + ' elements'
           }).catch(function() {});
         }
-      } catch (auditErr) {}
+      } catch (auditErr) {
+        // Audit recording is best-effort; failures here must not block the write.
+      }
     }
 
     var results = await client.setParameterValues(ids, paramName, values, { ...(options || {}), approval: { approved: true, approvedBy: 'nova-user', scope: 'single-operation', message: 'Approved via Connect panel' } });
