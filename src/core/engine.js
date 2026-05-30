@@ -24,7 +24,7 @@
 
 
 
-import { createLacingFrames, hasListInput, mapLacingFrames, isAutoLaceable, resolveLacingMode } from './lacing.js';
+import { createLacingFrames, hasListInput, mapLacingFrames, isAutoLaceable, resolveLacingMode, executeReplicated } from './lacing.js';
 import { hostRegistry } from '../hosts/HostRegistry.js';
 import { setPreviewItemVisibility } from '../viewer/preview-sync.js';
 import { NODE_TYPE_MAP } from './nodes.js';
@@ -357,10 +357,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       if (!hasListInput(inputDefinitions, inputValues)) return undefined;
 
-      var frames = createLacingFrames(inputDefinitions, inputValues, mode);
+      var outputIds = outputs.map(function(output) { return output.id; });
       var singleOutputId = outputs.length === 1 ? outputs[0].id : null;
-      var portValues = {};
-      outputs.forEach(function(output) { portValues[output.id] = []; });
 
       function executeFrame(frame) {
         var previousPortValues = nd._portValues;
@@ -384,21 +382,9 @@ export function installEngine(targetApp = getRuntimeApp()) {
         return value && typeof value === 'object' ? value : {};
       }
 
-      frames.forEach(function(frame) {
-        if (Array.isArray(frame)) {
-          var nested = {};
-          outputs.forEach(function(output) { nested[output.id] = []; });
-          frame.forEach(function(innerFrame) {
-            var outputValues = executeFrame(innerFrame);
-            outputs.forEach(function(output) { nested[output.id].push(outputValues[output.id]); });
-          });
-          outputs.forEach(function(output) { portValues[output.id].push(nested[output.id]); });
-          return;
-        }
-
-        var outputValues = executeFrame(frame);
-        outputs.forEach(function(output) { portValues[output.id].push(outputValues[output.id]); });
-      });
+      // Recursive (Dynamo-style) replication: nested lists fan all the way
+      // down and outputs mirror the input nesting.
+      var portValues = executeReplicated(inputDefinitions, inputValues, mode, outputIds, executeFrame);
 
       if (outputs.length > 1) {
         nd._portValues = portValues;

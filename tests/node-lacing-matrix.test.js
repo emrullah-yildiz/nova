@@ -132,3 +132,50 @@ describe('lacing matrix — laced(list) === map(unlaced)', () => {
     expect(laceableNodes.length).toBeGreaterThan(0);
   });
 });
+
+// Nested (list-of-list) generalisation: a nested list on a scalar port must
+// replicate recursively and mirror the input nesting — the same metamorphic
+// property, with the oracle built recursively over the structure.
+describe('lacing matrix — nested lists replicate per node', () => {
+  laceableNodes.forEach((node) => {
+    it(`${node.type} fans a nested list and mirrors its structure`, () => {
+      const base = {};
+      node.inputs.forEach((inp) => { base[inp.id] = sampleValue(inp.type, 0); });
+      const port = node.inputs[0];
+
+      // Ragged depth-2 fixture so a wrong shape (flattening / over-nesting) shows.
+      const nested = [
+        [sampleValue(port.type, 0), sampleValue(port.type, 1)],
+        [sampleValue(port.type, 2)]
+      ];
+
+      // Oracle: recurse the structure, running the node unlaced at each leaf.
+      const buildExpected = (value, outId) => {
+        if (Array.isArray(value)) return value.map((v) => buildExpected(v, outId));
+        const inst = { type: node.type, controlValues: {} };
+        const controls = resolveControls(node, inst, (id, raw) => raw);
+        return node.execute({}, { ...base, [port.id]: value }, controls, inst)[outId];
+      };
+
+      let expected;
+      try {
+        expected = {};
+        node.outputs.forEach((out) => { expected[out.id] = buildExpected(nested, out.id); });
+      } catch {
+        expect(true).toBe(true); // fixtures don't fit this node's first port
+        return;
+      }
+
+      const inst = { type: node.type, controlValues: {} };
+      const controls = resolveControls(node, inst, (id, raw) => raw);
+      const laced = executeWithLacing(node, {}, { ...base, [port.id]: nested }, controls, inst);
+
+      for (const out of node.outputs) {
+        expect(
+          canon(laced[out.id]),
+          `${node.type}: nested list on "${port.id}" did not mirror structure for output "${out.id}"`
+        ).toEqual(canon(expected[out.id]));
+      }
+    });
+  });
+});
