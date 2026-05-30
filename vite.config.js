@@ -1,4 +1,29 @@
 import { defineConfig, loadEnv } from 'vite';
+import fs from 'node:fs';
+import path from 'node:path';
+
+// Read the public [vars] table from wrangler.toml so `npm start` mirrors the
+// deployed Worker's non-secret config (notably GOOGLE_CLIENT_ID) without having
+// to duplicate it into .env.local. Only string key="value" pairs are parsed —
+// good enough for the flat [vars] table; secrets never live here.
+function loadWranglerVars(cwd) {
+  try {
+    const toml = fs.readFileSync(path.join(cwd, 'wrangler.toml'), 'utf8');
+    const out = {};
+    let inVars = false;
+    for (const raw of toml.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (line.startsWith('#') || line === '') continue;
+      if (line.startsWith('[')) { inVars = line === '[vars]'; continue; }
+      if (!inVars) continue;
+      const kv = line.match(/^([A-Za-z0-9_]+)\s*=\s*"([^"]*)"/);
+      if (kv) out[kv[1]] = kv[2];
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 
 // Local dev parity with Vercel: mount api/proxy/chat.mjs as middleware so the
 // free-tier proxy works on `npm start` exactly like it does in production.
@@ -30,6 +55,14 @@ function vercelFunctionsDev() {
       ];
       for (const key of passthrough) {
         if (env[key] && !process.env[key]) process.env[key] = env[key];
+      }
+
+      // Fill any still-missing public config from wrangler.toml [vars] so the
+      // dev sign-in modal sees GOOGLE_CLIENT_ID exactly like production. Real
+      // shell env and .env.local (copied above) win; this only fills gaps.
+      const wranglerVars = loadWranglerVars(process.cwd());
+      for (const [key, value] of Object.entries(wranglerVars)) {
+        if (value && !process.env[key]) process.env[key] = value;
       }
 
       let chatHandlerPromise;
