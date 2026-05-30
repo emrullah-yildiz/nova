@@ -1036,6 +1036,7 @@ const Geo = {
       if (geometry._type === 'Line3') return new Geo.Line3(geometry.start.add(vector), geometry.end.add(vector));
       if (geometry._type === 'Polyline3') return new Geo.Polyline3(geometry.points.map(p => p.add(vector)), geometry.closed);
       if (geometry._type === 'Circle3') return new Geo.Circle3(geometry.center.add(vector), geometry.radius, geometry.normal);
+      if (geometry._type === 'Arc3') return new Geo.Arc3(geometry.center.add(vector), geometry.radius, geometry.startAngle, geometry.endAngle, geometry.normal);
       if (geometry._type === 'Ellipse3') return new Geo.Ellipse3(geometry.center.add(vector), geometry.width, geometry.depth, geometry.normal, geometry.xAxis);
     }
     if (geometry._type === 'Mesh3') {
@@ -1060,6 +1061,7 @@ const Geo = {
       if (geometry._type === 'Line3') return new Geo.Line3(scalePoint(geometry.start), scalePoint(geometry.end));
       if (geometry._type === 'Polyline3') return new Geo.Polyline3(geometry.points.map(scalePoint), geometry.closed);
       if (geometry._type === 'Circle3') return new Geo.Circle3(scalePoint(geometry.center), geometry.radius * factor, geometry.normal);
+      if (geometry._type === 'Arc3') return new Geo.Arc3(scalePoint(geometry.center), geometry.radius * factor, geometry.startAngle, geometry.endAngle, geometry.normal);
       if (geometry._type === 'Ellipse3') return new Geo.Ellipse3(scalePoint(geometry.center), geometry.width * factor, geometry.depth * factor, geometry.normal, geometry.xAxis);
     }
     if (geometry._type === 'Mesh3') {

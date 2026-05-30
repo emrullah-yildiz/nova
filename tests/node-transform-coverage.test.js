@@ -44,10 +44,7 @@ const TRANSFORMS = {
 // Combinations the transforms do not yet handle (they pass the geometry
 // through unchanged). Remove an entry when you teach the transform that type —
 // the "gap set matches" guard below will remind you if you forget.
-const KNOWN_GAPS = new Set([
-  'move/Arc3', 'rotate/Arc3', 'scale/Arc3', 'mirror/Arc3',
-  'mirror/Circle3', 'mirror/Ellipse3'
-]);
+const KNOWN_GAPS = new Set([]);
 
 function isGap(transformName, geo) {
   const input = GEOMETRIES[geo]();
