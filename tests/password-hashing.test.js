@@ -43,4 +43,14 @@ describe('password hashing (PBKDF2 / WebCrypto)', () => {
   it('throws when hashing an empty password', async () => {
     await expect(hashPassword('')).rejects.toThrow();
   });
+
+  it('keeps the default iteration count within the Cloudflare Workers PBKDF2 cap (<= 100000)', async () => {
+    // workerd rejects deriveBits with iterations above 100000 ("iteration
+    // counts above 100000 are not supported"), which broke every production
+    // signup. Guard against bumping it back over the cap.
+    const hash = await hashPassword('regression-guard-password');
+    const iterations = Number(hash.split('$')[2]);
+    expect(iterations).toBeGreaterThan(0);
+    expect(iterations).toBeLessThanOrEqual(100000);
+  });
 });

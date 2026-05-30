@@ -64,8 +64,14 @@ export async function verifySessionPayload(token, secret) {
 // argon2). Output is a self-describing PHC-style string —
 // `pbkdf2$sha256$<iterations>$<saltB64url>$<hashB64url>` — so the iteration
 // count and salt travel with the hash and can be bumped later without a
-// migration. 210k iterations follows OWASP's 2023 PBKDF2-SHA256 guidance.
-const PBKDF2_ITERATIONS = 210000;
+// migration.
+//
+// Cloudflare Workers HARD-CAPS PBKDF2 at 100,000 iterations (deriveBits throws
+// "iteration counts above 100000 are not supported" above that), so 100k is the
+// ceiling here even though OWASP now suggests more. It's still a sound floor;
+// if we want stronger hashing later, the move is a WASM scrypt/argon2 (PBKDF2
+// can't go higher on workerd).
+const PBKDF2_ITERATIONS = 100000;
 const PBKDF2_SALT_BYTES = 16;
 const PBKDF2_HASH_BYTES = 32;
 
