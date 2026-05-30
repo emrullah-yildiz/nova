@@ -57,6 +57,34 @@ export class NovaCloudClient {
     return this.request('/api/projects/' + encodeURIComponent(projectId));
   }
 
+  // Projects shared with the signed-in user (member, different org).
+  async listSharedProjects(pagination = {}) {
+    return this.request(withPagination('/api/projects/shared', pagination));
+  }
+
+  // ── Share links ──
+  async createShareLink(projectId, { role, expiresInMs = 0 } = {}) {
+    return this.request('/api/projects/' + encodeURIComponent(projectId) + '/share-links', {
+      method: 'POST',
+      body: { role, expiresInMs }
+    });
+  }
+
+  async listShareLinks(projectId) {
+    return this.request('/api/projects/' + encodeURIComponent(projectId) + '/share-links');
+  }
+
+  async revokeShareLink(projectId, linkId) {
+    return this.request('/api/projects/' + encodeURIComponent(projectId) + '/share-links/' + encodeURIComponent(linkId) + '/revoke', {
+      method: 'POST'
+    });
+  }
+
+  // Redeem a share token → join the project at the link's role.
+  async redeemShareLink(token) {
+    return this.request('/api/share/' + encodeURIComponent(token), { method: 'POST' });
+  }
+
   async saveProjectGraph(projectId, { graph, message = 'Graph saved from Nova web' }) {
     return this.request('/api/projects/' + encodeURIComponent(projectId) + '/graph', {
       method: 'PUT',
