@@ -2,28 +2,34 @@ import { GPTClient } from '../src/ai/gpt-client.js';
 
 describe('GPTClient', () => {
   const previousLocalStorage = globalThis.localStorage;
+  const previousSessionStorage = globalThis.sessionStorage;
 
   afterEach(() => {
-    if (previousLocalStorage === undefined) {
-      delete globalThis.localStorage;
-    } else {
-      globalThis.localStorage = previousLocalStorage;
-    }
+    if (previousLocalStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previousLocalStorage;
+    if (previousSessionStorage === undefined) delete globalThis.sessionStorage;
+    else globalThis.sessionStorage = previousSessionStorage;
+    // Rebuild the backend so the next test starts from a clean anonymous store.
+    GPTClient._sessionBackend = null;
+    GPTClient._useAnonymousPrefs();
   });
 
-  function installLocalStorage(initial = {}) {
+  function makeStore(initial = {}) {
     const values = { ...initial };
-    globalThis.localStorage = {
-      getItem(key) {
-        return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : null;
-      },
-      setItem(key, value) {
-        values[key] = String(value);
-      },
-      removeItem(key) {
-        delete values[key];
-      }
+    return {
+      getItem(key) { return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : null; },
+      setItem(key, value) { values[key] = String(value); },
+      removeItem(key) { delete values[key]; }
     };
+  }
+
+  // AI prefs route through the anonymous (sessionStorage) backend, so seed there
+  // and rebuild the backend. A fresh empty localStorage keeps migration a no-op.
+  function installLocalStorage(initial = {}) {
+    globalThis.sessionStorage = makeStore(initial);
+    globalThis.localStorage = makeStore({});
+    GPTClient._sessionBackend = null;
+    GPTClient._useAnonymousPrefs();
   }
 
   it('returns the correct default provider URL', () => {
@@ -46,14 +52,50 @@ describe('GPTClient', () => {
     expect(GPTClient.isApiKeyValid('sk-12345678901')).toBe(true);
   });
 
-  it('uses proxy mode when no API key is configured', () => {
+  it('stores the API key in sessionStorage (anonymous backend), not localStorage', () => {
+    installLocalStorage();
+    GPTClient.setProvider('groq');
+    GPTClient.setApiKey('gsk_anon_1234567890');
+    expect(globalThis.sessionStorage.getItem('nodeflow_key_groq')).toBe('gsk_anon_1234567890');
+    expect(globalThis.localStorage.getItem('nodeflow_key_groq')).toBeNull();
+    expect(GPTClient.getApiKey()).toBe('gsk_anon_1234567890');
+  });
+
+  it('migrates legacy localStorage AI prefs into sessionStorage once, then purges them', () => {
+    // Simulate a returning anonymous user whose key still lives in localStorage.
+    globalThis.sessionStorage = makeStore({});
+    globalThis.localStorage = makeStore({ nodeflow_provider: 'groq', nodeflow_key_groq: 'gsk_legacy_1234567890' });
+    GPTClient._sessionBackend = null;
+    GPTClient._useAnonymousPrefs();
+    GPTClient._migrateLegacyLocalPrefs();
+    // Copied into sessionStorage and removed from localStorage (so a closed tab clears).
+    expect(globalThis.sessionStorage.getItem('nodeflow_key_groq')).toBe('gsk_legacy_1234567890');
+    expect(globalThis.localStorage.getItem('nodeflow_key_groq')).toBeNull();
+    expect(GPTClient.getApiKey()).toBe('gsk_legacy_1234567890');
+  });
+
+  it('is inactive (not proxy mode) when no API key and the free tier is off', () => {
     installLocalStorage();
 
-    expect(GPTClient.isProxyMode()).toBe(true);
-    expect(GPTClient.canChat()).toBe(true);
-    expect(GPTClient.getEffectiveApiUrl()).toBe('/api/proxy/chat');
-    expect(GPTClient.getEffectiveModel()).toBe('llama-3.1-8b-instant');
-    expect(GPTClient.buildRequestHeaders()).toEqual({ 'Content-Type': 'application/json' });
+    // BYOK-only default: no shared free-tier proxy, so "no key" => inactive.
+    expect(GPTClient.FREE_TIER_ENABLED).toBe(false);
+    expect(GPTClient.isProxyMode()).toBe(false);
+    expect(GPTClient.canChat()).toBe(false);
+  });
+
+  it('uses the shared proxy when the free tier is explicitly enabled', () => {
+    installLocalStorage();
+    const previous = GPTClient.FREE_TIER_ENABLED;
+    GPTClient.FREE_TIER_ENABLED = true;
+    try {
+      expect(GPTClient.isProxyMode()).toBe(true);
+      expect(GPTClient.canChat()).toBe(true);
+      expect(GPTClient.getEffectiveApiUrl()).toBe('/api/proxy/chat');
+      expect(GPTClient.getEffectiveModel()).toBe('llama-3.1-8b-instant');
+      expect(GPTClient.buildRequestHeaders()).toEqual({ 'Content-Type': 'application/json' });
+    } finally {
+      GPTClient.FREE_TIER_ENABLED = previous;
+    }
   });
 
   it('uses provider settings when an API key is configured', () => {

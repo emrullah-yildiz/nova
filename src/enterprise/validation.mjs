@@ -83,6 +83,28 @@ export function validateAiChatBody(body = {}) {
   return body;
 }
 
+// The signed-in user's synced AI settings: provider + model + a map of
+// per-provider BYOK keys. Returns a normalized { provider, model, keys } so the
+// stored (encrypted) blob is well-shaped. Caps sizes so a client can't stuff
+// the user record with megabytes.
+const AI_SETTINGS_PROVIDERS = ['openai', 'groq', 'gemini', 'anthropic', 'openrouter'];
+export function validateAiSettingsBody(body = {}) {
+  requirePlainObject(body, 'request body');
+  optionalString(body.provider, 'provider', 80);
+  optionalString(body.model, 'model', 200);
+  const keys = {};
+  if (body.keys !== undefined && body.keys !== null) {
+    requirePlainObject(body.keys, 'keys');
+    for (const [provider, value] of Object.entries(body.keys)) {
+      if (!AI_SETTINGS_PROVIDERS.includes(provider)) continue; // ignore unknown providers
+      if (typeof value !== 'string') throw createHttpError(400, 'keys.' + provider + ' must be a string.');
+      if (value.length > 600) throw createHttpError(400, 'keys.' + provider + ' is too long.');
+      if (value) keys[provider] = value;
+    }
+  }
+  return { provider: body.provider || '', model: body.model || '', keys };
+}
+
 export function validateGraphRunBody(body = {}) {
   requirePlainObject(body, 'request body');
   optionalString(body.versionId, 'versionId', 80);

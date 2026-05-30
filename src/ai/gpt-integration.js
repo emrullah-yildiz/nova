@@ -451,21 +451,106 @@ document.addEventListener('DOMContentLoaded', () => {
     return display;
   };
 
+  // True while a signed-in user's account-stored AI settings are still loading
+  // (the in-memory cache hasn't hydrated yet). Avoids flashing "Inactive" before
+  // the synced key arrives.
+  app._aiHydrating = function() {
+    return !!(window.app && window.app.currentUser && GPTClient._aiSettingsHydrated === false && !GPTClient.hasApiKey());
+  };
+
   app._updateChatStatus = function() {
     const hasKey = GPTClient.hasApiKey();
     const provider = GPTClient.getProvider();
     const prov = GPTClient.PROVIDERS[provider];
     const provName = prov ? prov.name : provider;
+    const enterprise = GPTClient.isEnterpriseAiEnabled && GPTClient.isEnterpriseAiEnabled();
+    const hydrating = app._aiHydrating();
     document.querySelectorAll('.chat-header-text p').forEach(function(el) {
       if (hasKey) {
         el.innerHTML = '● Online — <strong>' + provName + '</strong>';
         el.style.color = 'var(--accent-green)';
+      } else if (hydrating) {
+        el.innerHTML = '● Connecting…';
+        el.style.color = 'var(--accent-blue)';
       } else if (GPTClient.isProxyMode && GPTClient.isProxyMode()) {
         el.innerHTML = '● Free tier — <strong>Groq Llama 3.3 70B</strong>';
         el.style.color = 'var(--accent-blue)';
+      } else if (enterprise) {
+        el.innerHTML = '● Online — <strong>Nova Cloud</strong>';
+        el.style.color = 'var(--accent-green)';
       } else {
-        el.innerHTML = '● Local AI only';
+        // BYOK-only, no key yet: the assistant is inactive (see the gate below).
+        el.innerHTML = '○ Inactive — add API key';
         el.style.color = 'var(--accent-yellow)';
+      }
+    });
+    // Toggle the input gate to match readiness.
+    if (app._updateAssistantGate) app._updateAssistantGate();
+  };
+
+  // When the assistant can't take a request (BYOK-only and no key connected
+  // yet), make the chat input inactive and show a short explanation + a button
+  // that opens Settings. Once a key is saved, canChat() flips true and this
+  // removes the gate and re-enables the input. Runs for both the landing and
+  // workspace chat panels.
+  app._updateAssistantGate = function() {
+    const ready = GPTClient.canChat();
+    const hydrating = app._aiHydrating();
+    ['landing', 'workspace'].forEach(function(ch) {
+      const input = document.getElementById(ch === 'landing' ? 'landing-chat-input' : 'ws-chat-input');
+      if (!input) return;
+      const area = (input.closest && input.closest('.chat-input-area')) || input.parentElement;
+      if (!area) return;
+      const sendBtn = area.querySelector('.chat-send-btn');
+      const gateId = ch + '-chat-gate';
+      let gate = document.getElementById(gateId);
+
+      if (ready) {
+        input.disabled = false;
+        input.style.opacity = '';
+        const active = input.getAttribute('data-active-placeholder');
+        if (active !== null) input.placeholder = active;
+        if (sendBtn) { sendBtn.disabled = false; sendBtn.style.opacity = ''; sendBtn.style.cursor = ''; }
+        if (gate) gate.remove();
+        return;
+      }
+
+      if (hydrating) {
+        // Loading the account's synced key — disable briefly without the
+        // alarming "inactive" card; _updateChatStatus re-runs when hydration
+        // completes and resolves to Online or the gate.
+        if (input.getAttribute('data-active-placeholder') === null) {
+          input.setAttribute('data-active-placeholder', input.placeholder || '');
+        }
+        input.disabled = true;
+        input.style.opacity = '0.5';
+        input.placeholder = 'Connecting to your account…';
+        if (sendBtn) { sendBtn.disabled = true; sendBtn.style.opacity = '0.4'; sendBtn.style.cursor = 'not-allowed'; }
+        if (gate) gate.remove();
+        return;
+      }
+
+      // Gated: disable the input + send button and surface the CTA.
+      if (input.getAttribute('data-active-placeholder') === null) {
+        input.setAttribute('data-active-placeholder', input.placeholder || '');
+      }
+      input.disabled = true;
+      input.style.opacity = '0.5';
+      input.placeholder = 'Add your API key in Settings to activate the assistant…';
+      if (sendBtn) { sendBtn.disabled = true; sendBtn.style.opacity = '0.4'; sendBtn.style.cursor = 'not-allowed'; }
+
+      if (!gate) {
+        gate = document.createElement('div');
+        gate.id = gateId;
+        gate.className = 'chat-gate';
+        gate.innerHTML = ''
+          + '<div style="margin:8px 12px;padding:12px;border:1px solid var(--accent-blue,#89b4fa);border-radius:8px;background:rgba(137,180,250,0.06);display:flex;flex-direction:column;gap:8px">'
+          + '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">🔑</span><strong style="color:var(--text-primary,#fff);font-size:13px">Assistant inactive</strong></div>'
+          + '<div style="font-size:11px;color:var(--text-muted,#a6adc8);line-height:1.45">Nova runs on your own AI key. Add one to activate the assistant — Groq and OpenRouter offer free keys, and your key stays in your browser.</div>'
+          + '<button onclick="(window.SettingsDialog||{}).open&&SettingsDialog.open()" style="padding:8px 12px;border:none;border-radius:6px;background:var(--accent-blue,#89b4fa);color:#1e1e2e;font-weight:600;font-size:12px;cursor:pointer">Add API key in Settings</button>'
+          + '</div>';
+        // Place the CTA directly above the input row.
+        area.parentNode.insertBefore(gate, area);
       }
     });
   };
