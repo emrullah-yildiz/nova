@@ -558,7 +558,10 @@ const app = {
   },
 
   async _onGoogleCredential(resp) {
-    if (!resp || !resp.credential) return;
+    if (!resp || !resp.credential) {
+      this._showSignInError('Google did not return a sign-in. Try again, or use email + password.');
+      return;
+    }
     try {
       const r = await fetch('/api/auth/oidc/callback', {
         method: 'POST',
@@ -566,11 +569,17 @@ const app = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken: resp.credential })
       });
-      if (!r.ok) throw new Error('login failed');
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        // Surface the server's real reason (e.g. audience/issuer mismatch)
+        // rather than a generic message.
+        this._showSignInError((data.error && data.error.message) || 'Google sign-in failed. Please try again.');
+        return;
+      }
       this.closeSignIn();
       await this.refreshSession();
     } catch (e) {
-      this._showSignInError('Google sign-in failed. Please try again.');
+      this._showSignInError('Network error during Google sign-in — please try again.');
     }
   },
 
