@@ -15,7 +15,12 @@ import { createGoogleOidcVerifier } from '../server/auth/oidc-verifier.mjs';
 import { createEmailService } from '../server/email/resend.mjs';
 import { NeonPersistence } from '../server/db/neon-persistence.mjs';
 import { createKvStateStore, createR2ObjectStorage } from './adapters.mjs';
-import { serializeSessionCookie, clearSessionCookie, parseCookie } from './cookies.mjs';
+import {
+  clearSessionCookie, parseCookie,
+  serializeSlotCookie, clearSlotCookie, serializeActivePointer, clearActivePointer,
+  parseAllSlots, parseActiveSlot, clampSlot, MAX_ACCOUNT_SLOTS
+} from './cookies.mjs';
+import { hashToken } from '../src/enterprise/state-hash.mjs';
 
 let cachedApi = null;
 
@@ -74,8 +79,64 @@ function cors(env) {
 // verification link completes sign-in. (signup no longer returns a token.)
 const AUTH_ROUTES = new Set(['/api/auth/oidc/callback', '/api/auth/dev-login', '/api/auth/signup', '/api/auth/login', '/api/auth/verify']);
 
+// A Headers instance (CORS + any Set-Cookie). Multiple Set-Cookie need
+// Headers.append — a plain object would collapse duplicates to one.
+function headersWith(env, cookies = []) {
+  const h = new Headers(cors(env));
+  for (const c of cookies) { if (c) h.append('Set-Cookie', c); }
+  return h;
+}
+
+// Verify every `nova_session_<slot>` cookie → { [slot]: { token, userId, user } }.
+// Invalid/expired tokens are dropped (their slot is treated as free).
+async function resolveSlots(store, cookieHeader) {
+  const slots = parseAllSlots(cookieHeader);
+  const map = {};
+  for (const [slotStr, token] of Object.entries(slots)) {
+    try {
+      const ctx = await store.authenticateAsync(token);
+      map[Number(slotStr)] = { token, userId: ctx.userId, user: ctx.user };
+    } catch { /* invalid/expired → slot free */ }
+  }
+  return map;
+}
+
+// The slot whose token is "active": the pointer if it maps to a valid slot,
+// else the lowest valid slot, else null.
+function resolveActiveSlot(cookieHeader, map) {
+  const pointer = parseActiveSlot(cookieHeader);
+  if (pointer !== null && map[pointer]) return pointer;
+  const keys = Object.keys(map).map(Number).sort((a, b) => a - b);
+  return keys.length ? keys[0] : null;
+}
+
+// Authorization for a normal request: explicit header → active slot token →
+// lowest slot → legacy single cookie.
+function activeAuthorization(request, cookieHeader) {
+  const header = request.headers.get('authorization');
+  if (header) return header;
+  const slots = parseAllSlots(cookieHeader);
+  const pointer = parseActiveSlot(cookieHeader);
+  let token = (pointer !== null && slots[pointer]) ? slots[pointer] : null;
+  if (!token) {
+    const keys = Object.keys(slots).map(Number).sort((a, b) => a - b);
+    if (keys.length) token = slots[keys[0]];
+  }
+  if (!token) token = parseCookie(cookieHeader); // legacy nova_session
+  return token ? 'Bearer ' + token : null;
+}
+
+// Slot for a newly-issued token: reuse the user's existing slot, else the
+// lowest free one, else overwrite slot 0 (cap reached — rare; 5 accounts).
+function pickSlot(map, userId) {
+  for (const s of Object.keys(map).map(Number)) if (map[s].userId === userId) return s;
+  for (let i = 0; i < MAX_ACCOUNT_SLOTS; i++) if (!(i in map)) return i;
+  return 0;
+}
+
 export async function handleEnterpriseApi(request, env) {
   const url = new URL(request.url);
+  const cookieHeader = request.headers.get('cookie');
 
   // Public client config: lets the static SPA discover how to render sign-in
   // (Google client id is public; the secret never leaves the Worker).
@@ -86,47 +147,101 @@ export async function handleEnterpriseApi(request, env) {
     );
   }
 
-  // Logout is purely an HTTP/cookie concern — clear the session cookie.
-  if (url.pathname === '/api/auth/logout') {
-    return Response.json({ ok: true }, { status: 200, headers: { ...cors(env), 'Set-Cookie': clearSessionCookie() } });
-  }
-
-  // Auth via the httpOnly cookie, falling back to an Authorization header.
-  const cookieToken = parseCookie(request.headers.get('cookie'));
-  const authorization = request.headers.get('authorization') || (cookieToken ? 'Bearer ' + cookieToken : null);
-
   let body = {};
   if (['POST', 'PUT', 'PATCH'].includes(request.method)) {
     try { body = await request.json(); } catch { body = {}; }
   }
 
   try {
-    // getApi() boots the store, which reads the full Neon snapshot. Keep it
-    // INSIDE the try: an init failure (e.g. a missing table) must return a
-    // structured JSON error with CORS headers, not an opaque bare 500 from an
-    // unhandled rejection escaping the Worker.
-    const { dispatch } = await getApi(env);
+    // getApi() boots the store (reads the full Neon snapshot). Keep it INSIDE
+    // the try so an init failure returns a structured JSON error, not a bare 500.
+    const { store, dispatch } = await getApi(env);
+
+    // ── Multi-account cookie endpoints (handled here — cookie multiplexing) ──
+    if (url.pathname === '/api/auth/logout') {
+      return await handleLogout(env, store, cookieHeader, body);
+    }
+    if (url.pathname === '/api/me/accounts' && request.method === 'GET') {
+      const map = await resolveSlots(store, cookieHeader);
+      const active = resolveActiveSlot(cookieHeader, map);
+      const accounts = Object.keys(map).map(Number).sort((a, b) => a - b).map(slot => ({
+        slot,
+        email: map[slot].user.email,
+        displayName: map[slot].user.displayName,
+        active: slot === active
+      }));
+      return Response.json({ accounts }, { status: 200, headers: headersWith(env) });
+    }
+    if (url.pathname === '/api/auth/switch' && request.method === 'POST') {
+      const slot = clampSlot(body && body.slot);
+      const map = await resolveSlots(store, cookieHeader);
+      if (slot === null || !map[slot]) {
+        return Response.json({ ok: false, error: { message: 'That account is no longer signed in.', code: 'SLOT_NOT_FOUND' } }, { status: 401, headers: headersWith(env) });
+      }
+      return Response.json({ ok: true, user: map[slot].user }, { status: 200, headers: headersWith(env, [serializeActivePointer(slot)]) });
+    }
+
     const { status, body: payload } = await dispatch({
       method: request.method,
       path: url.pathname,
       searchParams: url.searchParams,
-      authorization,
+      authorization: activeAuthorization(request, cookieHeader),
       body,
-      // Verification links point back at this same origin (overridable via
-      // NOVA_PUBLIC_URL for custom domains).
       appUrl: env.NOVA_PUBLIC_URL || url.origin
     });
-    const headers = { ...cors(env) };
-    // On successful login, set the session as an httpOnly cookie so the browser
-    // sends it automatically and JS can't read the token.
+
+    const cookies = [];
+    // On a successful auth route, store the issued token in this user's slot and
+    // make it active (reusing their slot on re-login). Migrate any legacy cookie.
     if (status < 400 && payload && payload.token && AUTH_ROUTES.has(url.pathname)) {
-      headers['Set-Cookie'] = serializeSessionCookie(payload.token);
+      const map = await resolveSlots(store, cookieHeader);
+      let userId = null;
+      try { userId = (await store.authenticateAsync(payload.token)).userId; } catch { /* fall back to a free slot */ }
+      const slot = pickSlot(map, userId);
+      cookies.push(serializeSlotCookie(slot, payload.token));
+      cookies.push(serializeActivePointer(slot));
+      if (parseCookie(cookieHeader)) cookies.push(clearSessionCookie()); // migrate legacy → slotted
     }
-    return Response.json(payload, { status, headers });
+    return Response.json(payload, { status, headers: headersWith(env, cookies) });
   } catch (error) {
     return Response.json(
       { ok: false, error: { message: error.message || 'Internal server error', code: error.code || 'NOVA_API_ERROR' } },
       { status: error.status || 500, headers: cors(env) }
     );
   }
+}
+
+// scope:'current' (default) clears the active account and re-points to another;
+// scope:'all' signs out every account in this browser.
+async function handleLogout(env, store, cookieHeader, body) {
+  const scope = body && body.scope === 'all' ? 'all' : 'current';
+  const map = await resolveSlots(store, cookieHeader);
+  const cookies = [];
+  const dropKv = async (token) => {
+    if (store.stateStore && token) { try { await store.stateStore.delete('session:' + hashToken(token)); } catch { /* ignore */ } }
+  };
+
+  if (scope === 'all') {
+    // Clear every slot we can see (valid or not) + the pointer + legacy.
+    for (const s of Object.keys(parseAllSlots(cookieHeader)).map(Number)) cookies.push(clearSlotCookie(s));
+    for (const s of Object.keys(map).map(Number)) await dropKv(map[s].token);
+    cookies.push(clearActivePointer());
+    cookies.push(clearSessionCookie());
+    return Response.json({ ok: true, activeSlot: null }, { status: 200, headers: headersWith(env, cookies) });
+  }
+
+  const active = resolveActiveSlot(cookieHeader, map);
+  if (active !== null) {
+    cookies.push(clearSlotCookie(active));
+    await dropKv(map[active] && map[active].token);
+    delete map[active];
+  }
+  const next = Object.keys(map).map(Number).sort((a, b) => a - b)[0];
+  if (next !== undefined) {
+    cookies.push(serializeActivePointer(next));
+  } else {
+    cookies.push(clearActivePointer());
+    cookies.push(clearSessionCookie()); // also drop legacy when nothing remains
+  }
+  return Response.json({ ok: true, activeSlot: next === undefined ? null : next }, { status: 200, headers: headersWith(env, cookies) });
 }
