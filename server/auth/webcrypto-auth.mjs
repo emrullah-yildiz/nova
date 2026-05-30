@@ -39,8 +39,15 @@ export function createWebCryptoAuthService(options = {}) {
 
     async verifyOidcLogin({ idToken, organizationSlug }) {
       if (!oidcVerifier) throw createHttpError(501, 'OIDC verifier is not configured.');
-      const identity = await oidcVerifier({ idToken, organizationSlug });
-      if (!identity || !identity.email) throw createHttpError(401, 'OIDC identity is invalid.');
+      let identity;
+      try {
+        identity = await oidcVerifier({ idToken, organizationSlug });
+      } catch (error) {
+        // Surface the real reason as a clean 401 (not an opaque 500) so the
+        // client can show why Google sign-in failed.
+        throw createHttpError(401, 'Could not verify your Google sign-in: ' + ((error && error.message) || 'verification failed'), 'OIDC_VERIFY_FAILED');
+      }
+      if (!identity || !identity.email) throw createHttpError(401, 'OIDC identity is invalid.', 'OIDC_VERIFY_FAILED');
       return {
         email: identity.email,
         displayName: identity.displayName || identity.email,
