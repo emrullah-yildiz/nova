@@ -58,6 +58,51 @@ export async function verifySessionPayload(token, secret) {
   try { return JSON.parse(b64urlToUtf8(encodedPayload)); } catch { return null; }
 }
 
+// ── PBKDF2 password hashing (WebCrypto, cross-runtime) ──
+// For email+password accounts. PBKDF2-HMAC-SHA256 is the only password KDF in
+// WebCrypto, so it's the portable choice for workerd (no node:crypto.scrypt /
+// argon2). Output is a self-describing PHC-style string —
+// `pbkdf2$sha256$<iterations>$<saltB64url>$<hashB64url>` — so the iteration
+// count and salt travel with the hash and can be bumped later without a
+// migration. 210k iterations follows OWASP's 2023 PBKDF2-SHA256 guidance.
+const PBKDF2_ITERATIONS = 210000;
+const PBKDF2_SALT_BYTES = 16;
+const PBKDF2_HASH_BYTES = 32;
+
+async function pbkdf2Bits(password, salt, iterations) {
+  const baseKey = await SUBTLE.importKey('raw', enc.encode(String(password)), { name: 'PBKDF2' }, false, ['deriveBits']);
+  const bits = await SUBTLE.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, baseKey, PBKDF2_HASH_BYTES * 8);
+  return new Uint8Array(bits);
+}
+
+export async function hashPassword(password, options = {}) {
+  if (typeof password !== 'string' || password.length === 0) throw new Error('Password is required.');
+  const iterations = options.iterations || PBKDF2_ITERATIONS;
+  const salt = options.salt || globalThis.crypto.getRandomValues(new Uint8Array(PBKDF2_SALT_BYTES));
+  const hash = await pbkdf2Bits(password, salt, iterations);
+  return ['pbkdf2', 'sha256', iterations, bytesToB64url(salt), bytesToB64url(hash)].join('$');
+}
+
+export async function verifyPassword(password, stored) {
+  if (typeof password !== 'string' || typeof stored !== 'string') return false;
+  const parts = stored.split('$');
+  if (parts.length !== 5 || parts[0] !== 'pbkdf2' || parts[1] !== 'sha256') return false;
+  const iterations = parseInt(parts[2], 10);
+  if (!Number.isInteger(iterations) || iterations < 1) return false;
+  let salt, expected;
+  try { salt = b64urlToBytes(parts[3]); expected = b64urlToBytes(parts[4]); } catch { return false; }
+  const actual = await pbkdf2Bits(password, salt, iterations);
+  return constantTimeEqual(actual, expected);
+}
+
+// Length-independent equality to avoid leaking the hash via timing.
+function constantTimeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
 // ── RS256 verification for OIDC ID tokens ──
 // `signingInput` is `${headerB64url}.${payloadB64url}`; `jwk` is the issuer's
 // public key from its JWKS. Replaces jwks-verifier's node `createVerify`.

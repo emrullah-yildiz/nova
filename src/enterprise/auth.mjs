@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { createHttpError } from './domain.mjs';
+import { hashPassword, verifyPassword } from '../../server/auth/webcrypto.mjs';
 
 const DEFAULT_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
@@ -34,6 +35,11 @@ export class AuthService {
   // node implementation just wraps the sync methods.
   async createSessionTokenAsync(input) { return this.createSessionToken(input); }
   async verifySessionTokenAsync(token) { return this.verifySessionToken(token); }
+
+  // Email+password credentials. Delegates to the shared WebCrypto PBKDF2 impl
+  // so the hash format is byte-for-byte identical to the Worker's auth service.
+  async hashPasswordAsync(password) { return hashPassword(password); }
+  async verifyPasswordAsync(password, stored) { return verifyPassword(password, stored); }
 
   async verifyOidcLogin({ idToken, organizationSlug }) {
     if (!this.oidcVerifier) throw createHttpError(501, 'OIDC verifier is not configured.');

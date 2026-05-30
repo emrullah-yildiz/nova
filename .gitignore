@@ -27,3 +27,6 @@ Thumbs.db
 integrations/revit-addin/bin/
 integrations/revit-addin/obj/
 integrations/revit-addin/artifacts/
+
+# Playwright screenshot artifacts from local runs
+tests/e2e/__artifacts__/
