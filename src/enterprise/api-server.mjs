@@ -7,6 +7,7 @@ import { createObjectStorage } from './object-storage.mjs';
 import { PostgresPersistence } from '../../server/db/postgres-persistence.mjs';
 import { createApiDispatcher, createConfiguredAiProvider } from './api-dispatch.mjs';
 import { createSecretsService } from '../../server/auth/webcrypto.mjs';
+import { createGithubIssueService } from '../../server/feedback/github-issues.mjs';
 
 // Platform-agnostic API assembly: builds the store + injected deps and returns
 // a dispatch(request) -> { status, body }. The Cloudflare Worker calls this too
@@ -35,7 +36,8 @@ export function buildApi(options = {}) {
   // createEnterpriseApiServerAsync; sync callers without it get 503 on the
   // ai-settings routes only.
   const secretsService = options.secretsService || null;
-  const dispatch = createApiDispatcher({ store, authService, aiProvider, objectStorage, emailService, secretsService, appUrl, allowDevLogin });
+  const issueService = options.issueService || createGithubIssueService({ token: options.githubToken, repo: options.githubRepo });
+  const dispatch = createApiDispatcher({ store, authService, aiProvider, objectStorage, emailService, secretsService, issueService, appUrl, allowDevLogin });
   return { store, dispatch, authService, aiProvider, objectStorage, corsOrigin };
 }
 

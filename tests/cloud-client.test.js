@@ -59,4 +59,17 @@ describe('NovaCloudClient auth transport', () => {
     expect(calls[1].init.body).toBe(JSON.stringify({ role: 'Editor', expiresInMs: 0 }));
     expect(calls.every(c => c.init.credentials === 'include')).toBe(true);
   });
+
+  it('invite + ticket endpoints (cookie mode)', async () => {
+    const { impl, calls } = recordingFetch();
+    const client = new NovaCloudClient({ useCookie: true, fetchImpl: impl });
+    await client.inviteByEmail('prj_1', { email: 'a@b.com', role: 'Viewer' });
+    await client.submitTicket({ title: 'T', body: 'B', category: 'bug' });
+    expect(calls.map(c => c.init.method + ' ' + c.url)).toEqual([
+      'POST /api/projects/prj_1/invites',
+      'POST /api/feedback/ticket'
+    ]);
+    expect(calls[0].init.body).toBe(JSON.stringify({ email: 'a@b.com', role: 'Viewer' }));
+    expect(calls[1].init.body).toBe(JSON.stringify({ title: 'T', body: 'B', category: 'bug' }));
+  });
 });

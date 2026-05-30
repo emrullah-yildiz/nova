@@ -70,6 +70,31 @@ export function buildVerificationEmail({ appUrl, token, displayName, email }) {
   return { subject, text, html };
 }
 
+// Project share invite. Link points at the SPA (?join=<token>), redeemed on
+// load (the invitee signs in, then joins the project at the link's role).
+export function buildInviteEmail({ appUrl, token, projectName, inviterName, role }) {
+  const base = (appUrl || '').replace(/\/+$/, '');
+  const link = base + '/?join=' + encodeURIComponent(token);
+  const access = role === 'Viewer' ? 'view' : 'edit';
+  const proj = projectName || 'a Nova project';
+  const inviter = inviterName || 'Someone';
+  const subject = inviter + ' invited you to ' + proj + ' on Nova';
+  const text =
+    inviter + ' invited you to ' + access + ' "' + proj + '" on Nova.\n\n' +
+    'Open the project (you\'ll be asked to sign in first):\n' + link + '\n\n' +
+    'If you weren’t expecting this, you can ignore this email.';
+  const html =
+    '<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;color:#1c1c28">' +
+      '<h2 style="margin:0 0 12px">You’ve been invited to a Nova project</h2>' +
+      '<p style="margin:0 0 16px;color:#444">' + escapeHtml(inviter) + ' invited you to <strong>' + escapeHtml(access) + '</strong> “' + escapeHtml(proj) + '”.</p>' +
+      '<p style="margin:0 0 24px"><a href="' + escapeHtml(link) + '" style="display:inline-block;background:#89b4fa;color:#11111b;font-weight:700;text-decoration:none;padding:11px 20px;border-radius:7px">Open project</a></p>' +
+      '<p style="margin:0 0 8px;color:#777;font-size:13px">You’ll be asked to sign in first. Or paste this link:</p>' +
+      '<p style="margin:0 0 24px;color:#777;font-size:13px;word-break:break-all">' + escapeHtml(link) + '</p>' +
+      '<p style="margin:0;color:#999;font-size:12px">If you weren’t expecting this, you can ignore this email.</p>' +
+    '</div>';
+  return { subject, text, html };
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }

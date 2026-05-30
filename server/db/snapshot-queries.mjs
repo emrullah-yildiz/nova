@@ -80,7 +80,7 @@ export async function readSnapshotFromPool(pool, schemaVersion = 1) {
     })),
     shareLinks: shareLinks.map(r => ({
       id: r.id, projectId: r.project_id, createdBy: r.created_by, role: r.role,
-      tokenHash: r.token_hash, expiresAt: r.expires_at, revokedAt: r.revoked_at, createdAt: r.created_at
+      tokenHash: r.token_hash, email: r.email || '', expiresAt: r.expires_at, revokedAt: r.revoked_at, createdAt: r.created_at
     })),
     auditEvents: auditEvents.map(r => ({
       id: r.id, organizationId: r.organization_id, userId: r.user_id, type: r.type,
@@ -163,8 +163,8 @@ export async function writeSnapshotToPool(pool, snapshot) {
 
     for (const link of snapshot.shareLinks || []) {
       await client.query(
-        'INSERT INTO share_links (id, project_id, created_by, role, token_hash, expires_at, revoked_at, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO UPDATE SET role=EXCLUDED.role, revoked_at=EXCLUDED.revoked_at',
-        [link.id, link.projectId, link.createdBy, link.role, link.tokenHash, link.expiresAt || null, link.revokedAt || null, link.createdAt]
+        'INSERT INTO share_links (id, project_id, created_by, role, token_hash, email, expires_at, revoked_at, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (id) DO UPDATE SET role=EXCLUDED.role, revoked_at=EXCLUDED.revoked_at',
+        [link.id, link.projectId, link.createdBy, link.role, link.tokenHash, link.email || '', link.expiresAt || null, link.revokedAt || null, link.createdAt]
       );
     }
 
