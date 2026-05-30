@@ -1137,6 +1137,31 @@ const app = {
     if(zi)zi.textContent=Math.round(this.zoom*100)+'%';
   },
 
+  // Read-only overlay listing the available keyboard shortcuts (Settings menu).
+  showShortcuts(){
+    const existing=document.getElementById('shortcuts-overlay');
+    if(existing){existing.remove();return;} // toggle off if already open
+    const SC=[
+      ['Z','Zoom to Fit — selection, or all nodes'],
+      ['L','Auto Layout'],
+      ['P','Toggle Properties (selected)'],
+      ['D','Toggle Data Inspector (selected)'],
+      ['W','Toggle Warnings (selected)'],
+      ['Ctrl + Z','Undo'],
+      ['Ctrl + Y','Redo'],
+      ['Ctrl + C','Copy nodes'],
+      ['Ctrl + V','Paste nodes'],
+      ['Delete','Delete selected nodes'],
+      ['Esc','Deselect / close menus']
+    ];
+    const rows=SC.map(s=>`<div class="sc-row"><span class="sc-key">${s[0]}</span><span class="sc-desc">${s[1]}</span></div>`).join('');
+    const ov=document.createElement('div');
+    ov.id='shortcuts-overlay';
+    ov.innerHTML=`<div class="sc-panel" role="dialog" aria-label="Keyboard Shortcuts"><div class="sc-head"><span>Keyboard Shortcuts</span><button class="sc-close" title="Close">×</button></div><div class="sc-sub">Read-only reference</div><div class="sc-list">${rows}</div></div>`;
+    ov.addEventListener('click',e=>{ if(e.target===ov||e.target.classList.contains('sc-close')) ov.remove(); });
+    document.body.appendChild(ov);
+  },
+
 
 
   // ── CONTEXT MENU ──
@@ -1183,7 +1208,7 @@ const app = {
 
       if(e.key==='Delete'||e.key==='Backspace'){this.selectedNodes.forEach(id=>this.removeNode(id));this.selectedNodes=[];}
 
-      if(e.key==='Escape'){this.deselectAll();this.hideContextMenu();}
+      if(e.key==='Escape'){const so=document.getElementById('shortcuts-overlay');if(so)so.remove();this.deselectAll();this.hideContextMenu();}
 
     });
 
