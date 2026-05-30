@@ -122,3 +122,65 @@ export async function verifyRs256(signingInput, signatureB64url, jwk) {
   );
   return SUBTLE.verify('RSASSA-PKCS1-v1_5', key, b64urlToBytes(signatureB64url), enc.encode(signingInput));
 }
+
+// ── AES-GCM symmetric encryption (for secrets at rest) ──
+// Used to encrypt a signed-in user's stored AI settings (their BYOK API keys)
+// so the database never holds plaintext keys. WebCrypto-only, so it runs in
+// workerd and Node alike. Output is a self-describing string
+// `aesgcm$v1$<ivB64url>$<ciphertextB64url>` — the version tag lets the format
+// (or key) be rotated later without a migration.
+const AES_IV_BYTES = 12; // 96-bit nonce, the standard for AES-GCM
+const SECRETS_KDF_SALT = 'nova-ai-settings-v1'; // domain separation for the derived key
+const SECRETS_KDF_ITERATIONS = 100000; // workerd PBKDF2 cap
+
+// Build the AES-GCM CryptoKey. Prefer an explicit base64 32-byte NOVA_SECRETS_KEY;
+// otherwise derive a 256-bit key from the session secret (zero-config fallback —
+// note that rotating the session secret then invalidates stored ciphertexts).
+export async function deriveSecretsKey({ secretsKey = '', sessionSecret = '' } = {}) {
+  if (secretsKey) {
+    let raw;
+    try { raw = b64urlToBytes(secretsKey); } catch { raw = null; }
+    if (!raw || raw.length !== 32) throw new Error('NOVA_SECRETS_KEY must be base64url-encoded 32 bytes.');
+    return SUBTLE.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+  }
+  if (!sessionSecret) throw new Error('A secrets key or session secret is required for encryption.');
+  const baseKey = await SUBTLE.importKey('raw', enc.encode(sessionSecret), { name: 'PBKDF2' }, false, ['deriveKey']);
+  return SUBTLE.deriveKey(
+    { name: 'PBKDF2', salt: enc.encode(SECRETS_KDF_SALT), iterations: SECRETS_KDF_ITERATIONS, hash: 'SHA-256' },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+export async function encryptSecret(plaintext, key) {
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(AES_IV_BYTES));
+  const ct = await SUBTLE.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(String(plaintext)));
+  return ['aesgcm', 'v1', bytesToB64url(iv), bytesToB64url(new Uint8Array(ct))].join('$');
+}
+
+// Returns the decrypted plaintext, or null if the blob is malformed / tampered /
+// encrypted under a different key.
+export async function decryptSecret(blob, key) {
+  const parts = String(blob || '').split('$');
+  if (parts.length !== 4 || parts[0] !== 'aesgcm' || parts[1] !== 'v1') return null;
+  let iv, ct;
+  try { iv = b64urlToBytes(parts[2]); ct = b64urlToBytes(parts[3]); } catch { return null; }
+  try {
+    const plain = await SUBTLE.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    return dec.decode(plain);
+  } catch {
+    return null;
+  }
+}
+
+// Convenience: a bound { encrypt, decrypt } service so handlers don't juggle the
+// CryptoKey. Built once at dispatcher construction (handlers get no per-request env).
+export async function createSecretsService(opts = {}) {
+  const key = await deriveSecretsKey(opts);
+  return {
+    encrypt: (plaintext) => encryptSecret(plaintext, key),
+    decrypt: (blob) => decryptSecret(blob, key)
+  };
+}

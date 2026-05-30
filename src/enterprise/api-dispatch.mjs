@@ -10,6 +10,7 @@ import { assertDeliverableEmail } from './email-verification.mjs';
 import { buildVerificationEmail } from '../../server/email/resend.mjs';
 import {
   validateAiChatBody,
+  validateAiSettingsBody,
   validateBackgroundJobBody,
   validateCompleteBackgroundJobBody,
   validateConnectorPairBody,
@@ -49,6 +50,8 @@ export function matchRoute(method, path, options = {}) {
     ['POST', /^\/api\/auth\/verify$/, true, 200, handleVerifyEmail],
     ['POST', /^\/api\/auth\/resend-verification$/, false, 200, handleResendVerification],
     ['GET', /^\/api\/me$/, false, 200, ({ context }) => ({ user: context.user })],
+    ['GET', /^\/api\/me\/ai-settings$/, false, 200, handleGetAiSettings],
+    ['PUT', /^\/api\/me\/ai-settings$/, false, 200, handlePutAiSettings],
     ['GET', /^\/api\/projects$/, false, 200, ({ store, context, url }) => {
       const page = store.listProjects(context, parsePaginationParams(url));
       return { projects: page.items, pagination: page.pagination };
@@ -112,14 +115,14 @@ function bearerToken(authorization) {
 
 // Builds the platform-agnostic request handler. `request` is a plain object:
 // { method, path, searchParams, authorization, body }. Returns { status, body }.
-export function createApiDispatcher({ store, authService, aiProvider, objectStorage, emailService = null, appUrl = '', allowDevLogin = false }) {
+export function createApiDispatcher({ store, authService, aiProvider, objectStorage, emailService = null, secretsService = null, appUrl = '', allowDevLogin = false }) {
   return async function dispatch(request) {
     const { method, path, searchParams, authorization, body } = request;
     const route = matchRoute(method, path, { allowDevLogin });
     if (!route) throw createHttpError(404, 'Route not found.');
     const context = route.public ? null : await store.authenticateAsync(bearerToken(authorization));
     const url = { searchParams: searchParams instanceof URLSearchParams ? searchParams : new URLSearchParams(searchParams || '') };
-    const result = await route.handler({ store, context, params: route.params, body: body || {}, url, aiProvider, authService, objectStorage, emailService, appUrl: request.appUrl || appUrl });
+    const result = await route.handler({ store, context, params: route.params, body: body || {}, url, aiProvider, authService, objectStorage, emailService, secretsService, appUrl: request.appUrl || appUrl });
     if (store.flushPersistence) await store.flushPersistence();
     return { status: route.status || 200, body: result };
   };
@@ -224,6 +227,32 @@ async function handleResendVerification({ store, context, emailService, appUrl }
   const token = await store.createEmailVerificationTokenAsync(user.id);
   const msg = buildVerificationEmail({ appUrl, token, displayName: user.displayName, email: user.email });
   await emailService.send({ to: user.email, subject: msg.subject, html: msg.html, text: msg.text });
+  return { ok: true };
+}
+
+// Authenticated: the signed-in user's synced AI settings (their BYOK keys +
+// provider/model). Decrypts and returns plaintext to the owner ONLY — auth is
+// enforced by the dispatcher, and the encrypted blob is never exposed via
+// publicUser()/`/api/me`. Returns { settings: null } when nothing is stored.
+async function handleGetAiSettings({ store, context, secretsService }) {
+  const user = store.requireUser(context.userId);
+  if (!user.aiSettingsEncrypted) return { settings: null };
+  if (!secretsService) throw createHttpError(503, 'Secret storage is not configured for this deployment.', 'SECRETS_NOT_CONFIGURED');
+  const plain = await secretsService.decrypt(user.aiSettingsEncrypted);
+  if (plain === null) return { settings: null }; // stale/rotated key — treat as empty
+  let settings;
+  try { settings = JSON.parse(plain); } catch { return { settings: null }; }
+  return { settings };
+}
+
+// Authenticated: store (encrypted) the user's AI settings. Mutates the live
+// user record in place + persists, mirroring markEmailVerified().
+async function handlePutAiSettings({ store, context, body, secretsService }) {
+  if (!secretsService) throw createHttpError(503, 'Secret storage is not configured for this deployment.', 'SECRETS_NOT_CONFIGURED');
+  const settings = validateAiSettingsBody(body || {});
+  const user = store.requireUser(context.userId);
+  user.aiSettingsEncrypted = await secretsService.encrypt(JSON.stringify(settings));
+  if (store.persist) store.persist();
   return { ok: true };
 }
 

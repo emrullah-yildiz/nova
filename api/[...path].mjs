@@ -9,6 +9,7 @@ function getApi() {
       corsOrigin: process.env.NOVA_CORS_ORIGIN || '*',
       databaseUrl: process.env.NOVA_DATABASE_URL || '',
       sessionSecret: process.env.NOVA_SESSION_SECRET || undefined,
+      secretsKey: process.env.NOVA_SECRETS_KEY || undefined,
       aiPolicy: resolveAiPolicy(process.env),
       objectStorageDir: process.env.NOVA_OBJECT_STORAGE_DIR || ''
     });

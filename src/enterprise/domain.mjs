@@ -86,6 +86,10 @@ export class EnterpriseStore {
       // Email+password accounts start unverified until the emailed link is
       // clicked; OIDC accounts (Google) are created already verified.
       emailVerified,
+      // AES-GCM ciphertext of the user's synced AI settings (provider/model +
+      // BYOK keys). '' until they save settings while signed in. Like
+      // passwordHash, this is NEVER exposed via publicUser().
+      aiSettingsEncrypted: '',
       memberships: [],
       createdAt: this.now()
     };
@@ -992,6 +996,9 @@ function projectSummary(project) {
 }
 
 function publicUser(user, organizationId, role) {
+  // Allow-list only. NEVER add passwordHash or aiSettingsEncrypted here — those
+  // are server-only secrets (the latter is returned solely to its owner via
+  // GET /api/me/ai-settings).
   return {
     id: user.id,
     email: user.email,

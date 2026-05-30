@@ -6,6 +6,7 @@ import { createStateStore } from './state-store.mjs';
 import { createObjectStorage } from './object-storage.mjs';
 import { PostgresPersistence } from '../../server/db/postgres-persistence.mjs';
 import { createApiDispatcher, createConfiguredAiProvider } from './api-dispatch.mjs';
+import { createSecretsService } from '../../server/auth/webcrypto.mjs';
 
 // Platform-agnostic API assembly: builds the store + injected deps and returns
 // a dispatch(request) -> { status, body }. The Cloudflare Worker calls this too
@@ -30,7 +31,11 @@ export function buildApi(options = {}) {
   const allowDevLogin = options.allowDevLogin === true;
   const emailService = options.emailService || null;
   const appUrl = options.appUrl || '';
-  const dispatch = createApiDispatcher({ store, authService, aiProvider, objectStorage, emailService, appUrl, allowDevLogin });
+  // secretsService is built async (key derivation), so it's injected by
+  // createEnterpriseApiServerAsync; sync callers without it get 503 on the
+  // ai-settings routes only.
+  const secretsService = options.secretsService || null;
+  const dispatch = createApiDispatcher({ store, authService, aiProvider, objectStorage, emailService, secretsService, appUrl, allowDevLogin });
   return { store, dispatch, authService, aiProvider, objectStorage, corsOrigin };
 }
 
@@ -69,7 +74,19 @@ export function createEnterpriseApiServer(options = {}) {
 }
 
 export async function createEnterpriseApiServerAsync(options = {}) {
-  const api = createEnterpriseApiServer(options);
+  // Derive the AES key for synced AI settings up front (async) and inject it, so
+  // the sync buildApi path stays sync. Guarded: a missing secret leaves the
+  // service null (ai-settings routes 503) rather than throwing.
+  let withSecrets = options;
+  if (!options.secretsService && (options.secretsKey || options.sessionSecret)) {
+    try {
+      const secretsService = await createSecretsService({ secretsKey: options.secretsKey, sessionSecret: options.sessionSecret });
+      withSecrets = { ...options, secretsService };
+    } catch (error) {
+      console.error('[nova] secrets service init failed:', (error && error.message) || error);
+    }
+  }
+  const api = createEnterpriseApiServer(withSecrets);
   if (api.store && api.store.ready) await api.store.ready();
   if (options.aiPolicy) applyAiPolicy(api.store, options.aiPolicy);
   return api;
