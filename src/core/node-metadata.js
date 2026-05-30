@@ -388,11 +388,11 @@ export const NODE_META = {
     whenToUse: 'Merging many solids from a loop (panels, columns, structural members). Much more efficient than chained booleanUnion.'
   },
   'op-move': {
-    description: 'Translate geometry by a vector.',
-    python: 'result = Geo.move(geometry, vector)',
-    csharp: '// Geo.move(geo, vec)',
-    example: 'raised_floor = Geo.move(floor_slab, Geo.Vector3(0, 0, 3.5))',
-    whenToUse: 'Positioning elements, creating offsets, stacking floors.'
+    description: 'Translate geometry a distance along a direction.',
+    python: 'result = Geo.move(geometry, direction.normalize().scale(distance))',
+    csharp: '// Geo.move(geo, dir.normalize().scale(dist))',
+    example: 'raised_floor = Geo.move(floor_slab, Geo.Vector3(0, 0, 1).normalize().scale(3.5))',
+    whenToUse: 'Positioning elements, creating offsets, stacking floors. Pair with Vector.XAxis/YAxis/ZAxis for axis-aligned moves.'
   },
   'op-rotate': {
     description: 'Rotate geometry around an axis by an angle.',

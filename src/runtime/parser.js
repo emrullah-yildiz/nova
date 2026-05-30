@@ -444,7 +444,15 @@ const CodeParser = {
       if (fn === 'Geo.booleanUnion') return { type: 'op-boolean-union', inputs: { a: args[0]||'_', b: args[1]||'_' } };
       if (fn === 'Geo.booleanIntersect') return { type: 'op-boolean-intersect', inputs: { a: args[0]||'_', b: args[1]||'_' } };
       if (fn === 'Geo.booleanSubtract') return { type: 'op-boolean-subtract', inputs: { a: args[0]||'_', b: args[1]||'_' } };
-      if (fn === 'Geo.move') return { type: 'op-move', inputs: { geometry: args[0]||'_', vector: args[1]||'_' } };
+      if (fn === 'Geo.move') {
+        // Geometry.Move codegen emits `dir.normalize().scale(dist)` — unpack
+        // it back into the direction/distance ports. A bare vector (legacy
+        // hand-written call) maps to direction with distance defaulting to 1.
+        const v = (args[1] || '_').trim();
+        const m = /^(.+?)\.normalize\(\)\.scale\((.+)\)$/.exec(v);
+        if (m) return { type: 'op-move', inputs: { geometry: args[0]||'_', direction: m[1].trim(), distance: m[2].trim() } };
+        return { type: 'op-move', inputs: { geometry: args[0]||'_', direction: v, distance: '1' } };
+      }
       if (fn === 'Geo.scaleGeo') return { type: 'op-scale', inputs: { geometry: args[0]||'_', factor: args[1]||'1', origin: args[2]||'_' } };
       if (fn === 'Geo.offsetCurve') return { type: 'op-offset', inputs: { curve: args[0]||'_', distance: args[1]||'1' } };
       if (fn === 'Geo.trimLine') return { type: 'op-trim', inputs: { line: args[0]||'_', t0: args[1]||'0', t1: args[2]||'1' } };
