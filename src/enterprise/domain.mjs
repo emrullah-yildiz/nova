@@ -585,7 +585,7 @@ export class EnterpriseStore {
   // token is returned ONCE at creation and stored only as a hash (like sessions
   // / email-verify tokens), so a snapshot/DB leak can't reuse it.
 
-  createShareLink(context, projectId, { role, expiresInMs = 0 } = {}) {
+  createShareLink(context, projectId, { role, expiresInMs = 0, email = '' } = {}) {
     const project = this.requireProjectAccess(context, projectId);
     this.requireProjectAdmin(context, project);
     if (!SHARE_LINK_ROLES.has(role)) throw createHttpError(400, 'Share links can only grant Editor or Viewer access.');
@@ -595,6 +595,7 @@ export class EnterpriseStore {
       projectId: project.id,
       role,
       tokenHash: hashToken(rawToken),
+      email: email ? String(email).trim().toLowerCase() : '',
       createdBy: context.userId,
       expiresAt: expiresInMs > 0 ? this.now() + expiresInMs : null,
       revokedAt: null,
@@ -604,13 +605,20 @@ export class EnterpriseStore {
     this.audit({
       organizationId: project.organizationId,
       userId: context.userId,
-      type: 'project.share-link.created',
+      type: link.email ? 'project.invite.created' : 'project.share-link.created',
       targetId: project.id,
-      metadata: { linkId: link.id, role }
+      metadata: { linkId: link.id, role, invited: !!link.email }
     });
     this.persist();
     // Only place the raw token is ever exposed.
     return { ...publicShareLink(link), token: rawToken };
+  }
+
+  // Invite a specific person by email: a role-scoped share link tagged with the
+  // address (so the access panel can show it as a pending invite). The caller
+  // (API handler) emails the join URL using the returned token.
+  inviteToProject(context, projectId, { email, role, expiresInMs = 0 } = {}) {
+    return this.createShareLink(context, projectId, { role, expiresInMs, email });
   }
 
   listShareLinks(context, projectId) {
@@ -1124,6 +1132,7 @@ function publicShareLink(link) {
     id: link.id,
     projectId: link.projectId,
     role: link.role,
+    email: link.email || '',
     createdBy: link.createdBy,
     expiresAt: link.expiresAt,
     revokedAt: link.revokedAt,

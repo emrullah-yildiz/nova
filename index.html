@@ -123,11 +123,27 @@
 
     </div>
 
+    <div class="menu-item" id="menu-help">Help
+
+      <div class="menu-dropdown">
+
+        <button class="menu-dropdown-item" onclick="app.showTicketDialog()">Submit a Ticket…</button>
+
+        <button class="menu-dropdown-item" onclick="NFLogger.downloadLogs()">Download Session Logs</button>
+
+        <div class="menu-separator"></div>
+
+        <button class="menu-dropdown-item" onclick="app.showShortcuts()">Keyboard Shortcuts</button>
+
+      </div>
+
+    </div>
+
     <div class="menu-spacer"></div>
 
     <div class="menu-right">
 
-      <button class="menu-item" onclick="NFLogger.downloadLogs()" title="Download session logs as JSON" style="font-size:12px;opacity:0.7;">📥 Logs</button>
+      <button class="menu-invite-btn" id="btn-invite" onclick="app.showShareDialog()" title="Invite people to this project">Invite</button>
 
       <div class="menu-account" id="account-area"></div>
 

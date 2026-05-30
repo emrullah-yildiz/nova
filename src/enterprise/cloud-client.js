@@ -85,6 +85,19 @@ export class NovaCloudClient {
     return this.request('/api/share/' + encodeURIComponent(token), { method: 'POST' });
   }
 
+  // Invite someone by email → emails them a role-scoped join link.
+  async inviteByEmail(projectId, { email, role }) {
+    return this.request('/api/projects/' + encodeURIComponent(projectId) + '/invites', {
+      method: 'POST',
+      body: { email, role }
+    });
+  }
+
+  // Submit an in-app support ticket → opens a GitHub issue server-side.
+  async submitTicket({ title, body, category }) {
+    return this.request('/api/feedback/ticket', { method: 'POST', body: { title, body, category } });
+  }
+
   async saveProjectGraph(projectId, { graph, message = 'Graph saved from Nova web' }) {
     return this.request('/api/projects/' + encodeURIComponent(projectId) + '/graph', {
       method: 'PUT',

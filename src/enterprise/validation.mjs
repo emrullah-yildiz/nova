@@ -117,6 +117,26 @@ export function validateShareLinkBody(body = {}) {
   return { role: body.role, expiresInMs: body.expiresInMs || 0 };
 }
 
+// Invite-by-email: a valid email + an Editor/Viewer role.
+export function validateInviteBody(body = {}) {
+  requirePlainObject(body, 'request body');
+  requireString(body.email, 'email', 320);
+  if (!EMAIL_RE.test(body.email.trim())) throw createHttpError(400, 'Enter a valid email address.');
+  requireString(body.role, 'role', 40);
+  if (!['Editor', 'Viewer'].includes(body.role)) throw createHttpError(400, 'Invites can only grant Editor or Viewer access.');
+  return { email: body.email.trim().toLowerCase(), role: body.role };
+}
+
+// In-app support ticket → GitHub issue.
+export function validateTicketBody(body = {}) {
+  requirePlainObject(body, 'request body');
+  requireString(body.title, 'title', 160);
+  requireString(body.body, 'body', 8000);
+  optionalString(body.category, 'category', 40);
+  const category = ['bug', 'feature', 'question'].includes(body.category) ? body.category : 'bug';
+  return { title: body.title.trim(), body: body.body, category };
+}
+
 export function validateGraphRunBody(body = {}) {
   requirePlainObject(body, 'request body');
   optionalString(body.versionId, 'versionId', 80);

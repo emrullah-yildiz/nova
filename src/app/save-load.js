@@ -617,39 +617,71 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     overlay.id = 'share-dialog-overlay';
     overlay.className = 'project-save-overlay';
     overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
-    overlay.innerHTML = '<div class="project-save-dialog" role="dialog" aria-modal="true">' +
+    const ownerName = (app.currentUser && (app.currentUser.displayName || app.currentUser.email)) || 'You';
+    overlay.innerHTML = '<div class="project-save-dialog" role="dialog" aria-modal="true" style="width:min(520px,100%)">' +
       '<div class="project-save-header"><div class="project-save-mark">↗</div>' +
-      '<div><h3>Share project</h3><p>Anyone signed in with the link gets the access you choose.</p></div>' +
+      '<div><h3>Invite to project</h3><p>Invite people by email, or share a link. Everyone signs in first.</p></div>' +
       '<button class="project-save-close" onclick="document.getElementById(\'share-dialog-overlay\').remove()" aria-label="Close">x</button></div>' +
+      // Email invite row
       '<div class="share-controls">' +
-        '<span class="share-select"><select id="share-role" aria-label="Access level">' +
-          '<option value="Editor">Can edit</option><option value="Viewer">Can view</option></select></span>' +
-        '<button class="share-create-btn" id="share-generate" onclick="app._generateShareLink()">Create link</button>' +
+        '<input id="invite-email" class="share-email-input" type="text" placeholder="Enter emails to invite…" onkeydown="if(event.key===\'Enter\')app._sendInvites()" />' +
+        '<span class="share-select"><select id="invite-role" aria-label="Invite access"><option value="Editor">Can edit</option><option value="Viewer">Can view</option></select></span>' +
+        '<button class="share-create-btn" id="invite-send" onclick="app._sendInvites()">Invite</button>' +
       '</div>' +
-      '<div id="share-link-list" style="max-height:46vh;overflow-y:auto"></div>' +
-      '<div class="project-save-footer"><span>Links require the recipient to sign in.</span>' +
+      '<div id="invite-status" class="share-status"></div>' +
+      // Anyone-with-the-link row
+      '<div class="share-anyone"><span class="share-anyone-label">🔗 Anyone with the link</span>' +
+        '<span class="share-select"><select id="anyone-role" aria-label="Link access"><option value="Editor">Can edit</option><option value="Viewer">Can view</option></select></span>' +
+        '<button class="share-link-btn" id="anyone-create" onclick="app._createAnyoneLink()">Copy link</button></div>' +
+      // Access list
+      '<div id="share-link-list" style="max-height:42vh;overflow-y:auto"></div>' +
+      '<div class="project-save-footer"><span>' + escapeHtml(ownerName) + ' · owner</span>' +
       '<button onclick="document.getElementById(\'share-dialog-overlay\').remove()">Done</button></div></div>';
     document.body.appendChild(overlay);
     app._renderShareLinks();
   };
 
-  app._generateShareLink = async function() {
-    const sel = document.getElementById('share-role');
-    const role = (sel && sel.value) || 'Editor';
-    const btn = document.getElementById('share-generate');
+  // Invite by email — splits the input on commas/whitespace and emails each a
+  // role-scoped join link.
+  app._sendInvites = async function() {
+    const inp = document.getElementById('invite-email');
+    const status = document.getElementById('invite-status');
+    const raw = (inp && inp.value || '').trim();
+    if (!raw) return;
+    const role = (document.getElementById('invite-role') || {}).value || 'Editor';
+    const emails = raw.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
+    const btn = document.getElementById('invite-send');
+    if (btn) { btn.disabled = true; btn.textContent = 'Inviting…'; }
+    let ok = 0, fail = 0;
+    for (const email of emails) {
+      try { await app.getNovaCloudClient().inviteByEmail(app._cloudProjectId, { email: email, role: role }); ok++; }
+      catch (e) { fail++; }
+    }
+    if (status) {
+      status.className = 'share-status ' + (ok ? 'ok' : 'err');
+      status.textContent = ok ? ('Invite' + (ok > 1 ? 's' : '') + ' sent' + (fail ? (' · ' + fail + ' failed') : '') + '.') : 'Could not send the invite.';
+    }
+    if (inp && ok) inp.value = '';
+    if (btn) { btn.disabled = false; btn.textContent = 'Invite'; }
+    await app._renderShareLinks();
+  };
+
+  // "Anyone with the link" — create a role-scoped link and copy it.
+  app._createAnyoneLink = async function() {
+    const role = (document.getElementById('anyone-role') || {}).value || 'Editor';
+    const btn = document.getElementById('anyone-create');
     if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
     try {
       const link = await app.getNovaCloudClient().createShareLink(app._cloudProjectId, { role });
       const url = (typeof location !== 'undefined' ? location.origin : '') + '/?join=' + encodeURIComponent(link.token);
-      // Remember the raw URL for this session so it survives a list re-render
-      // (the server never returns the token again).
       app._freshLinkUrls = app._freshLinkUrls || {};
       app._freshLinkUrls[link.id] = url;
+      try { if (navigator.clipboard) navigator.clipboard.writeText(url); } catch (e) { /* ignore */ }
       await app._renderShareLinks();
     } catch (e) {
-      app.addAIMessage && app.addAIMessage('workspace', 'Could not create share link: ' + e.message);
+      app.addAIMessage && app.addAIMessage('workspace', 'Could not create link: ' + e.message);
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = 'Create link'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Copy link'; }
     }
   };
 
@@ -659,25 +691,31 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     let links = [];
     try { links = (await app.getNovaCloudClient().listShareLinks(app._cloudProjectId)).shareLinks || []; } catch (e) { /* ignore */ }
     const active = links.filter(l => !l.revokedAt).sort((a, b) => b.createdAt - a.createdAt);
-    if (!active.length) { list.innerHTML = '<div class="share-empty">No active links yet — create one above.</div>'; return; }
+    if (!active.length) { list.innerHTML = '<div class="share-empty">No invites or links yet.</div>'; return; }
     const fresh = app._freshLinkUrls || {};
     const roleLabel = r => (r === 'Viewer' ? 'Can view' : 'Can edit');
-    const revokeBtn = l => '<button class="share-icon-btn danger" title="Revoke link" onclick="app._revokeShareLink(\'' + escapeJsString(l.id) + '\')">🗑</button>';
+    const revokeBtn = l => '<button class="share-icon-btn danger" title="Remove" onclick="app._revokeShareLink(\'' + escapeJsString(l.id) + '\')">🗑</button>';
     const rows = active.map(l => {
+      // Email invite — show the address as a pending invite.
+      if (l.email) {
+        return '<div class="share-link-row"><span class="ri-icon">✉</span>' +
+          '<span class="share-link-meta">' + escapeHtml(l.email) +
+          ' <span style="color:var(--text-muted)">· ' + escapeHtml(roleLabel(l.role)) + ' · invited</span></span>' +
+          revokeBtn(l) + '</div>';
+      }
+      // Anonymous link created this session — show the copyable URL.
       if (fresh[l.id]) {
         return '<div class="share-link-row">' +
           '<input class="share-url-input" readonly value="' + escapeHtml(fresh[l.id]) + '" title="' + escapeHtml(roleLabel(l.role)) + ' link" onclick="this.select()" />' +
           '<button class="share-icon-btn" title="Copy link" data-url="' + escapeHtml(fresh[l.id]) + '" onclick="app._copyShareUrl(this)">📋</button>' +
           revokeBtn(l) + '</div>';
       }
-      // Older link (token not held this session) — metadata only, still revocable.
-      return '<div class="share-link-row">' +
-        '<span class="ri-icon">' + (l.role === 'Viewer' ? '👁' : '✎') + '</span>' +
-        '<span class="share-link-meta">' + escapeHtml(roleLabel(l.role)) + ' · ' + escapeHtml(_timeAgo(l.createdAt)) +
-        ' <span style="color:var(--text-muted)">· link hidden, make a new one to copy</span></span>' +
+      // Anonymous link from a prior session — metadata only (token not held).
+      return '<div class="share-link-row"><span class="ri-icon">🔗</span>' +
+        '<span class="share-link-meta">Anyone with the link <span style="color:var(--text-muted)">· ' + escapeHtml(roleLabel(l.role)) + ' · ' + escapeHtml(_timeAgo(l.createdAt)) + '</span></span>' +
         revokeBtn(l) + '</div>';
     }).join('');
-    list.innerHTML = '<div class="share-section-label">Active links</div>' + rows;
+    list.innerHTML = '<div class="share-section-label">Who has access</div>' + rows;
   };
 
   app._copyShareUrl = function(btn) {
@@ -695,6 +733,59 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       if (app._freshLinkUrls) delete app._freshLinkUrls[linkId];
       await app._renderShareLinks();
     } catch (e) { app.addAIMessage && app.addAIMessage('workspace', 'Revoke failed: ' + e.message); }
+  };
+
+  // ══════════════════════════════════════
+  // SUBMIT A TICKET (Help → opens a GitHub issue server-side)
+  // ══════════════════════════════════════
+  app.showTicketDialog = function() {
+    if (!app.currentUser) { app.addAIMessage && app.addAIMessage('workspace', 'Sign in to submit a ticket.'); if (app.signIn) app.signIn(); return; }
+    const existing = document.getElementById('ticket-dialog-overlay');
+    if (existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'ticket-dialog-overlay';
+    overlay.className = 'project-save-overlay';
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    overlay.innerHTML = '<div class="project-save-dialog" role="dialog" aria-modal="true" style="width:min(520px,100%)">' +
+      '<div class="project-save-header"><div class="project-save-mark">🎫</div>' +
+      '<div><h3>Submit a ticket</h3><p>Report a bug or request a feature — this opens an issue on the Nova GitHub repo.</p></div>' +
+      '<button class="project-save-close" onclick="document.getElementById(\'ticket-dialog-overlay\').remove()" aria-label="Close">x</button></div>' +
+      '<div class="share-controls" style="margin-bottom:10px">' +
+        '<span class="share-select"><select id="ticket-category" aria-label="Category"><option value="bug">Bug</option><option value="feature">Feature request</option><option value="question">Question</option></select></span>' +
+        '<input id="ticket-title" class="share-email-input" type="text" placeholder="Short summary" />' +
+      '</div>' +
+      '<textarea id="ticket-body" class="ticket-textarea" placeholder="What happened? Steps to reproduce, what you expected, screenshots links…"></textarea>' +
+      '<div id="ticket-status" class="share-status"></div>' +
+      '<div class="project-save-footer"><span>Posted to the public Nova repo — don\'t include secrets.</span>' +
+      '<button class="share-create-btn" id="ticket-submit" onclick="app._submitTicket()">Submit</button></div></div>';
+    document.body.appendChild(overlay);
+    setTimeout(function() { const t = document.getElementById('ticket-title'); if (t) t.focus(); }, 50);
+  };
+
+  app._submitTicket = async function() {
+    const title = ((document.getElementById('ticket-title') || {}).value || '').trim();
+    const body = (document.getElementById('ticket-body') || {}).value || '';
+    const category = (document.getElementById('ticket-category') || {}).value || 'bug';
+    const status = document.getElementById('ticket-status');
+    if (!title || !body.trim()) { if (status) { status.className = 'share-status err'; status.textContent = 'Add a short summary and a description.'; } return; }
+    const btn = document.getElementById('ticket-submit');
+    if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+    try {
+      const res = await app.getNovaCloudClient().submitTicket({ title: title, body: body, category: category });
+      if (status) {
+        status.className = 'share-status ok';
+        status.innerHTML = 'Ticket created.' + (res && res.url ? ' <a href="' + escapeHtml(res.url) + '" target="_blank" rel="noopener" style="color:var(--accent-blue);font-weight:700">View on GitHub →</a>' : '');
+      }
+      const ti = document.getElementById('ticket-title'); const tb = document.getElementById('ticket-body');
+      if (ti) ti.value = ''; if (tb) tb.value = '';
+    } catch (e) {
+      if (status) {
+        status.className = 'share-status err';
+        status.textContent = /not configured/i.test(e.message || '') ? 'Ticket submission isn’t set up on this deployment yet.' : ('Could not submit: ' + e.message);
+      }
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Submit'; }
+    }
   };
 
   function _timeAgo(ts) {
