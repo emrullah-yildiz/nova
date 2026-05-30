@@ -71,18 +71,31 @@ export class EnterpriseStore {
     return clone(organization);
   }
 
-  createUser({ email, displayName, externalSubject = '' }) {
+  createUser({ email, displayName, externalSubject = '', passwordHash = '' }) {
     const user = {
       id: createId('usr'),
       email,
       displayName: displayName || email,
       externalSubject,
+      // PBKDF2 hash for email+password accounts; '' for OIDC-only (Google/SSO)
+      // accounts. Never exposed via publicUser().
+      passwordHash,
       memberships: [],
       createdAt: this.now()
     };
     this.users.set(user.id, user);
     this.persist();
     return clone(user);
+  }
+
+  // Lookup by email (case-insensitive). Returns a clone (including passwordHash
+  // for server-side credential checks) or null. Server-only — handlers must
+  // never return the raw record to clients; use publicUser() for that.
+  findUserByEmail(email) {
+    const normalized = String(email || '').trim().toLowerCase();
+    if (!normalized) return null;
+    const user = Array.from(this.users.values()).find(item => String(item.email || '').toLowerCase() === normalized);
+    return user ? clone(user) : null;
   }
 
   addMembership({ organizationId, userId, role }) {

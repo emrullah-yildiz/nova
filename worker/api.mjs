@@ -47,7 +47,7 @@ function cors(env) {
   };
 }
 
-const AUTH_ROUTES = new Set(['/api/auth/oidc/callback', '/api/auth/dev-login']);
+const AUTH_ROUTES = new Set(['/api/auth/oidc/callback', '/api/auth/dev-login', '/api/auth/signup', '/api/auth/login']);
 
 export async function handleEnterpriseApi(request, env) {
   const url = new URL(request.url);

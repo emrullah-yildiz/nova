@@ -16,10 +16,12 @@ import {
   validateDevLoginBody,
   validateGraphRunBody,
   validateHostOperationBody,
+  validateLoginBody,
   validateObjectArtifactBody,
   validateOidcCallbackBody,
   validateProjectMemberBody,
-  validateSaveGraphBody
+  validateSaveGraphBody,
+  validateSignupBody
 } from './validation.mjs';
 
 export function matchRoute(method, path, options = {}) {
@@ -40,6 +42,8 @@ export function matchRoute(method, path, options = {}) {
       });
     }],
     ['POST', /^\/api\/auth\/oidc\/callback$/, true, 200, handleOidcCallback],
+    ['POST', /^\/api\/auth\/signup$/, true, 201, handleSignup],
+    ['POST', /^\/api\/auth\/login$/, true, 200, handleLogin],
     ['GET', /^\/api\/me$/, false, 200, ({ context }) => ({ user: context.user })],
     ['GET', /^\/api\/projects$/, false, 200, ({ store, context, url }) => {
       const page = store.listProjects(context, parsePaginationParams(url));
@@ -162,6 +166,35 @@ function parseLimitParam(value) {
   const limit = Number(value);
   if (limit < 1 || limit > 200) throw createHttpError(400, 'limit must be between 1 and 200.');
   return limit;
+}
+
+// Email+password sign-up. Creates the account, drops the user into their own
+// personal workspace, and issues a session — same end state as an OIDC login.
+async function handleSignup({ store, authService, body }) {
+  const payload = validateSignupBody(body || {});
+  const email = payload.email.trim();
+  // Refuse if the email is already taken — including by a Google-only account.
+  // Silently "linking" a password to an existing OIDC email would let anyone
+  // who guesses an email set a password on it, so we make the user sign in
+  // with the method that already owns the address.
+  if (store.findUserByEmail(email)) throw createHttpError(409, 'An account with this email already exists. Try signing in instead.');
+  const passwordHash = await authService.hashPasswordAsync(payload.password);
+  const user = store.createUser({ email, displayName: payload.displayName || email, passwordHash });
+  const organization = store.ensurePersonalWorkspace(user.id);
+  return store.createAuthSessionAsync({ email: user.email, organizationId: organization.id });
+}
+
+// Email+password sign-in. Uses a single generic error for "no such user" and
+// "wrong password" so the endpoint can't be used to enumerate which emails
+// have accounts.
+async function handleLogin({ store, authService, body }) {
+  const payload = validateLoginBody(body || {});
+  const email = payload.email.trim();
+  const user = store.findUserByEmail(email);
+  const ok = user && user.passwordHash && await authService.verifyPasswordAsync(payload.password, user.passwordHash);
+  if (!ok) throw createHttpError(401, 'Invalid email or password.');
+  const organization = store.ensurePersonalWorkspace(user.id);
+  return store.createAuthSessionAsync({ email: user.email, organizationId: organization.id });
 }
 
 async function handleOidcCallback({ store, authService, body }) {

@@ -31,6 +31,7 @@ export async function readSnapshotFromPool(pool, schemaVersion = 1) {
       email: r.email,
       displayName: r.display_name,
       externalSubject: r.external_subject,
+      passwordHash: r.password_hash || '',
       memberships: memberships.filter(m => m.user_id === r.id).map(m => ({ organizationId: m.organization_id, role: m.role })),
       createdAt: r.created_at
     })),
@@ -108,8 +109,8 @@ export async function writeSnapshotToPool(pool, snapshot) {
 
     for (const user of snapshot.users || []) {
       await client.query(
-        'INSERT INTO users (id, email, display_name, external_subject, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET email=EXCLUDED.email, display_name=EXCLUDED.display_name, external_subject=EXCLUDED.external_subject, created_at=EXCLUDED.created_at',
-        [user.id, user.email, user.displayName || '', user.externalSubject || '', user.createdAt]
+        'INSERT INTO users (id, email, display_name, external_subject, password_hash, created_at) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO UPDATE SET email=EXCLUDED.email, display_name=EXCLUDED.display_name, external_subject=EXCLUDED.external_subject, password_hash=EXCLUDED.password_hash, created_at=EXCLUDED.created_at',
+        [user.id, user.email, user.displayName || '', user.externalSubject || '', user.passwordHash || '', user.createdAt]
       );
       for (const m of user.memberships || []) {
         await client.query(

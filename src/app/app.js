@@ -163,19 +163,148 @@ const app = {
     document.head.appendChild(s);
   },
 
-  signIn() {
-    // Prefer Google One Tap / prompt when configured; otherwise fall back to a
-    // dev login when the deployment allows it (preview/local).
-    if (this._authConfig && this._authConfig.googleClientId && window.google && window.google.accounts) {
+  signIn() { this.openSignIn(); },
+
+  // Sign-in modal: the user picks how to authenticate — Google (if configured)
+  // or email+password (sign in to an existing account, or create a new one).
+  openSignIn() {
+    if (document.getElementById('signin-overlay')) return;
+    const cfg = this._authConfig || {};
+    const overlay = document.createElement('div');
+    overlay.id = 'signin-overlay';
+    overlay.innerHTML =
+      '<div class="signin-panel" role="dialog" aria-modal="true" aria-label="Sign in to Nova">' +
+        '<button class="signin-close" aria-label="Close" onclick="app.closeSignIn()">&times;</button>' +
+        '<div class="signin-title">Welcome to Nova</div>' +
+        '<div class="signin-sub" id="signin-sub">Sign in to save and sync your work.</div>' +
+        (cfg.googleClientId
+          ? '<div class="signin-google" id="signin-google"></div><div class="signin-divider"><span>or</span></div>'
+          : '') +
+        '<form class="signin-form" id="signin-form" autocomplete="on">' +
+          '<div class="signin-field" id="signin-name-field" style="display:none">' +
+            '<label for="signin-name">Name</label>' +
+            '<input id="signin-name" type="text" autocomplete="name" placeholder="Your name">' +
+          '</div>' +
+          '<div class="signin-field">' +
+            '<label for="signin-email">Email</label>' +
+            '<input id="signin-email" type="email" autocomplete="email" placeholder="you@example.com" required>' +
+          '</div>' +
+          '<div class="signin-field">' +
+            '<label for="signin-password">Password</label>' +
+            '<input id="signin-password" type="password" autocomplete="current-password" placeholder="At least 8 characters" required minlength="8">' +
+          '</div>' +
+          '<div class="signin-error" id="signin-error"></div>' +
+          '<button class="signin-submit" id="signin-submit" type="submit">Sign in</button>' +
+        '</form>' +
+        '<div class="signin-toggle" id="signin-toggle">New to Nova? <button type="button" onclick="app.toggleSignInMode()">Create an account</button></div>' +
+        (cfg.devLogin ? '<div class="signin-dev"><button type="button" onclick="app.devSignInPrompt()">Dev sign-in</button></div>' : '') +
+      '</div>';
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) this.closeSignIn(); });
+    document.body.appendChild(overlay);
+    this._signInMode = 'login';
+    this._escSignIn = (e) => { if (e.key === 'Escape') this.closeSignIn(); };
+    document.addEventListener('keydown', this._escSignIn);
+    const form = document.getElementById('signin-form');
+    if (form) form.addEventListener('submit', (e) => this._submitEmailAuth(e));
+    this._renderGoogleButton();
+    const email = document.getElementById('signin-email');
+    if (email) setTimeout(() => email.focus(), 50);
+  },
+
+  closeSignIn() {
+    const overlay = document.getElementById('signin-overlay');
+    if (overlay) overlay.remove();
+    if (this._escSignIn) { document.removeEventListener('keydown', this._escSignIn); this._escSignIn = null; }
+  },
+
+  // Render Google's official button into the modal when GIS is ready; otherwise
+  // fall back to a plain button that triggers the One Tap prompt.
+  _renderGoogleButton() {
+    const host = document.getElementById('signin-google');
+    const clientId = this._authConfig && this._authConfig.googleClientId;
+    if (!host || !clientId) return;
+    if (window.google && window.google.accounts && window.google.accounts.id) {
+      try {
+        window.google.accounts.id.renderButton(host, { theme: 'filled_black', size: 'large', text: 'continue_with', width: 320 });
+        return;
+      } catch (e) { /* fall through to custom button */ }
+    }
+    host.innerHTML = '<button type="button" class="signin-google-btn" onclick="app.signInWithGoogle()">Continue with Google</button>';
+  },
+
+  signInWithGoogle() {
+    if (window.google && window.google.accounts && window.google.accounts.id) {
       window.google.accounts.id.prompt();
-      return;
+    } else {
+      this._showSignInError('Google sign-in is still loading — try again in a moment.');
     }
-    if (this._authConfig && this._authConfig.devLogin) {
-      const email = prompt('Dev sign-in — email:', 'owner@demo.nova');
-      if (email) this._devLogin(email);
-      return;
+  },
+
+  // Flip the modal between "sign in" and "create account".
+  toggleSignInMode() {
+    this._signInMode = this._signInMode === 'login' ? 'signup' : 'login';
+    const signup = this._signInMode === 'signup';
+    const nameField = document.getElementById('signin-name-field');
+    const submit = document.getElementById('signin-submit');
+    const sub = document.getElementById('signin-sub');
+    const toggle = document.getElementById('signin-toggle');
+    const pw = document.getElementById('signin-password');
+    if (nameField) nameField.style.display = signup ? '' : 'none';
+    if (submit) submit.textContent = signup ? 'Create account' : 'Sign in';
+    if (sub) sub.textContent = signup ? 'Create an account to save and sync your work.' : 'Sign in to save and sync your work.';
+    if (toggle) toggle.innerHTML = signup
+      ? 'Already have an account? <button type="button" onclick="app.toggleSignInMode()">Sign in</button>'
+      : 'New to Nova? <button type="button" onclick="app.toggleSignInMode()">Create an account</button>';
+    if (pw) pw.setAttribute('autocomplete', signup ? 'new-password' : 'current-password');
+    this._showSignInError('');
+  },
+
+  async _submitEmailAuth(event) {
+    if (event) event.preventDefault();
+    const signup = this._signInMode === 'signup';
+    const emailEl = document.getElementById('signin-email');
+    const pwEl = document.getElementById('signin-password');
+    const nameEl = document.getElementById('signin-name');
+    const email = (emailEl && emailEl.value || '').trim();
+    const password = (pwEl && pwEl.value) || '';
+    const displayName = signup ? ((nameEl && nameEl.value || '').trim()) : '';
+    if (!email || !password) { this._showSignInError('Email and password are required.'); return false; }
+    if (signup && password.length < 8) { this._showSignInError('Password must be at least 8 characters.'); return false; }
+    const submit = document.getElementById('signin-submit');
+    const original = submit ? submit.textContent : '';
+    if (submit) { submit.disabled = true; submit.textContent = signup ? 'Creating…' : 'Signing in…'; }
+    try {
+      const endpoint = signup ? '/api/auth/signup' : '/api/auth/login';
+      const r = await fetch(endpoint, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signup ? { email, password, displayName } : { email, password })
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const msg = (data && data.error && data.error.message) || (signup ? 'Could not create your account.' : 'Invalid email or password.');
+        this._showSignInError(msg);
+        return false;
+      }
+      this.closeSignIn();
+      await this.refreshSession();
+    } catch (e) {
+      this._showSignInError('Network error — please try again.');
+    } finally {
+      if (submit) { submit.disabled = false; submit.textContent = original; }
     }
-    alert('Sign-in is not configured for this deployment (set GOOGLE_CLIENT_ID).');
+    return false;
+  },
+
+  _showSignInError(msg) {
+    const el = document.getElementById('signin-error');
+    if (el) { el.textContent = msg || ''; el.style.display = msg ? 'block' : 'none'; }
+  },
+
+  devSignInPrompt() {
+    const email = prompt('Dev sign-in — email:', 'owner@demo.nova');
+    if (email) this._devLogin(email);
   },
 
   async _onGoogleCredential(resp) {
@@ -188,9 +317,10 @@ const app = {
         body: JSON.stringify({ idToken: resp.credential })
       });
       if (!r.ok) throw new Error('login failed');
+      this.closeSignIn();
       await this.refreshSession();
     } catch (e) {
-      alert('Sign-in failed. Please try again.');
+      this._showSignInError('Google sign-in failed. Please try again.');
     }
   },
 
@@ -203,9 +333,10 @@ const app = {
         body: JSON.stringify({ email })
       });
       if (!r.ok) throw new Error('dev login failed');
+      this.closeSignIn();
       await this.refreshSession();
     } catch (e) {
-      alert('Dev sign-in failed.');
+      this._showSignInError('Dev sign-in failed.');
     }
   },
 
