@@ -284,58 +284,57 @@ export const surfacesNodes = [
     }
   },
   {
-    type: 'Surface.ByRuledLoft',
-    name: 'Surface.ByRuledLoft',
+    type: 'Surface.ByLoft',
+    name: 'Surface.ByLoft',
     category: 'surfaces',
     subGroup: 'Creation',
     icon: '▨',
-    aliases: ['op-ruled-surface'],
-    description: 'Builds a ruled surface by interpolating straight ruling lines between two boundary curves. The result is a tessellated mesh sampled at fixed steps along the rulings; suitable for hyperbolic paraboloids and saddle shapes.',
+    aliases: ['op-ruled-surface', 'Surface.ByRuledLoft'],
+    description: 'Lofts a surface through an ordered list of cross-section curves, skinning a tessellated mesh between successive sections. Two sections give a ruled surface; more sections shape the surface along its length.',
     inputs: [
-      { id: 'curve1', name: 'Curve 1', type: 'any', description: 'First boundary curve' },
-      { id: 'curve2', name: 'Curve 2', type: 'any', description: 'Second boundary curve' }
+      { id: 'crossSections', name: 'Cross Sections', type: 'list', description: 'Ordered list of cross-section curves to loft through' }
     ],
-    outputs: [{ id: 'surface', name: 'Surface', type: 'mesh', description: 'Ruled surface mesh' }],
-    controls: [
-      { id: 'segments', type: 'formula', default: '20', label: 'Segments' }
-    ],
-    execute(context, inputs, controls) {
-      if (inputs.curve1 == null || inputs.curve2 == null) return { surface: undefined };
-      return { surface: Geo.ruledSurface(inputs.curve1, inputs.curve2, toInteger(controls.segments, 20)) };
+    outputs: [{ id: 'surface', name: 'Surface', type: 'mesh', description: 'Lofted surface mesh through the cross sections' }],
+    controls: [],
+    execute(context, inputs) {
+      const sections = toList(inputs.crossSections);
+      if (sections.length < 2) return { surface: undefined };
+      return { surface: Geo.loft(sections) };
     },
     codegen: {
-      python: '{{surface}} = Geo.ruledSurface({{curve1}}, {{curve2}}, int({{ctrl.segments}}))',
-      csharp: 'var {{surface}} = Geo.ruledSurface({{curve1}}, {{curve2}}, (int){{ctrl.segments}});'
+      python: '{{surface}} = Geo.loft({{crossSections}})',
+      csharp: 'var {{surface}} = Geo.loft({{crossSections}});'
     },
     help: {
       inputs: [
-        { name: 'Curve 1', description: 'First boundary curve' },
-        { name: 'Curve 2', description: 'Second boundary curve' }
+        { name: 'Cross Sections', description: 'Ordered list of cross-section curves' }
       ],
-      outputs: [{ name: 'Surface', description: 'Ruled surface mesh' }],
+      outputs: [{ name: 'Surface', description: 'Lofted surface mesh' }],
       example: {
-        title: 'Ruled surface between two parallel lines',
+        title: 'Loft a surface through two circles offset in Z',
         nodes: [
-          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
-          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 10, y: 0, z: 0 } },
-          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 0, y: 10, z: 0 } },
-          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 10, y: 10, z: 5 } },
-          { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
-          { type: 'Line.ByStartPointEndPoint', x: 240, y: 170 },
-          { type: 'Surface.ByRuledLoft', x: 480, y: 100 },
-          { type: 'Output.Watch', x: 700, y: 100 }
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 1 } },
+          { type: 'Circle.ByCenterRadius', x: 240, y: 30 },
+          { type: 'Point.ByCoordinates', x: 0, y: 160, controls: { x: 0, y: 0, z: 2 } },
+          { type: 'Input.Number', x: 0, y: 240, controls: { val: 1 } },
+          { type: 'Circle.ByCenterRadius', x: 240, y: 200 },
+          { type: 'List.Create', x: 480, y: 110 },
+          { type: 'Surface.ByLoft', x: 700, y: 110 },
+          { type: 'Output.Watch', x: 920, y: 110 }
         ],
         wires: [
-          [0, 'point', 4, 'startPoint'],
-          [1, 'point', 4, 'endPoint'],
-          [2, 'point', 5, 'startPoint'],
-          [3, 'point', 5, 'endPoint'],
-          [4, 'line', 6, 'curve1'],
-          [5, 'line', 6, 'curve2'],
-          [6, 'surface', 7, 'value']
+          [0, 'point', 2, 'center'],
+          [1, 'value', 2, 'radius'],
+          [3, 'point', 5, 'center'],
+          [4, 'value', 5, 'radius'],
+          [2, 'circle', 6, 'item0'],
+          [5, 'circle', 6, 'item1'],
+          [6, 'list', 7, 'crossSections'],
+          [7, 'surface', 8, 'value']
         ]
       },
-      sampleCode: '{{surface}} = Geo.ruledSurface({{curve1}}, {{curve2}})'
+      sampleCode: '{{surface}} = Geo.loft({{crossSections}})'
     }
   },
   {
