@@ -44,42 +44,6 @@ const PROVIDERS = [
       'gemini-1.5-flash',
       'gemini-2.0-flash-exp'
     ])
-  },
-  {
-    name: 'openrouter-free',
-    url: 'https://openrouter.ai/api/v1/chat/completions',
-    envKey: 'OPENROUTER_API_KEY',
-    altEnvKey: 'NOVA_OPENROUTER_API_KEY',
-    modelEnvKey: 'NOVA_OPENROUTER_MODEL',
-    // Opt-in: OpenRouter free model ids/availability churn; enable with
-    // NOVA_ENABLE_OPENROUTER=true when you have a working key.
-    optIn: true,
-    enableEnvKey: 'NOVA_ENABLE_OPENROUTER',
-    defaultModel: 'meta-llama/llama-3.3-70b-instruct:free',
-    allowedModels: new Set([
-      'meta-llama/llama-3.3-70b-instruct:free',
-      'meta-llama/llama-3.1-8b-instruct:free',
-      'google/gemini-2.0-flash-exp:free',
-      'deepseek/deepseek-chat:free'
-    ]),
-    extraHeaders: (env) => ({
-      'HTTP-Referer': (env && env.NOVA_PUBLIC_URL) || 'https://nova.app',
-      'X-Title': 'Nova'
-    })
-  },
-  {
-    name: 'cerebras',
-    url: 'https://api.cerebras.ai/v1/chat/completions',
-    envKey: 'CEREBRAS_API_KEY',
-    altEnvKey: 'NOVA_CEREBRAS_API_KEY',
-    modelEnvKey: 'NOVA_CEREBRAS_MODEL',
-    // Opt-in: Cerebras model access varies by account/tier (404 model_not_found
-    // is common). Enable with NOVA_ENABLE_CEREBRAS=true + set NOVA_CEREBRAS_MODEL
-    // to an id your account can actually use.
-    optIn: true,
-    enableEnvKey: 'NOVA_ENABLE_CEREBRAS',
-    defaultModel: 'llama-3.3-70b',
-    allowedModels: new Set(['llama-3.3-70b', 'llama3.1-8b', 'llama-4-scout-17b-16e-instruct', 'qwen-3-32b'])
   }
 ];
 
@@ -148,9 +112,6 @@ export function resolveProvider(p, env) {
   const raw = envSource[p.envKey] || envSource[p.altEnvKey];
   const key = raw ? String(raw).trim() : '';
   if (!key) return null;
-  // Opt-in providers (flaky/gated free tiers) stay out of the chain unless
-  // explicitly enabled, so a broken key can't dead-end requests.
-  if (p.optIn && String(envSource[p.enableEnvKey] || '').toLowerCase() !== 'true') return null;
   // Model id is configurable per deployment (env) → provider model churn is a
   // variable change, not a code change.
   const model = (p.modelEnvKey && envSource[p.modelEnvKey] && String(envSource[p.modelEnvKey]).trim()) || p.defaultModel;
@@ -278,7 +239,7 @@ export default async function handler(req, res) {
   if (available.length === 0) {
     sendJson(res, 503, {
       error: {
-        message: 'Free-tier proxy is not configured for this deployment. Set GROQ_API_KEY (and optionally OPENROUTER_API_KEY, CEREBRAS_API_KEY) in Vercel environment variables, or bring your own API key in Nova Settings.',
+        message: 'Free-tier proxy is not configured for this deployment. Set GROQ_API_KEY (and optionally GEMINI_API_KEY) in the environment, or bring your own API key in Nova Settings.',
         code: 'PROXY_NOT_CONFIGURED'
       }
     });
