@@ -127,9 +127,7 @@ export function createStateStore(options = {}) {
   return null;
 }
 
-export function hashToken(token) {
-  return crypto.createHash('sha256').update(String(token || '')).digest('hex');
-}
+export { hashToken } from './state-hash.mjs';
 
 function encodeCommand(parts) {
   const encoded = ['*' + parts.length];

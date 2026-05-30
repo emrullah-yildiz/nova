@@ -87,36 +87,40 @@ export const geometryNodes = [
     subGroup: 'Transform',
     icon: '↗',
     aliases: ['op-move'],
-    description: 'Translates a geometry by a vector. Returns a new translated geometry; the input is left unchanged. Length, orientation, and shape are preserved — only position changes.',
+    description: 'Translates a geometry a given Distance along a Direction. The direction is normalised internally, so Distance is the exact amount moved. Returns a new geometry; the input is left unchanged. Length, orientation, and shape are preserved — only position changes.',
     inputs: [
       { id: 'geometry', name: 'Geometry', type: 'any', description: 'Geometry to translate' },
-      { id: 'vector', name: 'Vector', type: 'vector', description: 'Translation vector' }
+      { id: 'direction', name: 'Direction', type: 'vector', description: 'Axis/direction to move along (normalised internally)' },
+      { id: 'distance', name: 'Distance', type: 'number', description: 'Distance to move along the direction' }
     ],
     outputs: [{ id: 'result', name: 'Result', type: 'any', description: 'Translated geometry' }],
-    controls: [],
+    controls: [{ id: 'distance', type: 'formula', default: '1', label: 'Distance' }],
     execute(context, inputs) {
       const geo = inputs.geometry;
       if (geo == null) return { result: undefined };
-      return { result: Geo.move(geo, toVector(inputs.vector)) };
+      const dir = toVector(inputs.direction, new Geo.Vector3(0, 0, 1)).normalize();
+      const dist = toNumber(inputs.distance, 0);
+      return { result: Geo.move(geo, dir.scale(dist)) };
     },
     codegen: {
-      python: '{{result}} = Geo.move({{geometry}}, {{vector}})',
-      csharp: 'var {{result}} = Geo.move({{geometry}}, {{vector}});'
+      python: '{{result}} = Geo.move({{geometry}}, {{direction}}.normalize().scale({{distance}}))',
+      csharp: 'var {{result}} = Geo.move({{geometry}}, {{direction}}.normalize().scale({{distance}}));'
     },
     help: {
       inputs: [
         { name: 'Geometry', description: 'Geometry to move' },
-        { name: 'Vector', description: 'Translation vector' }
+        { name: 'Direction', description: 'Axis/direction to move along' },
+        { name: 'Distance', description: 'Distance to move' }
       ],
       outputs: [{ name: 'Result', description: 'Moved geometry' }],
       example: {
-        title: 'Move a 3-4-5 line — length unchanged (5)',
+        title: 'Move a 3-4-5 line 10 along X — length unchanged (5)',
         nodes: [
           { type: 'Point.Origin', x: 0, y: 0 },
           { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
           { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
-          { type: 'Point.ByCoordinates', x: 0, y: 160, controls: { x: 10, y: 0, z: 0 } },
-          { type: 'Geometry.Move', x: 460, y: 90 },
+          { type: 'Vector.XAxis', x: 240, y: 160 },
+          { type: 'Geometry.Move', x: 460, y: 90, controls: { distance: 10 } },
           { type: 'Curve.Length', x: 680, y: 90 },
           { type: 'Output.Watch', x: 880, y: 90 }
         ],
@@ -124,12 +128,12 @@ export const geometryNodes = [
           [0, 'point', 2, 'startPoint'],
           [1, 'point', 2, 'endPoint'],
           [2, 'line', 4, 'geometry'],
-          [3, 'point', 4, 'vector'],
+          [3, 'vector', 4, 'direction'],
           [4, 'result', 5, 'curve'],
           [5, 'length', 6, 'value']
         ]
       },
-      sampleCode: '{{result}} = Geo.move({{geometry}}, {{vector}})'
+      sampleCode: '{{result}} = Geo.move({{geometry}}, {{direction}}.normalize().scale({{distance}}))'
     }
   },
   {

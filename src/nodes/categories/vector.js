@@ -127,6 +127,114 @@ export const vectorNodes = [
       sampleCode: '{{vector}} = Geo.Vector3({{endPoint}}.x - {{startPoint}}.x, {{endPoint}}.y - {{startPoint}}.y, {{endPoint}}.z - {{startPoint}}.z)'
     }
   },
+  {
+    type: 'Vector.XAxis',
+    name: 'Vector.XAxis',
+    category: 'vector',
+    subGroup: 'Creation',
+    icon: '→',
+    aliases: ['vector-xaxis'],
+    description: 'Returns the world X axis as a unit vector (1, 0, 0). A constant direction with no inputs — feed it into Geometry.Move, Geometry.Rotate or array nodes to act along X.',
+    inputs: [],
+    outputs: [{ id: 'vector', name: 'Vector', type: 'vector', description: 'Unit vector (1, 0, 0)' }],
+    controls: [],
+    execute() {
+      return { vector: new Geo.Vector3(1, 0, 0) };
+    },
+    codegen: {
+      python: '{{vector}} = Geo.Vector3(1, 0, 0)',
+      csharp: 'var {{vector}} = Geo.Vector3(1, 0, 0);'
+    },
+    help: {
+      inputs: [],
+      outputs: [{ name: 'Vector', description: 'Unit vector (1, 0, 0)' }],
+      example: {
+        title: 'World X axis — length 1',
+        nodes: [
+          { type: 'Vector.XAxis', x: 0, y: 0 },
+          { type: 'Vector.Length', x: 240, y: 0 },
+          { type: 'Output.Watch', x: 460, y: 0 }
+        ],
+        wires: [
+          [0, 'vector', 1, 'vector'],
+          [1, 'length', 2, 'value']
+        ]
+      },
+      sampleCode: '{{vector}} = Geo.Vector3(1, 0, 0)'
+    }
+  },
+  {
+    type: 'Vector.YAxis',
+    name: 'Vector.YAxis',
+    category: 'vector',
+    subGroup: 'Creation',
+    icon: '↑',
+    aliases: ['vector-yaxis'],
+    description: 'Returns the world Y axis as a unit vector (0, 1, 0). A constant direction with no inputs — feed it into Geometry.Move, Geometry.Rotate or array nodes to act along Y.',
+    inputs: [],
+    outputs: [{ id: 'vector', name: 'Vector', type: 'vector', description: 'Unit vector (0, 1, 0)' }],
+    controls: [],
+    execute() {
+      return { vector: new Geo.Vector3(0, 1, 0) };
+    },
+    codegen: {
+      python: '{{vector}} = Geo.Vector3(0, 1, 0)',
+      csharp: 'var {{vector}} = Geo.Vector3(0, 1, 0);'
+    },
+    help: {
+      inputs: [],
+      outputs: [{ name: 'Vector', description: 'Unit vector (0, 1, 0)' }],
+      example: {
+        title: 'World Y axis — length 1',
+        nodes: [
+          { type: 'Vector.YAxis', x: 0, y: 0 },
+          { type: 'Vector.Length', x: 240, y: 0 },
+          { type: 'Output.Watch', x: 460, y: 0 }
+        ],
+        wires: [
+          [0, 'vector', 1, 'vector'],
+          [1, 'length', 2, 'value']
+        ]
+      },
+      sampleCode: '{{vector}} = Geo.Vector3(0, 1, 0)'
+    }
+  },
+  {
+    type: 'Vector.ZAxis',
+    name: 'Vector.ZAxis',
+    category: 'vector',
+    subGroup: 'Creation',
+    icon: '↗',
+    aliases: ['vector-zaxis'],
+    description: 'Returns the world Z axis as a unit vector (0, 0, 1). A constant direction with no inputs — feed it into Geometry.Move, Geometry.Rotate or array nodes to act along Z (the vertical/up direction).',
+    inputs: [],
+    outputs: [{ id: 'vector', name: 'Vector', type: 'vector', description: 'Unit vector (0, 0, 1)' }],
+    controls: [],
+    execute() {
+      return { vector: new Geo.Vector3(0, 0, 1) };
+    },
+    codegen: {
+      python: '{{vector}} = Geo.Vector3(0, 0, 1)',
+      csharp: 'var {{vector}} = Geo.Vector3(0, 0, 1);'
+    },
+    help: {
+      inputs: [],
+      outputs: [{ name: 'Vector', description: 'Unit vector (0, 0, 1)' }],
+      example: {
+        title: 'World Z axis — length 1',
+        nodes: [
+          { type: 'Vector.ZAxis', x: 0, y: 0 },
+          { type: 'Vector.Length', x: 240, y: 0 },
+          { type: 'Output.Watch', x: 460, y: 0 }
+        ],
+        wires: [
+          [0, 'vector', 1, 'vector'],
+          [1, 'length', 2, 'value']
+        ]
+      },
+      sampleCode: '{{vector}} = Geo.Vector3(0, 0, 1)'
+    }
+  },
 
   // ─── Query ───────────────────────────────────────────────
   {

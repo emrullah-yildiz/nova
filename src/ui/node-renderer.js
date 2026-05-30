@@ -15,6 +15,7 @@
 
 
 import { getWiredControlDisplay, removeControlInputWires } from './property-wire-controls.js';
+import { isAutoLaceable } from '../core/lacing.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -388,13 +389,11 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
 
     }
 
-    var defaultLacingMode = def.lacing && def.lacing.mode ? def.lacing.mode : null;
-    var supportsGenericLacing = !defaultLacingMode
-      && !def.dynamicInputs
-      && (def.inputs || []).length > 0
-      && (def.outputs || []).length > 0
-      && !(def.inputs || []).some(function(input) { return input.type === 'list'; });
-    if (supportsGenericLacing) defaultLacingMode = 'shortest';
+    // Show the Lacing dropdown (and pre-select a default) for any node that the
+    // engine will implicitly fan out over lists. Keep this predicate in sync
+    // with the runtime via the shared isAutoLaceable helper.
+    var declaredLacing = def.lacing && def.lacing.mode && def.lacing.mode !== 'none' ? def.lacing.mode : null;
+    var defaultLacingMode = declaredLacing || (isAutoLaceable(def) ? 'shortest' : null);
 
     if (propsControls.length > 0 || (def.controls || []).some(function(c) { return c.type === 'formula'; }) || (defaultLacingMode && defaultLacingMode !== 'none')) {
 
@@ -714,7 +713,7 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
         if (t.indexOf('vector') >= 0) return 'vector';
         if (t.indexOf('mesh') >= 0 || t.indexOf('solid') >= 0 || t.indexOf('surface') >= 0) return 'mesh';
         if (t.indexOf('line') >= 0) return 'line';
-        if (t.indexOf('curve') >= 0 || t.indexOf('circle') >= 0 || t.indexOf('arc') >= 0) return 'curve';
+        if (t.indexOf('curve') >= 0 || t.indexOf('circle') >= 0 || t.indexOf('arc') >= 0 || t.indexOf('ellipse') >= 0) return 'curve';
       }
       return typeof value === 'object' ? 'object' : typeof value;
     }
@@ -742,6 +741,9 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
       var input = inputValue(inp);
       if (!input.wired && input.value === undefined) return;
       var actual = typeOfValue(input.value);
+      // A list arriving at a scalar port is valid when the node auto-laces —
+      // it maps over each item rather than erroring. Don't flag that.
+      if (actual === 'list' && inp.type !== 'list' && isAutoLaceable(nd.def)) return;
       if (!matches(inp.type, actual, input.value)) warnings.push({ port: inp.name || inp.id, expected: inp.type, actual: actual, message: (inp.name || inp.id) + ' expects ' + inp.type + ' but received ' + actual + '.' });
     });
     if (nd._lastRunValue === undefined && nd.def && nd.def.outputs && nd.def.outputs.length > 0) warnings.push({ port: 'Output', expected: 'value', actual: 'undefined', message: 'Node produced no output on the last Run.' });

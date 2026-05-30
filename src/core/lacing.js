@@ -4,6 +4,51 @@ export function hasListInput(inputDefinitions, inputs) {
   });
 }
 
+// The implicit lacing mode used when a node hasn't declared one of its own.
+// 'shortest' matches the mode the properties panel has always offered, so the
+// UI dropdown and the engine agree.
+export const DEFAULT_LACING_MODE = 'shortest';
+
+// Node types whose execution is special-cased (async Python, external AI calls)
+// and must NOT be silently fanned out over a list one item at a time.
+const NON_LACEABLE_TYPES = {
+  'custom-python': true,
+  'Custom.Python': true,
+  'custom-ai': true,
+  'Custom.AI': true
+};
+
+// Whether a node should implicitly map over an incoming list — running once per
+// item and returning a list — when no explicit lacing mode is set. A node opts
+// out of this by: having no inputs or no outputs (sinks like Output.Watch),
+// using dynamic ports, declaring an input already typed 'list' (it consumes the
+// whole list itself, e.g. Solid.ByLoft / List.* / Math.Sum), or being a
+// special-cased type. Everything else — number/vector/point/mesh/'any' scalar
+// ports — fans out, which is what "any input can take a list" means.
+export function isAutoLaceable(def) {
+  if (!def) return false;
+  if (def.type && NON_LACEABLE_TYPES[def.type]) return false;
+  if (def.dynamicInputs) return false;
+  var inputs = def.inputs || [];
+  var outputs = def.outputs || [];
+  if (inputs.length === 0 || outputs.length === 0) return false;
+  return !inputs.some(function(input) { return input && input.type === 'list'; });
+}
+
+// Resolve the effective lacing mode for a node instance:
+//   1. an explicit per-instance override (the _lacingMode control) wins;
+//   2. then a real declared mode on the definition (e.g. math = 'shortest');
+//   3. otherwise auto-laceable nodes default to DEFAULT_LACING_MODE, all
+//      others to 'none'.
+// A declared mode of 'none' is treated as "unset" because node normalization
+// stamps every definition with { mode: 'none' } — no node opts out that way.
+export function resolveLacingMode(def, instanceMode) {
+  if (instanceMode) return instanceMode;
+  var declared = def && def.lacing && def.lacing.mode;
+  if (declared && declared !== 'none') return declared;
+  return isAutoLaceable(def) ? DEFAULT_LACING_MODE : 'none';
+}
+
 export function createLacingFrames(inputDefinitions, inputs, mode = 'shortest') {
   const listInputs = inputDefinitions
     .map(input => ({ id: input.id, value: inputs[input.id] }))
@@ -125,4 +170,32 @@ export function collectLacingFrameOutputs(outputIds, frames, executeFrame) {
   });
 
   return framedOutputs;
+}
+
+// Dynamo-style recursive replication. At each level the array-valued inputs are
+// zipped per `mode` (scalars broadcast); the call then recurses into the paired
+// elements, so a nested list (list-of-lists, any depth) fans all the way down
+// and each output mirrors the input's nesting structure.
+//
+// `runOne(frameInputs)` runs the node once on all-scalar inputs and must return
+// a normalized output object `{ [outputId]: value }`. executeReplicated returns
+// the same shape, with each output value nested to match the inputs.
+//
+// shortest/longest recurse; crossProduct keeps its existing single-pass nested
+// behavior (createLacingFrames already produces a nested frame structure).
+export function executeReplicated(inputDefinitions, inputs, mode, outputIds, runOne) {
+  if (mode === 'crossProduct') {
+    return collectLacingFrameOutputs(outputIds, createLacingFrames(inputDefinitions, inputs, mode), runOne);
+  }
+  if (!hasListInput(inputDefinitions, inputs)) {
+    return runOne(inputs);
+  }
+  const frames = createLacingFrames(inputDefinitions, inputs, mode);
+  const collected = {};
+  outputIds.forEach(function(id) { collected[id] = []; });
+  frames.forEach(function(frame) {
+    const res = executeReplicated(inputDefinitions, frame, mode, outputIds, runOne);
+    outputIds.forEach(function(id) { collected[id].push(res[id]); });
+  });
+  return collected;
 }

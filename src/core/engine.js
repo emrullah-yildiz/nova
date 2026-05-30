@@ -24,7 +24,8 @@
 
 
 
-import { createLacingFrames, hasListInput, mapLacingFrames } from './lacing.js';
+import { createLacingFrames, hasListInput, mapLacingFrames, isAutoLaceable, resolveLacingMode, executeReplicated } from './lacing.js';
+import { layoutGraph } from './graph-layout.js';
 import { hostRegistry } from '../hosts/HostRegistry.js';
 import { setPreviewItemVisibility } from '../viewer/preview-sync.js';
 import { NODE_TYPE_MAP } from './nodes.js';
@@ -341,11 +342,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
     function supportsGenericLacing() {
-      var def = nd.def || {};
-      var inputs = def.inputs || [];
-      if (inputs.length === 0 || def.dynamicInputs) return false;
-      if (def.lacing && def.lacing.mode === 'none') return false;
-      return !inputs.some(function(input) { return input.type === 'list'; });
+      return isAutoLaceable(nd.def);
     }
 
     function computeGenericLacedValue(mode) {
@@ -361,10 +358,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       if (!hasListInput(inputDefinitions, inputValues)) return undefined;
 
-      var frames = createLacingFrames(inputDefinitions, inputValues, mode);
+      var outputIds = outputs.map(function(output) { return output.id; });
       var singleOutputId = outputs.length === 1 ? outputs[0].id : null;
-      var portValues = {};
-      outputs.forEach(function(output) { portValues[output.id] = []; });
 
       function executeFrame(frame) {
         var previousPortValues = nd._portValues;
@@ -388,21 +383,9 @@ export function installEngine(targetApp = getRuntimeApp()) {
         return value && typeof value === 'object' ? value : {};
       }
 
-      frames.forEach(function(frame) {
-        if (Array.isArray(frame)) {
-          var nested = {};
-          outputs.forEach(function(output) { nested[output.id] = []; });
-          frame.forEach(function(innerFrame) {
-            var outputValues = executeFrame(innerFrame);
-            outputs.forEach(function(output) { nested[output.id].push(outputValues[output.id]); });
-          });
-          outputs.forEach(function(output) { portValues[output.id].push(nested[output.id]); });
-          return;
-        }
-
-        var outputValues = executeFrame(frame);
-        outputs.forEach(function(output) { portValues[output.id].push(outputValues[output.id]); });
-      });
+      // Recursive (Dynamo-style) replication: nested lists fan all the way
+      // down and outputs mirror the input nesting.
+      var portValues = executeReplicated(inputDefinitions, inputValues, mode, outputIds, executeFrame);
 
       if (outputs.length > 1) {
         nd._portValues = portValues;
@@ -416,9 +399,14 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     try {
 
-      var mode = nd.controlValues && nd.controlValues._lacingMode
+      // Default-on lacing: any node that isn't a list-consumer / sink / dynamic
+      // / special-cased type maps over an incoming list automatically, so every
+      // scalar/geometry input "can take a list". A per-instance _lacingMode
+      // control still overrides the default.
+      var instanceMode = nd.controlValues && nd.controlValues._lacingMode
         ? nd.controlValues._lacingMode
-        : (nd.def && nd.def.lacing && nd.def.lacing.mode) || null;
+        : null;
+      var mode = resolveLacingMode(nd.def, instanceMode);
 
       if (mode && mode !== 'none' && supportsGenericLacing()) {
         result = computeGenericLacedValue(mode);
@@ -2290,123 +2278,39 @@ export function installEngine(targetApp = getRuntimeApp()) {
   // ═══════════════════════════════════════
   app.autoLayout = function() {
     if (this.nodes.length === 0) return;
-    var MARGIN_X = 60;
-    var MARGIN_Y = 15;
     var self = this;
-    // 1. Build adjacency: which nodes feed into which
-    var incoming = {}; // nodeId → [sourceNodeIds]
-    var outgoing = {}; // nodeId → [targetNodeIds]
-    this.nodes.forEach(function(n) { incoming[n.id] = []; outgoing[n.id] = []; });
-    this.wires.forEach(function(w) {
-      if (incoming[w.toNode] && outgoing[w.fromNode]) {
-        incoming[w.toNode].push(w.fromNode);
-        outgoing[w.fromNode].push(w.toNode);
-      }
-    });
-    // 2. Assign depth (column) via topological sort
-    var depth = {};
-    var visited = {};
-    function assignDepth(nodeId) {
-      if (visited[nodeId]) return depth[nodeId] || 0;
-      visited[nodeId] = true;
-      var maxParentDepth = -1;
-      incoming[nodeId].forEach(function(srcId) {
-        var d = assignDepth(srcId);
-        if (d > maxParentDepth) maxParentDepth = d;
-      });
-      depth[nodeId] = maxParentDepth + 1;
-      return depth[nodeId];
-    }
-    this.nodes.forEach(function(n) { assignDepth(n.id); });
-    // 3. Group by column
-    var columns = {};
-    var maxCol = 0;
-    this.nodes.forEach(function(n) {
-      var col = depth[n.id] || 0;
-      if (!columns[col]) columns[col] = [];
-      columns[col].push(n);
-      if (col > maxCol) maxCol = col;
-    });
-    // 4. Measure node heights (from DOM)
-    var nodeHeights = {};
-    this.nodes.forEach(function(n) {
-      var el = document.getElementById(n.id);
-      nodeHeights[n.id] = el ? el.offsetHeight || 100 : 100;
-    });
-    // 5. Position nodes column by column
-    var startX = 60;
-    var maxColWidth = 0;
-    var currentX = startX;
-    for (var col = 0; col <= maxCol; col++) {
-      var colNodes = columns[col] || [];
-      if (colNodes.length === 0) continue;
-      // Find widest node in column
-      var colWidth = 0;
-      colNodes.forEach(function(n) {
-        var el = document.getElementById(n.id);
-        var w = el ? el.offsetWidth || 180 : 180;
-        if (w > colWidth) colWidth = w;
-      });
-      // Sort vertically: try to keep nodes near their connected sources
-      colNodes.sort(function(a, b) {
-        var aAvg = 0, bAvg = 0, aCnt = 0, bCnt = 0;
-        incoming[a.id].forEach(function(src) {
-          var srcNd = self.nodes.find(function(n) { return n.id === src; });
-          if (srcNd) { aAvg += srcNd.y; aCnt++; }
-        });
-        incoming[b.id].forEach(function(src) {
-          var srcNd = self.nodes.find(function(n) { return n.id === src; });
-          if (srcNd) { bAvg += srcNd.y; bCnt++; }
-        });
-        aAvg = aCnt > 0 ? aAvg / aCnt : a.y;
-        bAvg = bCnt > 0 ? bAvg / bCnt : b.y;
-        return aAvg - bAvg;
-      });
-      // Place vertically with no overlap
-      var currentY = 60;
-      colNodes.forEach(function(n) {
-        n.x = currentX;
-        n.y = currentY;
-        var el = document.getElementById(n.id);
-        if (el) {
-          el.style.left = n.x + 'px';
-          el.style.top = n.y + 'px';
-        }
-        currentY += (nodeHeights[n.id] || 100) + MARGIN_Y;
-      });
-      currentX += colWidth + MARGIN_X;
-    }
-    // 6. Remove orphan wires pointing to non-existent nodes
-    var nodeIds = {};
-    this.nodes.forEach(function(n) { nodeIds[n.id] = true; });
+
+    // Drop wires pointing at nodes that no longer exist before laying out.
+    var idSet = {};
+    this.nodes.forEach(function(n) { idSet[n.id] = true; });
     var before = this.wires.length;
-    this.wires = this.wires.filter(function(w) { return nodeIds[w.fromNode] && nodeIds[w.toNode]; });
-    if (this.wires.length < before && typeof NFLogger !== 'undefined') NFLogger.warn('layout', 'Removed ' + (before - this.wires.length) + ' orphan wires');
-    this.updatePortDots();
-    // 7. De-overlap nodes
-    var posMap = {};
+    this.wires = this.wires.filter(function(w) { return idSet[w.fromNode] && idSet[w.toNode]; });
+    if (this.wires.length < before && typeof NFLogger !== 'undefined') {
+      NFLogger.warn('layout', 'Removed ' + (before - this.wires.length) + ' orphan wires');
+    }
+
+    // Measure rendered node boxes so the layered layout fits the real sizes.
+    var sizeOf = function(id) {
+      var el = document.getElementById(id);
+      return { w: el ? (el.offsetWidth || 180) : 180, h: el ? (el.offsetHeight || 100) : 100 };
+    };
+    var ids = this.nodes.map(function(n) { return n.id; });
+    var edges = this.wires.map(function(w) { return [w.fromNode, w.toNode]; });
+
+    // Layered (Sugiyama-style) layout: minimises wire crossings and pulls
+    // connected nodes onto the same row, with continuous (non-grid) spacing.
+    var result = layoutGraph(ids, edges, sizeOf, { gapX: 60, gapY: 24 });
+
+    var OFFSET_X = 60, OFFSET_Y = 60;
     this.nodes.forEach(function(n) {
-      var key = Math.round(n.x / 20) + ',' + Math.round(n.y / 20);
-      while (posMap[key]) {
-        n.y += (nodeHeights[n.id] || 100) + MARGIN_Y;
-        key = Math.round(n.x / 20) + ',' + Math.round(n.y / 20);
-      }
-      posMap[key] = n.id;
+      var p = result.pos[n.id];
+      if (!p) return;
+      n.x = p.x + OFFSET_X;
+      n.y = p.y + OFFSET_Y;
       var el = document.getElementById(n.id);
       if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
     });
-    // 8. Ensure no node is off-screen
-    var minX = Infinity, minY = Infinity;
-    this.nodes.forEach(function(n) { if (n.x < minX) minX = n.x; if (n.y < minY) minY = n.y; });
-    if (minX < 60 || minY < 60) {
-      var ox = minX < 60 ? 60 - minX : 0;
-      var oy = minY < 60 ? 60 - minY : 0;
-      this.nodes.forEach(function(n) {
-        n.x += ox; n.y += oy;
-        var el = document.getElementById(n.id);
-        if (el) { el.style.left = n.x + 'px'; el.style.top = n.y + 'px'; }
-      });
-    }
+    this.updatePortDots();
     // 7. Re-render wires and zoom to fit all nodes
     setTimeout(function() { self.renderWires(); }, 50);
     // Calculate bounding box of all nodes

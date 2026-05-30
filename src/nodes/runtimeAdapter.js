@@ -1,4 +1,4 @@
-import { collectLacingFrameOutputs, createLacingFrames, hasListInput } from '../core/lacing.js';
+import { executeReplicated, hasListInput, isAutoLaceable, resolveLacingMode } from '../core/lacing.js';
 
 export function createRegistryComputeInner(registry, options = {}) {
   const fallbackComputeInner = options.fallbackComputeInner || null;
@@ -35,22 +35,20 @@ export function executeWithLacing(nodeDefinition, context, inputs, controls, nod
   const instanceLacingMode = nodeInstance && nodeInstance.controlValues
     ? nodeInstance.controlValues._lacingMode
     : undefined;
-  const lacing = {
-    ...(nodeDefinition.lacing || { mode: 'none' }),
-    mode: instanceLacingMode || (nodeDefinition.lacing && nodeDefinition.lacing.mode) || 'none'
-  };
-  const mode = lacing.mode || 'none';
-  if (mode === 'none' || !hasListInput(nodeDefinition.inputs, inputs)) {
+  const mode = resolveLacingMode(nodeDefinition, instanceLacingMode);
+  // Only fan out when the node is genuinely auto-laceable (not a list-consumer
+  // such as Solid.ByLoft / List.*, whose 'list' port must receive the whole
+  // array intact) and a list actually arrived.
+  if (mode === 'none' || !isAutoLaceable(nodeDefinition) || !hasListInput(nodeDefinition.inputs, inputs)) {
     return nodeDefinition.execute(context, inputs, controls, nodeInstance);
   }
 
   const outputIds = nodeDefinition.outputs.map(output => output.id);
-  const frames = createLacingFrames(nodeDefinition.inputs, inputs, mode);
-  const framedOutputs = collectLacingFrameOutputs(outputIds, frames, function(frameInputs) {
+  const replicated = executeReplicated(nodeDefinition.inputs, inputs, mode, outputIds, function(frameInputs) {
     return normalizeOutputs(outputIds, nodeDefinition.execute(context, frameInputs, controls, nodeInstance));
   });
 
-  return outputIds.length === 1 ? { [outputIds[0]]: framedOutputs[outputIds[0]] } : framedOutputs;
+  return outputIds.length === 1 ? { [outputIds[0]]: replicated[outputIds[0]] } : replicated;
 }
 
 export function resolveControls(nodeDefinition, nodeInstance, getVal) {

@@ -8,6 +8,14 @@
 
 
 
+// Coerce a point-like / vector-like value to a Vector3 (so directions always
+// have vector methods like normalize/cross). Returns null for nullish input.
+function asVector(v) {
+  if (!v) return null;
+  if (v instanceof _Vector3) return v;
+  return new Geo.Vector3(v.x || 0, v.y || 0, v.z || 0);
+}
+
 // ── Base: Curve3 — abstract curve interface ──
 
 class _Curve3 {
@@ -340,6 +348,89 @@ class _Circle3 extends _Curve3 {
 
 
 
+// ── Ellipse3 (axis-aligned ellipse in a plane, extends Curve3) ──
+
+class _Ellipse3 extends _Curve3 {
+
+  constructor(center, width, depth, normal, xAxis) {
+
+    super();
+
+    this.center = center || new Geo.Point3(0,0,0);
+
+    this.width = width || 1;   // total span along the local X (xAxis) direction
+
+    this.depth = depth || 1;   // total span along the local Y direction
+
+    this.normal = asVector(normal) || new Geo.Vector3(0,0,1);
+
+    // In-plane direction of the width axis. Defaults so a Z-normal ellipse has
+    // width along world X; transforms carry/rotate it so the ellipse can hold
+    // an arbitrary orientation (this is what lets Geometry.Rotate spin it).
+    this.xAxis = asVector(xAxis) || this._defaultXAxis();
+
+    this.closed = true;
+
+    this._type = 'Ellipse3';
+
+  }
+
+  _defaultXAxis() {
+    const n = this.normal.normalize();
+    const ref = Math.abs(n.y) < 0.999 ? new Geo.Vector3(0,1,0) : new Geo.Vector3(1,0,0);
+    return ref.cross(n).normalize();
+  }
+
+  // Orthonormal basis: u = width axis, v = depth axis, n = normal.
+  _buildAxes() {
+    const n = this.normal.normalize();
+    const u = this.xAxis.normalize();
+    const v = n.cross(u).normalize();
+    return { u, v, n };
+  }
+
+  pointAt(t) {
+    const a = Math.PI * 2 * t;
+    const rx = this.width / 2, ry = this.depth / 2;
+    const ax = this._buildAxes();
+    const cosA = Math.cos(a), sinA = Math.sin(a);
+    return new Geo.Point3(
+      this.center.x + rx * cosA * ax.u.x + ry * sinA * ax.v.x,
+      this.center.y + rx * cosA * ax.u.y + ry * sinA * ax.v.y,
+      this.center.z + rx * cosA * ax.u.z + ry * sinA * ax.v.z
+    );
+  }
+
+  // Ramanujan's approximation — no closed form exists for an ellipse perimeter.
+  length() {
+    const a = this.width / 2, b = this.depth / 2;
+    const h = Math.pow(a - b, 2) / Math.pow(a + b, 2) || 0;
+    return Math.PI * (a + b) * (1 + (3 * h) / (10 + Math.sqrt(4 - 3 * h)));
+  }
+
+  getCenter() { return this.center.clone(); }
+
+  toPoints(segments) {
+    segments = segments || 64;
+    const pts = [];
+    for (let i = 0; i <= segments; i++) pts.push(this.pointAt(i / segments));
+    return pts;
+  }
+
+  area() { return Math.PI * (this.width / 2) * (this.depth / 2); }
+
+  toMesh(color) {
+    const pts = this.toPoints(64).map(p => p.toThree());
+    const g = new THREE.BufferGeometry().setFromPoints(pts);
+    return new THREE.Line(g, new THREE.LineBasicMaterial({ color: color || 0xf9e2af, linewidth: 2 }));
+  }
+
+  toString() { return `Ellipse3(w=${this.width.toFixed(2)}, d=${this.depth.toFixed(2)}, c=${this.center})`; }
+
+}
+
+
+
 // ── Plane ──
 
 class _Plane {
@@ -498,6 +589,7 @@ const Geo = {
   Polyline3: _Polyline3,
   Arc3: _Arc3,
   Circle3: _Circle3,
+  Ellipse3: _Ellipse3,
   Plane: _Plane,
   Mesh3: _Mesh3,
 
@@ -765,7 +857,7 @@ const Geo = {
   _curveToPoints(curve, count) {
     if (Array.isArray(curve)) return curve;
     if (curve._type === 'Polyline3') return curve.points;
-    if (curve._type === 'Circle3' || curve._type === 'Arc3') return curve.toPoints ? curve.toPoints(count || 48) : [];
+    if (curve._type === 'Circle3' || curve._type === 'Arc3' || curve._type === 'Ellipse3') return curve.toPoints ? curve.toPoints(count || 48) : [];
     if (curve._type === 'Line3') return [curve.start, curve.end];
     const segs = count || 32;
     const pts = [];
@@ -944,6 +1036,8 @@ const Geo = {
       if (geometry._type === 'Line3') return new Geo.Line3(geometry.start.add(vector), geometry.end.add(vector));
       if (geometry._type === 'Polyline3') return new Geo.Polyline3(geometry.points.map(p => p.add(vector)), geometry.closed);
       if (geometry._type === 'Circle3') return new Geo.Circle3(geometry.center.add(vector), geometry.radius, geometry.normal);
+      if (geometry._type === 'Arc3') return new Geo.Arc3(geometry.center.add(vector), geometry.radius, geometry.startAngle, geometry.endAngle, geometry.normal);
+      if (geometry._type === 'Ellipse3') return new Geo.Ellipse3(geometry.center.add(vector), geometry.width, geometry.depth, geometry.normal, geometry.xAxis);
     }
     if (geometry._type === 'Mesh3') {
       const m = new Geo.Mesh3(geometry.vertices.map(v => v.add(vector)), geometry.faces.slice(), geometry.color);
@@ -967,6 +1061,8 @@ const Geo = {
       if (geometry._type === 'Line3') return new Geo.Line3(scalePoint(geometry.start), scalePoint(geometry.end));
       if (geometry._type === 'Polyline3') return new Geo.Polyline3(geometry.points.map(scalePoint), geometry.closed);
       if (geometry._type === 'Circle3') return new Geo.Circle3(scalePoint(geometry.center), geometry.radius * factor, geometry.normal);
+      if (geometry._type === 'Arc3') return new Geo.Arc3(scalePoint(geometry.center), geometry.radius * factor, geometry.startAngle, geometry.endAngle, geometry.normal);
+      if (geometry._type === 'Ellipse3') return new Geo.Ellipse3(scalePoint(geometry.center), geometry.width * factor, geometry.depth * factor, geometry.normal, geometry.xAxis);
     }
     if (geometry._type === 'Mesh3') {
       const m = new Geo.Mesh3(geometry.vertices.map(scalePoint), geometry.faces.slice(), geometry.color);
