@@ -26,6 +26,9 @@ export class EnterpriseStore {
     this.backgroundJobs = new Map();
     this.objectArtifacts = new Map();
     this.aiUsageBuckets = new Map();
+    // In-memory fallback for email-verification tokens when no stateStore (KV)
+    // is wired (node/dev). Keyed by 'emailverify:' + hashToken(token).
+    this.emailVerifications = new Map();
     this.auditEvents = [];
     this._persistenceReady = Promise.resolve();
     this._lastPersistPromise = Promise.resolve();
@@ -71,18 +74,34 @@ export class EnterpriseStore {
     return clone(organization);
   }
 
-  createUser({ email, displayName, externalSubject = '' }) {
+  createUser({ email, displayName, externalSubject = '', passwordHash = '', emailVerified = false }) {
     const user = {
       id: createId('usr'),
       email,
       displayName: displayName || email,
       externalSubject,
+      // PBKDF2 hash for email+password accounts; '' for OIDC-only (Google/SSO)
+      // accounts. Never exposed via publicUser().
+      passwordHash,
+      // Email+password accounts start unverified until the emailed link is
+      // clicked; OIDC accounts (Google) are created already verified.
+      emailVerified,
       memberships: [],
       createdAt: this.now()
     };
     this.users.set(user.id, user);
     this.persist();
     return clone(user);
+  }
+
+  // Lookup by email (case-insensitive). Returns a clone (including passwordHash
+  // for server-side credential checks) or null. Server-only — handlers must
+  // never return the raw record to clients; use publicUser() for that.
+  findUserByEmail(email) {
+    const normalized = String(email || '').trim().toLowerCase();
+    if (!normalized) return null;
+    const user = Array.from(this.users.values()).find(item => String(item.email || '').toLowerCase() === normalized);
+    return user ? clone(user) : null;
   }
 
   addMembership({ organizationId, userId, role }) {
@@ -145,9 +164,47 @@ export class EnterpriseStore {
     if (existing) {
       existing.displayName = displayName || existing.displayName;
       existing.externalSubject = externalSubject || existing.externalSubject;
+      // An OIDC login (Google/SSO) proves the email — mark it verified, which
+      // also "upgrades" a previously password-only account that now linked SSO.
+      existing.emailVerified = true;
       return clone(existing);
     }
-    return this.createUser({ email, displayName, externalSubject });
+    // OIDC identities are already email-verified by the provider.
+    return this.createUser({ email, displayName, externalSubject, emailVerified: true });
+  }
+
+  markEmailVerified(userId) {
+    const user = this.requireUser(userId);
+    if (!user.emailVerified) {
+      user.emailVerified = true;
+      this.persist();
+    }
+    return clone(user);
+  }
+
+  // Email-verification tokens. Stored hashed (never the raw token) in the
+  // stateStore (KV) when available — so links work across Worker isolates —
+  // else in an in-memory map (node/dev). Mirrors the session-token pattern.
+  async createEmailVerificationTokenAsync(userId, ttlMs = 24 * 60 * 60 * 1000) {
+    this.requireUser(userId);
+    const token = crypto.randomBytes(32).toString('hex');
+    const key = 'emailverify:' + hashToken(token);
+    const record = { userId, expiresAt: this.now() + ttlMs };
+    if (this.stateStore) await this.stateStore.set(key, record, ttlMs);
+    else this.emailVerifications.set(key, record);
+    return token;
+  }
+
+  async consumeEmailVerificationTokenAsync(token) {
+    if (!token) throw createHttpError(400, 'Missing verification token.');
+    const key = 'emailverify:' + hashToken(String(token));
+    const record = this.stateStore ? await this.stateStore.get(key) : this.emailVerifications.get(key);
+    if (!record || (record.expiresAt && record.expiresAt < this.now())) {
+      throw createHttpError(400, 'This verification link is invalid or has expired.');
+    }
+    if (this.stateStore) await this.stateStore.delete(key);
+    else this.emailVerifications.delete(key);
+    return this.markEmailVerified(record.userId);
   }
 
   // Personal-workspace model: every user gets a private organization (their
@@ -939,6 +996,7 @@ function publicUser(user, organizationId, role) {
     id: user.id,
     email: user.email,
     displayName: user.displayName,
+    emailVerified: !!user.emailVerified,
     organizationId,
     role
   };

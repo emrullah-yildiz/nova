@@ -10,6 +10,7 @@ import { EnterpriseStore } from '../src/enterprise/domain.mjs';
 import { createApiDispatcher, createConfiguredAiProvider } from '../src/enterprise/api-dispatch.mjs';
 import { createWebCryptoAuthService } from '../server/auth/webcrypto-auth.mjs';
 import { createGoogleOidcVerifier } from '../server/auth/oidc-verifier.mjs';
+import { createEmailService } from '../server/email/resend.mjs';
 import { NeonPersistence } from '../server/db/neon-persistence.mjs';
 import { createKvStateStore, createR2ObjectStorage } from './adapters.mjs';
 import { serializeSessionCookie, clearSessionCookie, parseCookie } from './cookies.mjs';
@@ -28,11 +29,15 @@ async function getApi(env) {
   if (typeof store.ready === 'function') await store.ready();
 
   const aiProvider = createConfiguredAiProvider({ env });
+  // Resend when RESEND_API_KEY is set, else a console fallback (logs the link).
+  const emailService = createEmailService(env);
   const dispatch = createApiDispatcher({
     store,
     authService,
     aiProvider,
     objectStorage,
+    emailService,
+    appUrl: env.NOVA_PUBLIC_URL || '',
     allowDevLogin: env.NOVA_ALLOW_DEV_LOGIN === 'true'
   });
   cachedApi = { store, dispatch };
@@ -47,7 +52,7 @@ function cors(env) {
   };
 }
 
-const AUTH_ROUTES = new Set(['/api/auth/oidc/callback', '/api/auth/dev-login']);
+const AUTH_ROUTES = new Set(['/api/auth/oidc/callback', '/api/auth/dev-login', '/api/auth/signup', '/api/auth/login']);
 
 export async function handleEnterpriseApi(request, env) {
   const url = new URL(request.url);
@@ -82,7 +87,10 @@ export async function handleEnterpriseApi(request, env) {
       path: url.pathname,
       searchParams: url.searchParams,
       authorization,
-      body
+      body,
+      // Verification links point back at this same origin (overridable via
+      // NOVA_PUBLIC_URL for custom domains).
+      appUrl: env.NOVA_PUBLIC_URL || url.origin
     });
     const headers = { ...cors(env) };
     // On successful login, set the session as an httpOnly cookie so the browser

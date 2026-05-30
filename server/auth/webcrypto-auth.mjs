@@ -6,7 +6,7 @@
 // the node AuthService (see tests/webcrypto.test.js). The sync methods throw —
 // on the Worker the domain only uses the async path.
 
-import { signSessionPayload, verifySessionPayload } from './webcrypto.mjs';
+import { signSessionPayload, verifySessionPayload, hashPassword, verifyPassword } from './webcrypto.mjs';
 import { createHttpError } from '../../src/enterprise/domain.mjs';
 
 const DEFAULT_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
@@ -32,6 +32,10 @@ export function createWebCryptoAuthService(options = {}) {
       if (payload.exp && payload.exp < now()) throw createHttpError(401, 'Session expired.');
       return payload;
     },
+
+    // Email+password account credentials (PBKDF2 via WebCrypto).
+    async hashPasswordAsync(password) { return hashPassword(password); },
+    async verifyPasswordAsync(password, stored) { return verifyPassword(password, stored); },
 
     async verifyOidcLogin({ idToken, organizationSlug }) {
       if (!oidcVerifier) throw createHttpError(501, 'OIDC verifier is not configured.');
