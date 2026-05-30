@@ -393,10 +393,20 @@ const app = {
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
+        const code = data && data.error && data.error.code;
         const msg = (data && data.error && data.error.message) || (signup ? 'Could not create your account.' : 'Invalid email or password.');
+        // Unverified login: don't sign in — explain and offer to resend the link.
+        if (code === 'EMAIL_NOT_VERIFIED') { this._showVerifyNotice(email, msg); return false; }
         this._showSignInError(msg);
         return false;
       }
+      // Sign-up no longer signs you in — it requires email verification first.
+      if (signup && data.verificationRequired) {
+        if (this._signInMode === 'signup') this.toggleSignInMode(); // back to the Sign-in form
+        this._showVerifyNotice(email, 'Account created. We emailed a verification link to ' + email + ' — click it to finish signing in.');
+        return false;
+      }
+      // Verified login succeeded.
       this.closeSignIn();
       await this.refreshSession();
     } catch (e) {
@@ -409,7 +419,31 @@ const app = {
 
   _showSignInError(msg) {
     const el = document.getElementById('signin-error');
-    if (el) { el.textContent = msg || ''; el.style.display = msg ? 'block' : 'none'; }
+    if (el) { el.classList.remove('signin-notice'); el.textContent = msg || ''; el.style.display = msg ? 'block' : 'none'; }
+  },
+
+  // Info notice (not a hard error) shown when sign-in is pending email
+  // verification, with a one-tap "Resend link".
+  _showVerifyNotice(email, msg) {
+    const el = document.getElementById('signin-error');
+    if (!el) return;
+    el.style.display = 'block';
+    el.classList.add('signin-notice');
+    const safe = String(email || '').replace(/'/g, "\\'");
+    el.innerHTML = (msg ? this.escapeHtml(msg) + ' ' : '') +
+      '<button type="button" class="signin-resend" onclick="app.resendVerificationEmail(\'' + safe + '\')">Resend link</button>';
+  },
+
+  async resendVerificationEmail(email) {
+    try {
+      await fetch('/api/auth/resend-verification', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+    } catch { /* generic — never reveal account state */ }
+    const el = document.getElementById('signin-error');
+    if (el) { el.classList.add('signin-notice'); el.textContent = 'Verification link sent — check your inbox (and spam).'; }
   },
 
   async _onGoogleCredential(resp) {
