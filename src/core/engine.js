@@ -24,7 +24,7 @@
 
 
 
-import { createLacingFrames, hasListInput, mapLacingFrames } from './lacing.js';
+import { createLacingFrames, hasListInput, mapLacingFrames, isAutoLaceable, resolveLacingMode } from './lacing.js';
 import { hostRegistry } from '../hosts/HostRegistry.js';
 import { setPreviewItemVisibility } from '../viewer/preview-sync.js';
 import { NODE_TYPE_MAP } from './nodes.js';
@@ -341,11 +341,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
     function supportsGenericLacing() {
-      var def = nd.def || {};
-      var inputs = def.inputs || [];
-      if (inputs.length === 0 || def.dynamicInputs) return false;
-      if (def.lacing && def.lacing.mode === 'none') return false;
-      return !inputs.some(function(input) { return input.type === 'list'; });
+      return isAutoLaceable(nd.def);
     }
 
     function computeGenericLacedValue(mode) {
@@ -416,9 +412,14 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     try {
 
-      var mode = nd.controlValues && nd.controlValues._lacingMode
+      // Default-on lacing: any node that isn't a list-consumer / sink / dynamic
+      // / special-cased type maps over an incoming list automatically, so every
+      // scalar/geometry input "can take a list". A per-instance _lacingMode
+      // control still overrides the default.
+      var instanceMode = nd.controlValues && nd.controlValues._lacingMode
         ? nd.controlValues._lacingMode
-        : (nd.def && nd.def.lacing && nd.def.lacing.mode) || null;
+        : null;
+      var mode = resolveLacingMode(nd.def, instanceMode);
 
       if (mode && mode !== 'none' && supportsGenericLacing()) {
         result = computeGenericLacedValue(mode);
