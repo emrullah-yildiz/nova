@@ -1920,6 +1920,16 @@ input[type="number"] {
 
 /* ── Account / sign-in (menu bar) ── */
 .menu-account { position: relative; display: flex; align-items: center; }
+.account-switch-list { margin-bottom: 4px; }
+.account-switch-row { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: none; color: var(--text-primary, #cdd6f4); font-size: 13px; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+.account-switch-row:hover { background: var(--bg-surface-hover, #2e2e45); }
+.account-switch-row.active { cursor: default; }
+.account-switch-email { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-switch-check { color: var(--accent-green, #a6e3a1); font-weight: 700; }
+.account-menu-sep { height: 1px; background: var(--border-color, #313244); margin: 4px 0; }
+.account-menu-muted { color: var(--text-muted, #6c7086) !important; font-size: 12px !important; }
+.join-account-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin: 4px 0 8px; border: 1px solid var(--border-color, #313244); border-radius: 8px; background: var(--bg-surface, #1e1e2e); }
+.join-account-email { font-size: 13px; color: var(--text-primary, #cdd6f4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-btn { display: inline-flex; align-items: center; gap: 7px; background: none; border: none; color: var(--text-secondary, #a6adc8); font-size: 12px; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
 .account-btn:hover { background: var(--bg-surface-hover, #2e2e45); color: var(--text-primary, #cdd6f4); }
 .account-btn.account-signin { color: var(--accent-blue, #89b4fa); font-weight: 600; }

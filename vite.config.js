@@ -166,12 +166,17 @@ function vercelFunctionsDev() {
           if (devEnv.NOVA_DEV_USE_DB !== 'true') delete devEnv.NOVA_DATABASE_URL;
           const response = await handleEnterpriseApi(request, devEnv);
           res.statusCode = response.status;
+          // Forward every Set-Cookie (multi-account sets several at once) as
+          // separate headers; strip Secure so the browser keeps them over plain
+          // http://localhost in dev (production is https, so Secure stays there).
+          const setCookies = typeof response.headers.getSetCookie === 'function' ? response.headers.getSetCookie() : [];
           response.headers.forEach((value, key) => {
-            // Strip Secure from the session cookie so the browser keeps it over
-            // plain http://localhost in dev (production keeps it, served over https).
-            const out = key.toLowerCase() === 'set-cookie' ? value.replace(/;\s*Secure/ig, '') : value;
-            res.setHeader(key, out);
+            if (key.toLowerCase() === 'set-cookie') return; // handled below
+            res.setHeader(key, value);
           });
+          if (setCookies.length) {
+            res.setHeader('Set-Cookie', setCookies.map(c => c.replace(/;\s*Secure/ig, '')));
+          }
           res.end(Buffer.from(await response.arrayBuffer()));
         } catch (err) {
           console.error('[nova:enterprise-api-dev] handler error:', err);
