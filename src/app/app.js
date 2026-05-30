@@ -128,6 +128,48 @@ const app = {
     } catch { /* ignore */ }
   },
 
+  // Before redeeming an invite, confirm which signed-in account joins — an
+  // invite is redeemed by whoever is signed in, so opening it shouldn't
+  // silently join as the wrong account.
+  showJoinChooser(token) {
+    if (!token) return;
+    this._pendingJoinToken = token;
+    const existing = document.getElementById('join-chooser-overlay');
+    if (existing) existing.remove();
+    const u = this.currentUser || {};
+    const label = u.displayName || u.email || 'this account';
+    const initial = (String(label)[0] || '?').toUpperCase();
+    const overlay = document.createElement('div');
+    overlay.id = 'join-chooser-overlay';
+    overlay.className = 'project-save-overlay';
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    overlay.innerHTML = '<div class="project-save-dialog" role="dialog" aria-modal="true" style="width:min(420px,100%)">' +
+      '<div class="project-save-header"><div class="project-save-mark">↗</div>' +
+      '<div><h3>Open shared project</h3><p>You were invited to a project — open it as which account?</p></div></div>' +
+      '<div class="join-account-row"><span class="account-avatar">' + this.escapeHtml(initial) + '</span>' +
+      '<span class="join-account-email">' + this.escapeHtml(u.email || label) + '</span></div>' +
+      '<div class="project-save-footer" style="gap:8px;justify-content:flex-end">' +
+        '<button class="share-link-btn" onclick="app._joinUseDifferent()">Use a different account</button>' +
+        '<button class="share-create-btn" onclick="app._joinContinue()">Continue</button>' +
+      '</div></div>';
+    document.body.appendChild(overlay);
+  },
+
+  _joinContinue() {
+    const token = this._pendingJoinToken;
+    this._pendingJoinToken = '';
+    const o = document.getElementById('join-chooser-overlay'); if (o) o.remove();
+    if (token && this.redeemShareToken) this.redeemShareToken(token);
+  },
+
+  _joinUseDifferent() {
+    const o = document.getElementById('join-chooser-overlay'); if (o) o.remove();
+    // Keep _pendingJoinToken set and ADD another account (no sign-out — this is
+    // multi-account). The new login becomes active; refreshSession then re-runs
+    // the join chooser for that account, where the user clicks Continue.
+    if (this.signIn) this.signIn();
+  },
+
   // If the page was opened from a verification email (?verify=<token>), confirm
   // the token, then strip it from the URL so a refresh doesn't re-submit it.
   async _handleVerifyParam() {
@@ -159,14 +201,13 @@ const app = {
     }
     this.renderAccount();
     await this._syncAiPrefsForSession();
-    // A pending share link: redeem it once signed in (opens the project); if not
-    // signed in, prompt sign-in and it redeems on the next refresh.
+    // A pending share link: confirm WHICH account joins before redeeming (an
+    // invite is redeemed by whoever's signed in — don't silently join as the
+    // wrong account). Signed out → prompt sign-in; redeems on next refresh.
     if (this._pendingJoinToken) {
-      if (this.currentUser && this.redeemShareToken) {
-        const token = this._pendingJoinToken;
-        this._pendingJoinToken = '';
-        await this.redeemShareToken(token);
-        return; // we've navigated into the shared project
+      if (this.currentUser && this.showJoinChooser) {
+        this.showJoinChooser(this._pendingJoinToken);
+        return;
       } else if (!this.currentUser && this.signIn) {
         this.signIn();
       }
@@ -220,20 +261,64 @@ const app = {
     const u = this.currentUser;
     if (u) {
       const label = u.displayName || u.email || 'Account';
-      const initial = (label[0] || '?').toUpperCase();
+      const initial = (String(label)[0] || '?').toUpperCase();
       el.innerHTML =
-        '<button class="account-btn" id="account-btn" title="' + (u.email || '') + '">' +
-        '<span class="account-avatar">' + initial + '</span><span class="account-name">' + label + '</span></button>' +
+        '<button class="account-btn" id="account-btn" title="' + this.escapeHtml(u.email || '') + '">' +
+        '<span class="account-avatar">' + this.escapeHtml(initial) + '</span><span class="account-name">' + this.escapeHtml(label) + '</span></button>' +
         '<div class="account-menu" id="account-menu">' +
-        '<div class="account-menu-email">' + (u.email || '') + '</div>' +
-        '<button class="account-menu-item" onclick="app.logout()">Sign out</button></div>';
+          '<div class="account-switch-list" id="account-switch-list"><div class="account-menu-email">' + this.escapeHtml(u.email || '') + '</div></div>' +
+          '<button class="account-menu-item" onclick="app.signIn()">+ Add account</button>' +
+          '<div class="account-menu-sep"></div>' +
+          '<button class="account-menu-item" onclick="app.logout(\'current\')">Sign out</button>' +
+          '<button class="account-menu-item account-menu-muted" onclick="app.logout(\'all\')">Sign out of all</button>' +
+        '</div>';
       const btn = document.getElementById('account-btn');
       const menu = document.getElementById('account-menu');
-      if (btn && menu) btn.onclick = (e) => { e.stopPropagation(); menu.classList.toggle('visible'); };
+      if (btn && menu) btn.onclick = (e) => {
+        e.stopPropagation();
+        menu.classList.toggle('visible');
+        if (menu.classList.contains('visible')) this._renderAccountSwitcher();
+      };
     } else {
       el.innerHTML = '<button class="account-btn account-signin" onclick="app.signIn()">Sign in</button>';
     }
     this.renderVerifyBanner();
+  },
+
+  // Populate the account dropdown with all signed-in accounts (the switcher).
+  async _renderAccountSwitcher() {
+    const list = document.getElementById('account-switch-list');
+    if (!list) return;
+    let accounts = [];
+    try {
+      const r = await fetch('/api/me/accounts', { credentials: 'include' });
+      if (r.ok) accounts = (await r.json()).accounts || [];
+    } catch { /* keep the email-only fallback */ }
+    if (accounts.length <= 1) return;
+    list.innerHTML = accounts.map(a => {
+      const init = (String(a.displayName || a.email || '?')[0] || '?').toUpperCase();
+      return '<button class="account-switch-row' + (a.active ? ' active' : '') + '" onclick="app.switchAccount(' + a.slot + ')">' +
+        '<span class="account-avatar">' + this.escapeHtml(init) + '</span>' +
+        '<span class="account-switch-email">' + this.escapeHtml(a.email || '') + '</span>' +
+        (a.active ? '<span class="account-switch-check">✓</span>' : '') + '</button>';
+    }).join('');
+  },
+
+  async switchAccount(slot) {
+    try {
+      const r = await fetch('/api/auth/switch', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot })
+      });
+      if (!r.ok) { await this._renderAccountSwitcher(); return; } // expired → refresh list
+      const menu = document.getElementById('account-menu'); if (menu) menu.classList.remove('visible');
+      // Switching changes the active account → drop the open project (it belongs
+      // to the previous account) and re-sync everything.
+      this._cloudProjectId = '';
+      this._lastCloudSaveSerialized = null;
+      await this.refreshSession();
+    } catch { /* ignore */ }
   },
 
   // Top banner nudging the user to confirm their email. Shows while the signed-
@@ -489,21 +574,31 @@ const app = {
     }
   },
 
-  async logout() {
-    try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch { /* ignore */ }
+  async logout(scope) {
+    const sc = scope === 'current' ? 'current' : 'all';
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope: sc })
+      });
+    } catch { /* ignore */ }
+    // Signing out one account may leave another active — refresh and let
+    // refreshSession reflect whoever's now active (or signed out).
+    this._cloudProjectId = '';
+    this._lastCloudSaveSerialized = null;
+    if (sc === 'current') {
+      await this.refreshSession();
+      return;
+    }
+    // Sign out of all.
     this.currentUser = null;
     if (window.google && window.google.accounts && window.google.accounts.id) {
       try { window.google.accounts.id.disableAutoSelect(); } catch { /* ignore */ }
     }
-    this.renderAccount();
-    // Drop the account-backed pref cache; fall back to anonymous sessionStorage
-    // (which keeps any key typed while anonymous in this tab).
     if (window.GPTClient) window.GPTClient._useAnonymousPrefs();
+    this.renderAccount();
     if (this._updateChatStatus) this._updateChatStatus();
-    // Drop the in-memory cloud-project binding and re-render the landing list
-    // as local recents.
-    this._cloudProjectId = '';
-    this._lastCloudSaveSerialized = null;
     if (this.currentPage === 'landing' && this.renderRecentProjects) {
       const el = document.getElementById('recent-list');
       if (el) delete el.dataset.cloudLoaded;
