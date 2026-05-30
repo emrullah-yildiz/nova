@@ -7,6 +7,9 @@ main = "worker/index.mjs"
 compatibility_date = "2024-11-01"
 # nodejs_compat lets the ported domain logic use the Node APIs workerd supports.
 compatibility_flags = ["nodejs_compat"]
+# Don't wipe variables/secrets set in the dashboard on each `wrangler deploy`
+# (default reconciles them to this file, dropping dashboard-only ones).
+keep_vars = true
 
 # Serve the Vite build as static assets; the Worker handles /api/* and falls
 # back to these for everything else (SPA). Run `npm run build` first.
@@ -14,10 +17,16 @@ compatibility_flags = ["nodejs_compat"]
 directory = "./dist"
 binding = "ASSETS"
 
-# Non-secret config. Secrets (GROQ_API_KEY, NOVA_DATABASE_URL, NOVA_SESSION_SECRET,
-# OIDC client id/secret, …) are set with `wrangler secret put <NAME>`.
+# Non-secret, public config — deployed as runtime vars with the Worker so they
+# reliably reach env. SECRETS (NOVA_SESSION_SECRET, NOVA_DATABASE_URL, GROQ_API_KEY,
+# …) are NOT put here — set them with `wrangler secret put <NAME>` or the dashboard
+# "Secret" type (kept across deploys by keep_vars above).
 [vars]
 NOVA_CORS_ORIGIN = "*"
+NOVA_ALLOW_DEV_LOGIN = "false"
+# The Google OAuth client id is PUBLIC (it's sent to every browser), so it lives
+# here. Paste your full client id, ending in .apps.googleusercontent.com:
+GOOGLE_CLIENT_ID = "REPLACE_WITH_YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
 
 # Per-IP AI-proxy rate limiting (replaces the in-memory Map). Create with:
 #   wrangler kv namespace create RATE_KV
