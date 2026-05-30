@@ -28,7 +28,9 @@ export function buildApi(options = {}) {
   const corsOrigin = options.corsOrigin || '*';
   const aiProvider = options.aiProvider || createConfiguredAiProvider(options.aiProviderConfig || {});
   const allowDevLogin = options.allowDevLogin === true;
-  const dispatch = createApiDispatcher({ store, authService, aiProvider, objectStorage, allowDevLogin });
+  const emailService = options.emailService || null;
+  const appUrl = options.appUrl || '';
+  const dispatch = createApiDispatcher({ store, authService, aiProvider, objectStorage, emailService, appUrl, allowDevLogin });
   return { store, dispatch, authService, aiProvider, objectStorage, corsOrigin };
 }
 

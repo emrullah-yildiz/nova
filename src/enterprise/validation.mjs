@@ -6,6 +6,29 @@ export function validateDevLoginBody(body = {}) {
   return body;
 }
 
+// Minimal, permissive email shape check — real deliverability is verified by
+// sending mail (out of scope here); this just rejects obvious garbage.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PASSWORD_MIN = 8;
+const PASSWORD_MAX = 200;
+
+export function validateSignupBody(body = {}) {
+  requirePlainObject(body, 'request body');
+  requireString(body.email, 'email', 320);
+  if (!EMAIL_RE.test(body.email.trim())) throw createHttpError(400, 'Enter a valid email address.');
+  requireString(body.password, 'password', PASSWORD_MAX);
+  if (body.password.length < PASSWORD_MIN) throw createHttpError(400, 'Password must be at least ' + PASSWORD_MIN + ' characters.');
+  optionalString(body.displayName, 'displayName', 160);
+  return body;
+}
+
+export function validateLoginBody(body = {}) {
+  requirePlainObject(body, 'request body');
+  requireString(body.email, 'email', 320);
+  requireString(body.password, 'password', PASSWORD_MAX);
+  return body;
+}
+
 export function validateOidcCallbackBody(body = {}) {
   requirePlainObject(body, 'request body');
   requireString(body.idToken, 'idToken', 20000);

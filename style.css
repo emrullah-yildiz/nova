@@ -1858,3 +1858,38 @@ input[type="number"] {
 .account-menu-item { width: 100%; text-align: left; background: none; border: none; color: var(--text-primary, #cdd6f4); font-size: 13px; padding: 8px; border-radius: 5px; cursor: pointer; }
 .account-menu-item:hover { background: var(--bg-surface-hover, #2e2e45); }
 
+/* ── Sign-in modal (Google + email/password) ── */
+#signin-overlay { position: fixed; inset: 0; z-index: 10001; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; }
+#signin-overlay .signin-panel { position: relative; width: 360px; max-width: 92vw; background: var(--bg-secondary, #181825); border: 1px solid var(--border-color, #313244); border-radius: 12px; box-shadow: 0 16px 48px rgba(0,0,0,0.55); color: var(--text-primary, #cdd6f4); padding: 24px 22px 18px; }
+#signin-overlay .signin-close { position: absolute; top: 10px; right: 12px; background: none; border: none; color: var(--text-muted, #6c7086); font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px; }
+#signin-overlay .signin-close:hover { color: var(--text-bright, #fff); }
+#signin-overlay .signin-title { font-size: 18px; font-weight: 700; text-align: center; }
+#signin-overlay .signin-sub { font-size: 12px; color: var(--text-muted, #6c7086); text-align: center; margin: 4px 0 18px; }
+#signin-overlay .signin-google { display: flex; justify-content: center; min-height: 40px; }
+#signin-overlay .signin-google-btn { width: 100%; padding: 10px; background: var(--bg-tertiary, #11111b); color: var(--text-primary, #cdd6f4); border: 1px solid var(--border-color, #313244); border-radius: 7px; font-size: 14px; font-weight: 600; cursor: pointer; }
+#signin-overlay .signin-google-btn:hover { background: var(--bg-surface-hover, #2e2e45); }
+#signin-overlay .signin-divider { display: flex; align-items: center; gap: 10px; margin: 16px 0; color: var(--text-muted, #6c7086); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+#signin-overlay .signin-divider::before, #signin-overlay .signin-divider::after { content: ''; flex: 1; height: 1px; background: var(--border-color, #313244); }
+#signin-overlay .signin-field { margin-bottom: 12px; }
+#signin-overlay .signin-field label { display: block; font-size: 11px; color: var(--text-muted, #6c7086); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; }
+#signin-overlay .signin-field input { width: 100%; box-sizing: border-box; padding: 10px; background: var(--bg-tertiary, #11111b); border: 1px solid var(--border-color, #313244); border-radius: 7px; color: var(--text-primary, #cdd6f4); font-size: 14px; }
+#signin-overlay .signin-field input:focus { outline: none; border-color: var(--accent-blue, #89b4fa); }
+#signin-overlay .signin-error { display: none; color: var(--accent-red, #f38ba8); font-size: 12px; margin: 2px 0 10px; }
+#signin-overlay .signin-submit { width: 100%; padding: 11px; background: var(--accent-blue, #89b4fa); color: #11111b; border: none; border-radius: 7px; font-size: 14px; font-weight: 700; cursor: pointer; }
+#signin-overlay .signin-submit:hover { filter: brightness(1.08); }
+#signin-overlay .signin-submit:disabled { opacity: 0.6; cursor: default; }
+#signin-overlay .signin-toggle { text-align: center; font-size: 12px; color: var(--text-muted, #6c7086); margin-top: 14px; }
+#signin-overlay .signin-toggle button { background: none; border: none; color: var(--accent-blue, #89b4fa); font-size: 12px; font-weight: 600; cursor: pointer; padding: 0; }
+#signin-overlay .signin-toggle button:hover { text-decoration: underline; }
+#signin-overlay .signin-dev { text-align: center; margin-top: 10px; }
+#signin-overlay .signin-dev button { background: none; border: none; color: var(--text-muted, #6c7086); font-size: 11px; cursor: pointer; text-decoration: underline; }
+
+/* ── Email verification banner (dismissible bottom pill) ── */
+.verify-banner { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; align-items: center; gap: 12px; padding: 10px 14px; font-size: 13px; background: #f9b34a; color: #2a1f00; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.45); max-width: 92vw; }
+.verify-banner.ok { background: var(--accent-green, #a6e3a1); color: #0b2010; }
+.verify-banner span { line-height: 1.3; }
+.verify-banner .verify-resend { background: rgba(0,0,0,0.18); border: none; color: inherit; font-weight: 700; font-size: 12px; padding: 5px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.verify-banner .verify-resend:hover { background: rgba(0,0,0,0.3); }
+.verify-banner .verify-dismiss { background: none; border: none; color: inherit; font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; opacity: 0.65; }
+.verify-banner .verify-dismiss:hover { opacity: 1; }
+
