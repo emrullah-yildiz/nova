@@ -9,7 +9,7 @@ import { getRuntimeConfig } from '../config/runtime-config.js';
 import { buildNodeCatalog } from './node-catalog.js';
 
 const GPTClient = {
-  MODEL: 'anthropic/claude-sonnet-4.5',
+  MODEL: 'anthropic/claude-sonnet-4.6',
   MAX_TOKENS: 2048,
   TEMPERATURE: 0.7,
 
@@ -36,11 +36,11 @@ const GPTClient = {
       keyPrefix: 'sk-',
       format: 'openai',
       models: [
-        { id: 'gpt-5', name: 'GPT-5 (recommended)', free: false },
-        { id: 'gpt-5-mini', name: 'GPT-5 Mini (faster, cheaper)', free: false },
-        { id: 'gpt-5-nano', name: 'GPT-5 Nano (fastest, cheapest)', free: false },
-        { id: 'gpt-4o', name: 'GPT-4o', free: false },
-        { id: 'gpt-4o-mini', name: 'GPT-4o Mini', free: false }
+        { id: 'gpt-5.5', name: 'GPT-5.5 (recommended)', free: false },
+        { id: 'gpt-5.5-pro', name: 'GPT-5.5 Pro (most capable)', free: false },
+        { id: 'gpt-5.4', name: 'GPT-5.4 (more affordable)', free: false },
+        { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini (faster, cheaper)', free: false },
+        { id: 'gpt-5.4-nano', name: 'GPT-5.4 Nano (fastest, cheapest)', free: false }
       ]
     },
     groq: {
@@ -49,10 +49,10 @@ const GPTClient = {
       keyPrefix: 'gsk_',
       format: 'openai',
       models: [
-        { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B (free, fast)', free: true },
+        { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B (free, balanced)', free: true },
         { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant (free, fastest)', free: true },
-        { id: 'meta-llama/llama-4-scout-17b-16e-instruct', name: 'Llama 4 Scout 17B (free)', free: true },
-        { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B (free, 32k ctx)', free: true }
+        { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B (free, most capable)', free: true },
+        { id: 'openai/gpt-oss-20b', name: 'GPT-OSS 20B (free, fast)', free: true }
       ]
     },
     gemini: {
@@ -64,10 +64,11 @@ const GPTClient = {
       keyPrefix: 'AIza',
       format: 'openai',
       models: [
-        { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (recommended, free tier)', free: true },
+        { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash (recommended, free tier)', free: true },
+        { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite (fast, cheap)', free: true },
         { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', free: true },
-        { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite (fastest)', free: true },
-        { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', free: true }
+        { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite (fastest)', free: true },
+        { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro (most capable)', free: false }
       ]
     },
     anthropic: {
@@ -82,6 +83,7 @@ const GPTClient = {
       models: [
         { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6 (recommended)', free: false },
         { id: 'claude-opus-4-8', name: 'Claude Opus 4.8 (most capable)', free: false },
+        { id: 'claude-opus-4-7', name: 'Claude Opus 4.7', free: false },
         { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5 (fastest)', free: false }
       ]
     },
@@ -1069,7 +1071,7 @@ const SettingsDialog = {
     status.innerHTML = '<span style="color:var(--text-muted)">⟳ Connecting to ' + provName + '...</span>';
     try {
       const modelSelect = document.getElementById('settings-model');
-      const model = modelSelect ? modelSelect.value : 'gpt-4o';
+      const model = modelSelect ? modelSelect.value : 'gpt-5.5';
       var format = GPTClient.getProviderFormat(provider);
       var headers = GPTClient.buildAuthHeaders(format, key, GPTClient.getExtraHeaders());
       const response = await fetch(GPTClient.getApiUrl(), {
