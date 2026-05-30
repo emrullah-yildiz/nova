@@ -171,3 +171,31 @@ export function collectLacingFrameOutputs(outputIds, frames, executeFrame) {
 
   return framedOutputs;
 }
+
+// Dynamo-style recursive replication. At each level the array-valued inputs are
+// zipped per `mode` (scalars broadcast); the call then recurses into the paired
+// elements, so a nested list (list-of-lists, any depth) fans all the way down
+// and each output mirrors the input's nesting structure.
+//
+// `runOne(frameInputs)` runs the node once on all-scalar inputs and must return
+// a normalized output object `{ [outputId]: value }`. executeReplicated returns
+// the same shape, with each output value nested to match the inputs.
+//
+// shortest/longest recurse; crossProduct keeps its existing single-pass nested
+// behavior (createLacingFrames already produces a nested frame structure).
+export function executeReplicated(inputDefinitions, inputs, mode, outputIds, runOne) {
+  if (mode === 'crossProduct') {
+    return collectLacingFrameOutputs(outputIds, createLacingFrames(inputDefinitions, inputs, mode), runOne);
+  }
+  if (!hasListInput(inputDefinitions, inputs)) {
+    return runOne(inputs);
+  }
+  const frames = createLacingFrames(inputDefinitions, inputs, mode);
+  const collected = {};
+  outputIds.forEach(function(id) { collected[id] = []; });
+  frames.forEach(function(frame) {
+    const res = executeReplicated(inputDefinitions, frame, mode, outputIds, runOne);
+    outputIds.forEach(function(id) { collected[id].push(res[id]); });
+  });
+  return collected;
+}

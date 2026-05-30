@@ -1,4 +1,4 @@
-import { collectLacingFrameOutputs, createLacingFrames, hasListInput, isAutoLaceable, resolveLacingMode } from '../core/lacing.js';
+import { executeReplicated, hasListInput, isAutoLaceable, resolveLacingMode } from '../core/lacing.js';
 
 export function createRegistryComputeInner(registry, options = {}) {
   const fallbackComputeInner = options.fallbackComputeInner || null;
@@ -44,12 +44,11 @@ export function executeWithLacing(nodeDefinition, context, inputs, controls, nod
   }
 
   const outputIds = nodeDefinition.outputs.map(output => output.id);
-  const frames = createLacingFrames(nodeDefinition.inputs, inputs, mode);
-  const framedOutputs = collectLacingFrameOutputs(outputIds, frames, function(frameInputs) {
+  const replicated = executeReplicated(nodeDefinition.inputs, inputs, mode, outputIds, function(frameInputs) {
     return normalizeOutputs(outputIds, nodeDefinition.execute(context, frameInputs, controls, nodeInstance));
   });
 
-  return outputIds.length === 1 ? { [outputIds[0]]: framedOutputs[outputIds[0]] } : framedOutputs;
+  return outputIds.length === 1 ? { [outputIds[0]]: replicated[outputIds[0]] } : replicated;
 }
 
 export function resolveControls(nodeDefinition, nodeInstance, getVal) {
