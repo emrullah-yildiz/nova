@@ -65,7 +65,10 @@ function cors(env) {
   };
 }
 
-const AUTH_ROUTES = new Set(['/api/auth/oidc/callback', '/api/auth/dev-login', '/api/auth/signup', '/api/auth/login']);
+// Routes whose successful response carries a session token we should promote to
+// the httpOnly cookie. /api/auth/verify is here because clicking the emailed
+// verification link completes sign-in. (signup no longer returns a token.)
+const AUTH_ROUTES = new Set(['/api/auth/oidc/callback', '/api/auth/dev-login', '/api/auth/signup', '/api/auth/login', '/api/auth/verify']);
 
 export async function handleEnterpriseApi(request, env) {
   const url = new URL(request.url);
