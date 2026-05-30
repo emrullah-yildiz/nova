@@ -33,12 +33,18 @@ NOVA_PUBLIC_URL = "https://hi-nova.work"
 # Resend; the API key itself is a SECRET — set it with `wrangler secret put RESEND_API_KEY`.
 NOVA_EMAIL_FROM = "Nova <noreply@hi-nova.work>"
 
-# Per-IP AI-proxy rate limiting (replaces the in-memory Map). Create with:
-#   wrangler kv namespace create RATE_KV
-# then paste the id below.
-# [[kv_namespaces]]
-# binding = "RATE_KV"
-# id = "<kv-namespace-id>"
+# KV: shared session state (sessions + email-verification tokens) and AI-proxy
+# per-IP rate limiting. Both bindings point at the same "nova-sessions"
+# namespace — their keys are prefixed differently (session:/emailverify:/rate:
+# vs rl:) so they don't collide. Defining them here (not just in the dashboard)
+# keeps the bindings from being dropped on `wrangler deploy`.
+[[kv_namespaces]]
+binding = "SESSION_KV"
+id = "2959d0665b324e53b58c2d1d5b752ffe"
+
+[[kv_namespaces]]
+binding = "RATE_KV"
+id = "2959d0665b324e53b58c2d1d5b752ffe"
 
 # Accelerated/pooled Postgres to Neon (Phase 0 DB step). Create with:
 #   wrangler hyperdrive create nova-neon --connection-string="$NOVA_DATABASE_URL"
