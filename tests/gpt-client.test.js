@@ -34,7 +34,10 @@ describe('GPTClient', () => {
   it('detects provider from key prefix', () => {
     expect(GPTClient.detectProvider('gsk_123')).toBe('groq');
     expect(GPTClient.detectProvider('sk-or-abc')).toBe('openrouter');
-    expect(GPTClient.detectProvider('sk-ant-xyz')).toBe('openrouter');
+    // A direct Anthropic key now routes to the native anthropic provider,
+    // not OpenRouter — sk-or- (checked first) keeps OpenRouter keys distinct.
+    expect(GPTClient.detectProvider('sk-ant-xyz')).toBe('anthropic');
+    expect(GPTClient.detectProvider('AIzaSyExample')).toBe('gemini');
     expect(GPTClient.detectProvider('sk-abc')).toBe('openai');
   });
 
@@ -148,6 +151,81 @@ describe('GPTClient', () => {
       expect(GPTClient.isFixPrompt('I got a runtime error earlier')).toBe(false);
       expect(GPTClient.isFixPrompt('')).toBe(false);
       expect(GPTClient.isFixPrompt(null)).toBe(false);
+    });
+  });
+
+  describe('direct BYOK providers (Gemini + Claude, no OpenRouter)', () => {
+    it('registers Gemini and Anthropic with the right endpoints and formats', () => {
+      const gemini = GPTClient.PROVIDERS.gemini;
+      const anthropic = GPTClient.PROVIDERS.anthropic;
+      expect(gemini).toBeDefined();
+      expect(gemini.apiUrl).toBe('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions');
+      expect(gemini.format).toBe('openai'); // OpenAI-compatible, no adapter
+      expect(anthropic).toBeDefined();
+      expect(anthropic.apiUrl).toBe('https://api.anthropic.com/v1/messages');
+      expect(anthropic.format).toBe('anthropic');
+      expect(anthropic.keyPrefix).toBe('sk-ant-');
+    });
+
+    it('getProviderFormat reflects the active provider (proxy mode is always openai)', () => {
+      installLocalStorage(); // no key → proxy
+      expect(GPTClient.getProviderFormat()).toBe('openai');
+      installLocalStorage({ nodeflow_provider: 'anthropic', nodeflow_key_anthropic: 'sk-ant-1234567890' });
+      expect(GPTClient.getProviderFormat()).toBe('anthropic');
+      expect(GPTClient.getProviderFormat('gemini')).toBe('openai');
+    });
+  });
+
+  describe('wire-format adapters', () => {
+    const sys = { role: 'system', content: 'be brief' };
+    const user = { role: 'user', content: 'hi' };
+
+    it('OpenAI auth uses Bearer; Anthropic uses x-api-key + version + browser-access', () => {
+      expect(GPTClient.buildAuthHeaders('openai', 'sk-test', { 'X-Title': 'Nova' })).toEqual({
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer sk-test',
+        'X-Title': 'Nova'
+      });
+      const a = GPTClient.buildAuthHeaders('anthropic', 'sk-ant-test');
+      expect(a['x-api-key']).toBe('sk-ant-test');
+      expect(a['anthropic-version']).toBe('2023-06-01');
+      expect(a['anthropic-dangerous-direct-browser-access']).toBe('true');
+      expect(a.Authorization).toBeUndefined();
+    });
+
+    it('OpenAI payload keeps system as a message; stream flag only when requested', () => {
+      const body = GPTClient.buildChatPayload('openai', 'gpt-4o', [sys, user], 100, 0.7, false);
+      expect(body).toEqual({ model: 'gpt-4o', messages: [sys, user], max_tokens: 100, temperature: 0.7 });
+      expect(GPTClient.buildChatPayload('openai', 'gpt-4o', [user], 100, 0.7, true).stream).toBe(true);
+    });
+
+    it('Anthropic payload hoists system out of messages and requires max_tokens', () => {
+      const body = GPTClient.buildChatPayload('anthropic', 'claude-sonnet-4-6', [sys, user], 256, 0.7, true);
+      expect(body.system).toBe('be brief');
+      expect(body.messages).toEqual([user]); // system removed from the array
+      expect(body.max_tokens).toBe(256);
+      expect(body.stream).toBe(true);
+    });
+
+    it('Anthropic payload concatenates multiple system messages', () => {
+      const body = GPTClient.buildChatPayload('anthropic', 'm', [sys, { role: 'system', content: 'and kind' }, user], 10, 0.7, false);
+      expect(body.system).toBe('be brief\n\nand kind');
+      expect(body.stream).toBeUndefined();
+    });
+
+    it('extracts non-stream content from each provider shape', () => {
+      expect(GPTClient.extractMessageContent('openai', { choices: [{ message: { content: 'hello' } }] })).toBe('hello');
+      expect(GPTClient.extractMessageContent('anthropic', { content: [{ type: 'text', text: 'hel' }, { type: 'text', text: 'lo' }] })).toBe('hello');
+      // Anthropic interleaves non-text blocks (e.g. thinking) — only text is kept.
+      expect(GPTClient.extractMessageContent('anthropic', { content: [{ type: 'tool_use' }, { type: 'text', text: 'ok' }] })).toBe('ok');
+    });
+
+    it('extracts streaming deltas from each provider SSE shape', () => {
+      expect(GPTClient.extractStreamDelta('openai', { choices: [{ delta: { content: 'x' } }] })).toBe('x');
+      expect(GPTClient.extractStreamDelta('anthropic', { type: 'content_block_delta', delta: { type: 'text_delta', text: 'y' } })).toBe('y');
+      // Non-text Anthropic events produce no output.
+      expect(GPTClient.extractStreamDelta('anthropic', { type: 'message_start' })).toBe('');
+      expect(GPTClient.extractStreamDelta('openai', { choices: [{ delta: {} }] })).toBe('');
     });
   });
 });

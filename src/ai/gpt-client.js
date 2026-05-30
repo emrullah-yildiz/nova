@@ -9,7 +9,7 @@ import { getRuntimeConfig } from '../config/runtime-config.js';
 import { buildNodeCatalog } from './node-catalog.js';
 
 const GPTClient = {
-  MODEL: 'anthropic/claude-sonnet-4.5',
+  MODEL: 'anthropic/claude-sonnet-4.6',
   MAX_TOKENS: 2048,
   TEMPERATURE: 0.7,
 
@@ -24,33 +24,74 @@ const GPTClient = {
   PROXY_MAX_TOKENS: 512,
 
   // ── PROVIDER REGISTRY ──
+  // `format` selects the wire protocol: 'openai' is the chat-completions
+  // shape (Bearer auth, {messages}, choices[].message.content) that most
+  // providers speak — including Google's OpenAI-compatible Gemini endpoint.
+  // 'anthropic' is Claude's native /v1/messages API, which differs in
+  // headers, request body, and response shape; see the adapters below.
   PROVIDERS: {
     openai: {
       name: 'OpenAI',
       apiUrl: 'https://api.openai.com/v1/chat/completions',
       keyPrefix: 'sk-',
+      format: 'openai',
       models: [
-        { id: 'gpt-4o', name: 'GPT-4o (recommended)', free: false },
-        { id: 'gpt-4o-mini', name: 'GPT-4o Mini (faster, cheaper)', free: false },
-        { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', free: false },
-        { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo (cheapest)', free: false }
+        { id: 'gpt-5.5', name: 'GPT-5.5 (recommended)', free: false },
+        { id: 'gpt-5.5-pro', name: 'GPT-5.5 Pro (most capable)', free: false },
+        { id: 'gpt-5.4', name: 'GPT-5.4 (more affordable)', free: false },
+        { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini (faster, cheaper)', free: false },
+        { id: 'gpt-5.4-nano', name: 'GPT-5.4 Nano (fastest, cheapest)', free: false }
       ]
     },
     groq: {
       name: 'Groq (Free Tier)',
       apiUrl: 'https://api.groq.com/openai/v1/chat/completions',
       keyPrefix: 'gsk_',
+      format: 'openai',
       models: [
-        { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B (free, fast)', free: true },
+        { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B (free, balanced)', free: true },
         { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant (free, fastest)', free: true },
-        { id: 'meta-llama/llama-4-scout-17b-16e-instruct', name: 'Llama 4 Scout 17B (free)', free: true },
-        { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B (free, 32k ctx)', free: true }
+        { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B (free, most capable)', free: true },
+        { id: 'openai/gpt-oss-20b', name: 'GPT-OSS 20B (free, fast)', free: true }
+      ]
+    },
+    gemini: {
+      // Google exposes an OpenAI-compatible endpoint, so Gemini slots into the
+      // standard chat-completions flow (Bearer auth, no custom adapter). Keys
+      // come from Google AI Studio and start with "AIza".
+      name: 'Google Gemini',
+      apiUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+      keyPrefix: 'AIza',
+      format: 'openai',
+      models: [
+        { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash (recommended, free tier)', free: true },
+        { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite (fast, cheap)', free: true },
+        { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', free: true },
+        { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite (fastest)', free: true },
+        { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro (most capable)', free: false }
+      ]
+    },
+    anthropic: {
+      // Claude's native messages API — used directly with an Anthropic key
+      // (sk-ant-…) so users don't have to route through OpenRouter. Needs the
+      // 'anthropic' format adapter (x-api-key header, system as a top-level
+      // field, content[] response). Model ids are overridable in Settings.
+      name: 'Anthropic (Claude)',
+      apiUrl: 'https://api.anthropic.com/v1/messages',
+      keyPrefix: 'sk-ant-',
+      format: 'anthropic',
+      models: [
+        { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6 (recommended)', free: false },
+        { id: 'claude-opus-4-8', name: 'Claude Opus 4.8 (most capable)', free: false },
+        { id: 'claude-opus-4-7', name: 'Claude Opus 4.7', free: false },
+        { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5 (fastest)', free: false }
       ]
     },
     openrouter: {
       name: 'OpenRouter',
       apiUrl: 'https://openrouter.ai/api/v1/chat/completions',
       keyPrefix: 'sk-or-',
+      format: 'openai',
       models: [
         { id: 'anthropic/claude-sonnet-4.6', name: 'Claude Sonnet 4.6 ($3/M)', free: false },
         { id: 'openai/gpt-4o', name: 'GPT-4o ($2.50/M)', free: false },
@@ -121,18 +162,97 @@ const GPTClient = {
   getEffectiveModel() {
     return this.isProxyMode() ? this.PROXY_MODEL : this.getModel();
   },
-  buildRequestHeaders() {
-    if (this.isProxyMode()) return { 'Content-Type': 'application/json' };
+  // Wire format for the active provider. Proxy mode always speaks OpenAI
+  // (the proxy normalizes everything server-side). For BYOK it's whatever the
+  // provider declares; unknown/legacy providers default to 'openai'.
+  getProviderFormat(providerOverride) {
+    if (!providerOverride && this.isProxyMode()) return 'openai';
+    var prov = this.PROVIDERS[providerOverride || this.getProvider()];
+    return (prov && prov.format) || 'openai';
+  },
+
+  // ── WIRE-FORMAT ADAPTERS ──
+  // Pure functions (no DOM / no fetch) so they're unit-testable. Each branches
+  // on `format`: 'openai' (chat-completions) vs 'anthropic' (/v1/messages).
+
+  buildAuthHeaders(format, key, extraHeaders) {
+    if (format === 'anthropic') {
+      return {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        // Required to call the Anthropic API directly from a browser (opts
+        // into CORS). Without it the request is rejected before reaching auth.
+        'anthropic-dangerous-direct-browser-access': 'true'
+      };
+    }
     return Object.assign({
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + this.getApiKey()
-    }, this.getExtraHeaders());
+      'Authorization': 'Bearer ' + key
+    }, extraHeaders || {});
+  },
+
+  buildChatPayload(format, model, messages, maxTokens, temperature, stream) {
+    if (format === 'anthropic') {
+      // Anthropic carries the system prompt as a top-level field, not a
+      // message role, and requires max_tokens. Fold any system messages into
+      // one `system` string and pass the rest through unchanged.
+      var system = '';
+      var convo = [];
+      for (var i = 0; i < messages.length; i++) {
+        var m = messages[i];
+        if (m.role === 'system') { system += (system ? '\n\n' : '') + m.content; continue; }
+        convo.push({ role: m.role, content: m.content });
+      }
+      var payload = { model: model, max_tokens: maxTokens, temperature: temperature, messages: convo };
+      if (system) payload.system = system;
+      if (stream) payload.stream = true;
+      return payload;
+    }
+    var openai = { model: model, messages: messages, max_tokens: maxTokens, temperature: temperature };
+    if (stream) openai.stream = true;
+    return openai;
+  },
+
+  extractMessageContent(format, data) {
+    if (format === 'anthropic') {
+      if (data && Array.isArray(data.content)) {
+        return data.content
+          .filter(function (b) { return b && b.type === 'text'; })
+          .map(function (b) { return b.text; })
+          .join('');
+      }
+      return '';
+    }
+    return (data && data.choices && data.choices[0] && data.choices[0].message)
+      ? data.choices[0].message.content : '';
+  },
+
+  extractStreamDelta(format, json) {
+    if (format === 'anthropic') {
+      // Anthropic SSE emits typed events; only content_block_delta carries
+      // text. message_start/_stop, ping, etc. produce no visible output.
+      if (json && json.type === 'content_block_delta' && json.delta && typeof json.delta.text === 'string') {
+        return json.delta.text;
+      }
+      return '';
+    }
+    var delta = json && json.choices && json.choices[0] && json.choices[0].delta;
+    return (delta && delta.content) || '';
+  },
+
+  buildRequestHeaders() {
+    if (this.isProxyMode()) return { 'Content-Type': 'application/json' };
+    return this.buildAuthHeaders(this.getProviderFormat(), this.getApiKey(), this.getExtraHeaders());
   },
   detectProvider(key) {
     if (!key) return 'openai';
-    if (key.startsWith('sk-ant-')) return 'openrouter';
-    if (key.startsWith('gsk_')) return 'groq';
+    // sk-or-/sk-ant- both start with "sk-", so match the specific prefixes
+    // before the generic OpenAI fallthrough.
     if (key.startsWith('sk-or-')) return 'openrouter';
+    if (key.startsWith('sk-ant-')) return 'anthropic';
+    if (key.startsWith('gsk_')) return 'groq';
+    if (key.startsWith('AIza')) return 'gemini';
     return 'openai';
   },
   isApiKeyValid(key) {
@@ -620,15 +740,11 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
       ...history.slice(-historyDepth),
       { role: 'user', content: userMessage }
     ];
+    const format = this.getProviderFormat();
     const response = await fetch(this.getEffectiveApiUrl(), {
       method: 'POST',
       headers: this.buildRequestHeaders(),
-      body: JSON.stringify({
-        model: this.getEffectiveModel(),
-        messages: messages,
-        max_tokens: maxTokens,
-        temperature: this.TEMPERATURE
-      })
+      body: JSON.stringify(this.buildChatPayload(format, this.getEffectiveModel(), messages, maxTokens, this.TEMPERATURE, false))
     });
     if (response.status === 503 && proxyMode) {
       NFLogger.aiError('Proxy not configured', providerLabel);
@@ -652,7 +768,7 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
       throw new Error(msg);
     }
     const data = await response.json();
-    const reply = data.choices[0].message.content;
+    const reply = this.extractMessageContent(format, data);
     NFLogger.aiResponse(reply, Date.now() - this._callStart);
     history.push({ role: 'user', content: userMessage });
     history.push({ role: 'assistant', content: reply });
@@ -713,17 +829,12 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
       ...history.slice(-historyDepth),
       { role: 'user', content: userMessage }
     ];
+    const format = this.getProviderFormat();
     try {
       const response = await fetch(this.getEffectiveApiUrl(), {
         method: 'POST',
         headers: this.buildRequestHeaders(),
-        body: JSON.stringify({
-          model: this.getEffectiveModel(),
-          messages: messages,
-          max_tokens: maxTokens,
-          temperature: this.TEMPERATURE,
-          stream: true
-        })
+        body: JSON.stringify(this.buildChatPayload(format, this.getEffectiveModel(), messages, maxTokens, this.TEMPERATURE, true))
       });
       if (!response.ok) {
         if (response.status === 503 && proxyMode) {
@@ -766,10 +877,10 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
           if (payload === '[DONE]') continue;
           try {
             const json = JSON.parse(payload);
-            const delta = json.choices && json.choices[0] && json.choices[0].delta;
-            if (delta && delta.content) {
-              fullText += delta.content;
-              onChunk(delta.content, fullText);
+            const chunk = this.extractStreamDelta(format, json);
+            if (chunk) {
+              fullText += chunk;
+              onChunk(chunk, fullText);
             }
           } catch (e) { /* skip */ }
         }
@@ -910,6 +1021,8 @@ const SettingsDialog = {
     if (hint) {
       if (pid === 'openrouter') hint.innerHTML = '⭐ Access Claude Sonnet, GPT-4o + free models! Get key at <a href="https://openrouter.ai/keys" target="_blank" style="color:#cba6f7">openrouter.ai/keys</a>';
       else if (pid === 'groq') hint.innerHTML = '🟢 Free! Get key at <a href="https://console.groq.com/keys" target="_blank" style="color:var(--accent-green)">console.groq.com/keys</a>';
+      else if (pid === 'gemini') hint.innerHTML = '🟢 Free tier! Get key at <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent-green)">aistudio.google.com/apikey</a>';
+      else if (pid === 'anthropic') hint.innerHTML = '⭐ Use Claude directly. Get key at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:#cba6f7">console.anthropic.com</a>';
       else hint.innerHTML = 'Get key from <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--accent-blue)">platform.openai.com/api-keys</a>';
     }
   },
@@ -953,20 +1066,18 @@ const SettingsDialog = {
     }
     btn.disabled = true;
     btn.textContent = 'Testing...';
-    status.innerHTML = '<span style="color:var(--text-muted)">⟳ Connecting to OpenAI...</span>';
+    var provider = GPTClient.getProvider();
+    var provName = (GPTClient.PROVIDERS[provider] && GPTClient.PROVIDERS[provider].name) || 'provider';
+    status.innerHTML = '<span style="color:var(--text-muted)">⟳ Connecting to ' + provName + '...</span>';
     try {
       const modelSelect = document.getElementById('settings-model');
-      const model = modelSelect ? modelSelect.value : 'gpt-4o';
-      var extraHeaders = GPTClient.getExtraHeaders();
-      var headers = Object.assign({ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key }, extraHeaders);
+      const model = modelSelect ? modelSelect.value : 'gpt-5.5';
+      var format = GPTClient.getProviderFormat(provider);
+      var headers = GPTClient.buildAuthHeaders(format, key, GPTClient.getExtraHeaders());
       const response = await fetch(GPTClient.getApiUrl(), {
         method: 'POST',
         headers: headers,
-        body: JSON.stringify({
-          model: model,
-          messages: [{ role: 'user', content: 'Reply with just: OK' }],
-          max_tokens: 5
-        })
+        body: JSON.stringify(GPTClient.buildChatPayload(format, model, [{ role: 'user', content: 'Reply with just: OK' }], 16, 0, false))
       });
       if (response.ok) {
         const data = await response.json();
