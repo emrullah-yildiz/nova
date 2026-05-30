@@ -560,69 +560,50 @@ export const curvesNodes = [
     subGroup: 'Ellipse',
     icon: '⬭',
     aliases: ['prof-ellipse'],
-    description: 'Samples an ellipse from a center point, a width (X span), a depth (Y span), an in-plane rotation in degrees, and a perimeter resolution. Returns a list of points usable for Loft, Sweep, or Extrude.',
+    description: 'Creates an ellipse from a center point, a width (X span), and a depth (Y span). Returns an Ellipse curve that can be used directly by downstream curve operations such as Loft, Sweep, or Extrude.',
     inputs: [
       { id: 'center', name: 'Center', type: 'point', description: 'Center point of the ellipse' },
-      { id: 'width', name: 'Width', type: 'number', description: 'Total span along the local X axis' },
-      { id: 'depth', name: 'Depth', type: 'number', description: 'Total span along the local Y axis' },
-      { id: 'rotation', name: 'Rotation°', type: 'number', description: 'In-plane rotation, in degrees' },
-      { id: 'resolution', name: 'Resolution', type: 'number', description: 'Number of sample points along the perimeter' }
+      { id: 'width', name: 'Width', type: 'number', description: 'Total span along the X axis' },
+      { id: 'depth', name: 'Depth', type: 'number', description: 'Total span along the Y axis' }
     ],
-    outputs: [{ id: 'profile', name: 'Profile', type: 'list', description: 'List of sample points around the ellipse' }],
+    outputs: [{ id: 'ellipse', name: 'Ellipse', type: 'curve', description: 'Resulting Ellipse3 curve' }],
     controls: [],
     execute(context, inputs) {
       const c = toPoint(inputs.center);
-      const w = toNumber(inputs.width, 10) / 2;
-      const d = toNumber(inputs.depth, 6) / 2;
-      const rot = toNumber(inputs.rotation, 0) * Math.PI / 180;
-      const res = Math.max(8, Math.floor(toNumber(inputs.resolution, 32)));
-      const cosR = Math.cos(rot);
-      const sinR = Math.sin(rot);
-      const pts = [];
-      for (let j = 0; j < res; j++) {
-        const a = 2 * Math.PI * j / res;
-        const x = w * Math.cos(a);
-        const y = d * Math.sin(a);
-        pts.push(new Geo.Point3(c.x + x * cosR - y * sinR, c.y + x * sinR + y * cosR, c.z));
-      }
-      return { profile: pts };
+      const w = toNumber(inputs.width, 10);
+      const d = toNumber(inputs.depth, 6);
+      return { ellipse: new Geo.Ellipse3(c, w, d) };
     },
     codegen: {
-      python: 'pts = []\nfor j in range(int({{resolution}})):\n    a = 2 * math.pi * j / int({{resolution}})\n    x = {{width}}/2 * math.cos(a)\n    y = {{depth}}/2 * math.sin(a)\n    r = math.radians({{rotation}})\n    pts.append(Geo.Point3({{center}}.x + x*math.cos(r) - y*math.sin(r), {{center}}.y + x*math.sin(r) + y*math.cos(r), {{center}}.z))\n{{profile}} = pts',
-      csharp: 'var {{profile}} = Enumerable.Range(0, (int){{resolution}}).Select(j => { double a = 2*Math.PI*j/(int){{resolution}}; double x = {{width}}/2*Math.Cos(a); double y = {{depth}}/2*Math.Sin(a); double r = {{rotation}}*Math.PI/180; return new Point3({{center}}.X + x*Math.Cos(r) - y*Math.Sin(r), {{center}}.Y + x*Math.Sin(r) + y*Math.Cos(r), {{center}}.Z); }).ToList();'
+      python: '{{ellipse}} = Geo.Ellipse3({{center}}, {{width}}, {{depth}})',
+      csharp: 'var {{ellipse}} = Geo.Ellipse3({{center}}, {{width}}, {{depth}});'
     },
     help: {
       inputs: [
         { name: 'Center', description: 'Center point' },
         { name: 'Width', description: 'Span along X' },
-        { name: 'Depth', description: 'Span along Y' },
-        { name: 'Rotation°', description: 'In-plane rotation' },
-        { name: 'Resolution', description: 'Sample count' }
+        { name: 'Depth', description: 'Span along Y' }
       ],
-      outputs: [{ name: 'Profile', description: 'Sampled point list' }],
+      outputs: [{ name: 'Ellipse', description: 'Ellipse curve' }],
       example: {
-        title: 'Sample a 10x6 ellipse into 24 points, count them',
+        title: 'Perimeter of a 10x6 ellipse',
         nodes: [
           { type: 'Point.Origin', x: 0, y: 0 },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 10 } },
           { type: 'Input.Number', x: 0, y: 150, controls: { val: 6 } },
-          { type: 'Input.Number', x: 0, y: 220, controls: { val: 0 } },
-          { type: 'Input.Number', x: 0, y: 290, controls: { val: 24 } },
-          { type: 'Ellipse.ByCenterWidthDepth', x: 240, y: 150 },
-          { type: 'List.Count', x: 480, y: 150 },
-          { type: 'Output.Watch', x: 680, y: 150 }
+          { type: 'Ellipse.ByCenterWidthDepth', x: 240, y: 70 },
+          { type: 'Curve.Length', x: 480, y: 70 },
+          { type: 'Output.Watch', x: 680, y: 70 }
         ],
         wires: [
-          [0, 'point', 5, 'center'],
-          [1, 'value', 5, 'width'],
-          [2, 'value', 5, 'depth'],
-          [3, 'value', 5, 'rotation'],
-          [4, 'value', 5, 'resolution'],
-          [5, 'profile', 6, 'list'],
-          [6, 'count', 7, 'value']
+          [0, 'point', 3, 'center'],
+          [1, 'value', 3, 'width'],
+          [2, 'value', 3, 'depth'],
+          [3, 'ellipse', 4, 'curve'],
+          [4, 'length', 5, 'value']
         ]
       },
-      sampleCode: 'pts = [Geo.Point3({{center}}.x + x*cos(r) - y*sin(r), {{center}}.y + x*sin(r) + y*cos(r), {{center}}.z) for j in range(N)]'
+      sampleCode: '{{ellipse}} = Geo.Ellipse3({{center}}, {{width}}, {{depth}})'
     }
   },
 

@@ -17,7 +17,7 @@ import { Geo } from './geometry-lib.js';
     n = n || 48;
     if (!curve) return [];
     if (curve._type === 'Polyline3') return curve.points;
-    if (curve._type === 'Circle3' || curve._type === 'Arc3') return curve.toPoints(n);
+    if (curve._type === 'Circle3' || curve._type === 'Arc3' || curve._type === 'Ellipse3') return curve.toPoints(n);
     if (curve._type === 'Line3') {
       const pts = [];
       for (let i = 0; i <= n; i++) pts.push(curve.pointAt(i / n));
@@ -313,6 +313,16 @@ import { Geo } from './geometry-lib.js';
     if (geometry._type === 'Line3') return new G.Line3(rp(geometry.start), rp(geometry.end));
     if (geometry._type === 'Polyline3') return new G.Polyline3(geometry.points.map(rp), geometry.closed);
     if (geometry._type === 'Circle3') return new G.Circle3(rp(geometry.center), geometry.radius, G._rotatePoint(geometry.center.add(geometry.normal), axisOrigin, axisDir, angle).sub(rp(geometry.center)));
+    if (geometry._type === 'Ellipse3') {
+      const rc = rp(geometry.center);
+      // Rotate the orientation vectors by the same rotation (about the center)
+      // so the ellipse spins in/with its plane rather than passing through.
+      const rdir = (vec) => {
+        const t = G._rotatePoint(geometry.center.add(vec), axisOrigin, axisDir, angle);
+        return V(t.x - rc.x, t.y - rc.y, t.z - rc.z).normalize();
+      };
+      return new G.Ellipse3(rc, geometry.width, geometry.depth, rdir(geometry.normal), rdir(geometry.xAxis));
+    }
     if (geometry._type === 'Mesh3') {
       const m = new G.Mesh3(geometry.vertices.map(rp), geometry.faces.slice(), geometry.color);
       m._solidType = geometry._solidType;

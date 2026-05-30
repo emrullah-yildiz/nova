@@ -713,7 +713,7 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
         if (t.indexOf('vector') >= 0) return 'vector';
         if (t.indexOf('mesh') >= 0 || t.indexOf('solid') >= 0 || t.indexOf('surface') >= 0) return 'mesh';
         if (t.indexOf('line') >= 0) return 'line';
-        if (t.indexOf('curve') >= 0 || t.indexOf('circle') >= 0 || t.indexOf('arc') >= 0) return 'curve';
+        if (t.indexOf('curve') >= 0 || t.indexOf('circle') >= 0 || t.indexOf('arc') >= 0 || t.indexOf('ellipse') >= 0) return 'curve';
       }
       return typeof value === 'object' ? 'object' : typeof value;
     }
