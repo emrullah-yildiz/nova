@@ -17,7 +17,7 @@ import { Geo } from './geometry-lib.js';
     n = n || 48;
     if (!curve) return [];
     if (curve._type === 'Polyline3') return curve.points;
-    if (curve._type === 'Circle3' || curve._type === 'Arc3') return curve.toPoints(n);
+    if (curve._type === 'Circle3' || curve._type === 'Arc3' || curve._type === 'Ellipse3') return curve.toPoints(n);
     if (curve._type === 'Line3') {
       const pts = [];
       for (let i = 0; i <= n; i++) pts.push(curve.pointAt(i / n));
@@ -313,6 +313,21 @@ import { Geo } from './geometry-lib.js';
     if (geometry._type === 'Line3') return new G.Line3(rp(geometry.start), rp(geometry.end));
     if (geometry._type === 'Polyline3') return new G.Polyline3(geometry.points.map(rp), geometry.closed);
     if (geometry._type === 'Circle3') return new G.Circle3(rp(geometry.center), geometry.radius, G._rotatePoint(geometry.center.add(geometry.normal), axisOrigin, axisDir, angle).sub(rp(geometry.center)));
+    if (geometry._type === 'Arc3') {
+      const rc = rp(geometry.center);
+      const rn = G._rotatePoint(geometry.center.add(geometry.normal), axisOrigin, axisDir, angle);
+      return new G.Arc3(rc, geometry.radius, geometry.startAngle, geometry.endAngle, V(rn.x - rc.x, rn.y - rc.y, rn.z - rc.z).normalize());
+    }
+    if (geometry._type === 'Ellipse3') {
+      const rc = rp(geometry.center);
+      // Rotate the orientation vectors by the same rotation (about the center)
+      // so the ellipse spins in/with its plane rather than passing through.
+      const rdir = (vec) => {
+        const t = G._rotatePoint(geometry.center.add(vec), axisOrigin, axisDir, angle);
+        return V(t.x - rc.x, t.y - rc.y, t.z - rc.z).normalize();
+      };
+      return new G.Ellipse3(rc, geometry.width, geometry.depth, rdir(geometry.normal), rdir(geometry.xAxis));
+    }
     if (geometry._type === 'Mesh3') {
       const m = new G.Mesh3(geometry.vertices.map(rp), geometry.faces.slice(), geometry.color);
       m._solidType = geometry._solidType;
@@ -333,10 +348,18 @@ import { Geo } from './geometry-lib.js';
       const d = (p.x - planeOrigin.x) * planeNormal.x + (p.y - planeOrigin.y) * planeNormal.y + (p.z - planeOrigin.z) * planeNormal.z;
       return P(p.x - 2*d*planeNormal.x, p.y - 2*d*planeNormal.y, p.z - 2*d*planeNormal.z);
     };
+    // Reflect a free vector (direction) across the plane — no origin offset.
+    const mv = (vec) => {
+      const d = vec.x * planeNormal.x + vec.y * planeNormal.y + vec.z * planeNormal.z;
+      return V(vec.x - 2*d*planeNormal.x, vec.y - 2*d*planeNormal.y, vec.z - 2*d*planeNormal.z);
+    };
 
     if (geometry._type === 'Point3') return mp(geometry);
     if (geometry._type === 'Line3') return new G.Line3(mp(geometry.start), mp(geometry.end));
     if (geometry._type === 'Polyline3') return new G.Polyline3(geometry.points.map(mp), geometry.closed);
+    if (geometry._type === 'Circle3') return new G.Circle3(mp(geometry.center), geometry.radius, mv(geometry.normal));
+    if (geometry._type === 'Arc3') return new G.Arc3(mp(geometry.center), geometry.radius, geometry.startAngle, geometry.endAngle, mv(geometry.normal));
+    if (geometry._type === 'Ellipse3') return new G.Ellipse3(mp(geometry.center), geometry.width, geometry.depth, mv(geometry.normal), mv(geometry.xAxis));
     if (geometry._type === 'Mesh3') {
       // Mirror vertices, reverse face winding
       const m = new G.Mesh3(
