@@ -571,6 +571,7 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
       }
     }
     if (key === 'l' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); if (app.autoLayout) app.autoLayout(); }
+    if (key === 'z' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); if (app.fitAll) app.fitAll(); }
   });
 
   // ═══════════════════════════════════════

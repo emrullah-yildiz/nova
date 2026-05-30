@@ -1833,3 +1833,15 @@ input[type="number"] {
 
 .py-node-status.err { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
 
+/* ── Keyboard shortcuts overlay (read-only, Settings → Keyboard Shortcuts) ── */
+#shortcuts-overlay { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; }
+#shortcuts-overlay .sc-panel { width: 400px; max-width: 90vw; max-height: 80vh; overflow: auto; background: var(--bg-secondary, #181825); border: 1px solid var(--border-color, #313244); border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); color: var(--text-primary, #cdd6f4); padding: 16px 18px; }
+#shortcuts-overlay .sc-head { display: flex; align-items: center; justify-content: space-between; font-size: 15px; font-weight: 700; }
+#shortcuts-overlay .sc-close { background: none; border: none; color: var(--text-muted, #6c7086); font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px; }
+#shortcuts-overlay .sc-close:hover { color: var(--text-bright, #fff); }
+#shortcuts-overlay .sc-sub { font-size: 11px; color: var(--text-muted, #6c7086); text-transform: uppercase; letter-spacing: 0.05em; margin: 2px 0 12px; }
+#shortcuts-overlay .sc-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border-color, #313244); }
+#shortcuts-overlay .sc-row:last-child { border-bottom: none; }
+#shortcuts-overlay .sc-key { font-family: monospace; font-size: 12px; font-weight: 700; color: var(--accent-blue, #89b4fa); background: var(--bg-tertiary, #11111b); border: 1px solid var(--border-color, #313244); border-radius: 5px; padding: 3px 8px; white-space: nowrap; }
+#shortcuts-overlay .sc-desc { font-size: 13px; color: var(--text-secondary, #a6adc8); margin-left: 14px; text-align: right; }
+

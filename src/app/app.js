@@ -1,6 +1,7 @@
 import { AIEngine } from '../ai/ai-engine.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from '../core/nodes.js';
 import { describeWireTypeMismatch } from '../core/wire-type-check.js';
+import { computeFitView } from '../core/graph-layout.js';
 import { CodeParser } from '../runtime/parser.js';
 import { Viewer3D } from '../viewer/viewer3d.js';
 
@@ -1102,7 +1103,64 @@ const app = {
 
   zoomOut(){this.zoom=Math.max(0.25,this.zoom-0.15);this.applyTransform();document.getElementById('zoom-indicator').textContent=Math.round(this.zoom*100)+'%';},
 
-  fitAll(){this.zoom=1;this.panX=0;this.panY=0;this.applyTransform();document.getElementById('zoom-indicator').textContent='100%';},
+  fitAll(){
+    const area=document.getElementById('canvas-area');
+    const in3D = area && area.classList.contains('view-3d');
+    const inSplit = area && area.classList.contains('split-view');
+    // 3D / split view: frame the geometry in the 3D camera.
+    if((in3D||inSplit) && typeof Viewer3D!=='undefined' && Viewer3D.isInitialized && Viewer3D.fitAll){
+      Viewer3D.fitAll();
+      if(in3D && !inSplit) return; // pure 3D — nothing else to fit
+    }
+    if(!area) return;
+    // Fit the current selection if any, otherwise every node.
+    const ids=(this.selectedNodes && this.selectedNodes.length)
+      ? this.selectedNodes : this.nodes.map(n=>n.id);
+    const targets=this.nodes.filter(n=>ids.indexOf(n.id)>=0);
+    const zi=document.getElementById('zoom-indicator');
+    if(targets.length===0){
+      this.zoom=1;this.panX=0;this.panY=0;this.applyTransform();
+      if(zi)zi.textContent='100%';
+      return;
+    }
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    targets.forEach(n=>{
+      const el=document.getElementById(n.id);
+      const w=el?(el.offsetWidth||180):180, h=el?(el.offsetHeight||100):100;
+      if(n.x<minX)minX=n.x; if(n.y<minY)minY=n.y;
+      if(n.x+w>maxX)maxX=n.x+w; if(n.y+h>maxY)maxY=n.y+h;
+    });
+    const rect=area.getBoundingClientRect();
+    const view=computeFitView({minX,minY,maxX,maxY},{width:rect.width,height:rect.height},{padding:60});
+    this.zoom=view.zoom;this.panX=view.panX;this.panY=view.panY;
+    this.applyTransform();
+    if(zi)zi.textContent=Math.round(this.zoom*100)+'%';
+  },
+
+  // Read-only overlay listing the available keyboard shortcuts (Settings menu).
+  showShortcuts(){
+    const existing=document.getElementById('shortcuts-overlay');
+    if(existing){existing.remove();return;} // toggle off if already open
+    const SC=[
+      ['Z','Zoom to Fit — selection, or all nodes'],
+      ['L','Auto Layout'],
+      ['P','Toggle Properties (selected)'],
+      ['D','Toggle Data Inspector (selected)'],
+      ['W','Toggle Warnings (selected)'],
+      ['Ctrl + Z','Undo'],
+      ['Ctrl + Y','Redo'],
+      ['Ctrl + C','Copy nodes'],
+      ['Ctrl + V','Paste nodes'],
+      ['Delete','Delete selected nodes'],
+      ['Esc','Deselect / close menus']
+    ];
+    const rows=SC.map(s=>`<div class="sc-row"><span class="sc-key">${s[0]}</span><span class="sc-desc">${s[1]}</span></div>`).join('');
+    const ov=document.createElement('div');
+    ov.id='shortcuts-overlay';
+    ov.innerHTML=`<div class="sc-panel" role="dialog" aria-label="Keyboard Shortcuts"><div class="sc-head"><span>Keyboard Shortcuts</span><button class="sc-close" title="Close">×</button></div><div class="sc-sub">Read-only reference</div><div class="sc-list">${rows}</div></div>`;
+    ov.addEventListener('click',e=>{ if(e.target===ov||e.target.classList.contains('sc-close')) ov.remove(); });
+    document.body.appendChild(ov);
+  },
 
 
 
@@ -1150,7 +1208,7 @@ const app = {
 
       if(e.key==='Delete'||e.key==='Backspace'){this.selectedNodes.forEach(id=>this.removeNode(id));this.selectedNodes=[];}
 
-      if(e.key==='Escape'){this.deselectAll();this.hideContextMenu();}
+      if(e.key==='Escape'){const so=document.getElementById('shortcuts-overlay');if(so)so.remove();this.deselectAll();this.hideContextMenu();}
 
     });
 
