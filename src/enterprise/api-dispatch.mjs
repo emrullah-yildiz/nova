@@ -6,6 +6,8 @@
 // are injected, so persistence/runtime differences live in the adapters.
 
 import { ROLES, createHttpError, decodePaginationCursor } from './domain.mjs';
+import { assertDeliverableEmail } from './email-verification.mjs';
+import { buildVerificationEmail } from '../../server/email/resend.mjs';
 import {
   validateAiChatBody,
   validateBackgroundJobBody,
@@ -44,6 +46,8 @@ export function matchRoute(method, path, options = {}) {
     ['POST', /^\/api\/auth\/oidc\/callback$/, true, 200, handleOidcCallback],
     ['POST', /^\/api\/auth\/signup$/, true, 201, handleSignup],
     ['POST', /^\/api\/auth\/login$/, true, 200, handleLogin],
+    ['POST', /^\/api\/auth\/verify$/, true, 200, handleVerifyEmail],
+    ['POST', /^\/api\/auth\/resend-verification$/, false, 200, handleResendVerification],
     ['GET', /^\/api\/me$/, false, 200, ({ context }) => ({ user: context.user })],
     ['GET', /^\/api\/projects$/, false, 200, ({ store, context, url }) => {
       const page = store.listProjects(context, parsePaginationParams(url));
@@ -108,14 +112,14 @@ function bearerToken(authorization) {
 
 // Builds the platform-agnostic request handler. `request` is a plain object:
 // { method, path, searchParams, authorization, body }. Returns { status, body }.
-export function createApiDispatcher({ store, authService, aiProvider, objectStorage, allowDevLogin = false }) {
+export function createApiDispatcher({ store, authService, aiProvider, objectStorage, emailService = null, appUrl = '', allowDevLogin = false }) {
   return async function dispatch(request) {
     const { method, path, searchParams, authorization, body } = request;
     const route = matchRoute(method, path, { allowDevLogin });
     if (!route) throw createHttpError(404, 'Route not found.');
     const context = route.public ? null : await store.authenticateAsync(bearerToken(authorization));
     const url = { searchParams: searchParams instanceof URLSearchParams ? searchParams : new URLSearchParams(searchParams || '') };
-    const result = await route.handler({ store, context, params: route.params, body: body || {}, url, aiProvider, authService, objectStorage });
+    const result = await route.handler({ store, context, params: route.params, body: body || {}, url, aiProvider, authService, objectStorage, emailService, appUrl: request.appUrl || appUrl });
     if (store.flushPersistence) await store.flushPersistence();
     return { status: route.status || 200, body: result };
   };
@@ -170,9 +174,13 @@ function parseLimitParam(value) {
 
 // Email+password sign-up. Creates the account, drops the user into their own
 // personal workspace, and issues a session — same end state as an OIDC login.
-async function handleSignup({ store, authService, body }) {
+async function handleSignup({ store, authService, body, emailService, appUrl }) {
   const payload = validateSignupBody(body || {});
   const email = payload.email.trim();
+  // Reject disposable domains and domains with no mail servers up front (the
+  // MX check fails open on lookup errors). Ownership is then proven by the
+  // emailed verification link.
+  await assertDeliverableEmail(email);
   // Refuse if the email is already taken — including by a Google-only account.
   // Silently "linking" a password to an existing OIDC email would let anyone
   // who guesses an email set a password on it, so we make the user sign in
@@ -181,7 +189,42 @@ async function handleSignup({ store, authService, body }) {
   const passwordHash = await authService.hashPasswordAsync(payload.password);
   const user = store.createUser({ email, displayName: payload.displayName || email, passwordHash });
   const organization = store.ensurePersonalWorkspace(user.id);
+  await sendVerificationEmail({ store, emailService, appUrl, user });
   return store.createAuthSessionAsync({ email: user.email, organizationId: organization.id });
+}
+
+// Best-effort: generate a token and email the verification link. Never fails
+// signup — if sending breaks, the account still exists and the user can
+// re-request a link from the in-app "verify your email" banner.
+async function sendVerificationEmail({ store, emailService, appUrl, user }) {
+  if (!emailService) return;
+  try {
+    const token = await store.createEmailVerificationTokenAsync(user.id);
+    const msg = buildVerificationEmail({ appUrl, token, displayName: user.displayName, email: user.email });
+    await emailService.send({ to: user.email, subject: msg.subject, html: msg.html, text: msg.text });
+  } catch (error) {
+    console.error('[nova-auth] verification email failed for %s: %s', user.email, (error && error.message) || error);
+  }
+}
+
+// Public: the link in the verification email points at the SPA (?verify=token),
+// which posts the token here. Marks the account verified.
+async function handleVerifyEmail({ store, body }) {
+  const token = body && typeof body.token === 'string' ? body.token.trim() : '';
+  if (!token) throw createHttpError(400, 'A verification token is required.');
+  const user = await store.consumeEmailVerificationTokenAsync(token);
+  return { ok: true, emailVerified: true, email: user.email };
+}
+
+// Authenticated: re-send the verification email to the signed-in user.
+async function handleResendVerification({ store, context, emailService, appUrl }) {
+  const user = store.requireUser(context.userId);
+  if (user.emailVerified) return { ok: true, alreadyVerified: true };
+  if (!emailService) throw createHttpError(503, 'Email delivery is not configured for this deployment.', 'EMAIL_NOT_CONFIGURED');
+  const token = await store.createEmailVerificationTokenAsync(user.id);
+  const msg = buildVerificationEmail({ appUrl, token, displayName: user.displayName, email: user.email });
+  await emailService.send({ to: user.email, subject: msg.subject, html: msg.html, text: msg.text });
+  return { ok: true };
 }
 
 // Email+password sign-in. Uses a single generic error for "no such user" and

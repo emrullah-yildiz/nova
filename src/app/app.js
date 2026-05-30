@@ -109,8 +109,31 @@ const app = {
     } catch {
       this._authConfig = { googleClientId: '', devLogin: false };
     }
+    await this._handleVerifyParam();
     await this.refreshSession();
     this._loadGoogleIdentity();
+  },
+
+  // If the page was opened from a verification email (?verify=<token>), confirm
+  // the token, then strip it from the URL so a refresh doesn't re-submit it.
+  async _handleVerifyParam() {
+    let token = '';
+    try { token = new URLSearchParams(window.location.search).get('verify') || ''; } catch { token = ''; }
+    if (!token) return;
+    try {
+      const r = await fetch('/api/auth/verify', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+      this._verifyJustConfirmed = r.ok;
+    } catch { /* ignore — banner stays until they retry */ }
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.delete('verify');
+      window.history.replaceState({}, document.title, u.pathname + u.search + u.hash);
+    } catch { /* ignore */ }
   },
 
   async refreshSession() {
@@ -142,6 +165,52 @@ const app = {
     } else {
       el.innerHTML = '<button class="account-btn account-signin" onclick="app.signIn()">Sign in</button>';
     }
+    this.renderVerifyBanner();
+  },
+
+  // Top banner nudging the user to confirm their email. Shows while the signed-
+  // in user is unverified; flashes a success note right after verification.
+  renderVerifyBanner() {
+    const u = this.currentUser;
+    let el = document.getElementById('verify-banner');
+    if (this._verifyJustConfirmed && (!u || u.emailVerified)) {
+      if (!el) { el = document.createElement('div'); document.body.appendChild(el); }
+      el.id = 'verify-banner';
+      el.className = 'verify-banner ok';
+      el.innerHTML = '<span>✓ Your email is verified.</span>';
+      this._verifyJustConfirmed = false;
+      setTimeout(() => { const b = document.getElementById('verify-banner'); if (b) b.remove(); }, 4000);
+      return;
+    }
+    if (!u || u.emailVerified !== false) { if (el) el.remove(); return; }
+    if (!el) { el = document.createElement('div'); el.id = 'verify-banner'; document.body.appendChild(el); }
+    el.className = 'verify-banner';
+    el.innerHTML =
+      '<span>⚠ Please verify your email — we sent a link to <strong>' + (u.email || '') + '</strong>.</span>' +
+      '<button class="verify-resend" onclick="app.resendVerification()">Resend</button>' +
+      '<button class="verify-dismiss" onclick="app.dismissVerifyBanner()" aria-label="Dismiss">&times;</button>';
+  },
+
+  dismissVerifyBanner() {
+    const b = document.getElementById('verify-banner');
+    if (b) b.remove();
+  },
+
+  async resendVerification() {
+    const el = document.getElementById('verify-banner');
+    try {
+      const r = await fetch('/api/auth/resend-verification', { method: 'POST', credentials: 'include' });
+      if (el) {
+        if (r.ok) {
+          el.className = 'verify-banner ok';
+          el.innerHTML = '<span>✓ Verification email sent — check your inbox.</span>';
+        } else {
+          const d = await r.json().catch(() => ({}));
+          el.innerHTML = '<span>Could not send: ' + ((d.error && d.error.message) || 'try again later') + '</span>' +
+            '<button class="verify-dismiss" onclick="app.dismissVerifyBanner()" aria-label="Dismiss">&times;</button>';
+        }
+      }
+    } catch { /* ignore */ }
   },
 
   _loadGoogleIdentity() {

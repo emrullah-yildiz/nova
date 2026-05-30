@@ -51,7 +51,10 @@ function vercelFunctionsDev() {
         // test against Neon locally, export NOVA_DATABASE_URL in your shell (and
         // run the migrations against it first).
         'GOOGLE_CLIENT_ID', 'NOVA_SESSION_SECRET', 'NOVA_ALLOW_DEV_LOGIN',
-        'NOVA_OIDC_ISSUER', 'NOVA_OIDC_CLIENT_ID'
+        'NOVA_OIDC_ISSUER', 'NOVA_OIDC_CLIENT_ID',
+        // Email verification: with no RESEND_API_KEY the console fallback logs
+        // the verification link to the dev server output.
+        'RESEND_API_KEY', 'NOVA_EMAIL_FROM', 'NOVA_PUBLIC_URL'
       ];
       for (const key of passthrough) {
         if (env[key] && !process.env[key]) process.env[key] = env[key];
