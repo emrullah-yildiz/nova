@@ -36,10 +36,11 @@ const GPTClient = {
       keyPrefix: 'sk-',
       format: 'openai',
       models: [
-        { id: 'gpt-4o', name: 'GPT-4o (recommended)', free: false },
-        { id: 'gpt-4o-mini', name: 'GPT-4o Mini (faster, cheaper)', free: false },
-        { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', free: false },
-        { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo (cheapest)', free: false }
+        { id: 'gpt-5', name: 'GPT-5 (recommended)', free: false },
+        { id: 'gpt-5-mini', name: 'GPT-5 Mini (faster, cheaper)', free: false },
+        { id: 'gpt-5-nano', name: 'GPT-5 Nano (fastest, cheapest)', free: false },
+        { id: 'gpt-4o', name: 'GPT-4o', free: false },
+        { id: 'gpt-4o-mini', name: 'GPT-4o Mini', free: false }
       ]
     },
     groq: {
