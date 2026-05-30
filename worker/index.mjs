@@ -88,6 +88,24 @@ app.post('/api/proxy/chat', async (c) => {
   );
 });
 
+// Enterprise API mount (auth/projects/versions/members/…).
+//
+// The route logic is already ported and Worker-ready: the shared dispatcher
+// `src/enterprise/api-dispatch.mjs` + the async WebCrypto auth service
+// `server/auth/webcrypto-auth.mjs` are proven end-to-end in
+// tests/api-dispatch-webcrypto.test.js. Mounting it here is blocked only on
+// worker-safe store deps: domain.mjs → state-store.mjs imports node:net/node:tls
+// (redis over TCP) and object-storage.mjs imports node:fs — neither bundles on
+// workerd. Phase 0 #2 swaps those for the Neon serverless driver (DB), KV/DO
+// (session state) and R2 (objects); then this becomes:
+//   const store = buildWorkerStore(env);  // Neon + WebCrypto auth, no node:net/fs
+//   const dispatch = createApiDispatcher({ store, authService, aiProvider, objectStorage, allowDevLogin });
+//   ...adapt Request -> dispatch() -> Response...
+app.all('/api/*', (c) => c.json(
+  { error: { message: 'Enterprise API on Workers is pending worker-safe persistence (Phase 0 step 2: Neon serverless driver + KV/R2). Use the Vercel API until cutover.', code: 'API_MIGRATION_IN_PROGRESS' } },
+  501, cors(c.env)
+));
+
 function forwardBody(provider, body) {
   return {
     model: pickModel(provider, body.model),

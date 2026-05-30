@@ -29,6 +29,12 @@ export class AuthService {
     return payload;
   }
 
+  // Async crypto surface, so the domain can stay agnostic to whether the auth
+  // service uses sync node:crypto (here) or async WebCrypto (the Worker). The
+  // node implementation just wraps the sync methods.
+  async createSessionTokenAsync(input) { return this.createSessionToken(input); }
+  async verifySessionTokenAsync(token) { return this.verifySessionToken(token); }
+
   async verifyOidcLogin({ idToken, organizationSlug }) {
     if (!this.oidcVerifier) throw createHttpError(501, 'OIDC verifier is not configured.');
     const identity = await this.oidcVerifier({ idToken, organizationSlug });
