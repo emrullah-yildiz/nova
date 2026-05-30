@@ -150,6 +150,23 @@ export class EnterpriseStore {
     return this.createUser({ email, displayName, externalSubject });
   }
 
+  // Personal-workspace model: every user gets a private organization (their
+  // "workspace") they own, so "log in and save my stuff" works without joining
+  // a team. Idempotent — returns the existing personal org if one exists.
+  ensurePersonalWorkspace(userId) {
+    const user = this.requireUser(userId);
+    const existing = user.memberships
+      .map(m => this.organizations.get(m.organizationId))
+      .find(org => org && org.settings && org.settings.personal);
+    if (existing) return clone(existing);
+    const org = this.createOrganization({ name: (user.displayName || user.email) + '’s Workspace', slug: 'u-' + user.id });
+    const stored = this.organizations.get(org.id);
+    stored.settings.personal = true;
+    this.addMembership({ organizationId: org.id, userId, role: ROLES.OWNER });
+    this.persist();
+    return clone(stored);
+  }
+
   authenticate(token) {
     if (!token) throw createHttpError(401, 'Missing bearer token.');
     let payload;

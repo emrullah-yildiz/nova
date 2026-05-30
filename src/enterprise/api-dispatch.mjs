@@ -170,14 +170,22 @@ async function handleOidcCallback({ store, authService, body }) {
     idToken: payload.idToken,
     organizationSlug: payload.organizationSlug
   });
-  const organization = Array.from(store.organizations.values()).find(item => item.slug === identity.organizationSlug) ||
-    Array.from(store.organizations.values())[0];
   const user = store.createOrUpdateExternalUser(identity);
-  try {
-    store.requireMembership(user.id, organization.id);
-  } catch (error) {
-    if (organization.settings.ssoRequired) throw error;
-    store.addMembership({ organizationId: organization.id, userId: user.id, role: ROLES.VIEWER });
+  // Org/SSO login: a known org slug maps the user into that organization.
+  // Personal login (Google with no org, or unknown slug): drop them into their
+  // own personal workspace so accounts work without a team.
+  let organization = identity.organizationSlug
+    ? Array.from(store.organizations.values()).find(item => item.slug === identity.organizationSlug)
+    : null;
+  if (organization) {
+    try {
+      store.requireMembership(user.id, organization.id);
+    } catch (error) {
+      if (organization.settings.ssoRequired) throw error;
+      store.addMembership({ organizationId: organization.id, userId: user.id, role: ROLES.VIEWER });
+    }
+  } else {
+    organization = store.ensurePersonalWorkspace(user.id);
   }
   return store.createAuthSessionAsync({ email: user.email, organizationId: organization.id });
 }
