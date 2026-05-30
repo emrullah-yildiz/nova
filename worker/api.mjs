@@ -9,6 +9,7 @@
 import { EnterpriseStore } from '../src/enterprise/domain.mjs';
 import { createApiDispatcher, createConfiguredAiProvider } from '../src/enterprise/api-dispatch.mjs';
 import { createWebCryptoAuthService } from '../server/auth/webcrypto-auth.mjs';
+import { createSecretsService } from '../server/auth/webcrypto.mjs';
 import { createGoogleOidcVerifier } from '../server/auth/oidc-verifier.mjs';
 import { createEmailService } from '../server/email/resend.mjs';
 import { NeonPersistence } from '../server/db/neon-persistence.mjs';
@@ -31,12 +32,24 @@ async function getApi(env) {
   const aiProvider = createConfiguredAiProvider({ env });
   // Resend when RESEND_API_KEY is set, else a console fallback (logs the link).
   const emailService = createEmailService(env);
+  // Encrypts/decrypts users' synced AI settings. Prefer a dedicated
+  // NOVA_SECRETS_KEY; fall back to deriving from NOVA_SESSION_SECRET. Guarded so
+  // a missing secret never throws out of getApi (handlers return 503 instead).
+  let secretsService = null;
+  try {
+    if (env.NOVA_SECRETS_KEY || env.NOVA_SESSION_SECRET) {
+      secretsService = await createSecretsService({ secretsKey: env.NOVA_SECRETS_KEY, sessionSecret: env.NOVA_SESSION_SECRET });
+    }
+  } catch (e) {
+    console.error('[nova] secrets service init failed:', (e && e.message) || e);
+  }
   const dispatch = createApiDispatcher({
     store,
     authService,
     aiProvider,
     objectStorage,
     emailService,
+    secretsService,
     appUrl: env.NOVA_PUBLIC_URL || '',
     allowDevLogin: env.NOVA_ALLOW_DEV_LOGIN === 'true'
   });

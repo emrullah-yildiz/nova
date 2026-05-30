@@ -451,16 +451,27 @@ document.addEventListener('DOMContentLoaded', () => {
     return display;
   };
 
+  // True while a signed-in user's account-stored AI settings are still loading
+  // (the in-memory cache hasn't hydrated yet). Avoids flashing "Inactive" before
+  // the synced key arrives.
+  app._aiHydrating = function() {
+    return !!(window.app && window.app.currentUser && GPTClient._aiSettingsHydrated === false && !GPTClient.hasApiKey());
+  };
+
   app._updateChatStatus = function() {
     const hasKey = GPTClient.hasApiKey();
     const provider = GPTClient.getProvider();
     const prov = GPTClient.PROVIDERS[provider];
     const provName = prov ? prov.name : provider;
     const enterprise = GPTClient.isEnterpriseAiEnabled && GPTClient.isEnterpriseAiEnabled();
+    const hydrating = app._aiHydrating();
     document.querySelectorAll('.chat-header-text p').forEach(function(el) {
       if (hasKey) {
         el.innerHTML = '● Online — <strong>' + provName + '</strong>';
         el.style.color = 'var(--accent-green)';
+      } else if (hydrating) {
+        el.innerHTML = '● Connecting…';
+        el.style.color = 'var(--accent-blue)';
       } else if (GPTClient.isProxyMode && GPTClient.isProxyMode()) {
         el.innerHTML = '● Free tier — <strong>Groq Llama 3.3 70B</strong>';
         el.style.color = 'var(--accent-blue)';
@@ -484,6 +495,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // workspace chat panels.
   app._updateAssistantGate = function() {
     const ready = GPTClient.canChat();
+    const hydrating = app._aiHydrating();
     ['landing', 'workspace'].forEach(function(ch) {
       const input = document.getElementById(ch === 'landing' ? 'landing-chat-input' : 'ws-chat-input');
       if (!input) return;
@@ -499,6 +511,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const active = input.getAttribute('data-active-placeholder');
         if (active !== null) input.placeholder = active;
         if (sendBtn) { sendBtn.disabled = false; sendBtn.style.opacity = ''; sendBtn.style.cursor = ''; }
+        if (gate) gate.remove();
+        return;
+      }
+
+      if (hydrating) {
+        // Loading the account's synced key — disable briefly without the
+        // alarming "inactive" card; _updateChatStatus re-runs when hydration
+        // completes and resolves to Online or the gate.
+        if (input.getAttribute('data-active-placeholder') === null) {
+          input.setAttribute('data-active-placeholder', input.placeholder || '');
+        }
+        input.disabled = true;
+        input.style.opacity = '0.5';
+        input.placeholder = 'Connecting to your account…';
+        if (sendBtn) { sendBtn.disabled = true; sendBtn.style.opacity = '0.4'; sendBtn.style.cursor = 'not-allowed'; }
         if (gate) gate.remove();
         return;
       }

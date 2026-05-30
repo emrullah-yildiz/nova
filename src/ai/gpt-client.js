@@ -134,24 +134,164 @@ const GPTClient = {
     }
   },
 
+  // ── PREFERENCE STORAGE BACKEND ──
+  // The AI provider/model/key are stored through a swappable backend
+  // (this._prefs) rather than touching localStorage directly:
+  //   • anonymous  → sessionStorage (clears when the tab/browser closes)
+  //   • signed-in  → an in-memory cache hydrated from the user's account and
+  //                  synced back server-side (see the account-sync section).
+  // Projects, autosave and wire-display toggles are NOT routed here — they stay
+  // in localStorage. Pointing the get*/set* methods below at this._prefs means
+  // hot-path callers (canChat, buildRequestHeaders, …) don't care which backend
+  // is active.
+  _prefs: null,
+  _sessionBackend: null,
+  _aiSettingsHydrated: false,
+
+  // The AI-credential keys that move between localStorage (legacy) and the
+  // active backend. Built from the provider registry so new providers are
+  // covered automatically.
+  _aiPrefKeys() {
+    var keys = ['nodeflow_provider', 'nodeflow_openai_model', 'nodeflow_openai_key'];
+    Object.keys(this.PROVIDERS).forEach(function (p) { keys.push('nodeflow_key_' + p); });
+    return keys;
+  },
+
+  _makeSessionBackend() {
+    var mem = {}; // fallback when sessionStorage is unavailable (locked-down browser)
+    function ss() { try { return (typeof sessionStorage !== 'undefined') ? sessionStorage : null; } catch (e) { return null; } }
+    return {
+      kind: 'session',
+      get: function (k) {
+        try { var s = ss(); if (s) { var v = s.getItem(k); if (v !== null) return v; } } catch (e) { /* fall through */ }
+        return (k in mem) ? mem[k] : null;
+      },
+      set: function (k, v) { try { var s = ss(); if (s) { s.setItem(k, v); return; } } catch (e) { /* fall through */ } mem[k] = v; },
+      remove: function (k) { try { var s = ss(); if (s) s.removeItem(k); } catch (e) { /* ignore */ } delete mem[k]; }
+    };
+  },
+
+  _activePrefs() { if (!this._prefs) this._useAnonymousPrefs(); return this._prefs; },
+  _prefGet(k) { return this._activePrefs().get(k); },
+  _prefSet(k, v) { this._activePrefs().set(k, v); },
+  _prefRemove(k) { this._activePrefs().remove(k); },
+
+  // Anonymous: route prefs to sessionStorage. Singleton so the in-process
+  // fallback survives backend swaps.
+  _useAnonymousPrefs() {
+    if (!this._sessionBackend) this._sessionBackend = this._makeSessionBackend();
+    this._prefs = this._sessionBackend;
+    this._aiSettingsHydrated = false;
+    return this._prefs;
+  },
+
+  // One-time: lift legacy AI prefs out of localStorage into the (anonymous)
+  // session backend, then purge them from localStorage so closing the tab truly
+  // clears them. No-op once localStorage holds none of these keys.
+  _migrateLegacyLocalPrefs() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      var backend = this._activePrefs();
+      var keys = this._aiPrefKeys();
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i], lv = null;
+        try { lv = localStorage.getItem(k); } catch (e) { lv = null; }
+        if (lv === null) continue;
+        if (backend.get(k) === null) backend.set(k, lv);
+        try { localStorage.removeItem(k); } catch (e) { /* ignore */ }
+      }
+    } catch (e) { /* ignore */ }
+  },
+
+  // Signed-in: prefs live in an in-memory Map hydrated from the account. Reads
+  // stay synchronous; writes mutate the Map and schedule a debounced PUT so the
+  // settings follow the user across devices.
+  _makeMemoryBackend(onChange) {
+    var map = new Map();
+    return {
+      kind: 'memory',
+      get: function (k) { return map.has(k) ? map.get(k) : null; },
+      set: function (k, v) { map.set(k, String(v)); if (onChange) onChange(); },
+      remove: function (k) { map.delete(k); if (onChange) onChange(); }
+    };
+  },
+
+  _useSignedInPrefs() {
+    var self = this;
+    this._prefs = this._makeMemoryBackend(function () { self._scheduleSync(); });
+    this._aiSettingsHydrated = false;
+    return this._prefs;
+  },
+
+  // Populate the in-memory cache from the server's { provider, model, keys }
+  // WITHOUT triggering a sync-back (these values came from the server).
+  hydrateFromServer(settings) {
+    if (!this._prefs || this._prefs.kind !== 'memory') this._useSignedInPrefs();
+    this._hydrating = true;
+    try {
+      if (settings && typeof settings === 'object') {
+        if (settings.provider) this._prefSet('nodeflow_provider', settings.provider);
+        if (settings.model) this._prefSet('nodeflow_openai_model', settings.model);
+        var keys = settings.keys || {};
+        var self = this;
+        Object.keys(keys).forEach(function (p) { if (keys[p]) self._prefSet('nodeflow_key_' + p, keys[p]); });
+        if (keys.openai) this._prefSet('nodeflow_openai_key', keys.openai); // legacy alias
+      }
+    } finally { this._hydrating = false; }
+    this._aiSettingsHydrated = true;
+  },
+
+  // The current AI settings as the server-bound blob.
+  _collectAiSettings() {
+    var keys = {}, self = this;
+    Object.keys(this.PROVIDERS).forEach(function (p) {
+      var k = self._prefGet('nodeflow_key_' + p);
+      if (k) keys[p] = k;
+    });
+    return { provider: this.getProvider(), model: this._prefGet('nodeflow_openai_model') || '', keys: keys };
+  },
+
+  _scheduleSync() {
+    if (this._hydrating) return;
+    var self = this;
+    if (this._syncTimer) { try { clearTimeout(this._syncTimer); } catch (e) { /* ignore */ } }
+    this._syncTimer = setTimeout(function () { self._syncToServer(); }, 400);
+  },
+
+  // Fire-and-forget PUT. Never throws — a failed sync leaves the key working
+  // in-memory for this session and retries on the next change.
+  async _syncToServer() {
+    if (!this._prefs || this._prefs.kind !== 'memory') return; // only when signed in
+    try {
+      await fetch('/api/me/ai-settings', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this._collectAiSettings())
+      });
+    } catch (e) {
+      if (typeof NFLogger !== 'undefined') NFLogger.warn('ai-settings', 'sync failed: ' + ((e && e.message) || e));
+    }
+  },
+
   getProvider() {
-    return localStorage.getItem('nodeflow_provider') || 'openrouter';
+    return this._prefGet('nodeflow_provider') || 'openrouter';
   },
   setProvider(provider) {
-    localStorage.setItem('nodeflow_provider', provider);
+    this._prefSet('nodeflow_provider', provider);
   },
   getApiKey() {
     var provider = this.getProvider();
-    return localStorage.getItem('nodeflow_key_' + provider) || localStorage.getItem('nodeflow_openai_key') || '';
+    return this._prefGet('nodeflow_key_' + provider) || this._prefGet('nodeflow_openai_key') || '';
   },
   setApiKey(key) {
     var provider = this.getProvider();
     if (key && key.trim()) {
-      localStorage.setItem('nodeflow_key_' + provider, key.trim());
-      if (provider === 'openai') localStorage.setItem('nodeflow_openai_key', key.trim());
+      this._prefSet('nodeflow_key_' + provider, key.trim());
+      if (provider === 'openai') this._prefSet('nodeflow_openai_key', key.trim());
     } else {
-      localStorage.removeItem('nodeflow_key_' + provider);
-      if (provider === 'openai') localStorage.removeItem('nodeflow_openai_key');
+      this._prefRemove('nodeflow_key_' + provider);
+      if (provider === 'openai') this._prefRemove('nodeflow_openai_key');
     }
   },
   hasApiKey() {
@@ -168,10 +308,10 @@ const GPTClient = {
     return this.hasApiKey() || this.isEnterpriseAiEnabled() || this.isProxyMode();
   },
   getModel() {
-    return localStorage.getItem('nodeflow_openai_model') || this.MODEL;
+    return this._prefGet('nodeflow_openai_model') || this.MODEL;
   },
   setModel(model) {
-    localStorage.setItem('nodeflow_openai_model', model);
+    this._prefSet('nodeflow_openai_model', model);
   },
   getApiUrl(providerOverride) {
     var provider = providerOverride || this.getProvider();
@@ -1069,7 +1209,7 @@ const SettingsDialog = {
       }).join('');
     }
     var keyInput = document.getElementById('settings-api-key');
-    var storedKey = localStorage.getItem('nodeflow_key_' + pid) || '';
+    var storedKey = GPTClient._prefGet('nodeflow_key_' + pid) || '';
     if (keyInput) { keyInput.value = storedKey; keyInput.placeholder = prov ? prov.keyPrefix + '...' : 'Enter API key...'; }
     var hint = document.getElementById('settings-key-hint');
     if (hint) {
@@ -1148,6 +1288,12 @@ const SettingsDialog = {
     btn.textContent = 'Test Connection';
   }
 };
+
+// Initialise the pref backend before any app code reads it. Default to the
+// anonymous (sessionStorage) backend and lift any legacy localStorage AI prefs
+// into it once. On sign-in, refreshSession() swaps to the account-backed cache.
+GPTClient._useAnonymousPrefs();
+GPTClient._migrateLegacyLocalPrefs();
 
 if (typeof window !== 'undefined') {
   window.GPTClient = GPTClient;

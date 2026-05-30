@@ -144,6 +144,41 @@ const app = {
       this.currentUser = null;
     }
     this.renderAccount();
+    await this._syncAiPrefsForSession();
+  },
+
+  // Route AI prefs to the right backend for the current session. Signed in:
+  // swap to the account-backed cache and hydrate it from the server (claiming
+  // any anonymously-entered key if the account has none). Signed out: anonymous
+  // sessionStorage. Never blocks session refresh.
+  async _syncAiPrefsForSession() {
+    const G = window.GPTClient;
+    if (!G) return;
+    try {
+      if (this.currentUser) {
+        // Capture an anon key (if any) before swapping backends, to claim it.
+        const anon = G.hasApiKey && G.hasApiKey() ? G._collectAiSettings() : null;
+        G._useSignedInPrefs();
+        let settings = null;
+        try {
+          const res = await fetch('/api/me/ai-settings', { credentials: 'include' });
+          if (res.ok) settings = (await res.json()).settings;
+        } catch { settings = null; }
+        if (settings && settings.keys && Object.keys(settings.keys).length) {
+          G.hydrateFromServer(settings);
+        } else if (anon && anon.keys && Object.keys(anon.keys).length) {
+          G.hydrateFromServer(anon);   // one-way claim into the empty account
+          G._scheduleSync();
+        } else {
+          G._aiSettingsHydrated = true; // signed in, nothing stored yet
+        }
+      } else {
+        G._useAnonymousPrefs();
+      }
+    } catch {
+      /* never block on pref sync */
+    }
+    if (this._updateChatStatus) this._updateChatStatus();
   },
 
   renderAccount() {
@@ -394,6 +429,10 @@ const app = {
       try { window.google.accounts.id.disableAutoSelect(); } catch { /* ignore */ }
     }
     this.renderAccount();
+    // Drop the account-backed pref cache; fall back to anonymous sessionStorage
+    // (which keeps any key typed while anonymous in this tab).
+    if (window.GPTClient) window.GPTClient._useAnonymousPrefs();
+    if (this._updateChatStatus) this._updateChatStatus();
   },
 
 
