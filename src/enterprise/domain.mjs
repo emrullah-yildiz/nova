@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { hashToken } from './state-store.mjs';
+import { hashToken } from './state-hash.mjs';
 
 export const ROLES = Object.freeze({
   OWNER: 'Owner',
