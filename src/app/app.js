@@ -197,7 +197,6 @@ const app = {
           '<button class="signin-submit" id="signin-submit" type="submit">Sign in</button>' +
         '</form>' +
         '<div class="signin-toggle" id="signin-toggle">New to Nova? <button type="button" onclick="app.toggleSignInMode()">Create an account</button></div>' +
-        (cfg.devLogin ? '<div class="signin-dev"><button type="button" onclick="app.devSignInPrompt()">Dev sign-in</button></div>' : '') +
       '</div>';
     overlay.addEventListener('click', (e) => { if (e.target === overlay) this.closeSignIn(); });
     document.body.appendChild(overlay);
@@ -302,11 +301,6 @@ const app = {
     if (el) { el.textContent = msg || ''; el.style.display = msg ? 'block' : 'none'; }
   },
 
-  devSignInPrompt() {
-    const email = prompt('Dev sign-in — email:', 'owner@demo.nova');
-    if (email) this._devLogin(email);
-  },
-
   async _onGoogleCredential(resp) {
     if (!resp || !resp.credential) return;
     try {
@@ -321,22 +315,6 @@ const app = {
       await this.refreshSession();
     } catch (e) {
       this._showSignInError('Google sign-in failed. Please try again.');
-    }
-  },
-
-  async _devLogin(email) {
-    try {
-      const r = await fetch('/api/auth/dev-login', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      });
-      if (!r.ok) throw new Error('dev login failed');
-      this.closeSignIn();
-      await this.refreshSession();
-    } catch (e) {
-      this._showSignInError('Dev sign-in failed.');
     }
   },
 
