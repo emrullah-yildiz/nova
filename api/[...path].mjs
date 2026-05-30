@@ -10,6 +10,8 @@ function getApi() {
       databaseUrl: process.env.NOVA_DATABASE_URL || '',
       sessionSecret: process.env.NOVA_SESSION_SECRET || undefined,
       secretsKey: process.env.NOVA_SECRETS_KEY || undefined,
+      githubToken: process.env.FEEDBACK_GITHUB_TOKEN || undefined,
+      githubRepo: process.env.FEEDBACK_GITHUB_REPO || undefined,
       aiPolicy: resolveAiPolicy(process.env),
       objectStorageDir: process.env.NOVA_OBJECT_STORAGE_DIR || ''
     });

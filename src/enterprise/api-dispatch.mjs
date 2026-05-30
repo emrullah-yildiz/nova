@@ -7,7 +7,7 @@
 
 import { ROLES, createHttpError, decodePaginationCursor } from './domain.mjs';
 import { assertDeliverableEmail } from './email-verification.mjs';
-import { buildVerificationEmail } from '../../server/email/resend.mjs';
+import { buildVerificationEmail, buildInviteEmail } from '../../server/email/resend.mjs';
 import {
   validateAiChatBody,
   validateAiSettingsBody,
@@ -23,9 +23,11 @@ import {
   validateObjectArtifactBody,
   validateOidcCallbackBody,
   validateProjectMemberBody,
+  validateInviteBody,
   validateSaveGraphBody,
   validateShareLinkBody,
-  validateSignupBody
+  validateSignupBody,
+  validateTicketBody
 } from './validation.mjs';
 
 export function matchRoute(method, path, options = {}) {
@@ -65,6 +67,8 @@ export function matchRoute(method, path, options = {}) {
     ['POST', /^\/api\/projects$/, false, 201, ({ store, context, body }) => store.createProject(context, validateCreateProjectBody(body || {}))],
     ['POST', /^\/api\/share\/([^/]+)$/, false, 200, ({ store, context, params }) => ({ project: store.redeemShareLink(context, params[0]) })],
     ['POST', /^\/api\/projects\/([^/]+)\/share-links$/, false, 201, ({ store, context, params, body }) => store.createShareLink(context, params[0], validateShareLinkBody(body || {}))],
+    ['POST', /^\/api\/projects\/([^/]+)\/invites$/, false, 200, handleInviteToProject],
+    ['POST', /^\/api\/feedback\/ticket$/, false, 201, handleSubmitTicket],
     ['GET', /^\/api\/projects\/([^/]+)\/share-links$/, false, 200, ({ store, context, params }) => ({ shareLinks: store.listShareLinks(context, params[0]) })],
     ['POST', /^\/api\/projects\/([^/]+)\/share-links\/([^/]+)\/revoke$/, false, 200, ({ store, context, params }) => store.revokeShareLink(context, params[0], params[1])],
     ['GET', /^\/api\/projects\/([^/]+)$/, false, 200, ({ store, context, params }) => store.getProject(context, params[0])],
@@ -125,14 +129,14 @@ function bearerToken(authorization) {
 
 // Builds the platform-agnostic request handler. `request` is a plain object:
 // { method, path, searchParams, authorization, body }. Returns { status, body }.
-export function createApiDispatcher({ store, authService, aiProvider, objectStorage, emailService = null, secretsService = null, appUrl = '', allowDevLogin = false }) {
+export function createApiDispatcher({ store, authService, aiProvider, objectStorage, emailService = null, secretsService = null, issueService = null, appUrl = '', allowDevLogin = false }) {
   return async function dispatch(request) {
     const { method, path, searchParams, authorization, body } = request;
     const route = matchRoute(method, path, { allowDevLogin });
     if (!route) throw createHttpError(404, 'Route not found.');
     const context = route.public ? null : await store.authenticateAsync(bearerToken(authorization));
     const url = { searchParams: searchParams instanceof URLSearchParams ? searchParams : new URLSearchParams(searchParams || '') };
-    const result = await route.handler({ store, context, params: route.params, body: body || {}, url, aiProvider, authService, objectStorage, emailService, secretsService, appUrl: request.appUrl || appUrl });
+    const result = await route.handler({ store, context, params: route.params, body: body || {}, url, aiProvider, authService, objectStorage, emailService, secretsService, issueService, appUrl: request.appUrl || appUrl });
     if (store.flushPersistence) await store.flushPersistence();
     return { status: route.status || 200, body: result };
   };
@@ -280,6 +284,39 @@ async function handlePutAiSettings({ store, context, body, secretsService }) {
   user.aiSettingsEncrypted = await secretsService.encrypt(JSON.stringify(settings));
   if (store.persist) store.persist();
   return { ok: true };
+}
+
+// Invite someone to a project by email: creates a role-scoped, email-tagged
+// share link (admin-only, enforced in the store) and emails the join URL. The
+// raw token goes only to the invitee's inbox, never back to the client.
+async function handleInviteToProject({ store, context, params, body, emailService, appUrl }) {
+  const payload = validateInviteBody(body || {});
+  const project = store.getProject(context, params[0]); // read-access check + name/org
+  const link = store.inviteToProject(context, params[0], { email: payload.email, role: payload.role });
+  let emailed = false;
+  if (emailService) {
+    try {
+      const inviter = (context.user && (context.user.displayName || context.user.email)) || 'A Nova user';
+      const msg = buildInviteEmail({ appUrl, token: link.token, projectName: project.name, inviterName: inviter, role: payload.role });
+      await emailService.send({ to: payload.email, subject: msg.subject, html: msg.html, text: msg.text });
+      emailed = true;
+    } catch (error) {
+      console.error('[nova-invite] email to %s failed: %s', payload.email, (error && error.message) || error);
+    }
+  }
+  return { ok: true, emailed, invite: { id: link.id, email: payload.email, role: payload.role } };
+}
+
+// In-app support ticket → a GitHub issue. Authenticated (reduces spam); the
+// GitHub token lives only in the injected issueService.
+async function handleSubmitTicket({ context, body, issueService }) {
+  if (!issueService) throw createHttpError(503, 'Ticket submission is not configured for this deployment.', 'FEEDBACK_NOT_CONFIGURED');
+  const payload = validateTicketBody(body || {});
+  const labelByCategory = { bug: 'bug', feature: 'enhancement', question: 'question' };
+  const title = '[' + payload.category + '] ' + payload.title;
+  const fullBody = payload.body + '\n\n---\n_Submitted via the Nova in-app ticket form._';
+  const issue = await issueService.create({ title, body: fullBody, labels: [labelByCategory[payload.category] || 'bug', 'from-app'] });
+  return { ok: true, url: issue.url, number: issue.number };
 }
 
 // Email+password sign-in. Uses a single generic error for "no such user" and

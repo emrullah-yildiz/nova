@@ -10,6 +10,7 @@ import { EnterpriseStore } from '../src/enterprise/domain.mjs';
 import { createApiDispatcher, createConfiguredAiProvider } from '../src/enterprise/api-dispatch.mjs';
 import { createWebCryptoAuthService } from '../server/auth/webcrypto-auth.mjs';
 import { createSecretsService } from '../server/auth/webcrypto.mjs';
+import { createGithubIssueService } from '../server/feedback/github-issues.mjs';
 import { createGoogleOidcVerifier } from '../server/auth/oidc-verifier.mjs';
 import { createEmailService } from '../server/email/resend.mjs';
 import { NeonPersistence } from '../server/db/neon-persistence.mjs';
@@ -43,6 +44,8 @@ async function getApi(env) {
   } catch (e) {
     console.error('[nova] secrets service init failed:', (e && e.message) || e);
   }
+  // Optional in-app support tickets → GitHub issues (FEEDBACK_GITHUB_TOKEN).
+  const issueService = createGithubIssueService({ token: env.FEEDBACK_GITHUB_TOKEN, repo: env.FEEDBACK_GITHUB_REPO });
   const dispatch = createApiDispatcher({
     store,
     authService,
@@ -50,6 +53,7 @@ async function getApi(env) {
     objectStorage,
     emailService,
     secretsService,
+    issueService,
     appUrl: env.NOVA_PUBLIC_URL || '',
     allowDevLogin: env.NOVA_ALLOW_DEV_LOGIN === 'true'
   });
