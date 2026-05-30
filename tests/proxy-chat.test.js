@@ -23,9 +23,9 @@ describe('proxy chat — pickModel', () => {
 
   it('Gemini provider has an OpenAI-compatible endpoint and accepts flash models', () => {
     expect(gemini.url).toBe('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions');
-    expect(gemini.allowedModels.has('gemini-2.0-flash-exp')).toBe(true);
+    expect(gemini.allowedModels.has('gemini-2.0-flash')).toBe(true);
     expect(gemini.allowedModels.has('gemini-1.5-flash')).toBe(true);
-    expect(gemini.defaultModel).toBe('gemini-2.0-flash-exp');
+    expect(gemini.defaultModel).toBe('gemini-2.0-flash');
   });
 
   it('honors the client request only when it is on the provider allowlist', () => {
