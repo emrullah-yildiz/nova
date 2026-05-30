@@ -10,6 +10,12 @@ export const ROLES = Object.freeze({
 
 const WRITE_ROLES = new Set([ROLES.OWNER, ROLES.ADMIN, ROLES.EDITOR]);
 const ADMIN_ROLES = new Set([ROLES.OWNER, ROLES.ADMIN]);
+// Ordering for "never downgrade" when redeeming a share link.
+const ROLE_RANK = { [ROLES.VIEWER]: 1, [ROLES.EDITOR]: 2, [ROLES.ADMIN]: 3, [ROLES.OWNER]: 4 };
+// Roles a share link may grant — never Admin/Owner (those are an escalation
+// primitive: they can mint more links / add members). Higher roles must be
+// granted explicitly via addProjectMember.
+const SHARE_LINK_ROLES = new Set([ROLES.EDITOR, ROLES.VIEWER]);
 
 export class EnterpriseStore {
   constructor(options = {}) {
@@ -25,6 +31,7 @@ export class EnterpriseStore {
     this.aiRequests = new Map();
     this.backgroundJobs = new Map();
     this.objectArtifacts = new Map();
+    this.shareLinks = new Map();
     this.aiUsageBuckets = new Map();
     // In-memory fallback for email-verification tokens when no stateStore (KV)
     // is wired (node/dev). Keyed by 'emailverify:' + hashToken(token).
@@ -324,7 +331,7 @@ export class EnterpriseStore {
     if (existing) existing.role = role;
     else project.members.push({ userId, role });
     this.audit({
-      organizationId: context.organizationId,
+      organizationId: project.organizationId,
       userId: context.userId,
       type: 'project.membership.upserted',
       targetId: project.id,
@@ -340,7 +347,7 @@ export class EnterpriseStore {
     project.currentVersionId = version.id;
     project.updatedAt = this.now();
     this.audit({
-      organizationId: context.organizationId,
+      organizationId: project.organizationId,
       userId: context.userId,
       type: 'project.version.created',
       targetId: project.id,
@@ -362,8 +369,10 @@ export class EnterpriseStore {
 
   listGraphRuns(context, projectId, pagination = null) {
     const project = this.requireProjectAccess(context, projectId);
+    // Runs are scoped to the PROJECT's org (not the accessor's), so a cross-org
+    // collaborator's runs are visible to everyone on the project.
     const runs = Array.from(this.graphRuns.values())
-      .filter(run => run.organizationId === context.organizationId && run.projectId === project.id)
+      .filter(run => run.organizationId === project.organizationId && run.projectId === project.id)
       .sort((a, b) => b.startedAt - a.startedAt)
       .map(clone);
     return pagination ? paginateItems(runs, pagination) : runs;
@@ -381,20 +390,20 @@ export class EnterpriseStore {
     this.requireProjectWrite(context, project);
     const artifact = {
       id: createId('art'),
-      organizationId: context.organizationId,
+      organizationId: project.organizationId,
       projectId: project.id,
       userId: context.userId,
       name,
       kind,
       contentType,
       byteSize,
-      storageKey: storageKey || ['org', context.organizationId, 'projects', project.id, 'artifacts', createId('obj')].join('/'),
+      storageKey: storageKey || ['org', project.organizationId, 'projects', project.id, 'artifacts', createId('obj')].join('/'),
       metadata,
       createdAt: this.now()
     };
     this.objectArtifacts.set(artifact.id, artifact);
     this.audit({
-      organizationId: context.organizationId,
+      organizationId: project.organizationId,
       userId: context.userId,
       type: 'object.artifact.created',
       targetId: artifact.id,
@@ -406,7 +415,7 @@ export class EnterpriseStore {
   listObjectArtifacts(context, projectId, pagination = null) {
     const project = this.requireProjectAccess(context, projectId);
     const artifacts = Array.from(this.objectArtifacts.values())
-      .filter(artifact => artifact.organizationId === context.organizationId && artifact.projectId === project.id)
+      .filter(artifact => artifact.organizationId === project.organizationId && artifact.projectId === project.id)
       .sort((a, b) => b.createdAt - a.createdAt)
       .map(clone);
     return pagination ? paginateItems(artifacts, pagination) : artifacts;
@@ -416,7 +425,8 @@ export class EnterpriseStore {
     this.requireContext(context);
     const artifact = this.objectArtifacts.get(artifactId);
     if (!artifact) throw createHttpError(404, 'Object artifact not found.');
-    if (artifact.organizationId !== context.organizationId) throw createHttpError(403, 'Cross-organization access denied.');
+    // Authorize solely via project access — the artifact's org is the project's
+    // org, which may differ from a shared collaborator's session org.
     this.requireProjectAccess(context, artifact.projectId);
     return clone(artifact);
   }
@@ -525,7 +535,7 @@ export class EnterpriseStore {
     const run = {
       id: createId('run'),
       projectId: project.id,
-      organizationId: context.organizationId,
+      organizationId: project.organizationId,
       userId: context.userId,
       versionId: resolvedVersionId,
       status,
@@ -536,7 +546,7 @@ export class EnterpriseStore {
     };
     this.graphRuns.set(run.id, run);
     this.audit({
-      organizationId: context.organizationId,
+      organizationId: project.organizationId,
       userId: context.userId,
       type: 'graph.run.recorded',
       targetId: project.id,
@@ -561,13 +571,115 @@ export class EnterpriseStore {
     project.currentVersionId = restored.id;
     project.updatedAt = this.now();
     this.audit({
-      organizationId: context.organizationId,
+      organizationId: project.organizationId,
       userId: context.userId,
       type: 'project.version.restored',
       targetId: project.id,
       metadata: { sourceVersionId: versionId, versionId: restored.id }
     });
     return clone(project);
+  }
+
+  // ── Share links ────────────────────────────────────────────────────────
+  // A capability URL that grants Editor/Viewer access on redemption. The raw
+  // token is returned ONCE at creation and stored only as a hash (like sessions
+  // / email-verify tokens), so a snapshot/DB leak can't reuse it.
+
+  createShareLink(context, projectId, { role, expiresInMs = 0 } = {}) {
+    const project = this.requireProjectAccess(context, projectId);
+    this.requireProjectAdmin(context, project);
+    if (!SHARE_LINK_ROLES.has(role)) throw createHttpError(400, 'Share links can only grant Editor or Viewer access.');
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const link = {
+      id: createId('shl'),
+      projectId: project.id,
+      role,
+      tokenHash: hashToken(rawToken),
+      createdBy: context.userId,
+      expiresAt: expiresInMs > 0 ? this.now() + expiresInMs : null,
+      revokedAt: null,
+      createdAt: this.now()
+    };
+    this.shareLinks.set(link.id, link);
+    this.audit({
+      organizationId: project.organizationId,
+      userId: context.userId,
+      type: 'project.share-link.created',
+      targetId: project.id,
+      metadata: { linkId: link.id, role }
+    });
+    this.persist();
+    // Only place the raw token is ever exposed.
+    return { ...publicShareLink(link), token: rawToken };
+  }
+
+  listShareLinks(context, projectId) {
+    const project = this.requireProjectAccess(context, projectId);
+    this.requireProjectAdmin(context, project);
+    return Array.from(this.shareLinks.values())
+      .filter(link => link.projectId === project.id)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map(publicShareLink);
+  }
+
+  revokeShareLink(context, projectId, linkId) {
+    const project = this.requireProjectAccess(context, projectId);
+    this.requireProjectAdmin(context, project);
+    const link = this.shareLinks.get(linkId);
+    if (!link || link.projectId !== project.id) throw createHttpError(404, 'Share link not found.');
+    if (!link.revokedAt) link.revokedAt = this.now();
+    this.audit({
+      organizationId: project.organizationId,
+      userId: context.userId,
+      type: 'project.share-link.revoked',
+      targetId: project.id,
+      metadata: { linkId: link.id }
+    });
+    this.persist();
+    return publicShareLink(link);
+  }
+
+  // Redeem a share link → join the project at the link's role. Requires a
+  // signed-in, verified user. Idempotent; never downgrades an existing role.
+  redeemShareLink(context, rawToken) {
+    this.requireContext(context);
+    const user = this.requireUser(context.userId);
+    if (!user.emailVerified) throw createHttpError(403, 'Verify your email before joining a shared project.', 'EMAIL_NOT_VERIFIED');
+    if (!rawToken || typeof rawToken !== 'string') throw createHttpError(400, 'A share token is required.');
+    const link = Array.from(this.shareLinks.values()).find(item => item.tokenHash === hashToken(rawToken));
+    if (!link) throw createHttpError(404, 'Share link not found.');
+    if (link.revokedAt || (link.expiresAt && link.expiresAt <= this.now())) throw createHttpError(410, 'This share link is no longer valid.');
+    if (!SHARE_LINK_ROLES.has(link.role)) throw createHttpError(400, 'Invalid share link.'); // defense in depth
+    const project = this.projects.get(link.projectId);
+    if (!project) throw createHttpError(404, 'Project not found.');
+    // Same-org admins already have full access; redeeming is a no-op for them.
+    if (!(this.orgRoleApplies(context, project) && ADMIN_ROLES.has(context.role))) {
+      const current = this.getProjectRole(context, project);
+      const nextRole = (ROLE_RANK[current] || 0) >= ROLE_RANK[link.role] ? current : link.role;
+      const member = (project.members || []).find(m => m.userId === context.userId);
+      if (member) member.role = nextRole;
+      else project.members.push({ userId: context.userId, role: nextRole });
+      this.audit({
+        organizationId: project.organizationId,
+        userId: context.userId,
+        type: 'project.share-link.redeemed',
+        targetId: project.id,
+        metadata: { linkId: link.id, role: nextRole }
+      });
+      this.persist();
+    }
+    return projectSummary(project);
+  }
+
+  // Projects shared WITH the user (member, but living in another org — i.e. not
+  // their own personal workspace). Complements listProjects (own org only).
+  listSharedProjects(context, pagination = null) {
+    this.requireContext(context);
+    const projects = Array.from(this.projects.values())
+      .filter(project => !this.orgRoleApplies(context, project) && !!this.getProjectRole(context, project))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map(project => projectSummary(project));
+    return pagination ? paginateItems(projects, pagination) : projects;
   }
 
   createConnectorSession(context, { host = 'revit', projectId = '', connectorVersion = '0.1.0' } = {}) {
@@ -792,9 +904,9 @@ export class EnterpriseStore {
   requireProjectAccess(context, projectId) {
     this.requireContext(context);
     const project = this.projects.get(projectId);
-    if (!project) throw createHttpError(404, 'Project not found.');
-    if (project.organizationId !== context.organizationId) throw createHttpError(403, 'Cross-organization access denied.');
-    if (!this.canReadProject(context, project)) throw createHttpError(403, 'Project access denied.');
+    // 404 (not 403) when the caller has no read access — including cross-org
+    // non-members — so a project's existence can't be probed by guessing ids.
+    if (!project || !this.canReadProject(context, project)) throw createHttpError(404, 'Project not found.');
     return project;
   }
 
@@ -808,18 +920,27 @@ export class EnterpriseStore {
     if (!this.canAdminProject(context, project)) throw createHttpError(403, 'Project admin access required.');
   }
 
+  // The session's org-level role (context.role) only conveys authority over
+  // projects IN that org. Since every user is Owner of their own personal
+  // workspace, that short-circuit MUST be gated on the project belonging to the
+  // session org — otherwise any signed-in user could admin any project. Cross-
+  // org access is granted solely by an explicit project-member role.
+  orgRoleApplies(context, project) {
+    return !!project && project.organizationId === context.organizationId;
+  }
+
   canReadProject(context, project) {
-    if (ADMIN_ROLES.has(context.role)) return true;
+    if (this.orgRoleApplies(context, project) && ADMIN_ROLES.has(context.role)) return true;
     return !!this.getProjectRole(context, project);
   }
 
   canWriteProject(context, project) {
-    if (ADMIN_ROLES.has(context.role)) return true;
+    if (this.orgRoleApplies(context, project) && ADMIN_ROLES.has(context.role)) return true;
     return WRITE_ROLES.has(this.getProjectRole(context, project));
   }
 
   canAdminProject(context, project) {
-    if (ADMIN_ROLES.has(context.role)) return true;
+    if (this.orgRoleApplies(context, project) && ADMIN_ROLES.has(context.role)) return true;
     return ADMIN_ROLES.has(this.getProjectRole(context, project));
   }
 
@@ -909,6 +1030,7 @@ export class EnterpriseStore {
       aiRequests: Array.from(this.aiRequests.values()).map(clone),
       backgroundJobs: Array.from(this.backgroundJobs.values()).map(clone),
       objectArtifacts: Array.from(this.objectArtifacts.values()).map(clone),
+      shareLinks: Array.from(this.shareLinks.values()).map(clone),
       auditEvents: this.auditEvents.map(clone)
     };
   }
@@ -923,6 +1045,7 @@ export class EnterpriseStore {
     this.aiRequests = mapById(snapshot.aiRequests);
     this.backgroundJobs = mapById(snapshot.backgroundJobs);
     this.objectArtifacts = mapById(snapshot.objectArtifacts);
+    this.shareLinks = mapById(snapshot.shareLinks);
     this.auditEvents = safeArray(snapshot.auditEvents).map(clone);
   }
 
@@ -992,6 +1115,19 @@ function projectSummary(project) {
     updatedAt: project.updatedAt,
     currentVersionId: project.currentVersionId,
     versionCount: project.versions.length
+  };
+}
+
+function publicShareLink(link) {
+  // Never expose tokenHash — the raw token is shown once at creation only.
+  return {
+    id: link.id,
+    projectId: link.projectId,
+    role: link.role,
+    createdBy: link.createdBy,
+    expiresAt: link.expiresAt,
+    revokedAt: link.revokedAt,
+    createdAt: link.createdAt
   };
 }
 

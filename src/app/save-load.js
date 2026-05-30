@@ -563,23 +563,117 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     if (!el.dataset.cloudLoaded) el.innerHTML = '<div class="recent-empty" style="padding:12px;color:var(--text-muted);font-size:12px">Loading your projects…</div>';
     try {
       const client = app.getNovaCloudClient();
-      const page = await client.listProjects({ limit: 24 });
-      const projects = (page && page.projects) || [];
+      const [ownedPage, sharedPage] = await Promise.all([
+        client.listProjects({ limit: 24 }).catch(() => ({ projects: [] })),
+        client.listSharedProjects({ limit: 24 }).catch(() => ({ projects: [] }))
+      ]);
+      const owned = (ownedPage && ownedPage.projects) || [];
+      const shared = (sharedPage && sharedPage.projects) || [];
       el.dataset.cloudLoaded = '1';
-      if (!projects.length) {
+      if (!owned.length && !shared.length) {
         el.innerHTML = '<div class="recent-empty" style="padding:12px;color:var(--text-muted);font-size:12px">No projects yet — save one to your account and it shows up here.</div>';
         return;
       }
-      el.innerHTML = projects.map(p => {
-        const ago = _timeAgo(p.updatedAt || p.createdAt || Date.now());
-        return '<button class="recent-item" onclick="app.openCloudProject(\'' + escapeJsString(p.id) + '\').then(function(pr){app._saveCloudProjectId(pr.id);}).catch(function(e){app.addAIMessage&&app.addAIMessage(\'workspace\',\'Open failed: \'+e.message);})">' +
-          '<span class="ri-icon">☁</span>' +
-          '<span class="ri-name">' + escapeHtml(p.name || 'Untitled') + '</span>' +
-          '<span class="ri-date">' + escapeHtml(ago) + '</span></button>';
-      }).join('');
+      const item = (p, icon) => '<button class="recent-item" onclick="app.openCloudProject(\'' + escapeJsString(p.id) + '\').then(function(pr){app._saveCloudProjectId(pr.id);}).catch(function(e){app.addAIMessage&&app.addAIMessage(\'workspace\',\'Open failed: \'+e.message);})">' +
+        '<span class="ri-icon">' + icon + '</span>' +
+        '<span class="ri-name">' + escapeHtml(p.name || 'Untitled') + '</span>' +
+        '<span class="ri-date">' + escapeHtml(_timeAgo(p.updatedAt || p.createdAt || Date.now())) + '</span></button>';
+      let html = owned.map(p => item(p, '☁')).join('');
+      if (shared.length) {
+        html += '<div class="recent-group" style="font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text-muted);padding:10px 4px 4px">Shared with you</div>' +
+          shared.map(p => item(p, '👥')).join('');
+      }
+      el.innerHTML = html;
     } catch (e) {
       el.innerHTML = '<div class="recent-empty" style="padding:12px;color:var(--text-muted);font-size:12px">Could not load your projects.</div>';
     }
+  };
+
+  // Join a shared project by redeeming a share token, then open it.
+  app.redeemShareToken = async function(token) {
+    if (!token) return;
+    try {
+      const client = app.getNovaCloudClient();
+      const res = await client.redeemShareLink(token);
+      const projectId = res && res.project && res.project.id;
+      if (projectId) {
+        await app.openCloudProject(projectId);
+        app._saveCloudProjectId(projectId);
+      }
+    } catch (e) {
+      app.addAIMessage && app.addAIMessage('workspace', 'Could not open the shared project: ' + e.message);
+    }
+  };
+
+  // Share dialog: generate a viewer/editor link for the current cloud project
+  // and manage existing links. Requires sign-in + a saved cloud project.
+  app.showShareDialog = function() {
+    if (!app.currentUser) { app.addAIMessage && app.addAIMessage('workspace', 'Sign in to share this project.'); if (app.signIn) app.signIn(); return; }
+    if (!app._cloudProjectId) { app.addAIMessage && app.addAIMessage('workspace', 'Save this project to your account first (File → Save → Save to cloud), then share it.'); return; }
+    const existing = document.getElementById('share-dialog-overlay');
+    if (existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'share-dialog-overlay';
+    overlay.className = 'project-save-overlay';
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    overlay.innerHTML = '<div class="project-save-dialog" role="dialog" aria-modal="true" style="width:480px">' +
+      '<div class="project-save-header"><div class="project-save-mark">↗</div>' +
+      '<div><h3>Share project</h3><p>Anyone signed in with the link gets the access you choose.</p></div>' +
+      '<button class="project-save-close" onclick="document.getElementById(\'share-dialog-overlay\').remove()" aria-label="Close">x</button></div>' +
+      '<div style="display:flex;gap:8px;align-items:center;padding:4px 0 12px">' +
+        '<select id="share-role" class="settings-input" style="flex:0 0 auto">' +
+          '<option value="Editor">Can edit</option><option value="Viewer">Can view</option></select>' +
+        '<button id="share-generate" class="project-save-action" style="flex:1" onclick="app._generateShareLink()"><strong>Create link</strong></button>' +
+      '</div>' +
+      '<div id="share-link-list" style="max-height:46vh;overflow-y:auto"></div>' +
+      '<div class="project-save-footer"><span>Links require the recipient to sign in.</span>' +
+      '<button onclick="document.getElementById(\'share-dialog-overlay\').remove()">Done</button></div></div>';
+    document.body.appendChild(overlay);
+    app._renderShareLinks();
+  };
+
+  app._generateShareLink = async function() {
+    const role = (document.getElementById('share-role') || {}).value || 'Editor';
+    const btn = document.getElementById('share-generate');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<strong>Creating…</strong>'; }
+    try {
+      const link = await app.getNovaCloudClient().createShareLink(app._cloudProjectId, { role });
+      const url = (typeof location !== 'undefined' ? location.origin : '') + '/?join=' + encodeURIComponent(link.token);
+      const box = document.getElementById('share-fresh-link');
+      if (box) {
+        box.style.display = 'block';
+        box.innerHTML = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">New ' + escapeHtml(role) + ' link — copy it now, it won\'t be shown again:</div>' +
+          '<div style="display:flex;gap:6px"><input readonly value="' + escapeHtml(url) + '" class="settings-input" style="flex:1" onclick="this.select()" />' +
+          '<button class="project-save-action" onclick="(function(b){navigator.clipboard&&navigator.clipboard.writeText(' + JSON.stringify(url).replace(/"/g, '&quot;') + ');b.textContent=\'Copied\';})(this)">Copy</button></div>';
+      }
+      await app._renderShareLinks();
+    } catch (e) {
+      app.addAIMessage && app.addAIMessage('workspace', 'Could not create share link: ' + e.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<strong>Create link</strong>'; }
+    }
+  };
+
+  app._renderShareLinks = async function() {
+    const list = document.getElementById('share-link-list');
+    if (!list) return;
+    let links = [];
+    try { links = (await app.getNovaCloudClient().listShareLinks(app._cloudProjectId)).shareLinks || []; } catch (e) { /* ignore */ }
+    const active = links.filter(l => !l.revokedAt);
+    const rows = active.map(l =>
+      '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border-color)">' +
+      '<span class="ri-icon">' + (l.role === 'Viewer' ? '👁' : '✎') + '</span>' +
+      '<span style="flex:1;font-size:12px;color:var(--text-primary)">' + escapeHtml(l.role === 'Viewer' ? 'Can view' : 'Can edit') + '<span style="color:var(--text-muted)"> · ' + escapeHtml(_timeAgo(l.createdAt)) + '</span></span>' +
+      '<button class="project-save-action" style="padding:4px 10px" onclick="app._revokeShareLink(\'' + escapeJsString(l.id) + '\')">Revoke</button></div>'
+    ).join('');
+    list.innerHTML = '<div id="share-fresh-link" style="display:none;padding:8px 0"></div>' +
+      (active.length ? '<div style="font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text-muted);padding:8px 0 2px">Active links</div>' + rows
+        : '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No active links yet.</div>');
+  };
+
+  app._revokeShareLink = async function(linkId) {
+    try { await app.getNovaCloudClient().revokeShareLink(app._cloudProjectId, linkId); await app._renderShareLinks(); }
+    catch (e) { app.addAIMessage && app.addAIMessage('workspace', 'Revoke failed: ' + e.message); }
   };
 
   function _timeAgo(ts) {
@@ -608,6 +702,12 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     cloudOpen.id = 'mi-cloud-open';
     cloudOpen.textContent = 'Open from Cloud';
 
+    const share = document.createElement('button');
+    share.className = 'menu-dropdown-item disabled';
+    share.id = 'mi-share';
+    share.textContent = 'Share…';
+
+    saveAs.insertAdjacentElement('afterend', share);
     saveAs.insertAdjacentElement('afterend', cloudOpen);
     saveAs.insertAdjacentElement('afterend', cloudSave);
   }
@@ -618,6 +718,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   const miSaveAs = document.getElementById('mi-saveas');
   const miCloudSave = document.getElementById('mi-cloud-save');
   const miCloudOpen = document.getElementById('mi-cloud-open');
+  const miShare = document.getElementById('mi-share');
   const miOpen = document.getElementById('mi-open');
   const miExport = document.getElementById('mi-export');
   const miImport = document.getElementById('mi-import');
@@ -626,6 +727,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   if (miSaveAs) { miSaveAs.classList.remove('disabled'); miSaveAs.onclick = function() { app.showSaveDialog(); }; }
   if (miCloudSave) { miCloudSave.classList.remove('disabled'); miCloudSave.onclick = function() { app.saveCloudFromDialog(app._projectName || 'Untitled').catch(function(){}); }; }
   if (miCloudOpen) { miCloudOpen.classList.remove('disabled'); miCloudOpen.onclick = function() { app.showCloudOpenDialog(); }; }
+  if (miShare) { miShare.classList.remove('disabled'); miShare.onclick = function() { app.showShareDialog(); }; }
   if (miOpen) { miOpen.classList.remove('disabled'); miOpen.onclick = function() { app.showOpenDialog(); }; }
   if (miExport) { miExport.classList.remove('disabled'); miExport.onclick = function() { app.saveToFile(); }; }
   if (miImport) { miImport.classList.remove('disabled'); miImport.onclick = function() { app.openFromFile(); }; }

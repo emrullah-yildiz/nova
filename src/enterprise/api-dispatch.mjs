@@ -24,6 +24,7 @@ import {
   validateOidcCallbackBody,
   validateProjectMemberBody,
   validateSaveGraphBody,
+  validateShareLinkBody,
   validateSignupBody
 } from './validation.mjs';
 
@@ -56,7 +57,16 @@ export function matchRoute(method, path, options = {}) {
       const page = store.listProjects(context, parsePaginationParams(url));
       return { projects: page.items, pagination: page.pagination };
     }],
+    // Must precede /api/projects/:id so "shared" isn't captured as an id.
+    ['GET', /^\/api\/projects\/shared$/, false, 200, ({ store, context, url }) => {
+      const page = store.listSharedProjects(context, parsePaginationParams(url));
+      return { projects: page.items, pagination: page.pagination };
+    }],
     ['POST', /^\/api\/projects$/, false, 201, ({ store, context, body }) => store.createProject(context, validateCreateProjectBody(body || {}))],
+    ['POST', /^\/api\/share\/([^/]+)$/, false, 200, ({ store, context, params }) => ({ project: store.redeemShareLink(context, params[0]) })],
+    ['POST', /^\/api\/projects\/([^/]+)\/share-links$/, false, 201, ({ store, context, params, body }) => store.createShareLink(context, params[0], validateShareLinkBody(body || {}))],
+    ['GET', /^\/api\/projects\/([^/]+)\/share-links$/, false, 200, ({ store, context, params }) => ({ shareLinks: store.listShareLinks(context, params[0]) })],
+    ['POST', /^\/api\/projects\/([^/]+)\/share-links\/([^/]+)\/revoke$/, false, 200, ({ store, context, params }) => store.revokeShareLink(context, params[0], params[1])],
     ['GET', /^\/api\/projects\/([^/]+)$/, false, 200, ({ store, context, params }) => store.getProject(context, params[0])],
     ['POST', /^\/api\/projects\/([^/]+)\/members$/, false, 200, ({ store, context, params, body }) => store.addProjectMember(context, params[0], validateProjectMemberBody(body || {}))],
     ['PUT', /^\/api\/projects\/([^/]+)\/graph$/, false, 200, ({ store, context, params, body }) => store.updateProjectGraph(context, params[0], validateSaveGraphBody(body || {}))],

@@ -38,4 +38,25 @@ describe('NovaCloudClient auth transport', () => {
     expect(calls[0].init.headers.Authorization).toBe('Bearer tok_123');
     expect(calls[0].init.credentials).toBeUndefined();
   });
+
+  it('share-link + shared endpoints use the right paths/methods (cookie mode)', async () => {
+    const { impl, calls } = recordingFetch();
+    const client = new NovaCloudClient({ useCookie: true, fetchImpl: impl });
+
+    await client.listSharedProjects({ limit: 10 });
+    await client.createShareLink('prj_1', { role: 'Editor' });
+    await client.listShareLinks('prj_1');
+    await client.revokeShareLink('prj_1', 'shl_9');
+    await client.redeemShareLink('tok abc/?');
+
+    expect(calls.map(c => c.init.method + ' ' + c.url)).toEqual([
+      'GET /api/projects/shared?limit=10',
+      'POST /api/projects/prj_1/share-links',
+      'GET /api/projects/prj_1/share-links',
+      'POST /api/projects/prj_1/share-links/shl_9/revoke',
+      'POST /api/share/tok%20abc%2F%3F' // token is URL-encoded
+    ]);
+    expect(calls[1].init.body).toBe(JSON.stringify({ role: 'Editor', expiresInMs: 0 }));
+    expect(calls.every(c => c.init.credentials === 'include')).toBe(true);
+  });
 });
