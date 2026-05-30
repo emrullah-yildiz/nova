@@ -46,14 +46,28 @@ describe('GPTClient', () => {
     expect(GPTClient.isApiKeyValid('sk-12345678901')).toBe(true);
   });
 
-  it('uses proxy mode when no API key is configured', () => {
+  it('is inactive (not proxy mode) when no API key and the free tier is off', () => {
     installLocalStorage();
 
-    expect(GPTClient.isProxyMode()).toBe(true);
-    expect(GPTClient.canChat()).toBe(true);
-    expect(GPTClient.getEffectiveApiUrl()).toBe('/api/proxy/chat');
-    expect(GPTClient.getEffectiveModel()).toBe('llama-3.1-8b-instant');
-    expect(GPTClient.buildRequestHeaders()).toEqual({ 'Content-Type': 'application/json' });
+    // BYOK-only default: no shared free-tier proxy, so "no key" => inactive.
+    expect(GPTClient.FREE_TIER_ENABLED).toBe(false);
+    expect(GPTClient.isProxyMode()).toBe(false);
+    expect(GPTClient.canChat()).toBe(false);
+  });
+
+  it('uses the shared proxy when the free tier is explicitly enabled', () => {
+    installLocalStorage();
+    const previous = GPTClient.FREE_TIER_ENABLED;
+    GPTClient.FREE_TIER_ENABLED = true;
+    try {
+      expect(GPTClient.isProxyMode()).toBe(true);
+      expect(GPTClient.canChat()).toBe(true);
+      expect(GPTClient.getEffectiveApiUrl()).toBe('/api/proxy/chat');
+      expect(GPTClient.getEffectiveModel()).toBe('llama-3.1-8b-instant');
+      expect(GPTClient.buildRequestHeaders()).toEqual({ 'Content-Type': 'application/json' });
+    } finally {
+      GPTClient.FREE_TIER_ENABLED = previous;
+    }
   });
 
   it('uses provider settings when an API key is configured', () => {

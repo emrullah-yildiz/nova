@@ -13,9 +13,16 @@ const GPTClient = {
   MAX_TOKENS: 2048,
   TEMPERATURE: 0.7,
 
-  // Free-tier proxy — when the user has no API key configured we POST to
+  // Free-tier shared proxy. Nova is BYOK-only: there is no server-side
+  // GROQ_API_KEY, so this is OFF. When disabled, "no API key" means the
+  // assistant is INACTIVE (it shows a Settings CTA) rather than silently
+  // falling back to a shared key. Flip to true only if a deployment actually
+  // configures GROQ_API_KEY/GEMINI_API_KEY on the Worker.
+  FREE_TIER_ENABLED: false,
+
+  // Free-tier proxy route — only used when FREE_TIER_ENABLED is true. POSTs to
   // Nova's own serverless API route, which forwards to Groq with a
-  // server-side GROQ_API_KEY. Lets first-time visitors chat without signup.
+  // server-side GROQ_API_KEY.
   PROXY_URL: '/api/proxy/chat',
   // 8B-Instant has dramatically higher TPM than 70B on Groq's free tier and
   // is plenty for chat triage. The proxy will upgrade to a larger model for
@@ -152,11 +159,11 @@ const GPTClient = {
     return k && k.length > 10;
   },
 
-  // Returns true when the assistant can actually attempt a request. BYOK and
-  // enterprise modes always qualify; in proxy mode we optimistically allow
-  // the call too — if the deployment hasn't configured GROQ_API_KEY the
-  // proxy returns 503 and the chat surfaces a clear "owner needs to set
-  // env var" message instead of being silently blocked at the door.
+  // Returns true when the assistant is ready to take a request. A user API
+  // key (BYOK) or enterprise mode qualifies; the shared free-tier proxy only
+  // qualifies when it's actually enabled (FREE_TIER_ENABLED). With the free
+  // tier off and no key, this is false and the UI shows the "add your key"
+  // gate instead of letting the user send into a dead proxy.
   canChat() {
     return this.hasApiKey() || this.isEnterpriseAiEnabled() || this.isProxyMode();
   },
@@ -180,7 +187,7 @@ const GPTClient = {
     return {};
   },
   isProxyMode() {
-    return !this.hasApiKey();
+    return !this.hasApiKey() && this.FREE_TIER_ENABLED;
   },
   getEffectiveApiUrl() {
     return this.isProxyMode() ? this.PROXY_URL : this.getApiUrl();
@@ -1087,14 +1094,9 @@ const SettingsDialog = {
     if (waCb) localStorage.setItem('nodeflow_wire_animations', waCb.checked ? 'true' : 'false');
     this.close();
     setTimeout(function(){ if(typeof app!=='undefined'&&app.renderWires)app.renderWires();},50);
-    if (GPTClient.hasApiKey()) {
-      var prov = GPTClient.PROVIDERS[GPTClient.getProvider()];
-      var provName = prov ? prov.name : 'AI';
-      document.querySelectorAll('.chat-header-text p').forEach(el => {
-        el.innerHTML = '● Online — <strong>' + provName + '</strong>';
-        el.style.color = 'var(--accent-green)';
-      });
-    }
+    // Refresh the header status AND the input gate: adding a key here flips the
+    // assistant from inactive → active without a reload.
+    if (typeof app !== 'undefined' && app._updateChatStatus) app._updateChatStatus();
   },
 
   toggleKeyVisibility() {

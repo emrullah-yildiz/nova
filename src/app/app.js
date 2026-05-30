@@ -1710,6 +1710,10 @@ const app = {
 
     const txt=inp.value.trim();if(!txt)return;
 
+    // BYOK gate: the assistant is inactive until a key is connected. Surface the
+    // Settings CTA instead of sending (covers programmatic callers too).
+    if(window.GPTClient&&!window.GPTClient.canChat()){if(this._updateAssistantGate)this._updateAssistantGate();return;}
+
     inp.value='';this.addUserMessage(ch,txt);
 
     document.getElementById(ch==='landing'?'landing-chat-suggestions':'ws-chat-suggestions').innerHTML='';
