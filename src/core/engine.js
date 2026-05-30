@@ -25,6 +25,7 @@
 
 
 import { createLacingFrames, hasListInput, mapLacingFrames, isAutoLaceable, resolveLacingMode, executeReplicated } from './lacing.js';
+import { layoutGraph } from './graph-layout.js';
 import { hostRegistry } from '../hosts/HostRegistry.js';
 import { setPreviewItemVisibility } from '../viewer/preview-sync.js';
 import { NODE_TYPE_MAP } from './nodes.js';
