@@ -152,9 +152,10 @@ describe('proxy chat — chain integration', () => {
     expect(res.body()).toContain('Invalid API Key');
   });
 
-  it('returns 502 ALL_PROVIDERS_FAILED with attempts[] when every provider 429s', async () => {
-    // Worst-case: every free tier is rate-limited at the same time. The
-    // user must see actionable info, not a silent failure.
+  it('returns 429 RATE_LIMITED with attempts[] when every provider 429s', async () => {
+    // Worst-case: every free tier is rate-limited at the same time. The user
+    // must see the actual reason (throttled), not a vague outage — so it's a
+    // 429 RATE_LIMITED, not a 502.
     process.env.GROQ_API_KEY = 'gsk_test';
     process.env.OPENROUTER_API_KEY = 'sk-or-test';
     process.env.CEREBRAS_API_KEY = 'csk_test';
@@ -166,9 +167,9 @@ describe('proxy chat — chain integration', () => {
     const res = makeRes();
     await handler(req, res);
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(res.statusCode).toBe(502);
+    expect(res.statusCode).toBe(429);
     const body = JSON.parse(res.body());
-    expect(body.error.code).toBe('ALL_PROVIDERS_FAILED');
+    expect(body.error.code).toBe('RATE_LIMITED');
     expect(Array.isArray(body.error.attempts)).toBe(true);
     expect(body.error.attempts.length).toBe(3);
     // Attempts must record which provider failed and the status — so the
@@ -267,7 +268,8 @@ describe('proxy chat — chain integration', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const groqUrl = PROVIDERS.find(p => p.name === 'groq-8b').url;
     expect(fetchMock.mock.calls[0][0]).toBe(groqUrl);
-    expect(res.statusCode).toBe(502); // No further providers to try
-    expect(JSON.parse(res.body()).error.code).toBe('ALL_PROVIDERS_FAILED');
+    // Only provider was rate-limited → surfaced as RATE_LIMITED (429).
+    expect(res.statusCode).toBe(429);
+    expect(JSON.parse(res.body()).error.code).toBe('RATE_LIMITED');
   });
 });
