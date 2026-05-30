@@ -1071,11 +1071,10 @@ export class EnterpriseStore {
     }
     // Asynchronous persistence (e.g. Neon): SERIALIZE writes by chaining onto
     // the previous one, so two rapid mutations never run two concurrent
-    // full-snapshot transactions (which deadlock on Postgres — the cause of a
-    // write occasionally failing after the in-memory change already
-    // succeeded). Errors are logged, not propagated, so a transient persist
-    // failure doesn't turn a successful mutation into a 500; the in-memory
-    // state is intact and the next persist rewrites it.
+    // full-snapshot transactions (which deadlock on Postgres and made a write
+    // fail after the in-memory change had already succeeded). Errors are logged,
+    // not propagated — the in-memory state is intact and the next write rewrites
+    // it. flushPersistence() therefore never rejects.
     if (this._persistIsAsync === true) {
       this._lastPersistPromise = this._lastPersistPromise
         .catch(() => {})
