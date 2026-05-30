@@ -145,6 +145,13 @@ const app = {
     }
     this.renderAccount();
     await this._syncAiPrefsForSession();
+    // Refresh the landing project list: account projects when signed in, local
+    // recents when signed out.
+    if (this.currentPage === 'landing' && this.renderRecentProjects) {
+      const el = document.getElementById('recent-list');
+      if (el) delete el.dataset.cloudLoaded;
+      this.renderRecentProjects();
+    }
   },
 
   // Route AI prefs to the right backend for the current session. Signed in:
@@ -433,6 +440,15 @@ const app = {
     // (which keeps any key typed while anonymous in this tab).
     if (window.GPTClient) window.GPTClient._useAnonymousPrefs();
     if (this._updateChatStatus) this._updateChatStatus();
+    // Drop the in-memory cloud-project binding and re-render the landing list
+    // as local recents.
+    this._cloudProjectId = '';
+    this._lastCloudSaveSerialized = null;
+    if (this.currentPage === 'landing' && this.renderRecentProjects) {
+      const el = document.getElementById('recent-list');
+      if (el) delete el.dataset.cloudLoaded;
+      this.renderRecentProjects();
+    }
   },
 
 
