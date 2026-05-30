@@ -26,7 +26,7 @@ NOVA_CORS_ORIGIN = "*"
 NOVA_ALLOW_DEV_LOGIN = "false"
 # The Google OAuth client id is PUBLIC (it's sent to every browser), so it lives
 # here. Paste your full client id, ending in .apps.googleusercontent.com:
-GOOGLE_CLIENT_ID = "REPLACE_WITH_YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
+GOOGLE_CLIENT_ID = "766511449312-a3f505pvirs8f5gjol9ntmu09rue37jl.apps.googleusercontent.com"
 
 # Per-IP AI-proxy rate limiting (replaces the in-memory Map). Create with:
 #   wrangler kv namespace create RATE_KV
