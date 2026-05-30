@@ -71,7 +71,6 @@ export async function handleEnterpriseApi(request, env) {
     return Response.json({ ok: true }, { status: 200, headers: { ...cors(env), 'Set-Cookie': clearSessionCookie() } });
   }
 
-  const { dispatch } = await getApi(env);
   // Auth via the httpOnly cookie, falling back to an Authorization header.
   const cookieToken = parseCookie(request.headers.get('cookie'));
   const authorization = request.headers.get('authorization') || (cookieToken ? 'Bearer ' + cookieToken : null);
@@ -82,6 +81,11 @@ export async function handleEnterpriseApi(request, env) {
   }
 
   try {
+    // getApi() boots the store, which reads the full Neon snapshot. Keep it
+    // INSIDE the try: an init failure (e.g. a missing table) must return a
+    // structured JSON error with CORS headers, not an opaque bare 500 from an
+    // unhandled rejection escaping the Worker.
+    const { dispatch } = await getApi(env);
     const { status, body: payload } = await dispatch({
       method: request.method,
       path: url.pathname,
