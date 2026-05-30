@@ -4,15 +4,22 @@ export class NovaCloudClient {
   constructor(options = {}) {
     this.config = options.config || getRuntimeConfig();
     this.fetchImpl = options.fetchImpl || getFetchImpl();
-    this.token = options.token || readStoredToken();
+    // Cookie mode: the SPA is signed in via the httpOnly session cookie, so the
+    // client sends same-origin requests with credentials and no Bearer token
+    // (the durable identity, shared with the rest of the app). Bearer/token mode
+    // is kept for dev-login and non-browser callers.
+    this.useCookie = options.useCookie || false;
+    this.token = options.token || (this.useCookie ? '' : readStoredToken());
   }
 
   isConfigured() {
-    return !!(this.config && this.config.apiBaseUrl);
+    return this.useCookie || !!(this.config && this.config.apiBaseUrl);
   }
 
   isAuthenticated() {
-    return !!this.token;
+    // In cookie mode the httpOnly cookie isn't readable from JS — the app gates
+    // on app.currentUser instead, so treat the client as ready.
+    return this.useCookie || !!this.token;
   }
 
   clearSession() {
@@ -135,12 +142,21 @@ export class NovaCloudClient {
   async request(path, options = {}) {
     if (!this.fetchImpl) throw new Error('Fetch API is unavailable.');
     const headers = { 'Content-Type': 'application/json' };
-    if (options.auth !== false && this.token) headers.Authorization = 'Bearer ' + this.token;
-    const response = await this.fetchImpl(resolveApiUrl(path, this.config), {
+    const init = {
       method: options.method || 'GET',
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined
-    });
+    };
+    let target;
+    if (this.useCookie) {
+      // Same-origin relative path so the session cookie is sent automatically.
+      target = path;
+      init.credentials = 'include';
+    } else {
+      target = resolveApiUrl(path, this.config);
+      if (options.auth !== false && this.token) headers.Authorization = 'Bearer ' + this.token;
+    }
+    const response = await this.fetchImpl(target, init);
     const text = await response.text();
     const data = text ? JSON.parse(text) : null;
     if (!response.ok) {

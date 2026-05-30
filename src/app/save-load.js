@@ -161,9 +161,13 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     const factory = typeof window !== 'undefined' && window.NodeFlow && window.NodeFlow.createNovaCloudClient
       ? window.NodeFlow.createNovaCloudClient
       : null;
-    app._novaCloudClient = factory ? factory() : null;
+    // Cookie mode: authenticate as the signed-in user via the session cookie
+    // (same identity as the rest of the app), not a separate dev-login token.
+    app._novaCloudClient = factory ? factory({ useCookie: true }) : null;
     return app._novaCloudClient;
   };
+
+  app.isSignedIn = function() { return !!app.currentUser; };
 
   app.loginNovaCloudDemo = async function(email = 'owner@demo.nova') {
     const client = app.getNovaCloudClient();
@@ -176,19 +180,13 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   app.ensureNovaCloudSession = async function() {
     const client = app.getNovaCloudClient();
     if (!client) throw new Error('Nova Cloud client is not available.');
-    if (!client.isAuthenticated()) {
-      await app.loginNovaCloudDemo();
-      return client;
+    // Account-backed: require a real signed-in session (cookie). No dev-login.
+    if (!app.currentUser) {
+      const err = new Error('Sign in to save projects to your account.');
+      err.code = 'NOT_SIGNED_IN';
+      throw err;
     }
-    try {
-      await client.me();
-      return client;
-    } catch (e) {
-      if (!/Invalid bearer token|Session expired|Missing bearer token/i.test(e.message || '')) throw e;
-      if (client.clearSession) client.clearSession();
-      await app.loginNovaCloudDemo();
-      return client;
-    }
+    return client;
   };
 
   app.saveToCloud = async function(name = app._projectName || 'Untitled') {
@@ -202,7 +200,8 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       app._cloudProjectId = project.id;
     }
     app._projectName = project.name || name;
-    app.addAIMessage('workspace', 'Saved **' + app._projectName + '** to Nova Cloud.');
+    app._lastCloudSaveSerialized = JSON.stringify(graph);
+    app.addAIMessage('workspace', 'Saved **' + app._projectName + '** to your account.');
     return project;
   };
 
@@ -216,7 +215,8 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     app.deserializeGraph(version.graph);
     app._cloudProjectId = project.id;
     app._projectName = project.name;
-    app.addAIMessage('workspace', 'Opened cloud project **' + project.name + '**.');
+    app._lastCloudSaveSerialized = JSON.stringify(app.serializeGraph());
+    app.addAIMessage('workspace', 'Opened **' + project.name + '** from your account.');
     return project;
   };
 
@@ -227,7 +227,12 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       app._saveCloudProjectId(project.id);
       return project;
     } catch (e) {
-      app.addAIMessage('workspace', 'Cloud save failed: ' + e.message + '\n\nStart the Nova API with `NOVA_ALLOW_DEV_LOGIN=true` and either `NOVA_DATABASE_URL` or `NOVA_ENTERPRISE_STORE_FILE`.');
+      if (e && e.code === 'NOT_SIGNED_IN') {
+        app.addAIMessage('workspace', 'Sign in to save this project to your account.');
+        if (app.signIn) app.signIn();
+      } else {
+        app.addAIMessage('workspace', 'Cloud save failed: ' + e.message);
+      }
       throw e;
     }
   };
@@ -370,6 +375,22 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
         const data = app.serializeGraph();
         localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(data));
       } catch (e) { /* silent */ }
+      // Cloud autosave: only for a signed-in user with an existing cloud
+      // project, and only when the graph actually changed since the last cloud
+      // save (avoids creating a redundant version every 30s).
+      if (app.currentUser && app._cloudProjectId && isCloudEnabled()) {
+        try {
+          const serialized = JSON.stringify(app.serializeGraph());
+          if (serialized !== app._lastCloudSaveSerialized) {
+            app._lastCloudSaveSerialized = serialized;
+            const client = app.getNovaCloudClient();
+            if (client) {
+              client.saveProjectGraph(app._cloudProjectId, { graph: app.serializeGraph(), message: 'Autosave' })
+                .catch(() => { app._lastCloudSaveSerialized = null; }); // retry next tick on failure
+            }
+          }
+        } catch (e) { /* silent */ }
+      }
     }
   }, 30000);
 
@@ -506,9 +527,15 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     } catch (e) { /* ignore */ }
   }
 
-  // Patch landing page recent projects to show real data
+  // Patch landing page recent projects to show real data. Signed in → the
+  // account's cloud projects ("My Projects"); anonymous → local browser recents.
   const origRenderRecent = app.renderRecentProjects.bind(app);
   app.renderRecentProjects = function() {
+    if (app.currentUser && isCloudEnabled()) {
+      app._renderCloudProjects();
+      return;
+    }
+
     let recent = [];
     try { recent = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) { /* ignore corrupt recent list */ }
 
@@ -526,6 +553,33 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
         '<span class="ri-name">' + escapeHtml(r.name) + '</span>' +
         '<span class="ri-date">' + escapeHtml(ago) + '</span></button>';
     }).join('');
+  };
+
+  // Async: fetch and render the signed-in user's account projects into the
+  // landing "recent" list. Falls back to a friendly empty/error state.
+  app._renderCloudProjects = async function() {
+    const el = document.getElementById('recent-list');
+    if (!el) return;
+    if (!el.dataset.cloudLoaded) el.innerHTML = '<div class="recent-empty" style="padding:12px;color:var(--text-muted);font-size:12px">Loading your projects…</div>';
+    try {
+      const client = app.getNovaCloudClient();
+      const page = await client.listProjects({ limit: 24 });
+      const projects = (page && page.projects) || [];
+      el.dataset.cloudLoaded = '1';
+      if (!projects.length) {
+        el.innerHTML = '<div class="recent-empty" style="padding:12px;color:var(--text-muted);font-size:12px">No projects yet — save one to your account and it shows up here.</div>';
+        return;
+      }
+      el.innerHTML = projects.map(p => {
+        const ago = _timeAgo(p.updatedAt || p.createdAt || Date.now());
+        return '<button class="recent-item" onclick="app.openCloudProject(\'' + escapeJsString(p.id) + '\').then(function(pr){app._saveCloudProjectId(pr.id);}).catch(function(e){app.addAIMessage&&app.addAIMessage(\'workspace\',\'Open failed: \'+e.message);})">' +
+          '<span class="ri-icon">☁</span>' +
+          '<span class="ri-name">' + escapeHtml(p.name || 'Untitled') + '</span>' +
+          '<span class="ri-date">' + escapeHtml(ago) + '</span></button>';
+      }).join('');
+    } catch (e) {
+      el.innerHTML = '<div class="recent-empty" style="padding:12px;color:var(--text-muted);font-size:12px">Could not load your projects.</div>';
+    }
   };
 
   function _timeAgo(ts) {
