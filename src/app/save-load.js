@@ -629,12 +629,14 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
         '<button class="share-create-btn" id="invite-send" onclick="app._sendInvites()">Invite</button>' +
       '</div>' +
       '<div id="invite-status" class="share-status"></div>' +
+      // Invited people — listed directly under the email box
+      '<div id="invite-list" style="max-height:26vh;overflow-y:auto"></div>' +
       // Anyone-with-the-link row
       '<div class="share-anyone"><span class="share-anyone-label">🔗 Anyone with the link</span>' +
         '<span class="share-select"><select id="anyone-role" aria-label="Link access"><option value="Editor">Can edit</option><option value="Viewer">Can view</option></select></span>' +
         '<button class="share-link-btn" id="anyone-create" onclick="app._createAnyoneLink()">Copy link</button></div>' +
-      // Access list
-      '<div id="share-link-list" style="max-height:42vh;overflow-y:auto"></div>' +
+      // Anonymous link list
+      '<div id="share-link-list" style="max-height:24vh;overflow-y:auto"></div>' +
       '<div class="project-save-footer"><span>' + escapeHtml(ownerName) + ' · owner</span>' +
       '<button onclick="document.getElementById(\'share-dialog-overlay\').remove()">Done</button></div></div>';
     document.body.appendChild(overlay);
@@ -686,36 +688,45 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   };
 
   app._renderShareLinks = async function() {
-    const list = document.getElementById('share-link-list');
-    if (!list) return;
+    const inviteList = document.getElementById('invite-list');
+    const linkList = document.getElementById('share-link-list');
+    if (!inviteList && !linkList) return;
     let links = [];
     try { links = (await app.getNovaCloudClient().listShareLinks(app._cloudProjectId)).shareLinks || []; } catch (e) { /* ignore */ }
     const active = links.filter(l => !l.revokedAt).sort((a, b) => b.createdAt - a.createdAt);
-    if (!active.length) { list.innerHTML = '<div class="share-empty">No invites or links yet.</div>'; return; }
     const fresh = app._freshLinkUrls || {};
     const roleLabel = r => (r === 'Viewer' ? 'Can view' : 'Can edit');
     const revokeBtn = l => '<button class="share-icon-btn danger" title="Remove" onclick="app._revokeShareLink(\'' + escapeJsString(l.id) + '\')">🗑</button>';
-    const rows = active.map(l => {
-      // Email invite — show the address as a pending invite.
-      if (l.email) {
-        return '<div class="share-link-row"><span class="ri-icon">✉</span>' +
-          '<span class="share-link-meta">' + escapeHtml(l.email) +
-          ' <span style="color:var(--text-muted)">· ' + escapeHtml(roleLabel(l.role)) + ' · invited</span></span>' +
-          revokeBtn(l) + '</div>';
-      }
-      // Anonymous link created this session — show the copyable URL.
-      if (fresh[l.id]) {
-        return '<div class="share-link-row">' +
-          '<input class="share-url-input" readonly value="' + escapeHtml(fresh[l.id]) + '" title="' + escapeHtml(roleLabel(l.role)) + ' link" onclick="this.select()" />' +
-          '<button class="share-icon-btn" title="Copy link" data-url="' + escapeHtml(fresh[l.id]) + '" onclick="app._copyShareUrl(this)">📋</button>' +
-          revokeBtn(l) + '</div>';
-      }
-      // Anonymous link from a prior session — metadata only (token not held).
-      return '<div class="share-link-row"><span class="ri-icon">🔗</span>' +
-        '<span class="share-link-meta">Anyone with the link <span style="color:var(--text-muted)">· ' + escapeHtml(roleLabel(l.role)) + ' · ' + escapeHtml(_timeAgo(l.createdAt)) + '</span></span>' +
-        revokeBtn(l) + '</div>';
-    }).join('');
-    list.innerHTML = '<div class="share-section-label">Who has access</div>' + rows;
+
+    // Invited people → directly under the email box.
+    const invites = active.filter(l => l.email);
+    if (inviteList) {
+      inviteList.innerHTML = invites.length
+        ? '<div class="share-section-label">Invited</div>' + invites.map(l =>
+            '<div class="share-link-row"><span class="ri-icon">✉</span>' +
+            '<span class="share-link-meta">' + escapeHtml(l.email) +
+            ' <span style="color:var(--text-muted)">· ' + escapeHtml(roleLabel(l.role)) + ' · invited</span></span>' +
+            revokeBtn(l) + '</div>').join('')
+        : '';
+    }
+
+    // "Anyone with the link" links → below that section.
+    const anon = active.filter(l => !l.email);
+    if (linkList) {
+      linkList.innerHTML = anon.length
+        ? '<div class="share-section-label">Links</div>' + anon.map(l => {
+            if (fresh[l.id]) {
+              return '<div class="share-link-row">' +
+                '<input class="share-url-input" readonly value="' + escapeHtml(fresh[l.id]) + '" title="' + escapeHtml(roleLabel(l.role)) + ' link" onclick="this.select()" />' +
+                '<button class="share-icon-btn" title="Copy link" data-url="' + escapeHtml(fresh[l.id]) + '" onclick="app._copyShareUrl(this)">📋</button>' +
+                revokeBtn(l) + '</div>';
+            }
+            return '<div class="share-link-row"><span class="ri-icon">🔗</span>' +
+              '<span class="share-link-meta">Anyone with the link <span style="color:var(--text-muted)">· ' + escapeHtml(roleLabel(l.role)) + ' · ' + escapeHtml(_timeAgo(l.createdAt)) + '</span></span>' +
+              revokeBtn(l) + '</div>';
+          }).join('')
+        : '';
+    }
   };
 
   app._copyShareUrl = function(btn) {
