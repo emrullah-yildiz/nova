@@ -48,7 +48,7 @@ export function matchRoute(method, path, options = {}) {
     ['POST', /^\/api\/auth\/signup$/, true, 201, handleSignup],
     ['POST', /^\/api\/auth\/login$/, true, 200, handleLogin],
     ['POST', /^\/api\/auth\/verify$/, true, 200, handleVerifyEmail],
-    ['POST', /^\/api\/auth\/resend-verification$/, false, 200, handleResendVerification],
+    ['POST', /^\/api\/auth\/resend-verification$/, true, 200, handleResendVerification],
     ['GET', /^\/api\/me$/, false, 200, ({ context }) => ({ user: context.user })],
     ['GET', /^\/api\/me\/ai-settings$/, false, 200, handleGetAiSettings],
     ['PUT', /^\/api\/me\/ai-settings$/, false, 200, handlePutAiSettings],
@@ -175,8 +175,10 @@ function parseLimitParam(value) {
   return limit;
 }
 
-// Email+password sign-up. Creates the account, drops the user into their own
-// personal workspace, and issues a session — same end state as an OIDC login.
+// Email+password sign-up. Creates the account + personal workspace and emails a
+// verification link, but does NOT issue a session — sign-in only completes once
+// the user clicks that link (see handleVerifyEmail). The response carries no
+// token; the client tells the user to check their inbox.
 async function handleSignup({ store, authService, body, emailService, appUrl }) {
   const payload = validateSignupBody(body || {});
   const email = payload.email.trim();
@@ -191,9 +193,9 @@ async function handleSignup({ store, authService, body, emailService, appUrl }) 
   if (store.findUserByEmail(email)) throw createHttpError(409, 'An account with this email already exists. Try signing in instead.');
   const passwordHash = await authService.hashPasswordAsync(payload.password);
   const user = store.createUser({ email, displayName: payload.displayName || email, passwordHash });
-  const organization = store.ensurePersonalWorkspace(user.id);
+  store.ensurePersonalWorkspace(user.id);
   await sendVerificationEmail({ store, emailService, appUrl, user });
-  return store.createAuthSessionAsync({ email: user.email, organizationId: organization.id });
+  return { ok: true, verificationRequired: true, email: user.email };
 }
 
 // Best-effort: generate a token and email the verification link. Never fails
@@ -211,22 +213,36 @@ async function sendVerificationEmail({ store, emailService, appUrl, user }) {
 }
 
 // Public: the link in the verification email points at the SPA (?verify=token),
-// which posts the token here. Marks the account verified.
+// which posts the token here. Marks the account verified AND completes sign-in
+// by issuing a session — so clicking the link logs the user straight in (the
+// Worker turns the returned token into the httpOnly session cookie).
 async function handleVerifyEmail({ store, body }) {
   const token = body && typeof body.token === 'string' ? body.token.trim() : '';
   if (!token) throw createHttpError(400, 'A verification token is required.');
   const user = await store.consumeEmailVerificationTokenAsync(token);
-  return { ok: true, emailVerified: true, email: user.email };
+  const organization = store.ensurePersonalWorkspace(user.id);
+  const session = await store.createAuthSessionAsync({ email: user.email, organizationId: organization.id });
+  return { ok: true, emailVerified: true, token: session.token, user: session.user };
 }
 
-// Authenticated: re-send the verification email to the signed-in user.
-async function handleResendVerification({ store, context, emailService, appUrl }) {
-  const user = store.requireUser(context.userId);
-  if (user.emailVerified) return { ok: true, alreadyVerified: true };
-  if (!emailService) throw createHttpError(503, 'Email delivery is not configured for this deployment.', 'EMAIL_NOT_CONFIGURED');
-  const token = await store.createEmailVerificationTokenAsync(user.id);
-  const msg = buildVerificationEmail({ appUrl, token, displayName: user.displayName, email: user.email });
-  await emailService.send({ to: user.email, subject: msg.subject, html: msg.html, text: msg.text });
+// Public + email-based: re-send the verification link. Since an unverified user
+// has no session yet, this works from the email in the body (also honors a
+// signed-in context if present). Always returns a generic { ok: true } and only
+// sends when the address maps to a real, still-unverified account — so it never
+// reveals whether an email is registered or already verified.
+async function handleResendVerification({ store, context, body, emailService, appUrl }) {
+  let user = null;
+  if (context && context.userId) user = store.requireUser(context.userId);
+  else if (body && typeof body.email === 'string' && body.email.trim()) user = store.findUserByEmail(body.email.trim());
+  if (user && !user.emailVerified && emailService) {
+    try {
+      const token = await store.createEmailVerificationTokenAsync(user.id);
+      const msg = buildVerificationEmail({ appUrl, token, displayName: user.displayName, email: user.email });
+      await emailService.send({ to: user.email, subject: msg.subject, html: msg.html, text: msg.text });
+    } catch (error) {
+      console.error('[nova-auth] resend verification failed for %s: %s', user.email, (error && error.message) || error);
+    }
+  }
   return { ok: true };
 }
 
@@ -265,6 +281,11 @@ async function handleLogin({ store, authService, body }) {
   const user = store.findUserByEmail(email);
   const ok = user && user.passwordHash && await authService.verifyPasswordAsync(payload.password, user.passwordHash);
   if (!ok) throw createHttpError(401, 'Invalid email or password.');
+  // Sign-in is gated on a verified email: until the emailed link is clicked,
+  // no session is issued. (OIDC/Google accounts are created already verified.)
+  if (!user.emailVerified) {
+    throw createHttpError(403, 'Please verify your email before signing in — check your inbox for the verification link.', 'EMAIL_NOT_VERIFIED');
+  }
   const organization = store.ensurePersonalWorkspace(user.id);
   return store.createAuthSessionAsync({ email: user.email, organizationId: organization.id });
 }
