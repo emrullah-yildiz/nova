@@ -105,6 +105,18 @@ export function validateAiSettingsBody(body = {}) {
   return { provider: body.provider || '', model: body.model || '', keys };
 }
 
+// Share-link creation: role is capped at Editor/Viewer (never Admin/Owner via a
+// link — those must be granted explicitly). Optional positive expiry.
+export function validateShareLinkBody(body = {}) {
+  requirePlainObject(body, 'request body');
+  requireString(body.role, 'role', 40);
+  if (!['Editor', 'Viewer'].includes(body.role)) throw createHttpError(400, 'Share links can only grant Editor or Viewer access.');
+  if (body.expiresInMs !== undefined && body.expiresInMs !== null && (!Number.isFinite(body.expiresInMs) || body.expiresInMs < 0)) {
+    throw createHttpError(400, 'expiresInMs must be a non-negative number.');
+  }
+  return { role: body.role, expiresInMs: body.expiresInMs || 0 };
+}
+
 export function validateGraphRunBody(body = {}) {
   requirePlainObject(body, 'request body');
   optionalString(body.versionId, 'versionId', 80);

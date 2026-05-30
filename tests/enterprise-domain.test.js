@@ -62,7 +62,7 @@ describe('enterprise domain', () => {
     await expect(store.authenticateAsync(session.token)).rejects.toThrow(/Session expired/);
   });
 
-  it('stores projects inside an organization and blocks cross-organization access', () => {
+  it('scopes projects to their org: a cross-org non-member gets 404 (no existence leak)', () => {
     const store = new EnterpriseStore();
     const orgA = store.createOrganization({ name: 'A' });
     const orgB = store.createOrganization({ name: 'B' });
@@ -73,7 +73,8 @@ describe('enterprise domain', () => {
 
     expect(store.listProjects(ctxA)).toHaveLength(1);
     expect(store.listProjects(ctxB)).toHaveLength(0);
-    expect(() => store.getProject(ctxB, project.id)).toThrow(/Cross-organization/);
+    // Not a member and a different org → indistinguishable from "not found".
+    expect(() => store.getProject(ctxB, project.id)).toThrow(/Project not found/);
   });
 
   it('paginates enterprise project, version, run, and audit lists', () => {
@@ -162,7 +163,7 @@ describe('enterprise domain', () => {
     expect(run.status).toBe('failed');
     expect(store.listGraphRuns(owner, project.id)).toHaveLength(1);
     expect(store.listAuditEvents(owner).some(event => event.type === 'graph.run.recorded')).toBe(true);
-    expect(() => store.recordGraphRun(viewer, project.id, { status: 'completed' })).toThrow(/Project access|Project write/);
+    expect(() => store.recordGraphRun(viewer, project.id, { status: 'completed' })).toThrow(/Project not found|Project write/);
   });
 
   it('tracks object artifacts and background jobs for long-running work', () => {
@@ -230,7 +231,7 @@ describe('enterprise domain', () => {
     const project = store.createProject(owner.context, { name: 'RBAC Project' });
 
     expect(store.listProjects(outsider.context)).toHaveLength(0);
-    expect(() => store.getProject(outsider.context, project.id)).toThrow(/Project access/);
+    expect(() => store.getProject(outsider.context, project.id)).toThrow(/Project not found/);
 
     store.addProjectMember(owner.context, project.id, { userId: editor.user.id, role: ROLES.EDITOR });
     store.addProjectMember(owner.context, project.id, { userId: viewer.user.id, role: ROLES.VIEWER });

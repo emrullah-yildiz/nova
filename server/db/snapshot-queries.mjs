@@ -17,6 +17,7 @@ export async function readSnapshotFromPool(pool, schemaVersion = 1) {
   const backgroundJobs = (await pool.query('SELECT * FROM background_jobs ORDER BY created_at ASC')).rows;
   const connectorSessions = (await pool.query('SELECT * FROM connect_sessions')).rows;
   const aiRequests = (await pool.query('SELECT * FROM ai_requests')).rows;
+  const shareLinks = (await pool.query('SELECT * FROM share_links ORDER BY created_at ASC')).rows;
   const auditEvents = (await pool.query('SELECT * FROM audit_events ORDER BY created_at ASC')).rows;
 
   const json = (v, fallback) => (typeof v === 'string' ? JSON.parse(v) : (v || fallback));
@@ -77,6 +78,10 @@ export async function readSnapshotFromPool(pool, schemaVersion = 1) {
       messages: json(r.messages, []), metadata: json(r.metadata, {}), responsePreview: r.response_preview,
       usage: r.usage ? json(r.usage, null) : null, createdAt: r.created_at, completedAt: r.completed_at
     })),
+    shareLinks: shareLinks.map(r => ({
+      id: r.id, projectId: r.project_id, createdBy: r.created_by, role: r.role,
+      tokenHash: r.token_hash, expiresAt: r.expires_at, revokedAt: r.revoked_at, createdAt: r.created_at
+    })),
     auditEvents: auditEvents.map(r => ({
       id: r.id, organizationId: r.organization_id, userId: r.user_id, type: r.type,
       targetId: r.target_id, metadata: json(r.metadata, {}), createdAt: r.created_at
@@ -93,6 +98,7 @@ export async function writeSnapshotToPool(pool, snapshot) {
     await client.query('DELETE FROM ai_requests');
     await client.query('DELETE FROM connect_sessions');
     await client.query('DELETE FROM background_jobs');
+    await client.query('DELETE FROM share_links');
     await client.query('DELETE FROM object_artifacts');
     await client.query('DELETE FROM project_versions');
     await client.query('DELETE FROM project_members');
@@ -152,6 +158,13 @@ export async function writeSnapshotToPool(pool, snapshot) {
       await client.query(
         'INSERT INTO object_artifacts (id, organization_id, project_id, user_id, name, kind, content_type, byte_size, storage_key, metadata, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, kind=EXCLUDED.kind, content_type=EXCLUDED.content_type, byte_size=EXCLUDED.byte_size, storage_key=EXCLUDED.storage_key, metadata=EXCLUDED.metadata',
         [artifact.id, artifact.organizationId, artifact.projectId, artifact.userId, artifact.name, artifact.kind, artifact.contentType, artifact.byteSize || 0, artifact.storageKey, JSON.stringify(artifact.metadata || {}), artifact.createdAt]
+      );
+    }
+
+    for (const link of snapshot.shareLinks || []) {
+      await client.query(
+        'INSERT INTO share_links (id, project_id, created_by, role, token_hash, expires_at, revoked_at, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO UPDATE SET role=EXCLUDED.role, revoked_at=EXCLUDED.revoked_at',
+        [link.id, link.projectId, link.createdBy, link.role, link.tokenHash, link.expiresAt || null, link.revokedAt || null, link.createdAt]
       );
     }
 

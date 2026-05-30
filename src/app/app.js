@@ -110,8 +110,22 @@ const app = {
       this._authConfig = { googleClientId: '', devLogin: false };
     }
     await this._handleVerifyParam();
+    this._handleJoinParam();
     await this.refreshSession();
     this._loadGoogleIdentity();
+  },
+
+  // If opened from a share link (?join=<token>), stash the token and strip it
+  // from the URL. It's redeemed once the user is signed in (see refreshSession);
+  // if they're not, the sign-in prompt is shown and redemption runs after.
+  _handleJoinParam() {
+    try {
+      const token = new URLSearchParams(window.location.search).get('join') || '';
+      if (token) this._pendingJoinToken = token;
+      const u = new URL(window.location.href);
+      u.searchParams.delete('join');
+      window.history.replaceState({}, document.title, u.pathname + u.search + u.hash);
+    } catch { /* ignore */ }
   },
 
   // If the page was opened from a verification email (?verify=<token>), confirm
@@ -145,6 +159,18 @@ const app = {
     }
     this.renderAccount();
     await this._syncAiPrefsForSession();
+    // A pending share link: redeem it once signed in (opens the project); if not
+    // signed in, prompt sign-in and it redeems on the next refresh.
+    if (this._pendingJoinToken) {
+      if (this.currentUser && this.redeemShareToken) {
+        const token = this._pendingJoinToken;
+        this._pendingJoinToken = '';
+        await this.redeemShareToken(token);
+        return; // we've navigated into the shared project
+      } else if (!this.currentUser && this.signIn) {
+        this.signIn();
+      }
+    }
     // Refresh the landing project list: account projects when signed in, local
     // recents when signed out.
     if (this.currentPage === 'landing' && this.renderRecentProjects) {
