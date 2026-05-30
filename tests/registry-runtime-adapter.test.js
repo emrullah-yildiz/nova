@@ -43,6 +43,40 @@ function makeTestRegistry() {
     }
   });
 
+  // No lacing declared — relies on the default-on auto-lacing.
+  registry.registerNode({
+    type: 'test.inc',
+    category: 'test',
+    inputs: [{ id: 'x', type: 'number' }],
+    outputs: [{ id: 'result', type: 'number' }],
+    controls: [{ id: 'x', type: 'formula', default: '0' }],
+    execute(context, inputs) {
+      return { result: Number(inputs.x) + 1 };
+    }
+  });
+
+  // A list consumer: its 'list' port must receive the whole array intact.
+  registry.registerNode({
+    type: 'test.listLen',
+    category: 'test',
+    inputs: [{ id: 'list', type: 'list' }],
+    outputs: [{ id: 'result', type: 'number' }],
+    execute(context, inputs) {
+      return { result: Array.isArray(inputs.list) ? inputs.list.length : -1 };
+    }
+  });
+
+  // A sink (no outputs) must receive the whole value, never fanned out.
+  registry.registerNode({
+    type: 'test.sink',
+    category: 'test',
+    inputs: [{ id: 'value', type: 'any' }],
+    outputs: [],
+    execute(context, inputs) {
+      return inputs.value;
+    }
+  });
+
   return registry;
 }
 
@@ -123,6 +157,67 @@ describe('registry runtime adapter', () => {
 
     expect(computeNodeValue(ctx, nodes[2])).toEqual([11, 22, 23]);
     expect(nodes[2]._portValues).toEqual({ result: [11, 22, 23] });
+  });
+
+  it('auto-laces a node that declares no lacing when a list arrives', () => {
+    const registry = makeTestRegistry();
+    const nodes = [
+      { id: 'src', type: 'test.passthroughList', controlValues: {}, _portValues: { list: [1, 2, 3] } },
+      { id: 'inc', type: 'test.inc', controlValues: { x: '0' } }
+    ];
+    const wires = [
+      { fromNode: 'src', fromPort: 'list', toNode: 'inc', toPort: 'x' }
+    ];
+    const ctx = createComputeContext(nodes, wires, {
+      computeInner: createRegistryComputeInner(registry, {
+        fallbackComputeInner(node) {
+          return node._portValues ? node._portValues.list : undefined;
+        }
+      })
+    });
+
+    expect(computeNodeValue(ctx, nodes[1])).toEqual([2, 3, 4]);
+    expect(nodes[1]._portValues).toEqual({ result: [2, 3, 4] });
+  });
+
+  it('does NOT fan out a list into a port typed "list"', () => {
+    const registry = makeTestRegistry();
+    const nodes = [
+      { id: 'src', type: 'test.passthroughList', controlValues: {}, _portValues: { list: [1, 2, 3] } },
+      { id: 'len', type: 'test.listLen', controlValues: {} }
+    ];
+    const wires = [
+      { fromNode: 'src', fromPort: 'list', toNode: 'len', toPort: 'list' }
+    ];
+    const ctx = createComputeContext(nodes, wires, {
+      computeInner: createRegistryComputeInner(registry, {
+        fallbackComputeInner(node) {
+          return node._portValues ? node._portValues.list : undefined;
+        }
+      })
+    });
+
+    expect(computeNodeValue(ctx, nodes[1])).toBe(3);
+  });
+
+  it('does NOT fan out a list into a sink node (no outputs)', () => {
+    const registry = makeTestRegistry();
+    const nodes = [
+      { id: 'src', type: 'test.passthroughList', controlValues: {}, _portValues: { list: [1, 2, 3] } },
+      { id: 'sink', type: 'test.sink', controlValues: {} }
+    ];
+    const wires = [
+      { fromNode: 'src', fromPort: 'list', toNode: 'sink', toPort: 'value' }
+    ];
+    const ctx = createComputeContext(nodes, wires, {
+      computeInner: createRegistryComputeInner(registry, {
+        fallbackComputeInner(node) {
+          return node._portValues ? node._portValues.list : undefined;
+        }
+      })
+    });
+
+    expect(computeNodeValue(ctx, nodes[1])).toEqual([1, 2, 3]);
   });
 
   it('groups cross product results by the first list input', () => {

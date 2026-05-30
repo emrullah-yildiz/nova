@@ -1,4 +1,4 @@
-import { collectLacingFrameOutputs, createLacingFrames, hasListInput } from '../core/lacing.js';
+import { collectLacingFrameOutputs, createLacingFrames, hasListInput, isAutoLaceable, resolveLacingMode } from '../core/lacing.js';
 
 export function createRegistryComputeInner(registry, options = {}) {
   const fallbackComputeInner = options.fallbackComputeInner || null;
@@ -35,12 +35,11 @@ export function executeWithLacing(nodeDefinition, context, inputs, controls, nod
   const instanceLacingMode = nodeInstance && nodeInstance.controlValues
     ? nodeInstance.controlValues._lacingMode
     : undefined;
-  const lacing = {
-    ...(nodeDefinition.lacing || { mode: 'none' }),
-    mode: instanceLacingMode || (nodeDefinition.lacing && nodeDefinition.lacing.mode) || 'none'
-  };
-  const mode = lacing.mode || 'none';
-  if (mode === 'none' || !hasListInput(nodeDefinition.inputs, inputs)) {
+  const mode = resolveLacingMode(nodeDefinition, instanceLacingMode);
+  // Only fan out when the node is genuinely auto-laceable (not a list-consumer
+  // such as Solid.ByLoft / List.*, whose 'list' port must receive the whole
+  // array intact) and a list actually arrived.
+  if (mode === 'none' || !isAutoLaceable(nodeDefinition) || !hasListInput(nodeDefinition.inputs, inputs)) {
     return nodeDefinition.execute(context, inputs, controls, nodeInstance);
   }
 

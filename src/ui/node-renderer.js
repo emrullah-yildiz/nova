@@ -15,6 +15,7 @@
 
 
 import { getWiredControlDisplay, removeControlInputWires } from './property-wire-controls.js';
+import { isAutoLaceable } from '../core/lacing.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -388,13 +389,11 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
 
     }
 
-    var defaultLacingMode = def.lacing && def.lacing.mode ? def.lacing.mode : null;
-    var supportsGenericLacing = !defaultLacingMode
-      && !def.dynamicInputs
-      && (def.inputs || []).length > 0
-      && (def.outputs || []).length > 0
-      && !(def.inputs || []).some(function(input) { return input.type === 'list'; });
-    if (supportsGenericLacing) defaultLacingMode = 'shortest';
+    // Show the Lacing dropdown (and pre-select a default) for any node that the
+    // engine will implicitly fan out over lists. Keep this predicate in sync
+    // with the runtime via the shared isAutoLaceable helper.
+    var declaredLacing = def.lacing && def.lacing.mode && def.lacing.mode !== 'none' ? def.lacing.mode : null;
+    var defaultLacingMode = declaredLacing || (isAutoLaceable(def) ? 'shortest' : null);
 
     if (propsControls.length > 0 || (def.controls || []).some(function(c) { return c.type === 'formula'; }) || (defaultLacingMode && defaultLacingMode !== 'none')) {
 
