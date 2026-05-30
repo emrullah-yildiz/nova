@@ -15,7 +15,9 @@ const ENV_KEYS = [
   'GROQ_API_KEY', 'NOVA_GROQ_API_KEY',
   'GEMINI_API_KEY', 'NOVA_GEMINI_API_KEY',
   'OPENROUTER_API_KEY', 'NOVA_OPENROUTER_API_KEY',
-  'CEREBRAS_API_KEY', 'NOVA_CEREBRAS_API_KEY'
+  'CEREBRAS_API_KEY', 'NOVA_CEREBRAS_API_KEY',
+  'NOVA_ENABLE_OPENROUTER', 'NOVA_ENABLE_CEREBRAS',
+  'NOVA_GROQ_MODEL', 'NOVA_GEMINI_MODEL'
 ];
 
 function makeReq({ ip = '10.0.0.1', body = {}, method = 'POST' } = {}) {
@@ -64,6 +66,10 @@ describe('proxy chat — chain integration', () => {
       snapshot[k] = process.env[k];
       delete process.env[k];
     }
+    // Cerebras/OpenRouter are opt-in now; enable them so the multi-provider
+    // chain tests below still exercise the full fallthrough.
+    process.env.NOVA_ENABLE_OPENROUTER = 'true';
+    process.env.NOVA_ENABLE_CEREBRAS = 'true';
     fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
   });
@@ -271,5 +277,32 @@ describe('proxy chat — chain integration', () => {
     // Only provider was rate-limited → surfaced as RATE_LIMITED (429).
     expect(res.statusCode).toBe(429);
     expect(JSON.parse(res.body()).error.code).toBe('RATE_LIMITED');
+  });
+
+  it('opt-in providers are skipped by default even when keyed', async () => {
+    // Cerebras/OpenRouter keys present but the enable flags are NOT set →
+    // they must stay out of the chain so a broken key can't dead-end requests.
+    delete process.env.NOVA_ENABLE_OPENROUTER;
+    delete process.env.NOVA_ENABLE_CEREBRAS;
+    process.env.GROQ_API_KEY = 'gsk_test';
+    process.env.OPENROUTER_API_KEY = 'sk-or-test';
+    process.env.CEREBRAS_API_KEY = 'csk_test';
+    fetchMock.mockResolvedValueOnce(upstream(200, '{"ok":true}'));
+    const req = makeReq({ ip: freshIp() });
+    const res = makeRes();
+    await handler(req, res);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // only groq
+    expect(fetchMock.mock.calls[0][0]).toBe(PROVIDERS.find(p => p.name === 'groq-8b').url);
+  });
+
+  it('model id is overridable per deployment via env (NOVA_GROQ_MODEL)', async () => {
+    process.env.GROQ_API_KEY = 'gsk_test';
+    process.env.NOVA_GROQ_MODEL = 'llama-3.3-70b-versatile';
+    fetchMock.mockResolvedValueOnce(upstream(200, '{"ok":true}'));
+    const req = makeReq({ ip: freshIp(), body: {} }); // no model requested
+    const res = makeRes();
+    await handler(req, res);
+    const sent = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(sent.model).toBe('llama-3.3-70b-versatile');
   });
 });
