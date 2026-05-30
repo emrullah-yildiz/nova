@@ -73,6 +73,11 @@ const app = {
 
       this.hideContextMenu();
 
+      if (!e.target.closest('#account-area')) {
+        const am = document.getElementById('account-menu');
+        if (am) am.classList.remove('visible');
+      }
+
       if (!e.target.closest('.dock-selector') && !e.target.closest('.chat-header-btn'))
 
         document.getElementById('dock-selector').classList.remove('visible');
@@ -89,8 +94,128 @@ const app = {
 
     }
 
+    this.initAccount();
+
     this.initialized = true;
 
+  },
+
+  // ── ACCOUNTS (sign in with Google / SSO; session via httpOnly cookie) ──
+
+  async initAccount() {
+    try {
+      const res = await fetch('/api/auth/config', { credentials: 'include' });
+      this._authConfig = res.ok ? await res.json() : { googleClientId: '', devLogin: false };
+    } catch {
+      this._authConfig = { googleClientId: '', devLogin: false };
+    }
+    await this.refreshSession();
+    this._loadGoogleIdentity();
+  },
+
+  async refreshSession() {
+    try {
+      const res = await fetch('/api/me', { credentials: 'include' });
+      this.currentUser = res.ok ? (await res.json()).user : null;
+    } catch {
+      this.currentUser = null;
+    }
+    this.renderAccount();
+  },
+
+  renderAccount() {
+    const el = document.getElementById('account-area');
+    if (!el) return;
+    const u = this.currentUser;
+    if (u) {
+      const label = u.displayName || u.email || 'Account';
+      const initial = (label[0] || '?').toUpperCase();
+      el.innerHTML =
+        '<button class="account-btn" id="account-btn" title="' + (u.email || '') + '">' +
+        '<span class="account-avatar">' + initial + '</span><span class="account-name">' + label + '</span></button>' +
+        '<div class="account-menu" id="account-menu">' +
+        '<div class="account-menu-email">' + (u.email || '') + '</div>' +
+        '<button class="account-menu-item" onclick="app.logout()">Sign out</button></div>';
+      const btn = document.getElementById('account-btn');
+      const menu = document.getElementById('account-menu');
+      if (btn && menu) btn.onclick = (e) => { e.stopPropagation(); menu.classList.toggle('visible'); };
+    } else {
+      el.innerHTML = '<button class="account-btn account-signin" onclick="app.signIn()">Sign in</button>';
+    }
+  },
+
+  _loadGoogleIdentity() {
+    const clientId = this._authConfig && this._authConfig.googleClientId;
+    if (!clientId || this._gisLoaded) return;
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.async = true;
+    s.defer = true;
+    s.onload = () => {
+      this._gisLoaded = true;
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: (resp) => this._onGoogleCredential(resp)
+        });
+      }
+    };
+    document.head.appendChild(s);
+  },
+
+  signIn() {
+    // Prefer Google One Tap / prompt when configured; otherwise fall back to a
+    // dev login when the deployment allows it (preview/local).
+    if (this._authConfig && this._authConfig.googleClientId && window.google && window.google.accounts) {
+      window.google.accounts.id.prompt();
+      return;
+    }
+    if (this._authConfig && this._authConfig.devLogin) {
+      const email = prompt('Dev sign-in — email:', 'owner@demo.nova');
+      if (email) this._devLogin(email);
+      return;
+    }
+    alert('Sign-in is not configured for this deployment (set GOOGLE_CLIENT_ID).');
+  },
+
+  async _onGoogleCredential(resp) {
+    if (!resp || !resp.credential) return;
+    try {
+      const r = await fetch('/api/auth/oidc/callback', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken: resp.credential })
+      });
+      if (!r.ok) throw new Error('login failed');
+      await this.refreshSession();
+    } catch (e) {
+      alert('Sign-in failed. Please try again.');
+    }
+  },
+
+  async _devLogin(email) {
+    try {
+      const r = await fetch('/api/auth/dev-login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      if (!r.ok) throw new Error('dev login failed');
+      await this.refreshSession();
+    } catch (e) {
+      alert('Dev sign-in failed.');
+    }
+  },
+
+  async logout() {
+    try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch { /* ignore */ }
+    this.currentUser = null;
+    if (window.google && window.google.accounts && window.google.accounts.id) {
+      try { window.google.accounts.id.disableAutoSelect(); } catch { /* ignore */ }
+    }
+    this.renderAccount();
   },
 
 
