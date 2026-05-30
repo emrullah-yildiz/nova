@@ -35,12 +35,26 @@ const GPTClient = {
       apiUrl: 'https://api.openai.com/v1/chat/completions',
       keyPrefix: 'sk-',
       format: 'openai',
+      // OpenAI's reasoning models (gpt-5.x, o-series) require
+      // max_completion_tokens, not the legacy max_tokens. It's accepted by the
+      // classic models too, so the whole provider uses it uniformly.
+      tokenParam: 'max_completion_tokens',
       models: [
         { id: 'gpt-5.5', name: 'GPT-5.5 (recommended)', free: false },
-        { id: 'gpt-5.5-pro', name: 'GPT-5.5 Pro (most capable)', free: false },
         { id: 'gpt-5.4', name: 'GPT-5.4 (more affordable)', free: false },
         { id: 'gpt-5.4-mini', name: 'GPT-5.4 Mini (faster, cheaper)', free: false },
-        { id: 'gpt-5.4-nano', name: 'GPT-5.4 Nano (fastest, cheapest)', free: false }
+        { id: 'gpt-5.4-nano', name: 'GPT-5.4 Nano (fastest, cheapest)', free: false },
+        { id: 'gpt-5', name: 'GPT-5', free: false },
+        { id: 'gpt-5-mini', name: 'GPT-5 Mini', free: false },
+        { id: 'gpt-5-nano', name: 'GPT-5 Nano', free: false },
+        { id: 'o3', name: 'o3 (reasoning)', free: false },
+        { id: 'o1', name: 'o1 (reasoning)', free: false },
+        { id: 'gpt-4.1', name: 'GPT-4.1 (non-reasoning)', free: false },
+        { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', free: false },
+        { id: 'gpt-4o', name: 'GPT-4o', free: false },
+        { id: 'gpt-4o-mini', name: 'GPT-4o Mini', free: false },
+        { id: 'gpt-4', name: 'GPT-4 (legacy)', free: false },
+        { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo (legacy, cheapest)', free: false }
       ]
     },
     groq: {
@@ -52,7 +66,11 @@ const GPTClient = {
         { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B (free, balanced)', free: true },
         { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant (free, fastest)', free: true },
         { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B (free, most capable)', free: true },
-        { id: 'openai/gpt-oss-20b', name: 'GPT-OSS 20B (free, fast)', free: true }
+        { id: 'openai/gpt-oss-20b', name: 'GPT-OSS 20B (free, fast)', free: true },
+        { id: 'meta-llama/llama-4-scout-17b-16e-instruct', name: 'Llama 4 Scout 17B (free, preview)', free: true },
+        { id: 'qwen/qwen3-32b', name: 'Qwen3 32B (free, preview)', free: true },
+        { id: 'groq/compound', name: 'Compound (free, web search + code exec)', free: true },
+        { id: 'groq/compound-mini', name: 'Compound Mini (free, lightweight agent)', free: true }
       ]
     },
     gemini: {
@@ -65,10 +83,14 @@ const GPTClient = {
       format: 'openai',
       models: [
         { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash (recommended, free tier)', free: true },
+        { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro (most capable)', free: false },
+        { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash (preview)', free: true },
         { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite (fast, cheap)', free: true },
+        { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', free: false },
         { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', free: true },
         { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite (fastest)', free: true },
-        { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro (most capable)', free: false }
+        { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (legacy)', free: true },
+        { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite (legacy)', free: true }
       ]
     },
     anthropic: {
@@ -83,8 +105,12 @@ const GPTClient = {
       models: [
         { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6 (recommended)', free: false },
         { id: 'claude-opus-4-8', name: 'Claude Opus 4.8 (most capable)', free: false },
+        { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5 (fastest)', free: false },
         { id: 'claude-opus-4-7', name: 'Claude Opus 4.7', free: false },
-        { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5 (fastest)', free: false }
+        { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', free: false },
+        { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', free: false },
+        { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', free: false },
+        { id: 'claude-opus-4-1', name: 'Claude Opus 4.1', free: false }
       ]
     },
     openrouter: {
@@ -171,6 +197,23 @@ const GPTClient = {
     return (prov && prov.format) || 'openai';
   },
 
+  // Name of the max-output-tokens field for the active provider. OpenAI's
+  // reasoning models require 'max_completion_tokens'; everyone else (and the
+  // proxy) takes the classic 'max_tokens'.
+  getTokenParam(providerOverride) {
+    if (!providerOverride && this.isProxyMode()) return 'max_tokens';
+    var prov = this.PROVIDERS[providerOverride || this.getProvider()];
+    return (prov && prov.tokenParam) || 'max_tokens';
+  },
+
+  // OpenAI's reasoning models (gpt-5.x and the o-series) reject any temperature
+  // other than the default on Chat Completions, so callers must omit it.
+  // Matches "gpt-5", "gpt-5.4-mini", "o1", "o3", "o4-…" but not "gpt-4o" or
+  // "openai/gpt-oss-…".
+  isReasoningModel(model) {
+    return /^(gpt-5|o\d)/.test(String(model || ''));
+  },
+
   // ── WIRE-FORMAT ADAPTERS ──
   // Pure functions (no DOM / no fetch) so they're unit-testable. Each branches
   // on `format`: 'openai' (chat-completions) vs 'anthropic' (/v1/messages).
@@ -192,7 +235,7 @@ const GPTClient = {
     }, extraHeaders || {});
   },
 
-  buildChatPayload(format, model, messages, maxTokens, temperature, stream) {
+  buildChatPayload(format, model, messages, maxTokens, temperature, stream, tokenParam) {
     if (format === 'anthropic') {
       // Anthropic carries the system prompt as a top-level field, not a
       // message role, and requires max_tokens. Fold any system messages into
@@ -209,7 +252,11 @@ const GPTClient = {
       if (stream) payload.stream = true;
       return payload;
     }
-    var openai = { model: model, messages: messages, max_tokens: maxTokens, temperature: temperature };
+    // OpenAI-compatible. The output-token field name varies (max_tokens vs
+    // max_completion_tokens) and reasoning models reject a custom temperature.
+    var openai = { model: model, messages: messages };
+    openai[tokenParam || 'max_tokens'] = maxTokens;
+    if (!this.isReasoningModel(model)) openai.temperature = temperature;
     if (stream) openai.stream = true;
     return openai;
   },
@@ -744,7 +791,7 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     const response = await fetch(this.getEffectiveApiUrl(), {
       method: 'POST',
       headers: this.buildRequestHeaders(),
-      body: JSON.stringify(this.buildChatPayload(format, this.getEffectiveModel(), messages, maxTokens, this.TEMPERATURE, false))
+      body: JSON.stringify(this.buildChatPayload(format, this.getEffectiveModel(), messages, maxTokens, this.TEMPERATURE, false, this.getTokenParam()))
     });
     if (response.status === 503 && proxyMode) {
       NFLogger.aiError('Proxy not configured', providerLabel);
@@ -834,7 +881,7 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
       const response = await fetch(this.getEffectiveApiUrl(), {
         method: 'POST',
         headers: this.buildRequestHeaders(),
-        body: JSON.stringify(this.buildChatPayload(format, this.getEffectiveModel(), messages, maxTokens, this.TEMPERATURE, true))
+        body: JSON.stringify(this.buildChatPayload(format, this.getEffectiveModel(), messages, maxTokens, this.TEMPERATURE, true, this.getTokenParam()))
       });
       if (!response.ok) {
         if (response.status === 503 && proxyMode) {
@@ -1077,7 +1124,7 @@ const SettingsDialog = {
       const response = await fetch(GPTClient.getApiUrl(), {
         method: 'POST',
         headers: headers,
-        body: JSON.stringify(GPTClient.buildChatPayload(format, model, [{ role: 'user', content: 'Reply with just: OK' }], 16, 0, false))
+        body: JSON.stringify(GPTClient.buildChatPayload(format, model, [{ role: 'user', content: 'Reply with just: OK' }], 64, 0, false, GPTClient.getTokenParam(provider)))
       });
       if (response.ok) {
         const data = await response.json();
