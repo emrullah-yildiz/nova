@@ -9,7 +9,7 @@
 // The legacy Vercel deployment remains the source of truth until cutover.
 
 import { Hono } from 'hono';
-import { PROVIDERS, resolveProvider, pickModel, shouldFallthrough } from '../api/proxy/chat.mjs';
+import { PROVIDERS, resolveProvider, pickModel, shouldFallthrough, summarizeFailure } from '../api/proxy/chat.mjs';
 import { handleEnterpriseApi } from './api.mjs';
 
 const MAX_TOKENS_CAP = 512;
@@ -83,10 +83,10 @@ app.post('/api/proxy/chat', async (c) => {
     return new Response(upstream.body, { status: upstream.status, headers });
   }
 
-  return c.json(
-    { error: { message: 'All free-tier providers are temporarily unavailable. Bring your own API key in Settings → Preferences.', code: 'ALL_PROVIDERS_FAILED', attempts, lastError } },
-    502, cors(env)
-  );
+  const fail = summarizeFailure(attempts, lastError);
+  const headers = { ...cors(env) };
+  if (fail.retryAfter) headers['Retry-After'] = String(fail.retryAfter);
+  return c.json(fail.body, fail.status, headers);
 });
 
 // Enterprise API (auth/projects/versions/members/…): the shared dispatcher

@@ -178,6 +178,39 @@ export function shouldFallthrough(status, bodyText) {
 
 export { PROVIDERS };
 
+// Turn the per-provider failure list into a single user-facing error. A rate
+// limit (429) is surfaced as its own RATE_LIMITED status so the UI can tell the
+// user "you're being throttled, wait or BYOK" instead of a vague outage.
+export function summarizeFailure(attempts = [], lastError) {
+  const rateLimited = attempts.find(a => a && a.status === 429);
+  if (rateLimited) {
+    return {
+      status: 429,
+      retryAfter: 30,
+      body: {
+        error: {
+          message: 'The free AI tier is rate-limited right now (too many requests in a short window). Wait about a minute and try again — or add your own free API key in Settings → Preferences for unlimited use.',
+          code: 'RATE_LIMITED',
+          attempts,
+          lastError
+        }
+      }
+    };
+  }
+  return {
+    status: 502,
+    retryAfter: null,
+    body: {
+      error: {
+        message: 'All free-tier AI providers are temporarily unavailable. Bring your own free API key in Settings → Preferences for direct access.',
+        code: 'ALL_PROVIDERS_FAILED',
+        attempts,
+        lastError
+      }
+    }
+  };
+}
+
 async function tryProvider(provider, body) {
   const forwardBody = {
     model: pickModel(provider, body.model),
@@ -282,14 +315,8 @@ export default async function handler(req, res) {
     return;
   }
 
-  // All providers failed.
+  // All providers failed — surface the real reason (rate limit vs outage).
   console.error('[nova-proxy] all providers failed:', JSON.stringify(attempts));
-  sendJson(res, 502, {
-    error: {
-      message: 'All free-tier providers are temporarily unavailable. Bring your own API key in Settings → Preferences for direct access.',
-      code: 'ALL_PROVIDERS_FAILED',
-      attempts,
-      lastError
-    }
-  });
+  const fail = summarizeFailure(attempts, lastError);
+  sendJson(res, fail.status, fail.body, fail.retryAfter ? { 'Retry-After': String(fail.retryAfter) } : undefined);
 }
