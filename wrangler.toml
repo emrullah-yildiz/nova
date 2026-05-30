@@ -1,0 +1,43 @@
+# Cloudflare Workers config for the Nova API + static SPA.
+# Phase 0 of the all-Cloudflare migration (see docs/accounts-collaboration.md).
+# The legacy Vercel deployment stays live until cutover; this is additive.
+
+name = "nova"
+main = "worker/index.mjs"
+compatibility_date = "2024-11-01"
+# nodejs_compat lets the ported domain logic use the Node APIs workerd supports.
+compatibility_flags = ["nodejs_compat"]
+
+# Serve the Vite build as static assets; the Worker handles /api/* and falls
+# back to these for everything else (SPA). Run `npm run build` first.
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+# Non-secret config. Secrets (GROQ_API_KEY, NOVA_DATABASE_URL, NOVA_SESSION_SECRET,
+# OIDC client id/secret, …) are set with `wrangler secret put <NAME>`.
+[vars]
+NOVA_CORS_ORIGIN = "*"
+
+# Per-IP AI-proxy rate limiting (replaces the in-memory Map). Create with:
+#   wrangler kv namespace create RATE_KV
+# then paste the id below.
+# [[kv_namespaces]]
+# binding = "RATE_KV"
+# id = "<kv-namespace-id>"
+
+# Accelerated/pooled Postgres to Neon (Phase 0 DB step). Create with:
+#   wrangler hyperdrive create nova-neon --connection-string="$NOVA_DATABASE_URL"
+# [[hyperdrive]]
+# binding = "HYPERDRIVE"
+# id = "<hyperdrive-id>"
+
+# Realtime collaboration rooms (Phase 4). Uncomment once the ProjectRoom class
+# ships in the worker entry — a DO binding without its class fails to deploy.
+# [[durable_objects.bindings]]
+# name = "PROJECT_ROOM"
+# class_name = "ProjectRoom"
+#
+# [[migrations]]
+# tag = "v1"
+# new_classes = ["ProjectRoom"]

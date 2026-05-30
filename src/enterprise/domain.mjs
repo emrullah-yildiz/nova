@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { hashToken } from './state-store.mjs';
+import { hashToken } from './state-hash.mjs';
 
 export const ROLES = Object.freeze({
   OWNER: 'Owner',
@@ -117,14 +117,23 @@ export class EnterpriseStore {
   }
 
   async createAuthSessionAsync({ email, organizationId }) {
-    const session = this.createAuthSession({ email, organizationId });
+    // Async-crypto variant of createAuthSession: works with both the sync
+    // node AuthService and the Worker's async WebCrypto auth service.
+    const user = Array.from(this.users.values()).find(item => item.email === email);
+    if (!user) throw createHttpError(401, 'Unknown user.');
+    const membership = this.requireMembership(user.id, organizationId);
+    const token = this.authService
+      ? await this.authService.createSessionTokenAsync({ userId: user.id, organizationId, role: membership.role })
+      : Buffer.from(JSON.stringify({ sub: user.id, org: organizationId, role: membership.role, iat: this.now() })).toString('base64url');
+    this.audit({ organizationId, userId: user.id, type: 'auth.login', targetId: user.id });
+    const session = { token, user: publicUser(user, organizationId, membership.role) };
     if (this.stateStore) {
-      const payload = this.authService ? this.authService.verifySessionToken(session.token) : { sub: session.user.id, org: organizationId, role: session.user.role };
+      const payload = this.authService ? await this.authService.verifySessionTokenAsync(token) : { sub: user.id, org: organizationId, role: membership.role };
       const ttlMs = payload.exp ? Math.max(1, payload.exp - this.now()) : 8 * 60 * 60 * 1000;
-      await this.stateStore.set('session:' + hashToken(session.token), {
-        userId: session.user.id,
+      await this.stateStore.set('session:' + hashToken(token), {
+        userId: user.id,
         organizationId,
-        role: session.user.role,
+        role: membership.role,
         createdAt: this.now()
       }, ttlMs);
     }
@@ -162,7 +171,23 @@ export class EnterpriseStore {
   }
 
   async authenticateAsync(token) {
-    const context = this.authenticate(token);
+    if (!token) throw createHttpError(401, 'Missing bearer token.');
+    let payload;
+    try {
+      payload = this.authService
+        ? await this.authService.verifySessionTokenAsync(token)
+        : JSON.parse(Buffer.from(token, 'base64url').toString('utf8'));
+    } catch (error) {
+      throw createHttpError(401, 'Invalid bearer token.');
+    }
+    const user = this.requireUser(payload.sub);
+    const membership = this.requireMembership(user.id, payload.org);
+    const context = {
+      userId: user.id,
+      organizationId: payload.org,
+      role: membership.role,
+      user: publicUser(user, payload.org, membership.role)
+    };
     if (this.stateStore) {
       const session = await this.stateStore.get('session:' + hashToken(token));
       if (!session) throw createHttpError(401, 'Session expired.');
