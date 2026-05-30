@@ -199,6 +199,37 @@ describe('GPTClient', () => {
       expect(GPTClient.buildChatPayload('openai', 'gpt-4o', [user], 100, 0.7, true).stream).toBe(true);
     });
 
+    it('uses the provider token-param name (OpenAI reasoning models need max_completion_tokens)', () => {
+      const body = GPTClient.buildChatPayload('openai', 'gpt-5.5', [user], 200, 0.7, false, 'max_completion_tokens');
+      expect(body.max_completion_tokens).toBe(200);
+      expect(body.max_tokens).toBeUndefined();
+    });
+
+    it('omits temperature for OpenAI reasoning models, keeps it for classic chat models', () => {
+      // gpt-5.x / o-series reject a non-default temperature on Chat Completions.
+      expect(GPTClient.buildChatPayload('openai', 'gpt-5.4-mini', [user], 50, 0.7, false, 'max_completion_tokens').temperature).toBeUndefined();
+      expect(GPTClient.buildChatPayload('openai', 'o3', [user], 50, 0.7, false, 'max_completion_tokens').temperature).toBeUndefined();
+      expect(GPTClient.buildChatPayload('openai', 'gpt-4o', [user], 50, 0.7, false, 'max_completion_tokens').temperature).toBe(0.7);
+    });
+
+    it('isReasoningModel matches gpt-5.x and o-series only', () => {
+      expect(GPTClient.isReasoningModel('gpt-5.5')).toBe(true);
+      expect(GPTClient.isReasoningModel('o1')).toBe(true);
+      expect(GPTClient.isReasoningModel('o3')).toBe(true);
+      expect(GPTClient.isReasoningModel('gpt-4o')).toBe(false);
+      expect(GPTClient.isReasoningModel('gpt-4.1')).toBe(false);
+      expect(GPTClient.isReasoningModel('openai/gpt-oss-120b')).toBe(false);
+    });
+
+    it('getTokenParam returns max_completion_tokens only for OpenAI', () => {
+      installLocalStorage({ nodeflow_provider: 'openai', nodeflow_key_openai: 'sk-1234567890' });
+      expect(GPTClient.getTokenParam()).toBe('max_completion_tokens');
+      installLocalStorage({ nodeflow_provider: 'groq', nodeflow_key_groq: 'gsk_1234567890' });
+      expect(GPTClient.getTokenParam()).toBe('max_tokens');
+      installLocalStorage(); // proxy
+      expect(GPTClient.getTokenParam()).toBe('max_tokens');
+    });
+
     it('Anthropic payload hoists system out of messages and requires max_tokens', () => {
       const body = GPTClient.buildChatPayload('anthropic', 'claude-sonnet-4-6', [sys, user], 256, 0.7, true);
       expect(body.system).toBe('be brief');
