@@ -612,18 +612,19 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     if (!app._cloudProjectId) { app.addAIMessage && app.addAIMessage('workspace', 'Save this project to your account first (File → Save → Save to cloud), then share it.'); return; }
     const existing = document.getElementById('share-dialog-overlay');
     if (existing) existing.remove();
+    app._freshLinkUrls = {}; // raw URLs are only known for links created this session
     const overlay = document.createElement('div');
     overlay.id = 'share-dialog-overlay';
     overlay.className = 'project-save-overlay';
     overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
-    overlay.innerHTML = '<div class="project-save-dialog" role="dialog" aria-modal="true" style="width:480px">' +
+    overlay.innerHTML = '<div class="project-save-dialog" role="dialog" aria-modal="true">' +
       '<div class="project-save-header"><div class="project-save-mark">↗</div>' +
       '<div><h3>Share project</h3><p>Anyone signed in with the link gets the access you choose.</p></div>' +
       '<button class="project-save-close" onclick="document.getElementById(\'share-dialog-overlay\').remove()" aria-label="Close">x</button></div>' +
-      '<div style="display:flex;gap:8px;align-items:center;padding:4px 0 12px">' +
-        '<select id="share-role" class="settings-input" style="flex:0 0 auto">' +
-          '<option value="Editor">Can edit</option><option value="Viewer">Can view</option></select>' +
-        '<button id="share-generate" class="project-save-action" style="flex:1" onclick="app._generateShareLink()"><strong>Create link</strong></button>' +
+      '<div class="share-controls">' +
+        '<span class="share-select"><select id="share-role" aria-label="Access level">' +
+          '<option value="Editor">Can edit</option><option value="Viewer">Can view</option></select></span>' +
+        '<button class="share-create-btn" id="share-generate" onclick="app._generateShareLink()">Create link</button>' +
       '</div>' +
       '<div id="share-link-list" style="max-height:46vh;overflow-y:auto"></div>' +
       '<div class="project-save-footer"><span>Links require the recipient to sign in.</span>' +
@@ -633,24 +634,22 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   };
 
   app._generateShareLink = async function() {
-    const role = (document.getElementById('share-role') || {}).value || 'Editor';
+    const sel = document.getElementById('share-role');
+    const role = (sel && sel.value) || 'Editor';
     const btn = document.getElementById('share-generate');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<strong>Creating…</strong>'; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
     try {
       const link = await app.getNovaCloudClient().createShareLink(app._cloudProjectId, { role });
       const url = (typeof location !== 'undefined' ? location.origin : '') + '/?join=' + encodeURIComponent(link.token);
-      const box = document.getElementById('share-fresh-link');
-      if (box) {
-        box.style.display = 'block';
-        box.innerHTML = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">New ' + escapeHtml(role) + ' link — copy it now, it won\'t be shown again:</div>' +
-          '<div style="display:flex;gap:6px"><input readonly value="' + escapeHtml(url) + '" class="settings-input" style="flex:1" onclick="this.select()" />' +
-          '<button class="project-save-action" onclick="(function(b){navigator.clipboard&&navigator.clipboard.writeText(' + JSON.stringify(url).replace(/"/g, '&quot;') + ');b.textContent=\'Copied\';})(this)">Copy</button></div>';
-      }
+      // Remember the raw URL for this session so it survives a list re-render
+      // (the server never returns the token again).
+      app._freshLinkUrls = app._freshLinkUrls || {};
+      app._freshLinkUrls[link.id] = url;
       await app._renderShareLinks();
     } catch (e) {
       app.addAIMessage && app.addAIMessage('workspace', 'Could not create share link: ' + e.message);
     } finally {
-      if (btn) { btn.disabled = false; btn.innerHTML = '<strong>Create link</strong>'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Create link'; }
     }
   };
 
@@ -659,21 +658,43 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     if (!list) return;
     let links = [];
     try { links = (await app.getNovaCloudClient().listShareLinks(app._cloudProjectId)).shareLinks || []; } catch (e) { /* ignore */ }
-    const active = links.filter(l => !l.revokedAt);
-    const rows = active.map(l =>
-      '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border-color)">' +
-      '<span class="ri-icon">' + (l.role === 'Viewer' ? '👁' : '✎') + '</span>' +
-      '<span style="flex:1;font-size:12px;color:var(--text-primary)">' + escapeHtml(l.role === 'Viewer' ? 'Can view' : 'Can edit') + '<span style="color:var(--text-muted)"> · ' + escapeHtml(_timeAgo(l.createdAt)) + '</span></span>' +
-      '<button class="project-save-action" style="padding:4px 10px" onclick="app._revokeShareLink(\'' + escapeJsString(l.id) + '\')">Revoke</button></div>'
-    ).join('');
-    list.innerHTML = '<div id="share-fresh-link" style="display:none;padding:8px 0"></div>' +
-      (active.length ? '<div style="font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text-muted);padding:8px 0 2px">Active links</div>' + rows
-        : '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No active links yet.</div>');
+    const active = links.filter(l => !l.revokedAt).sort((a, b) => b.createdAt - a.createdAt);
+    if (!active.length) { list.innerHTML = '<div class="share-empty">No active links yet — create one above.</div>'; return; }
+    const fresh = app._freshLinkUrls || {};
+    const roleLabel = r => (r === 'Viewer' ? 'Can view' : 'Can edit');
+    const revokeBtn = l => '<button class="share-icon-btn danger" title="Revoke link" onclick="app._revokeShareLink(\'' + escapeJsString(l.id) + '\')">🗑</button>';
+    const rows = active.map(l => {
+      if (fresh[l.id]) {
+        return '<div class="share-link-row">' +
+          '<input class="share-url-input" readonly value="' + escapeHtml(fresh[l.id]) + '" title="' + escapeHtml(roleLabel(l.role)) + ' link" onclick="this.select()" />' +
+          '<button class="share-icon-btn" title="Copy link" data-url="' + escapeHtml(fresh[l.id]) + '" onclick="app._copyShareUrl(this)">📋</button>' +
+          revokeBtn(l) + '</div>';
+      }
+      // Older link (token not held this session) — metadata only, still revocable.
+      return '<div class="share-link-row">' +
+        '<span class="ri-icon">' + (l.role === 'Viewer' ? '👁' : '✎') + '</span>' +
+        '<span class="share-link-meta">' + escapeHtml(roleLabel(l.role)) + ' · ' + escapeHtml(_timeAgo(l.createdAt)) +
+        ' <span style="color:var(--text-muted)">· link hidden, make a new one to copy</span></span>' +
+        revokeBtn(l) + '</div>';
+    }).join('');
+    list.innerHTML = '<div class="share-section-label">Active links</div>' + rows;
+  };
+
+  app._copyShareUrl = function(btn) {
+    const url = btn && btn.getAttribute('data-url');
+    if (!url) return;
+    try { if (navigator.clipboard) navigator.clipboard.writeText(url); } catch (e) { /* ignore */ }
+    const prev = btn.textContent;
+    btn.textContent = '✓';
+    setTimeout(function() { btn.textContent = prev; }, 1200);
   };
 
   app._revokeShareLink = async function(linkId) {
-    try { await app.getNovaCloudClient().revokeShareLink(app._cloudProjectId, linkId); await app._renderShareLinks(); }
-    catch (e) { app.addAIMessage && app.addAIMessage('workspace', 'Revoke failed: ' + e.message); }
+    try {
+      await app.getNovaCloudClient().revokeShareLink(app._cloudProjectId, linkId);
+      if (app._freshLinkUrls) delete app._freshLinkUrls[linkId];
+      await app._renderShareLinks();
+    } catch (e) { app.addAIMessage && app.addAIMessage('workspace', 'Revoke failed: ' + e.message); }
   };
 
   function _timeAgo(ts) {
