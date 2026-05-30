@@ -1059,9 +1059,39 @@ export class EnterpriseStore {
 
   persist() {
     if (!this.persistence) return;
-    const result = this.persistence.writeSnapshot(this.exportSnapshot());
+    const snapshot = this.exportSnapshot();
+    const logFail = (error) => {
+      if (typeof console !== 'undefined') console.error('[nova] snapshot persist failed: %s', (error && error.message) || error);
+    };
+    // Synchronous persistence (e.g. JSON file): write immediately so a freshly
+    // constructed store can read it back in the same tick.
+    if (this._persistIsAsync === false) {
+      try { this.persistence.writeSnapshot(snapshot); } catch (error) { logFail(error); }
+      return;
+    }
+    // Asynchronous persistence (e.g. Neon): SERIALIZE writes by chaining onto
+    // the previous one, so two rapid mutations never run two concurrent
+    // full-snapshot transactions (which deadlock on Postgres and made a write
+    // fail after the in-memory change had already succeeded). Errors are logged,
+    // not propagated — the in-memory state is intact and the next write rewrites
+    // it. flushPersistence() therefore never rejects.
+    if (this._persistIsAsync === true) {
+      this._lastPersistPromise = this._lastPersistPromise
+        .catch(() => {})
+        .then(() => this.persistence.writeSnapshot(snapshot))
+        .catch(logFail);
+      return;
+    }
+    // First write — detect sync vs async from the return value, then route
+    // subsequent writes accordingly.
+    let result;
+    try { result = this.persistence.writeSnapshot(snapshot); }
+    catch (error) { this._persistIsAsync = false; logFail(error); return; }
     if (result && typeof result.then === 'function') {
-      this._lastPersistPromise = result;
+      this._persistIsAsync = true;
+      this._lastPersistPromise = Promise.resolve(result).catch(logFail);
+    } else {
+      this._persistIsAsync = false;
     }
   }
 

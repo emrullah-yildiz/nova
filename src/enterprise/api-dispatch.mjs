@@ -137,7 +137,17 @@ export function createApiDispatcher({ store, authService, aiProvider, objectStor
     const context = route.public ? null : await store.authenticateAsync(bearerToken(authorization));
     const url = { searchParams: searchParams instanceof URLSearchParams ? searchParams : new URLSearchParams(searchParams || '') };
     const result = await route.handler({ store, context, params: route.params, body: body || {}, url, aiProvider, authService, objectStorage, emailService, secretsService, issueService, appUrl: request.appUrl || appUrl });
-    if (store.flushPersistence) await store.flushPersistence();
+    // Persistence is write-behind: the handler already mutated the in-memory
+    // store and returned its result. A snapshot-write failure here must NOT turn
+    // a successful mutation into an error for the client (e.g. an invite that
+    // was created + emailed showing "could not send"). Log and move on; the
+    // in-memory state is intact and a later write rewrites it.
+    if (store.flushPersistence) {
+      try { await store.flushPersistence(); }
+      catch (error) {
+        if (typeof console !== 'undefined') console.error('[nova] persist flush failed (mutation still succeeded): %s', (error && error.message) || error);
+      }
+    }
     return { status: route.status || 200, body: result };
   };
 }

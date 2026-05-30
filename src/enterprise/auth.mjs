@@ -43,8 +43,16 @@ export class AuthService {
 
   async verifyOidcLogin({ idToken, organizationSlug }) {
     if (!this.oidcVerifier) throw createHttpError(501, 'OIDC verifier is not configured.');
-    const identity = await this.oidcVerifier({ idToken, organizationSlug });
-    if (!identity || !identity.email) throw createHttpError(401, 'OIDC identity is invalid.');
+    let identity;
+    try {
+      identity = await this.oidcVerifier({ idToken, organizationSlug });
+    } catch (error) {
+      // Surface the real reason (audience/issuer/signature/JWKS/expiry) as a
+      // clean 401 instead of an opaque 500 — so the client shows why sign-in
+      // failed rather than a generic message.
+      throw createHttpError(401, 'Could not verify your Google sign-in: ' + ((error && error.message) || 'verification failed'), 'OIDC_VERIFY_FAILED');
+    }
+    if (!identity || !identity.email) throw createHttpError(401, 'OIDC identity is invalid.', 'OIDC_VERIFY_FAILED');
     return {
       email: identity.email,
       displayName: identity.displayName || identity.email,
