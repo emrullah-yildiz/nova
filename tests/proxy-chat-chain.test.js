@@ -14,8 +14,7 @@ import handler, { PROVIDERS } from '../api/proxy/chat.mjs';
 const ENV_KEYS = [
   'GROQ_API_KEY', 'NOVA_GROQ_API_KEY',
   'GEMINI_API_KEY', 'NOVA_GEMINI_API_KEY',
-  'OPENROUTER_API_KEY', 'NOVA_OPENROUTER_API_KEY',
-  'CEREBRAS_API_KEY', 'NOVA_CEREBRAS_API_KEY'
+  'NOVA_GROQ_MODEL', 'NOVA_GEMINI_MODEL'
 ];
 
 function makeReq({ ip = '10.0.0.1', body = {}, method = 'POST' } = {}) {
@@ -106,10 +105,10 @@ describe('proxy chat — chain integration', () => {
     expect(res.headers['X-Nova-Provider']).toBe('groq-8b');
   });
 
-  it('falls through Groq 429 to the next configured provider', async () => {
+  it('falls through Groq 429 to Gemini', async () => {
     // The exact "Groq TPM cap hit" path the user reported in production.
     process.env.GROQ_API_KEY = 'gsk_test_key';
-    process.env.OPENROUTER_API_KEY = 'sk-or-test_key';
+    process.env.GEMINI_API_KEY = 'gem_test_key';
     fetchMock
       .mockResolvedValueOnce(upstream(429, 'Too many requests'))
       .mockResolvedValueOnce(upstream(200, '{"choices":[{"message":{"content":"ok"}}]}'));
@@ -118,20 +117,19 @@ describe('proxy chat — chain integration', () => {
     await handler(req, res);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const groq = PROVIDERS.find(p => p.name === 'groq-8b');
-    const openrouter = PROVIDERS.find(p => p.name === 'openrouter-free');
+    const gemini = PROVIDERS.find(p => p.name === 'gemini-flash');
     expect(fetchMock.mock.calls[0][0]).toBe(groq.url);
-    expect(fetchMock.mock.calls[1][0]).toBe(openrouter.url);
+    expect(fetchMock.mock.calls[1][0]).toBe(gemini.url);
     expect(res.statusCode).toBe(200);
-    expect(res.headers['X-Nova-Provider']).toBe('openrouter-free');
+    expect(res.headers['X-Nova-Provider']).toBe('gemini-flash');
   });
 
-  it('falls through model-not-found 4xx', async () => {
-    // The exact Cerebras "Model llama-3.3-70b does not exist or you do not
-    // have access to it" path that used to dead-end the chain.
-    process.env.CEREBRAS_API_KEY = 'csk_test_key';
-    process.env.OPENROUTER_API_KEY = 'sk-or-test_key';
+  it('falls through model-not-found 4xx to the next provider', async () => {
+    // A "model does not exist / no access" 4xx must not dead-end the chain.
+    process.env.GROQ_API_KEY = 'gsk_test_key';
+    process.env.GEMINI_API_KEY = 'gem_test_key';
     fetchMock
-      .mockResolvedValueOnce(upstream(404, 'Model llama-3.3-70b does not exist or you do not have access to it'))
+      .mockResolvedValueOnce(upstream(404, 'Model does not exist or you do not have access to it'))
       .mockResolvedValueOnce(upstream(200, '{"choices":[{"message":{"content":"ok"}}]}'));
     const req = makeReq({ ip: freshIp() });
     const res = makeRes();
@@ -140,55 +138,46 @@ describe('proxy chat — chain integration', () => {
     expect(res.statusCode).toBe(200);
   });
 
-  it('does NOT fall through 401 auth errors — retrying with another key will not fix a misconfigured one', async () => {
+  it('does NOT fall through 401 auth errors even when another provider exists', async () => {
     process.env.GROQ_API_KEY = 'gsk_wrong_key';
-    process.env.OPENROUTER_API_KEY = 'sk-or-test_key';
+    process.env.GEMINI_API_KEY = 'gem_test_key';
     fetchMock.mockResolvedValueOnce(upstream(401, '{"error":{"message":"Invalid API Key"}}'));
     const req = makeReq({ ip: freshIp() });
     const res = makeRes();
     await handler(req, res);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // does not try gemini
     expect(res.statusCode).toBe(401);
     expect(res.body()).toContain('Invalid API Key');
   });
 
   it('returns 429 RATE_LIMITED with attempts[] when every provider 429s', async () => {
-    // Worst-case: every free tier is rate-limited at the same time. The user
-    // must see the actual reason (throttled), not a vague outage — so it's a
-    // 429 RATE_LIMITED, not a 502.
+    // Worst-case: both free tiers are rate-limited at once. The user must see
+    // the actual reason (throttled), not a vague outage — so it's a 429
+    // RATE_LIMITED, not a 502.
     process.env.GROQ_API_KEY = 'gsk_test';
-    process.env.OPENROUTER_API_KEY = 'sk-or-test';
-    process.env.CEREBRAS_API_KEY = 'csk_test';
+    process.env.GEMINI_API_KEY = 'gem_test';
     fetchMock
-      .mockResolvedValueOnce(upstream(429, 'rate limited'))
       .mockResolvedValueOnce(upstream(429, 'rate limited'))
       .mockResolvedValueOnce(upstream(429, 'rate limited'));
     const req = makeReq({ ip: freshIp() });
     const res = makeRes();
     await handler(req, res);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(res.statusCode).toBe(429);
     const body = JSON.parse(res.body());
     expect(body.error.code).toBe('RATE_LIMITED');
     expect(Array.isArray(body.error.attempts)).toBe(true);
-    expect(body.error.attempts.length).toBe(3);
-    // Attempts must record which provider failed and the status — so the
-    // network-tab debugger never has to guess.
+    expect(body.error.attempts.length).toBe(2);
     expect(body.error.attempts[0].provider).toBe('groq-8b');
     expect(body.error.attempts[0].status).toBe(429);
   });
 
   it('sends each provider its OWN default model — never the previous provider\'s model ID', async () => {
-    // The cross-provider model-routing bug: Groq used to forward its
-    // "llama-3.1-8b-instant" ID to OpenRouter on fallover, and OpenRouter
-    // returned 400 "not a valid model ID" because it expects its own
-    // naming. Verify each upstream request body carries an ID that
-    // belongs to that provider.
+    // Cross-provider model-routing guard: each upstream request must carry a
+    // model id that belongs to that provider, not the previous one's.
     process.env.GROQ_API_KEY = 'gsk_test';
-    process.env.OPENROUTER_API_KEY = 'sk-or-test';
-    process.env.CEREBRAS_API_KEY = 'csk_test';
+    process.env.GEMINI_API_KEY = 'gem_test';
     fetchMock
-      .mockResolvedValueOnce(upstream(429, 'rate limited'))
       .mockResolvedValueOnce(upstream(429, 'rate limited'))
       .mockResolvedValueOnce(upstream(429, 'rate limited'));
     const req = makeReq({ ip: freshIp() });
@@ -196,16 +185,14 @@ describe('proxy chat — chain integration', () => {
     await handler(req, res);
 
     const groq = PROVIDERS.find(p => p.name === 'groq-8b');
-    const openrouter = PROVIDERS.find(p => p.name === 'openrouter-free');
-    const cerebras = PROVIDERS.find(p => p.name === 'cerebras');
+    const gemini = PROVIDERS.find(p => p.name === 'gemini-flash');
 
     for (let i = 0; i < fetchMock.mock.calls.length; i++) {
       const url = fetchMock.mock.calls[i][0];
       const sentBody = JSON.parse(fetchMock.mock.calls[i][1].body);
       const expected =
         url === groq.url ? groq.allowedModels :
-        url === openrouter.url ? openrouter.allowedModels :
-        url === cerebras.url ? cerebras.allowedModels :
+        url === gemini.url ? gemini.allowedModels :
         null;
       expect(expected, `attempt ${i} URL not recognized: ${url}`).not.toBe(null);
       expect(expected.has(sentBody.model), `${url} got cross-provider model ${sentBody.model}`).toBe(true);
@@ -257,9 +244,8 @@ describe('proxy chat — chain integration', () => {
   });
 
   it('skips providers whose key is missing — single-key deployments still work', async () => {
-    // Common case: deployer only set GROQ_API_KEY. We must NOT try to call
-    // OpenRouter or Cerebras with empty Authorization headers; they're
-    // simply not in the chain.
+    // Common case: deployer only set GROQ_API_KEY. Gemini has no key, so it's
+    // simply not in the chain (no empty-Authorization call).
     process.env.GROQ_API_KEY = 'gsk_test';
     fetchMock.mockResolvedValueOnce(upstream(429, 'rate limited'));
     const req = makeReq({ ip: freshIp() });
@@ -271,5 +257,16 @@ describe('proxy chat — chain integration', () => {
     // Only provider was rate-limited → surfaced as RATE_LIMITED (429).
     expect(res.statusCode).toBe(429);
     expect(JSON.parse(res.body()).error.code).toBe('RATE_LIMITED');
+  });
+
+  it('model id is overridable per deployment via env (NOVA_GROQ_MODEL)', async () => {
+    process.env.GROQ_API_KEY = 'gsk_test';
+    process.env.NOVA_GROQ_MODEL = 'llama-3.3-70b-versatile';
+    fetchMock.mockResolvedValueOnce(upstream(200, '{"ok":true}'));
+    const req = makeReq({ ip: freshIp(), body: {} }); // no model requested
+    const res = makeRes();
+    await handler(req, res);
+    const sent = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(sent.model).toBe('llama-3.3-70b-versatile');
   });
 });

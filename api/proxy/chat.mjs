@@ -15,6 +15,7 @@ const PROVIDERS = [
     url: 'https://api.groq.com/openai/v1/chat/completions',
     envKey: 'GROQ_API_KEY',
     altEnvKey: 'NOVA_GROQ_API_KEY',
+    modelEnvKey: 'NOVA_GROQ_MODEL',
     defaultModel: 'llama-3.1-8b-instant',
     allowedModels: new Set([
       'llama-3.1-8b-instant',
@@ -33,6 +34,7 @@ const PROVIDERS = [
     url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
     envKey: 'GEMINI_API_KEY',
     altEnvKey: 'NOVA_GEMINI_API_KEY',
+    modelEnvKey: 'NOVA_GEMINI_MODEL',
     // gemini-2.0-flash-exp was removed; gemini-2.0-flash is the GA replacement.
     defaultModel: 'gemini-2.0-flash',
     allowedModels: new Set([
@@ -42,34 +44,6 @@ const PROVIDERS = [
       'gemini-1.5-flash',
       'gemini-2.0-flash-exp'
     ])
-  },
-  {
-    name: 'openrouter-free',
-    url: 'https://openrouter.ai/api/v1/chat/completions',
-    envKey: 'OPENROUTER_API_KEY',
-    altEnvKey: 'NOVA_OPENROUTER_API_KEY',
-    defaultModel: 'meta-llama/llama-3.3-70b-instruct:free',
-    allowedModels: new Set([
-      'meta-llama/llama-3.3-70b-instruct:free',
-      'meta-llama/llama-3.1-8b-instruct:free',
-      'google/gemini-2.0-flash-exp:free',
-      'deepseek/deepseek-chat:free'
-    ]),
-    extraHeaders: () => ({
-      'HTTP-Referer': process.env.NOVA_PUBLIC_URL || 'https://nova.app',
-      'X-Title': 'Nova'
-    })
-  },
-  {
-    name: 'cerebras',
-    url: 'https://api.cerebras.ai/v1/chat/completions',
-    envKey: 'CEREBRAS_API_KEY',
-    altEnvKey: 'NOVA_CEREBRAS_API_KEY',
-    // Cerebras model ids (verify against your account — availability varies by
-    // tier). llama-3.3-70b is the broadly-available default; shouldFallthrough()
-    // skips Cerebras on "model not found"/auth errors so it never dead-ends.
-    defaultModel: 'llama-3.3-70b',
-    allowedModels: new Set(['llama-3.3-70b', 'llama3.1-8b', 'llama-4-scout-17b-16e-instruct', 'qwen-3-32b'])
   }
 ];
 
@@ -138,13 +112,17 @@ export function resolveProvider(p, env) {
   const raw = envSource[p.envKey] || envSource[p.altEnvKey];
   const key = raw ? String(raw).trim() : '';
   if (!key) return null;
+  // Model id is configurable per deployment (env) → provider model churn is a
+  // variable change, not a code change.
+  const model = (p.modelEnvKey && envSource[p.modelEnvKey] && String(envSource[p.modelEnvKey]).trim()) || p.defaultModel;
   return {
     ...p,
     apiKey: key,
+    defaultModel: model,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${key}`,
-      ...(p.extraHeaders ? p.extraHeaders() : {})
+      ...(p.extraHeaders ? p.extraHeaders(envSource) : {})
     }
   };
 }
@@ -261,7 +239,7 @@ export default async function handler(req, res) {
   if (available.length === 0) {
     sendJson(res, 503, {
       error: {
-        message: 'Free-tier proxy is not configured for this deployment. Set GROQ_API_KEY (and optionally OPENROUTER_API_KEY, CEREBRAS_API_KEY) in Vercel environment variables, or bring your own API key in Nova Settings.',
+        message: 'Free-tier proxy is not configured for this deployment. Set GROQ_API_KEY (and optionally GEMINI_API_KEY) in the environment, or bring your own API key in Nova Settings.',
         code: 'PROXY_NOT_CONFIGURED'
       }
     });
