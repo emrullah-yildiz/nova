@@ -33,12 +33,14 @@ const PROVIDERS = [
     url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
     envKey: 'GEMINI_API_KEY',
     altEnvKey: 'NOVA_GEMINI_API_KEY',
-    defaultModel: 'gemini-2.0-flash-exp',
+    // gemini-2.0-flash-exp was removed; gemini-2.0-flash is the GA replacement.
+    defaultModel: 'gemini-2.0-flash',
     allowedModels: new Set([
-      'gemini-2.0-flash-exp',
+      'gemini-2.0-flash',
+      'gemini-2.5-flash',
+      'gemini-2.0-flash-lite',
       'gemini-1.5-flash',
-      'gemini-1.5-flash-8b',
-      'gemini-1.5-pro'
+      'gemini-2.0-flash-exp'
     ])
   },
   {
@@ -63,12 +65,11 @@ const PROVIDERS = [
     url: 'https://api.cerebras.ai/v1/chat/completions',
     envKey: 'CEREBRAS_API_KEY',
     altEnvKey: 'NOVA_CEREBRAS_API_KEY',
-    // llama3.1-8b is on Cerebras's free tier; llama-3.3-70b often isn't.
-    // shouldFallthrough() will skip Cerebras if it returns "model not found"
-    // or 401 auth errors anyway, but defaulting to 8B avoids dead-ending
-    // the chain when the user's tier is the free one.
-    defaultModel: 'llama3.1-8b',
-    allowedModels: new Set(['llama3.1-8b', 'llama-3.3-70b', 'llama3.1-70b'])
+    // Cerebras model ids (verify against your account — availability varies by
+    // tier). llama-3.3-70b is the broadly-available default; shouldFallthrough()
+    // skips Cerebras on "model not found"/auth errors so it never dead-ends.
+    defaultModel: 'llama-3.3-70b',
+    allowedModels: new Set(['llama-3.3-70b', 'llama3.1-8b', 'llama-4-scout-17b-16e-instruct', 'qwen-3-32b'])
   }
 ];
 
@@ -178,6 +179,39 @@ export function shouldFallthrough(status, bodyText) {
 
 export { PROVIDERS };
 
+// Turn the per-provider failure list into a single user-facing error. A rate
+// limit (429) is surfaced as its own RATE_LIMITED status so the UI can tell the
+// user "you're being throttled, wait or BYOK" instead of a vague outage.
+export function summarizeFailure(attempts = [], lastError) {
+  const rateLimited = attempts.find(a => a && a.status === 429);
+  if (rateLimited) {
+    return {
+      status: 429,
+      retryAfter: 30,
+      body: {
+        error: {
+          message: 'The free AI tier is rate-limited right now (too many requests in a short window). Wait about a minute and try again — or add your own free API key in Settings → Preferences for unlimited use.',
+          code: 'RATE_LIMITED',
+          attempts,
+          lastError
+        }
+      }
+    };
+  }
+  return {
+    status: 502,
+    retryAfter: null,
+    body: {
+      error: {
+        message: 'All free-tier AI providers are temporarily unavailable. Bring your own free API key in Settings → Preferences for direct access.',
+        code: 'ALL_PROVIDERS_FAILED',
+        attempts,
+        lastError
+      }
+    }
+  };
+}
+
 async function tryProvider(provider, body) {
   const forwardBody = {
     model: pickModel(provider, body.model),
@@ -282,14 +316,8 @@ export default async function handler(req, res) {
     return;
   }
 
-  // All providers failed.
+  // All providers failed — surface the real reason (rate limit vs outage).
   console.error('[nova-proxy] all providers failed:', JSON.stringify(attempts));
-  sendJson(res, 502, {
-    error: {
-      message: 'All free-tier providers are temporarily unavailable. Bring your own API key in Settings → Preferences for direct access.',
-      code: 'ALL_PROVIDERS_FAILED',
-      attempts,
-      lastError
-    }
-  });
+  const fail = summarizeFailure(attempts, lastError);
+  sendJson(res, fail.status, fail.body, fail.retryAfter ? { 'Retry-After': String(fail.retryAfter) } : undefined);
 }
