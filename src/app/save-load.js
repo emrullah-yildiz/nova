@@ -899,17 +899,15 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       try {
         const res = await app.getNovaCloudClient().inviteByEmail(app._cloudProjectId, { email: email, role: role });
         if (res && res.ok) {
-          const prov = res.delivery && res.delivery.provider;
           const wasDelivered = !!(res.delivery && res.delivery.delivered);
-          // 'pending' means email was kicked off fire-and-forget — treat as sent.
-          const isPending = prov === 'pending';
-          if (wasDelivered || isPending) {
+          if (wasDelivered) {
             delivered++;
-            pending[key] = { email: email, role: role, state: 'ok', title: 'Invitation sent to ' + email + '.' };
+            pending[key] = { email: email, role: role, state: 'ok', title: 'Invitation emailed to ' + email + '.' };
           } else {
             // Classify the non-delivery honestly: a real provider that tried and
             // failed (has an error / provider !== none|console) is "undelivered" —
             // NOT "not configured".
+            const prov = res.delivery && res.delivery.provider;
             const err = res.delivery && res.delivery.error;
             const realFailure = prov === 'resend' || (err && prov !== 'none' && prov !== 'console');
             if (realFailure) undelivered++; else created++;
@@ -1018,7 +1016,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     const roleLabel = link.role === 'Viewer' ? 'Can view' : 'Can edit';
     mount.innerHTML = '<div class="share-created-link-row">' +
       '<input class="share-url-input" readonly value="' + escapeHtml(link.url) + '" title="' + escapeHtml(roleLabel) + ' link" onclick="this.select()" />' +
-      shareRoleSelect(link) + revokeControls(link) +
+      revokeControls(link) +
       '<button class="share-icon-btn" title="Copy link" aria-label="Copy link" data-url="' + escapeHtml(link.url) + '" onclick="app._copyShareUrl(this)">📋</button>' +
       '</div>';
   };
