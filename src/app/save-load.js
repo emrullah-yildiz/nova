@@ -1,5 +1,6 @@
 import { NODE_TYPE_MAP } from '../core/nodes.js';
 import { getRuntimeConfig } from '../config/runtime-config.js';
+import { buildInviteStatus } from './invite-status.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -643,8 +644,11 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     app._renderShareLinks();
   };
 
-  // Invite by email — splits the input on commas/whitespace and emails each a
-  // role-scoped join link.
+  // Invite by email — splits the input on commas/whitespace and asks the server
+  // to email each a role-scoped join link. The status is HONEST: it only says
+  // "emailed" when the server confirmed a real provider delivered it. When the
+  // link was created but not emailed (no provider configured), we surface a
+  // copyable join link so the invite is still usable.
   app._sendInvites = async function() {
     const inp = document.getElementById('invite-email');
     const status = document.getElementById('invite-status');
@@ -654,16 +658,54 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     const emails = raw.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
     const btn = document.getElementById('invite-send');
     if (btn) { btn.disabled = true; btn.textContent = 'Inviting…'; }
-    let ok = 0, fail = 0;
+    let delivered = 0, created = 0, undelivered = 0, failed = 0;
+    const links = []; // { email, joinUrl } for created/undelivered (not-emailed) invites
+    let anyCreated = false;
     for (const email of emails) {
-      try { await app.getNovaCloudClient().inviteByEmail(app._cloudProjectId, { email: email, role: role }); ok++; }
-      catch (e) { fail++; }
+      try {
+        const res = await app.getNovaCloudClient().inviteByEmail(app._cloudProjectId, { email: email, role: role });
+        if (res && res.ok) {
+          anyCreated = true;
+          const wasDelivered = !!(res.delivery && res.delivery.delivered);
+          if (wasDelivered) {
+            delivered++;
+          } else {
+            // Classify the non-delivery honestly: a real provider that tried
+            // and failed (has an error / provider !== none|console) is an
+            // "undelivered" — NOT "not configured".
+            const prov = res.delivery && res.delivery.provider;
+            if (prov === 'resend' || (res.delivery && res.delivery.error && prov !== 'none' && prov !== 'console')) {
+              undelivered++;
+            } else {
+              created++;
+            }
+            if (res.joinUrl) links.push({ email: email, joinUrl: res.joinUrl });
+          }
+        } else {
+          failed++;
+        }
+      } catch (e) {
+        failed++;
+      }
     }
+    const result = buildInviteStatus({ delivered, created, undelivered, failed, links });
     if (status) {
-      status.className = 'share-status ' + (ok ? 'ok' : 'err');
-      status.textContent = ok ? ('Invite' + (ok > 1 ? 's' : '') + ' sent' + (fail ? (' · ' + fail + ' failed') : '') + '.') : 'Could not send the invite.';
+      status.className = 'share-status ' + (result.state === 'err' ? 'err' : result.state === 'warn' ? 'warn' : 'ok');
+      // Render the message plus any copyable join links for invites that were
+      // created but not emailed.
+      let html = '<span>' + escapeHtml(result.text) + '</span>';
+      if (result.links.length) {
+        html += '<div class="invite-fallback-links" style="margin-top:8px;display:flex;flex-direction:column;gap:6px">' +
+          result.links.map(l =>
+            '<div class="share-link-row">' +
+              '<input class="share-url-input" readonly value="' + escapeHtml(l.joinUrl) + '" title="Join link for ' + escapeHtml(l.email) + '" onclick="this.select()" />' +
+              '<button class="share-icon-btn" title="Copy link" data-url="' + escapeHtml(l.joinUrl) + '" onclick="app._copyShareUrl(this)">📋</button>' +
+            '</div>').join('') +
+          '</div>';
+      }
+      status.innerHTML = html;
     }
-    if (inp && ok) inp.value = '';
+    if (inp && anyCreated) inp.value = '';
     if (btn) { btn.disabled = false; btn.textContent = 'Invite'; }
     await app._renderShareLinks();
   };

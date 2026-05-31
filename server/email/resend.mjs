@@ -7,18 +7,27 @@
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
 export function createResendEmailService({ apiKey, from, fetch: fetchImpl } = {}) {
+  // send() never throws: it returns a structured result so callers can report
+  // the TRUTH about delivery. A non-2xx response or a network error both yield
+  // { delivered:false, ... } rather than a thrown exception, so the UI is never
+  // told an email was sent when it wasn't.
   const send = async ({ to, subject, html, text }) => {
     const f = fetchImpl || globalThis.fetch;
-    const res = await f(RESEND_ENDPOINT, {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to, subject, html, text })
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error('Resend send failed (' + res.status + '): ' + body.slice(0, 200));
+    try {
+      const res = await f(RESEND_ENDPOINT, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from, to, subject, html, text })
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        return { delivered: false, provider: 'resend', error: 'Resend send failed (' + res.status + '): ' + body.slice(0, 200) };
+      }
+      const data = await res.json().catch(() => ({}));
+      return { delivered: true, provider: 'resend', id: data && data.id ? data.id : undefined };
+    } catch (error) {
+      return { delivered: false, provider: 'resend', error: (error && error.message) || String(error) };
     }
-    return res.json().catch(() => ({}));
   };
   return { provider: 'resend', from, send };
 }
@@ -32,7 +41,8 @@ export function createConsoleEmailService({ logger = console } = {}) {
     from: 'console',
     async send({ to, subject, text }) {
       logger.log('[nova-email] (no provider configured) would send to %s — %s\n%s', to, subject, text || '');
-      return { id: 'console' };
+      // Honest result: nothing was actually emailed.
+      return { delivered: false, provider: 'console' };
     }
   };
 }
