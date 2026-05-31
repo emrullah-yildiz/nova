@@ -944,9 +944,9 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       mount.innerHTML = '';
       return;
     }
+    const roleLabel = link.role === 'Viewer' ? 'Can view' : 'Can edit';
     mount.innerHTML = '<div class="share-created-link-row">' +
-      '<input class="share-url-input" readonly value="' + escapeHtml(link.url) + '" title="Share link" onclick="this.select()" />' +
-      shareRoleSelect(link) +
+      '<input class="share-url-input" readonly value="' + escapeHtml(link.url) + '" title="' + escapeHtml(roleLabel) + ' link" onclick="this.select()" />' +
       revokeControls(link) +
       '<button class="share-icon-btn" title="Copy link" aria-label="Copy link" data-url="' + escapeHtml(link.url) + '" onclick="app._copyShareUrl(this)">📋</button>' +
       '</div>';

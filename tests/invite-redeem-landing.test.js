@@ -31,17 +31,14 @@ function httpError(status, message, code) {
   return e;
 }
 
-// A truthy graph version (so openCloudProject's `!version.graph` guard passes)
-// that the REAL deserializeGraph (installed by installSaveLoad) short-circuits on
-// — it returns early when there are no `nodes`, so we don't have to stub the full
-// canvas/render surface (applyTransform, renderWires, …). openCloudProject still
-// sets _cloudProjectId = project.id afterwards, which is what we assert.
-const stubGraph = () => ({ schema: 'nova', empty: true });
+// An empty-but-valid graph the REAL deserializeGraph (installed by installSaveLoad)
+// can consume: it iterates data.nodes / data.wires.
+const emptyGraph = () => ({ nodes: [], wires: [] });
 
 // Build a minimal fake app wired enough to run the real join flow. installSaveLoad
-// installs its own getNovaCloudClient (returns app._novaCloudClient), so we seed
-// that with our stub. newProject is faked to do the page switch the real one does
-// (switchPage('workspace')).
+// installs its own getNovaCloudClient (returns app._novaCloudClient) plus the real
+// serialize/deserialize handlers — so the fake provides the state those touch
+// (nodes/wires arrays, renderNode) and seeds the stub client.
 function makeApp(client) {
   const app = {
     currentPage: 'landing',
@@ -50,11 +47,14 @@ function makeApp(client) {
     _projectName: null,
     currentUser: { email: 'invitee@example.com', displayName: 'Invitee' },
     _pendingJoinToken: '',
-    // installSaveLoad installs the real serializeGraph (reads app.nodes/app.wires).
     nodes: [],
     wires: [],
+    selectedNodes: [],
+    zoom: 1, panX: 0, panY: 0, nextNodeId: 1,
     signIn: () => {},
     renderRecentProjects: () => {},
+    renderNode: () => {},
+    applyTransform: () => {},
     escapeHtml: (s) => String(s == null ? '' : s),
   };
   app.addAIMessage = (...a) => { app._aiMessages.push(a); };
@@ -103,7 +103,7 @@ describe('invite redeem: land in the shared project or show a visible error', ()
         id: 'prj1',
         name: 'Shared Project',
         currentVersionId: 'v1',
-        versions: [{ id: 'v1', graph: stubGraph() }],
+        versions: [{ id: 'v1', graph: emptyGraph() }],
       }),
     };
     const app = makeApp(client);
@@ -111,7 +111,7 @@ describe('invite redeem: land in the shared project or show a visible error', ()
     app._pendingJoinToken = 'tok-success';
 
     // Fire Continue but do NOT await yet — assert it is still in-flight, proving
-    // _joinContinue AWAITS (the loading overlay is gone only after it resolves).
+    // _joinContinue AWAITS (the overlay/loading is gone only after it resolves).
     const p = app._joinContinue();
 
     // The pending token is cleared synchronously (so refreshSession won't reprocess).

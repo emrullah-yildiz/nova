@@ -1486,8 +1486,6 @@ input[type="number"] {
 .share-section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-muted); padding: 4px 0 2px; }
 .share-link-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border-color); }
 .share-created-link-row { display: flex; align-items: center; gap: 8px; padding: 0 0 12px; }
-.share-role-select { flex: 0 0 136px; }
-.share-role-select select { height: 36px; font-size: 13px; }
 .share-url-input {
   flex: 1; min-width: 0; height: 36px; padding: 0 10px;
   background: var(--bg-surface); color: var(--text-secondary);
