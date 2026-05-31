@@ -86,7 +86,7 @@ Nova
 
 html, body { width: 100%; height: 100%; font-family: var(--font-sans); background: var(--bg-primary); color: var(--text-primary); overflow: hidden; -webkit-font-smoothing: antialiased; }
 
-button { font-family: var(--font-sans); cursor: pointer; border: none; outline: none; transition: all var(--transition-fast); }
+button { font-family: var(--font-sans); cursor: pointer; border: none; outline: none; background: transparent; color: inherit; -webkit-appearance: none; appearance: none; transition: all var(--transition-fast); }
 
 input, textarea, select { font-family: var(--font-sans); background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 8px 12px; outline: none; }
 
@@ -189,11 +189,15 @@ input:focus, textarea:focus { border-color: var(--accent-blue); }
 
 .recent-item:hover { background: var(--bg-surface); }
 
-.recent-item .ri-icon { color: var(--accent-blue); font-size: 16px; width: 20px; text-align: center; }
+.recent-item .ri-icon { font-size: 15px; width: 22px; text-align: center; flex-shrink: 0; }
 
-.recent-item .ri-name { font-size: 13px; color: var(--text-primary); font-weight: 500; }
+.recent-item .ri-name { font-size: 13px; color: var(--text-primary); font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.recent-item .ri-date { margin-left: auto; font-size: 11px; color: var(--text-muted); }
+.recent-item .ri-date { font-size: 11px; color: var(--text-muted); flex-shrink: 0; margin-left: 8px; }
+
+.recent-item .ri-type { font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 3px; flex-shrink: 0; letter-spacing: 0.3px; }
+.recent-item .ri-type.ri-type-cloud { background: color-mix(in srgb, var(--accent-blue) 18%, transparent); color: var(--accent-blue); }
+.recent-item .ri-type.ri-type-local { background: color-mix(in srgb, var(--text-muted) 18%, transparent); color: var(--text-muted); }
 
 .landing-right { width: 420px; border-left: 1px solid var(--border-color); background: var(--bg-secondary); display: flex; flex-direction: column; }
 
