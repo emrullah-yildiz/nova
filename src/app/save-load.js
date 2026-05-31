@@ -700,13 +700,21 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     app._showJoinStatus({ loading: true });
     try {
       const client = app.getNovaCloudClient();
-      const res = await client.redeemShareLink(token);
-      const projectId = res && res.project && res.project.id;
-      if (projectId) {
-        // openCloudProject switches to the workspace (via newProject) and loads
-        // the graph; once that's done the loading overlay is no longer needed.
-        await app.openCloudProject(projectId);
-        app._saveCloudProjectId(projectId);
+      const project = await client.redeemShareLink(token);
+      if (project && project.id) {
+        // The redeem response now includes the full project with versions, so we
+        // can open it directly without a second round-trip to getProject.
+        const versions = project.versions || [];
+        const version = versions.find(v => v.id === project.currentVersionId) || versions[versions.length - 1];
+        if (!version || !version.graph) throw new Error('Cloud project has no graph version.');
+        if (app.currentPage !== 'workspace') app.newProject();
+        app.deserializeGraph(version.graph);
+        app._cloudProjectId = project.id;
+        app._projectName = project.name;
+        app._lastCloudSaveSerialized = JSON.stringify(app.serializeGraph());
+        app.addAIMessage('workspace', 'Opened **' + project.name + '** from your account.');
+        _saveToRecent(project.name, project.id);
+        app._saveCloudProjectId(project.id);
       }
       app._clearJoinStatus();
     } catch (e) {

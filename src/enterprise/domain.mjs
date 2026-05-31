@@ -720,7 +720,7 @@ export class EnterpriseStore {
       });
       this.persist();
     }
-    return projectSummary(project);
+    return clone(project);
   }
 
   // Projects shared WITH the user (member, but living in another org — i.e. not

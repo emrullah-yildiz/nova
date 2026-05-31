@@ -140,15 +140,13 @@ export function createApiDispatcher({ store, authService, aiProvider, objectStor
     const url = { searchParams: searchParams instanceof URLSearchParams ? searchParams : new URLSearchParams(searchParams || '') };
     const result = await route.handler({ store, context, params: route.params, body: body || {}, url, aiProvider, authService, objectStorage, emailService, secretsService, issueService, appUrl: request.appUrl || appUrl });
     // Persistence is write-behind: the handler already mutated the in-memory
-    // store and returned its result. A snapshot-write failure here must NOT turn
-    // a successful mutation into an error for the client (e.g. an invite that
-    // was created + emailed showing "could not send"). Log and move on; the
-    // in-memory state is intact and a later write rewrites it.
+    // store. Flush to the DB in the background so the client doesn't wait for it.
+    // A flush failure is logged but never surfaced to the caller — the in-memory
+    // state is intact and the next write will include this mutation too.
     if (store.flushPersistence) {
-      try { await store.flushPersistence(); }
-      catch (error) {
+      store.flushPersistence().catch(error => {
         if (typeof console !== 'undefined') console.error('[nova] persist flush failed (mutation still succeeded): %s', (error && error.message) || error);
-      }
+      });
     }
     return { status: route.status || 200, body: result };
   };
@@ -315,22 +313,21 @@ async function handleInviteToProject({ store, context, params, body, emailServic
   // fallback link matches exactly what the email contains.
   const base = (appUrl || '').replace(/\/+$/, '');
   const joinUrl = base + '/?join=' + encodeURIComponent(link.token);
-  let delivery = { delivered: false, provider: 'none' };
+  // Fire-and-forget: the invite link is already persisted, so don't block the
+  // response on the email provider's latency (200–500 ms). Delivery status is
+  // reported as 'pending'; the link is always included so the inviter can share
+  // it manually if the email is delayed or undeliverable.
+  const delivery = { delivered: false, provider: emailService ? 'pending' : 'none' };
   if (emailService) {
-    try {
-      const inviter = (context.user && (context.user.displayName || context.user.email)) || 'A Nova user';
-      const msg = buildInviteEmail({ appUrl, token: link.token, projectName: project.name, inviterName: inviter, role: payload.role });
-      const result = await emailService.send({ to: payload.email, subject: msg.subject, html: msg.html, text: msg.text });
-      delivery = {
-        delivered: !!(result && result.delivered),
-        provider: (result && result.provider) || 'unknown'
-      };
-      if (result && result.error) delivery.error = result.error;
-      if (!delivery.delivered) console.error('[nova-invite] email to %s not delivered (%s): %s', payload.email, delivery.provider, delivery.error || 'no error reported');
-    } catch (error) {
-      delivery = { delivered: false, provider: (emailService && emailService.provider) || 'unknown', error: (error && error.message) || String(error) };
-      console.error('[nova-invite] email to %s threw: %s', payload.email, delivery.error);
-    }
+    const inviter = (context.user && (context.user.displayName || context.user.email)) || 'A Nova user';
+    const msg = buildInviteEmail({ appUrl, token: link.token, projectName: project.name, inviterName: inviter, role: payload.role });
+    emailService.send({ to: payload.email, subject: msg.subject, html: msg.html, text: msg.text })
+      .then(result => {
+        if (result && !result.delivered) console.error('[nova-invite] email to %s not delivered (%s): %s', payload.email, result.provider, result.error || 'no error reported');
+      })
+      .catch(error => {
+        console.error('[nova-invite] email to %s threw: %s', payload.email, (error && error.message) || String(error));
+      });
   }
   return {
     ok: true,
