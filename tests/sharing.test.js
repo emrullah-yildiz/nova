@@ -125,6 +125,21 @@ describe('share links + cross-org access', () => {
     expect(members[0].role).toBe(ROLES.EDITOR);
   });
 
+  it('email invites preview the intended account and only redeem for that email', () => {
+    const { store, owner, collaborator, project } = setup();
+    const invite = store.inviteToProject(owner.context, project.id, { email: collaborator.user.email, role: ROLES.VIEWER });
+    const preview = store.previewShareLink(invite.token);
+
+    expect(preview.email).toBe(collaborator.user.email);
+    expect(preview.projectName).toBe('Shared Tower');
+
+    const other = verifiedContext(store, 'other@example.com');
+    expect(() => store.redeemShareLink(other.context, invite.token)).toThrow(/invite is for collab@example.com/i);
+
+    const summary = store.redeemShareLink(collaborator.context, invite.token);
+    expect(summary.id).toBe(project.id);
+  });
+
   it('listSharedProjects shows shared projects for the member and never double-lists', () => {
     const { store, owner, collaborator, project } = setup();
     store.redeemShareLink(collaborator.context, store.createShareLink(owner.context, project.id, { role: ROLES.EDITOR }).token);
