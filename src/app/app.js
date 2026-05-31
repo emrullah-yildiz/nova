@@ -114,7 +114,11 @@ const app = {
     } catch {
       this._authConfig = { googleClientId: '', devLogin: false };
     }
-    this._loadGoogleIdentity();
+    await this._handleVerifyParam();
+    this._handleJoinParam();
+    // If we just came back from Google's account chooser, complete the sign-in
+    // (sets the session cookie) BEFORE reading the session below.
+    await this._handleGoogleRedirect();
     await this.refreshSession();
   },
 
@@ -384,24 +388,75 @@ const app = {
     } catch { /* ignore */ }
   },
 
-  _loadGoogleIdentity() {
-    const clientId = this._authConfig && this._authConfig.googleClientId;
-    if (!clientId || this._gisLoaded) return;
-    const s = document.createElement('script');
-    s.src = 'https://accounts.google.com/gsi/client';
-    s.async = true;
-    s.defer = true;
-    s.onload = () => {
-      this._gisLoaded = true;
-      if (window.google && window.google.accounts && window.google.accounts.id) {
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: (resp) => this._onGoogleCredential(resp)
-        });
-        this._renderGoogleButton();
-      }
-    };
-    document.head.appendChild(s);
+  // Google sign-in uses an OpenID Connect redirect with prompt=select_account,
+  // NOT the GIS One Tap / credential button. One Tap silently reuses the single
+  // active Google session (and self-suppresses after a few dismissals), so it
+  // can't let the user choose or switch accounts. The redirect always shows
+  // Google's account chooser ("Use another account" included) and returns an
+  // id_token the existing /api/auth/oidc/callback verifier accepts unchanged.
+
+  // Where Google redirects back to. Must EXACTLY match an Authorized redirect URI
+  // on the Google Cloud OAuth client — Google compares the full string, so the
+  // trailing slash matters. We use the bare origin (scheme+host+port, no path,
+  // no trailing slash), e.g. https://hi-nova.work, https://nova.ey-myacc.workers.dev,
+  // http://127.0.0.1:8080. Path-independent, so it's the same wherever the app loads.
+  _googleRedirectUri() {
+    return window.location.origin;
+  },
+
+  _randomToken() {
+    const bytes = new Uint8Array(16);
+    if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  },
+
+  // Decode a JWT payload (unverified — only used client-side to check the nonce
+  // for replay protection; the server is the real trust anchor).
+  _decodeJwtPayload(token) {
+    try {
+      const part = String(token).split('.')[1];
+      const json = decodeURIComponent(
+        atob(part.replace(/-/g, '+').replace(/_/g, '/'))
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      return JSON.parse(json);
+    } catch { return null; }
+  },
+
+  // On boot: if Google redirected back with an id_token in the URL fragment,
+  // validate state/nonce and exchange it for a session.
+  async _handleGoogleRedirect() {
+    let hash = '';
+    try { hash = window.location.hash || ''; } catch { return; }
+    if (hash.indexOf('id_token=') === -1) return;
+    const params = new URLSearchParams(hash.replace(/^#/, ''));
+    const idToken = params.get('id_token');
+    const state = params.get('state');
+    // Strip the fragment immediately so a refresh can't replay it and the raw
+    // token never lingers in the address bar.
+    try {
+      const u = new URL(window.location.href);
+      window.history.replaceState({}, document.title, u.pathname + u.search);
+    } catch { /* ignore */ }
+    let expectedState = '';
+    let expectedNonce = '';
+    try {
+      expectedState = sessionStorage.getItem('nova:oidc:state') || '';
+      expectedNonce = sessionStorage.getItem('nova:oidc:nonce') || '';
+      sessionStorage.removeItem('nova:oidc:state');
+      sessionStorage.removeItem('nova:oidc:nonce');
+    } catch { /* ignore */ }
+    if (!idToken) return;
+    // CSRF: the redirect must echo the state we generated.
+    if (expectedState && state !== expectedState) return;
+    // Replay: the token's nonce must match the one we sent.
+    if (expectedNonce) {
+      const claims = this._decodeJwtPayload(idToken);
+      if (!claims || claims.nonce !== expectedNonce) return;
+    }
+    await this._completeGoogleSignIn(idToken);
   },
 
   signIn() { this.openSignIn(); },
@@ -464,27 +519,37 @@ const app = {
     if (this._escSignIn) { document.removeEventListener('keydown', this._escSignIn); this._escSignIn = null; }
   },
 
-  // Render Google's official button into the modal when GIS is ready; otherwise
-  // fall back to a plain button that triggers the One Tap prompt.
+  // Render the "Continue with Google" button into the modal. Clicking it starts
+  // the redirect flow (see signInWithGoogle), so no GIS script load is needed.
   _renderGoogleButton() {
     const host = document.getElementById('signin-google');
     const clientId = this._authConfig && this._authConfig.googleClientId;
     if (!host || !clientId) return;
-    if (window.google && window.google.accounts && window.google.accounts.id) {
-      try {
-        window.google.accounts.id.renderButton(host, { theme: 'filled_black', size: 'large', text: 'continue_with', width: 320 });
-        return;
-      } catch (e) { /* fall through to custom button */ }
-    }
     host.innerHTML = '<button type="button" class="signin-google-btn" onclick="app.signInWithGoogle()">Continue with Google</button>';
   },
 
+  // Send the user to Google's account chooser. prompt=select_account forces the
+  // chooser every time so they can pick or switch accounts; the id_token comes
+  // back in the redirect fragment and is handled by _handleGoogleRedirect.
   signInWithGoogle() {
-    if (window.google && window.google.accounts && window.google.accounts.id) {
-      window.google.accounts.id.prompt();
-    } else {
-      this._showSignInError('Google sign-in is still loading — try again in a moment.');
-    }
+    const clientId = this._authConfig && this._authConfig.googleClientId;
+    if (!clientId) { this._showSignInError('Google sign-in is not configured.'); return; }
+    const nonce = this._randomToken();
+    const state = this._randomToken();
+    try {
+      sessionStorage.setItem('nova:oidc:nonce', nonce);
+      sessionStorage.setItem('nova:oidc:state', state);
+    } catch { /* sign-in still works; we just skip the client-side replay check */ }
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: this._googleRedirectUri(),
+      response_type: 'id_token',
+      scope: 'openid email profile',
+      prompt: 'select_account',
+      nonce,
+      state
+    });
+    window.location.assign('https://accounts.google.com/o/oauth2/v2/auth?' + params.toString());
   },
 
   // Flip the modal between "sign in" and "create account".
@@ -591,8 +656,11 @@ const app = {
     if (el) { el.classList.add('signin-notice'); el.textContent = 'Verification link sent — check your inbox (and spam).'; }
   },
 
-  async _onGoogleCredential(resp) {
-    if (!resp || !resp.credential) {
+  // Exchange a Google id_token for a Nova session. Called after the redirect
+  // back from Google's account chooser (see _handleGoogleRedirect).
+  async _completeGoogleSignIn(idToken) {
+    if (!idToken) {
+      this.openSignIn();
       this._showSignInError('Google did not return a sign-in. Try again, or use email + password.');
       return;
     }
@@ -601,19 +669,24 @@ const app = {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken: resp.credential })
+        body: JSON.stringify({ idToken })
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
         // Surface the server's real reason (e.g. audience/issuer mismatch)
-        // rather than a generic message.
+        // rather than a generic message. The modal isn't open after a redirect,
+        // so open it to show the error.
+        this.openSignIn();
         this._showSignInError((data.error && data.error.message) || 'Google sign-in failed. Please try again.');
         return;
       }
       const autoJoin = this._signInReason === 'join';
       this.closeSignIn();
-      await this.refreshSession({ autoJoinPendingShare: autoJoin });
+      // refreshSession runs right after this in initAccount; if we were called
+      // some other way, reflect the new session now.
+      await this.refreshSession();
     } catch (e) {
+      this.openSignIn();
       this._showSignInError('Network error during Google sign-in — please try again.');
     }
   },
@@ -637,9 +710,6 @@ const app = {
     }
     // Sign out of all.
     this.currentUser = null;
-    if (window.google && window.google.accounts && window.google.accounts.id) {
-      try { window.google.accounts.id.disableAutoSelect(); } catch { /* ignore */ }
-    }
     if (window.GPTClient) window.GPTClient._useAnonymousPrefs();
     this.renderAccount();
     if (this._updateChatStatus) this._updateChatStatus();
