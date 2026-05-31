@@ -888,15 +888,17 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       try {
         const res = await app.getNovaCloudClient().inviteByEmail(app._cloudProjectId, { email: email, role: role });
         if (res && res.ok) {
+          const prov = res.delivery && res.delivery.provider;
           const wasDelivered = !!(res.delivery && res.delivery.delivered);
-          if (wasDelivered) {
+          // 'pending' means email was kicked off fire-and-forget — treat as sent.
+          const isPending = prov === 'pending';
+          if (wasDelivered || isPending) {
             delivered++;
-            pending[key] = { email: email, role: role, state: 'ok', title: 'Invitation emailed to ' + email + '.' };
+            pending[key] = { email: email, role: role, state: 'ok', title: 'Invitation sent to ' + email + '.' };
           } else {
             // Classify the non-delivery honestly: a real provider that tried and
             // failed (has an error / provider !== none|console) is "undelivered" —
             // NOT "not configured".
-            const prov = res.delivery && res.delivery.provider;
             const err = res.delivery && res.delivery.error;
             const realFailure = prov === 'resend' || (err && prov !== 'none' && prov !== 'console');
             if (realFailure) undelivered++; else created++;
