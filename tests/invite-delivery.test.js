@@ -50,6 +50,17 @@ describe('invite delivery honesty', () => {
     errSpy.mockRestore();
   });
 
+  it('real provider send fails → ok:true, provider:"resend", delivered:false, error + joinUrl present', async () => {
+    const service = { provider: 'resend', async send() { return { delivered: false, provider: 'resend', error: 'Resend send failed (401): Unauthorized' }; } };
+    const { dispatch, auth, projectId } = await ownerWithProject({ emailService: service });
+    const res = await dispatch({ method: 'POST', path: '/api/projects/' + projectId + '/invites', authorization: auth, body: { email: 'f@e.com', role: 'Editor' } });
+    expect(res.body.ok).toBe(true);
+    expect(res.body.delivery.delivered).toBe(false);
+    expect(res.body.delivery.provider).toBe('resend');
+    expect(res.body.delivery.error).toBeTruthy();
+    expect(res.body.joinUrl).toMatch(TOKEN_JOIN);
+  });
+
   it('no email service configured → delivery.provider:"none", delivered:false, joinUrl present', async () => {
     const { dispatch, auth, projectId } = await ownerWithProject(); // no emailService
     const res = await dispatch({ method: 'POST', path: '/api/projects/' + projectId + '/invites', authorization: auth, body: { email: 'f@e.com', role: 'Editor' } });

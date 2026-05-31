@@ -5,14 +5,17 @@
 // should be surfaced for manual sharing.
 //
 // Contract:
-//   delivered  — count of recipients a real provider confirmed it emailed
-//   created    — count of recipients whose invite/link was created but NOT emailed
-//   failed     — count of recipients whose request failed entirely (no link made)
-//   links      — array of { email, joinUrl } for the `created`-but-not-emailed
-//                invites, so the caller can show a copyable link
+//   delivered    — count of recipients a real provider confirmed it emailed
+//   created      — count of recipients whose invite/link was created but NOT
+//                  emailed because no email delivery is configured
+//   undelivered  — count of recipients whose link was created but a REAL
+//                  provider genuinely failed to deliver the email
+//   failed       — count of recipients whose request failed entirely (no link)
+//   links        — array of { email, joinUrl } for the created/undelivered
+//                  invites, so the caller can show a copyable link
 //
 // Returns { text, state: 'ok'|'warn'|'err', links }.
-export function buildInviteStatus({ delivered = 0, created = 0, failed = 0, links = [] } = {}) {
+export function buildInviteStatus({ delivered = 0, created = 0, undelivered = 0, failed = 0, links = [] } = {}) {
   const parts = [];
   let state = 'ok';
 
@@ -21,10 +24,18 @@ export function buildInviteStatus({ delivered = 0, created = 0, failed = 0, link
   }
 
   if (created > 0) {
-    // Honest: the link exists but no email was sent. Surface that it must be
-    // shared manually.
+    // Honest: the link exists but no email could be sent because delivery
+    // isn't configured. Surface that it must be shared manually.
     const who = created > 1 ? created + ' people' : '1 person';
-    parts.push('Invite created for ' + who + ' — email not sent (not configured). Share the link' + (created > 1 ? 's' : '') + ' below.');
+    parts.push('Invite created for ' + who + ' — email delivery isn’t configured, so share the link' + (created > 1 ? 's' : '') + ' below.');
+    if (state === 'ok') state = 'warn';
+  }
+
+  if (undelivered > 0) {
+    // Honest: a real provider was configured and tried, but the send failed.
+    // Do NOT say "not configured" — that would be a different lie.
+    const who = undelivered > 1 ? undelivered + ' people' : '1 person';
+    parts.push('Invite created for ' + who + ' — but the email couldn’t be delivered. Share the link' + (undelivered > 1 ? 's' : '') + ' below.');
     if (state === 'ok') state = 'warn';
   }
 

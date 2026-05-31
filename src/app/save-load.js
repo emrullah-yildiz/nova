@@ -658,8 +658,8 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     const emails = raw.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
     const btn = document.getElementById('invite-send');
     if (btn) { btn.disabled = true; btn.textContent = 'Inviting…'; }
-    let delivered = 0, created = 0, failed = 0;
-    const links = []; // { email, joinUrl } for created-but-not-emailed invites
+    let delivered = 0, created = 0, undelivered = 0, failed = 0;
+    const links = []; // { email, joinUrl } for created/undelivered (not-emailed) invites
     let anyCreated = false;
     for (const email of emails) {
       try {
@@ -670,7 +670,15 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
           if (wasDelivered) {
             delivered++;
           } else {
-            created++;
+            // Classify the non-delivery honestly: a real provider that tried
+            // and failed (has an error / provider !== none|console) is an
+            // "undelivered" — NOT "not configured".
+            const prov = res.delivery && res.delivery.provider;
+            if (prov === 'resend' || (res.delivery && res.delivery.error && prov !== 'none' && prov !== 'console')) {
+              undelivered++;
+            } else {
+              created++;
+            }
             if (res.joinUrl) links.push({ email: email, joinUrl: res.joinUrl });
           }
         } else {
@@ -680,7 +688,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
         failed++;
       }
     }
-    const result = buildInviteStatus({ delivered, created, failed, links });
+    const result = buildInviteStatus({ delivered, created, undelivered, failed, links });
     if (status) {
       status.className = 'share-status ' + (result.state === 'err' ? 'err' : result.state === 'warn' ? 'warn' : 'ok');
       // Render the message plus any copyable join links for invites that were
