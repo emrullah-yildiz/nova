@@ -238,6 +238,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     app._projectName = project.name;
     app._lastCloudSaveSerialized = JSON.stringify(app.serializeGraph());
     app.addAIMessage('workspace', 'Opened **' + project.name + '** from your account.');
+    _saveToRecent(project.name, project.id);
     return project;
   };
 
@@ -538,11 +539,13 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   // ══════════════════════════════════════
   // RECENT PROJECTS (for landing page)
   // ══════════════════════════════════════
-  function _saveToRecent(name) {
+  function _saveToRecent(name, cloudId) {
     try {
       let recent = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
       recent = recent.filter(r => r.name !== name);
-      recent.unshift({ name: name, date: Date.now() });
+      const entry = { name: name, date: Date.now() };
+      if (cloudId) entry.cloudId = cloudId;
+      recent.unshift(entry);
       if (recent.length > 10) recent = recent.slice(0, 10);
       localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
     } catch (e) { /* ignore */ }
@@ -557,14 +560,19 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
 
   function _browserRecentMarkup(recent) {
     if (!recent.length) return '';
-    return '<div class="recent-group" style="font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text-muted);padding:2px 4px 6px">Recent in this browser</div>' +
-      recent.map(r => {
-        const ago = _timeAgo(r.date);
-        return '<button class="recent-item" onclick="app.openFromLocal(\'' + escapeJsString(r.name) + '\')">' +
-          '<span class="ri-icon">ðŸ“„</span>' +
-          '<span class="ri-name">' + escapeHtml(r.name) + '</span>' +
-          '<span class="ri-date">' + escapeHtml(ago) + '</span></button>';
-      }).join('');
+    return recent.map(r => {
+      const ago = _timeAgo(r.date);
+      if (r.cloudId) {
+        return '<button class=”recent-item” onclick=”app.openCloudProject(\'' + escapeJsString(r.cloudId) + '\').then(function(pr){app._saveCloudProjectId(pr.id);}).catch(function(e){app.addAIMessage&&app.addAIMessage(\'workspace\',\'Open failed: \'+e.message);})”>' +
+          '<span class=”ri-icon”>☁</span>' +
+          '<span class=”ri-name”>' + escapeHtml(r.name) + '</span>' +
+          '<span class=”ri-date”>' + escapeHtml(ago) + '</span></button>';
+      }
+      return '<button class=”recent-item” onclick=”app.openFromLocal(\'' + escapeJsString(r.name) + '\')”>' +
+        '<span class=”ri-icon”>📄</span>' +
+        '<span class=”ri-name”>' + escapeHtml(r.name) + '</span>' +
+        '<span class=”ri-date”>' + escapeHtml(ago) + '</span></button>';
+    }).join('');
   }
 
   const origRenderRecent = app.renderRecentProjects.bind(app);
@@ -572,97 +580,44 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     const listEl = document.getElementById('recent-list');
     if (!listEl) return;
     const browserRecent = _readBrowserRecents();
-    const browserHtml = _browserRecentMarkup(browserRecent);
-    if (app.currentUser && isCloudEnabled()) {
-      const requestId = String(Date.now()) + Math.random();
-      listEl.dataset.cloudRequestId = requestId;
-      listEl.dataset.cloudLoaded = '';
-      listEl.innerHTML = browserHtml +
-        '<div class="recent-group" style="font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text-muted);padding:12px 4px 6px">My projects</div>' +
-        '<div class="recent-empty" style="padding:12px;color:var(--text-muted);font-size:12px">Loading your projects...</div>';
-      app._renderCloudProjects({ browserHtml, requestId });
-      return;
-    }
     if (browserRecent.length) {
-      listEl.innerHTML = browserHtml;
-      return;
-    }
-    origRenderRecent();
-    if (app.__legacyRecentRenderer) {
-    if (app.currentUser && isCloudEnabled()) {
-      app._renderCloudProjects();
-      return;
-    }
-
-    let recent = [];
-    try { recent = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) { /* ignore corrupt recent list */ }
-
-    if (recent.length === 0) {
+      listEl.innerHTML = _browserRecentMarkup(browserRecent);
+    } else if (app.currentUser && isCloudEnabled()) {
+      listEl.innerHTML = '<div class="recent-empty" style="padding:4px 0 0;color:var(--text-muted);font-size:12px">Open a project to see it here.</div>';
+    } else {
       origRenderRecent();
-      return;
     }
 
-    const el = document.getElementById('recent-list');
-    if (!el) return;
-    el.innerHTML = recent.map(r => {
-      const ago = _timeAgo(r.date);
-      return '<button class="recent-item" onclick="app.openFromLocal(\'' + escapeJsString(r.name) + '\')">' +
-        '<span class="ri-icon">📄</span>' +
-        '<span class="ri-name">' + escapeHtml(r.name) + '</span>' +
-        '<span class="ri-date">' + escapeHtml(ago) + '</span></button>';
-    }).join('');
+    const mySection = document.getElementById('my-projects-section');
+    if (!mySection) return;
+    if (app.currentUser && isCloudEnabled()) {
+      mySection.style.display = '';
+      const myList = document.getElementById('my-projects-list');
+      if (myList) {
+        const requestId = String(Date.now()) + Math.random();
+        myList.dataset.cloudRequestId = requestId;
+        delete myList.dataset.cloudLoaded;
+        myList.innerHTML = '<div class="recent-empty" style="padding:12px;color:var(--text-muted);font-size:12px">Loading your projects...</div>';
+        app._renderCloudProjects({ requestId });
+      }
+    } else {
+      mySection.style.display = 'none';
     }
   };
 
   // Async: fetch and render the signed-in user's account projects into the
-  // landing "recent" list. Falls back to a friendly empty/error state.
+  // dedicated "My Projects" section. Falls back to a friendly empty/error state.
   app._renderCloudProjects = async function(options = {}) {
-    const el = document.getElementById('recent-list');
+    const el = document.getElementById('my-projects-list');
     if (!el) return;
-    if (options.browserHtml !== undefined) {
-      const browserHtml = options.browserHtml || '';
-      const requestId = options.requestId || '';
-      try {
-        const client = app.getNovaCloudClient();
-        const [ownedPage, sharedPage] = await Promise.all([
-          client.listProjects({ limit: 24 }).catch(() => ({ projects: [] })),
-          client.listSharedProjects({ limit: 24 }).catch(() => ({ projects: [] }))
-        ]);
-        if (requestId && el.dataset.cloudRequestId !== requestId) return;
-        const owned = (ownedPage && ownedPage.projects) || [];
-        const shared = (sharedPage && sharedPage.projects) || [];
-        el.dataset.cloudLoaded = '1';
-        let cloudHtml = '<div class="recent-group" style="font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text-muted);padding:12px 4px 6px">My projects</div>';
-        if (!owned.length && !shared.length) {
-          el.innerHTML = browserHtml + cloudHtml +
-            '<div class="recent-empty" style="padding:12px;color:var(--text-muted);font-size:12px">No projects yet - save one to your account and it shows up here.</div>';
-          return;
-        }
-        const item = (p, icon) => '<button class="recent-item" onclick="app.openCloudProject(\'' + escapeJsString(p.id) + '\').then(function(pr){app._saveCloudProjectId(pr.id);}).catch(function(e){app.addAIMessage&&app.addAIMessage(\'workspace\',\'Open failed: \'+e.message);})">' +
-          '<span class="ri-icon">' + icon + '</span>' +
-          '<span class="ri-name">' + escapeHtml(p.name || 'Untitled') + '</span>' +
-          '<span class="ri-date">' + escapeHtml(_timeAgo(p.updatedAt || p.createdAt || Date.now())) + '</span></button>';
-        cloudHtml += owned.map(p => item(p, 'â˜')).join('');
-        if (shared.length) {
-          cloudHtml += '<div class="recent-group" style="font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text-muted);padding:10px 4px 4px">Shared with you</div>' +
-            shared.map(p => item(p, 'ðŸ‘¥')).join('');
-        }
-        el.innerHTML = browserHtml + cloudHtml;
-      } catch (e) {
-        if (requestId && el.dataset.cloudRequestId !== requestId) return;
-        el.innerHTML = browserHtml +
-          '<div class="recent-group" style="font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text-muted);padding:12px 4px 6px">My projects</div>' +
-          '<div class="recent-empty" style="padding:12px;color:var(--text-muted);font-size:12px">Could not load your projects.</div>';
-      }
-      return;
-    }
-    if (!el.dataset.cloudLoaded) el.innerHTML = '<div class="recent-empty" style="padding:12px;color:var(--text-muted);font-size:12px">Loading your projects…</div>';
+    const requestId = options.requestId || '';
     try {
       const client = app.getNovaCloudClient();
       const [ownedPage, sharedPage] = await Promise.all([
         client.listProjects({ limit: 24 }).catch(() => ({ projects: [] })),
         client.listSharedProjects({ limit: 24 }).catch(() => ({ projects: [] }))
       ]);
+      if (requestId && el.dataset.cloudRequestId !== requestId) return;
       const owned = (ownedPage && ownedPage.projects) || [];
       const shared = (sharedPage && sharedPage.projects) || [];
       el.dataset.cloudLoaded = '1';
@@ -681,6 +636,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       }
       el.innerHTML = html;
     } catch (e) {
+      if (requestId && el.dataset.cloudRequestId !== requestId) return;
       el.innerHTML = '<div class="recent-empty" style="padding:12px;color:var(--text-muted);font-size:12px">Could not load your projects.</div>';
     }
   };
