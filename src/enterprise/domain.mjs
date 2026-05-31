@@ -647,6 +647,30 @@ export class EnterpriseStore {
     return publicShareLink(link);
   }
 
+  updateShareLinkRole(context, projectId, linkId, role) {
+    const project = this.requireProjectAccess(context, projectId);
+    this.requireProjectAdmin(context, project);
+    if (!SHARE_LINK_ROLES.has(role)) throw createHttpError(400, 'Share links can only grant Editor or Viewer access.');
+    const link = this.shareLinks.get(linkId);
+    if (!link || link.projectId !== project.id) throw createHttpError(404, 'Share link not found.');
+    if (link.revokedAt) throw createHttpError(410, 'This share link is no longer valid.');
+    link.role = role;
+    if (link.email) {
+      const user = this.findUserByEmail(link.email);
+      const member = user && (project.members || []).find(m => m.userId === user.id);
+      if (member && SHARE_LINK_ROLES.has(member.role)) member.role = role;
+    }
+    this.audit({
+      organizationId: project.organizationId,
+      userId: context.userId,
+      type: 'project.share-link.role-updated',
+      targetId: project.id,
+      metadata: { linkId: link.id, role }
+    });
+    this.persist();
+    return publicShareLink(link);
+  }
+
   // Redeem a share link → join the project at the link's role. Requires a
   // signed-in, verified user. Idempotent; never downgrades an existing role.
   redeemShareLink(context, rawToken) {

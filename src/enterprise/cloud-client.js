@@ -80,6 +80,13 @@ export class NovaCloudClient {
     });
   }
 
+  async updateShareLinkRole(projectId, linkId, { role }) {
+    return this.request('/api/projects/' + encodeURIComponent(projectId) + '/share-links/' + encodeURIComponent(linkId), {
+      method: 'PATCH',
+      body: { role }
+    });
+  }
+
   // Redeem a share token → join the project at the link's role.
   async redeemShareLink(token) {
     return this.request('/api/share/' + encodeURIComponent(token), { method: 'POST' });
