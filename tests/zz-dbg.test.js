@@ -5,8 +5,8 @@ import { installSaveLoad } from '../src/app/save-load.js';
 it('dbg2', async () => {
   document.body.innerHTML = '<div id="landing-page" class="active"></div><div id="workspace-page"></div>';
   const client = {
-    redeemShareLink: async () => ({ project: { id: 'prj1' } }),
-    getProject: async () => ({ id:'prj1', name:'P', currentVersionId:'v1', versions:[{id:'v1',graph:{nodes:[],wires:[]}}] }),
+    // redeemShareLink now returns the full project (versions embedded) so no second getProject call is needed.
+    redeemShareLink: async () => ({ project: { id: 'prj1', name: 'P', currentVersionId: 'v1', versions: [{ id: 'v1', graph: { nodes: [], wires: [] } }] } }),
   };
   const app = { currentPage:'landing', _cloudProjectId:null, currentUser:{email:'a'}, _aiMessages:[], nodes:[], wires:[], selectedNodes:[], zoom:1,panX:0,panY:0,nextNodeId:1, signIn:()=>{}, renderRecentProjects:()=>{}, renderNode:()=>{}, escapeHtml:s=>String(s==null?'':s) };
   app.addAIMessage = (...a)=>{ app._aiMessages.push(a); };

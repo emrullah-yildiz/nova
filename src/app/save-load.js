@@ -700,7 +700,8 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     app._showJoinStatus({ loading: true });
     try {
       const client = app.getNovaCloudClient();
-      const project = await client.redeemShareLink(token);
+      const res = await client.redeemShareLink(token);
+      const project = res && res.project;
       if (project && project.id) {
         // The redeem response now includes the full project with versions, so we
         // can open it directly without a second round-trip to getProject.

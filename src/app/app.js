@@ -335,7 +335,7 @@ const app = {
         // Page-load / re-check: fetch /api/me and /api/me/ai-settings in parallel.
         const [meRes, aiRes] = await Promise.all([
           fetch('/api/me', { credentials: 'include' }),
-          fetch('/api/me/ai-settings', { credentials: 'include' })
+          fetch('/api/me/ai-settings', { credentials: 'include' }).catch(() => null)
         ]);
         this.currentUser = meRes.ok ? (await meRes.json()).user : null;
         aiPrefsRes = aiRes;
@@ -773,7 +773,7 @@ const app = {
       const autoJoin = this._signInReason === 'join';
       this._setRememberedAuth(remember);
       this.closeSignIn();
-      await this.refreshSession({ autoJoinPendingShare: autoJoin });
+      await this.refreshSession({ autoJoinPendingShare: autoJoin, user: data.user || null });
     } catch (e) {
       this._showSignInError('Network error — please try again.');
     } finally {
