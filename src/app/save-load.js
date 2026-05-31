@@ -581,16 +581,16 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   function _recentItemHtml(name, ago, cloudId) {
     const icon = cloudId ? '☁' : '📄';
     const badge = cloudId
-      ? '<span class=”ri-type ri-type-cloud”>cloud</span>'
-      : '<span class=”ri-type ri-type-local”>local</span>';
+      ? '<span class="ri-type ri-type-cloud">cloud</span>'
+      : '<span class="ri-type ri-type-local">local</span>';
     const onclick = cloudId
       ? 'app._openRecentItem(\'\',\'' + escapeJsString(cloudId) + '\')'
       : 'app._openRecentItem(\'' + escapeJsString(name) + '\',\'\')';
-    return '<button class=”recent-item” onclick=”' + onclick + '”>' +
-      '<span class=”ri-icon”>' + icon + '</span>' +
-      '<span class=”ri-name”>' + escapeHtml(name) + '</span>' +
+    return '<button class="recent-item" onclick="' + onclick + '">' +
+      '<span class="ri-icon">' + icon + '</span>' +
+      '<span class="ri-name">' + escapeHtml(name) + '</span>' +
       badge +
-      '<span class=”ri-date”>' + escapeHtml(ago) + '</span></button>';
+      '<span class="ri-date">' + escapeHtml(ago) + '</span></button>';
   }
 
   function _browserRecentMarkup(recent) {
