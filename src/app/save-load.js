@@ -614,6 +614,11 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     const existing = document.getElementById('share-dialog-overlay');
     if (existing) existing.remove();
     app._freshLinkUrls = {}; // raw URLs are only known for links created this session
+    // Persist the transient per-recipient invite status across close/reopen:
+    // initialize once, and NEVER reset it here. An invite that was still being
+    // sent when the dialog was closed keeps its pending entry, so reopening can
+    // paint its spinner again (see the synchronous _renderInvitedRows below).
+    app._invitePending = app._invitePending || {};
     const overlay = document.createElement('div');
     overlay.id = 'share-dialog-overlay';
     overlay.className = 'project-save-overlay';
@@ -641,6 +646,15 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       '<div class="project-save-footer"><span>' + escapeHtml(ownerName) + ' · owner</span>' +
       '<button onclick="document.getElementById(\'share-dialog-overlay\').remove()">Done</button></div></div>';
     document.body.appendChild(overlay);
+    // Paint cached server invites (_lastInvites) + any in-flight/just-resolved
+    // pending rows (_invitePending) IMMEDIATELY, with zero blank gap. This is
+    // what keeps an invite that's still being sent visible as a spinner when the
+    // dialog is reopened — _renderShareLinks below only paints #invite-list after
+    // its listShareLinks network round-trip, which would otherwise leave the list
+    // blank (and the loading rows "lost") until the request returns.
+    app._renderInvitedRows();
+    // Then reconcile with server truth; _renderShareLinks re-merges _invitePending
+    // onto the refreshed _lastInvites, so spinners persist and keep resolving.
     app._renderShareLinks();
   };
 
