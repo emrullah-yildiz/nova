@@ -7,8 +7,9 @@
 // silently sitting on the landing page (errors used to go only to the hidden
 // workspace chat).
 //
-// Drives the REAL installed handlers: app._joinContinue() → app.redeemShareToken()
-// → app.openCloudProject(), with a fake cloud client + a minimal fake app.
+// Drives the REAL installed handlers: app._joinContinue() -> app.redeemShareToken()
+// -> app.openCloudProject() (all from src/app/save-load.js + the byte-identical
+// _joinContinue from src/app/app.js), with a fake cloud client + a minimal fake app.
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { installSaveLoad } from '../src/app/save-load.js';
@@ -21,7 +22,8 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-// Mimic how the cloud client throws: Error with .status (and sometimes .code).
+// Mimic how NovaCloudClient.request throws on a non-2xx response: an Error with
+// .status (the HTTP code) and sometimes .code (the server error code).
 function httpError(status, message, code) {
   const e = new Error(message);
   e.status = status;
@@ -29,10 +31,14 @@ function httpError(status, message, code) {
   return e;
 }
 
+// An empty-but-valid graph the REAL deserializeGraph (installed by installSaveLoad)
+// can consume: it iterates data.nodes / data.wires.
+const emptyGraph = () => ({ nodes: [], wires: [] });
+
 // Build a minimal fake app wired enough to run the real join flow. installSaveLoad
-// installs its own getNovaCloudClient that returns app._novaCloudClient, so we
-// seed that with our stub. newProject is faked to do the page switch the real one
-// does (switchPage('workspace')).
+// installs its own getNovaCloudClient (returns app._novaCloudClient) plus the real
+// serialize/deserialize handlers — so the fake provides the state those touch
+// (nodes/wires arrays, renderNode) and seeds the stub client.
 function makeApp(client) {
   const app = {
     currentPage: 'landing',
@@ -41,14 +47,18 @@ function makeApp(client) {
     _projectName: null,
     currentUser: { email: 'invitee@example.com', displayName: 'Invitee' },
     _pendingJoinToken: '',
+    nodes: [],
+    wires: [],
+    selectedNodes: [],
+    zoom: 1, panX: 0, panY: 0, nextNodeId: 1,
     signIn: () => {},
     renderRecentProjects: () => {},
-    deserializeGraph: () => {},
-    serializeGraph: () => ({ nodes: [], connections: [] }),
-    escapeHtml: (s) => String(s ?? ''),
+    renderNode: () => {},
+    applyTransform: () => {},
+    escapeHtml: (s) => String(s == null ? '' : s),
   };
   app.addAIMessage = (...a) => { app._aiMessages.push(a); };
-  // Fake the page switch the real newProject performs.
+  // Fake the page switch the real newProject performs (switchPage('workspace')).
   app.newProject = () => { app.switchPage('workspace'); };
   app.switchPage = (p) => {
     app.currentPage = p;
@@ -56,16 +66,16 @@ function makeApp(client) {
     const t = document.getElementById(p + '-page');
     if (t) t.classList.add('active');
   };
-  // The redeem/open code lives in save-load; install it onto our fake.
+  // The redeem/open code lives in save-load; install it onto our fake. This also
+  // installs the real serializeGraph / deserializeGraph.
   installSaveLoad(app);
   app._novaCloudClient = client;
   return app;
 }
 
-// Pull in _joinContinue (defined in app.js on the shared `app` singleton). We
-// don't want to boot the whole app singleton, so re-declare the same logic by
-// copying the real method onto our fake — kept byte-identical to app.js so the
-// test exercises the real control flow (await + clear pending + redeem).
+// Re-declare _joinContinue (defined in app.js on the shared `app` singleton),
+// kept byte-identical to app.js so the test exercises the real control flow
+// (await + clear pending + redeem) without booting the whole app singleton.
 function attachJoinContinue(app) {
   app._joinContinue = async function () {
     const token = this._pendingJoinToken;
@@ -80,9 +90,6 @@ const visibleText = () => (document.body.textContent || '').toLowerCase();
 const statusOverlay = () => document.getElementById('join-status-overlay');
 
 beforeEach(() => {
-  // ensureNovaCloudSession (used by openCloudProject) requires cloud to be
-  // enabled in the runtime config — otherwise it throws CLOUD_DISABLED.
-  window.__NOVA_RUNTIME__ = { cloud: true };
   document.body.innerHTML =
     '<div id="landing-page" class="active"></div><div id="workspace-page"></div>';
 });
@@ -96,14 +103,15 @@ describe('invite redeem: land in the shared project or show a visible error', ()
         id: 'prj1',
         name: 'Shared Project',
         currentVersionId: 'v1',
-        versions: [{ id: 'v1', graph: { nodes: [], connections: [] } }],
+        versions: [{ id: 'v1', graph: emptyGraph() }],
       }),
     };
     const app = makeApp(client);
     attachJoinContinue(app);
     app._pendingJoinToken = 'tok-success';
 
-    // Fire Continue but do NOT await yet — assert it is still in-flight.
+    // Fire Continue but do NOT await yet — assert it is still in-flight, proving
+    // _joinContinue AWAITS (the overlay/loading is gone only after it resolves).
     const p = app._joinContinue();
 
     // The pending token is cleared synchronously (so refreshSession won't reprocess).
@@ -122,7 +130,7 @@ describe('invite redeem: land in the shared project or show a visible error', ()
     expect(app.currentPage).toBe('workspace');
     expect(document.getElementById('workspace-page').classList.contains('active')).toBe(true);
     expect(app._cloudProjectId).toBe('prj1');
-    // Both the chooser (if any) and the loading overlay are gone.
+    // Both the chooser (if any) and the loading overlay are gone after success.
     expect(document.getElementById('join-chooser-overlay')).toBeNull();
     expect(statusOverlay()).toBeNull();
   });
