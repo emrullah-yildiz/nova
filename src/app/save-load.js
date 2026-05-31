@@ -34,6 +34,17 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     .replace(/</g, '\\x3c');
   const isCloudEnabled = () => !!getRuntimeConfig().cloudProjectsEnabled;
 
+  // Shared revoke-button renderer used by BOTH the invited-people list
+  // (_renderInvitedRows) and the anon-link list (_renderAnonLinks) so the
+  // two-step inline confirm behaves identically. When this link is the one being
+  // confirmed (app._revokeConfirmId === l.id) it shows a green confirm + a cancel
+  // button; otherwise it shows the trash button, which only ASKS (no network).
+  const revokeControls = l =>
+    (app._revokeConfirmId === l.id)
+      ? '<button class="share-icon-btn confirm" title="Confirm remove" aria-label="Confirm remove" onclick="app._confirmRevokeShareLink(\'' + escapeJsString(l.id) + '\')">✓</button>' +
+        '<button class="share-icon-btn" title="Cancel" aria-label="Cancel" onclick="app._cancelRevokeShareLink()">✕</button>'
+      : '<button class="share-icon-btn danger" title="Remove" aria-label="Remove" onclick="app._askRevokeShareLink(\'' + escapeJsString(l.id) + '\')">🗑</button>';
+
   // ══════════════════════════════════════
   // SERIALIZE — graph → JSON
   // ══════════════════════════════════════
@@ -614,6 +625,18 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     const existing = document.getElementById('share-dialog-overlay');
     if (existing) existing.remove();
     app._freshLinkUrls = {}; // raw URLs are only known for links created this session
+    // Persist the transient per-recipient invite status across close/reopen:
+    // initialize once, and NEVER reset it here. An invite that was still being
+    // sent when the dialog was closed keeps its pending entry, so reopening can
+    // paint its spinner again (see the synchronous _renderInvitedRows below).
+    app._invitePending = app._invitePending || {};
+    // Optimistically-removed link ids: filtered out of both list renderers so a
+    // revoked row never reappears while the server catches up. Persists across
+    // close/reopen (do NOT clear on open).
+    app._locallyRevoked = app._locallyRevoked || new Set();
+    // Reset any stale inline-confirm state so a half-finished "remove?" prompt
+    // from a previous open doesn't linger.
+    app._revokeConfirmId = null;
     const overlay = document.createElement('div');
     overlay.id = 'share-dialog-overlay';
     overlay.className = 'project-save-overlay';
@@ -641,6 +664,15 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       '<div class="project-save-footer"><span>' + escapeHtml(ownerName) + ' · owner</span>' +
       '<button onclick="document.getElementById(\'share-dialog-overlay\').remove()">Done</button></div></div>';
     document.body.appendChild(overlay);
+    // Paint cached server invites (_lastInvites) + any in-flight/just-resolved
+    // pending rows (_invitePending) IMMEDIATELY, with zero blank gap. This is
+    // what keeps an invite that's still being sent visible as a spinner when the
+    // dialog is reopened — _renderShareLinks below only paints #invite-list after
+    // its listShareLinks network round-trip, which would otherwise leave the list
+    // blank (and the loading rows "lost") until the request returns.
+    app._renderInvitedRows();
+    // Then reconcile with server truth; _renderShareLinks re-merges _invitePending
+    // onto the refreshed _lastInvites, so spinners persist and keep resolving.
     app._renderShareLinks();
   };
 
@@ -654,10 +686,10 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   app._renderInvitedRows = function() {
     const inviteList = document.getElementById('invite-list');
     if (!inviteList) return;
-    const invites = Array.isArray(app._lastInvites) ? app._lastInvites : [];
+    const revoked = app._locallyRevoked = app._locallyRevoked || new Set();
+    const invites = (Array.isArray(app._lastInvites) ? app._lastInvites : []).filter(l => !revoked.has(l.id));
     const pending = app._invitePending || {};
     const roleLabel = r => (r === 'Viewer' ? 'Can view' : 'Can edit');
-    const revokeBtn = l => '<button class="share-icon-btn danger" title="Remove" onclick="app._revokeShareLink(\'' + escapeJsString(l.id) + '\')">🗑</button>';
 
     const statIcon = entry => {
       if (!entry) return '';
@@ -678,7 +710,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       rows.push('<div class="share-link-row"><span class="ri-icon">✉</span>' +
         '<span class="share-link-meta">' + escapeHtml(l.email) +
         ' <span style="color:var(--text-muted)">· ' + escapeHtml(roleLabel(l.role)) + ' · invited</span></span>' +
-        statIcon(pending[key]) + revokeBtn(l) + '</div>');
+        statIcon(pending[key]) + revokeControls(l) + '</div>');
     }
 
     // Pending-only rows: in-flight spinners and failures that never got a link.
@@ -808,6 +840,10 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     }
   };
 
+  // Async reconcile: fetch server truth, cache BOTH lists (invited + anon), then
+  // paint via the two synchronous renderers. Keeping the renderers synchronous is
+  // what lets a revoke remove its row instantly (optimistically) before this
+  // network round-trip even starts.
   app._renderShareLinks = async function() {
     const inviteList = document.getElementById('invite-list');
     const linkList = document.getElementById('share-link-list');
@@ -815,36 +851,43 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     let links = [];
     try { links = (await app.getNovaCloudClient().listShareLinks(app._cloudProjectId)).shareLinks || []; } catch (e) { /* ignore */ }
     const active = links.filter(l => !l.revokedAt).sort((a, b) => b.createdAt - a.createdAt);
+
+    // Cache both lists, then delegate to the synchronous renderers so live
+    // per-recipient invite status (spinner / check / cross from app._invitePending)
+    // and optimistic removals (app._locallyRevoked) are applied consistently.
+    app._lastInvites = active.filter(l => l.email);
+    app._lastAnonLinks = active.filter(l => !l.email);
+    app._renderInvitedRows();
+    app._renderAnonLinks();
+  };
+
+  // Rebuilds ONLY the #share-link-list markup, synchronously, from the cached
+  // anon links (app._lastAnonLinks — active links with no .email) and the
+  // session-only raw URLs (app._freshLinkUrls). A link created this session shows
+  // an input + copy button; otherwise it's an "Anyone with the link · role ·
+  // timeAgo" row. Optimistically-revoked ids are filtered out, and the revoke
+  // button uses the shared two-step inline confirm.
+  app._renderAnonLinks = function() {
+    const linkList = document.getElementById('share-link-list');
+    if (!linkList) return;
+    const revoked = app._locallyRevoked = app._locallyRevoked || new Set();
+    const anon = (Array.isArray(app._lastAnonLinks) ? app._lastAnonLinks : []).filter(l => !revoked.has(l.id));
     const fresh = app._freshLinkUrls || {};
     const roleLabel = r => (r === 'Viewer' ? 'Can view' : 'Can edit');
-    const revokeBtn = l => '<button class="share-icon-btn danger" title="Remove" onclick="app._revokeShareLink(\'' + escapeJsString(l.id) + '\')">🗑</button>';
 
-    // Invited people → directly under the email box. Delegated to
-    // _renderInvitedRows so live per-recipient invite status (spinner / check /
-    // cross from app._invitePending) merges onto the server rows.
-    const invites = active.filter(l => l.email);
-    if (inviteList) {
-      app._lastInvites = invites;
-      app._renderInvitedRows();
-    }
-
-    // "Anyone with the link" links → below that section.
-    const anon = active.filter(l => !l.email);
-    if (linkList) {
-      linkList.innerHTML = anon.length
-        ? '<div class="share-section-label">Links</div>' + anon.map(l => {
-            if (fresh[l.id]) {
-              return '<div class="share-link-row">' +
-                '<input class="share-url-input" readonly value="' + escapeHtml(fresh[l.id]) + '" title="' + escapeHtml(roleLabel(l.role)) + ' link" onclick="this.select()" />' +
-                '<button class="share-icon-btn" title="Copy link" data-url="' + escapeHtml(fresh[l.id]) + '" onclick="app._copyShareUrl(this)">📋</button>' +
-                revokeBtn(l) + '</div>';
-            }
-            return '<div class="share-link-row"><span class="ri-icon">🔗</span>' +
-              '<span class="share-link-meta">Anyone with the link <span style="color:var(--text-muted)">· ' + escapeHtml(roleLabel(l.role)) + ' · ' + escapeHtml(_timeAgo(l.createdAt)) + '</span></span>' +
-              revokeBtn(l) + '</div>';
-          }).join('')
-        : '';
-    }
+    linkList.innerHTML = anon.length
+      ? '<div class="share-section-label">Links</div>' + anon.map(l => {
+          if (fresh[l.id]) {
+            return '<div class="share-link-row">' +
+              '<input class="share-url-input" readonly value="' + escapeHtml(fresh[l.id]) + '" title="' + escapeHtml(roleLabel(l.role)) + ' link" onclick="this.select()" />' +
+              '<button class="share-icon-btn" title="Copy link" data-url="' + escapeHtml(fresh[l.id]) + '" onclick="app._copyShareUrl(this)">📋</button>' +
+              revokeControls(l) + '</div>';
+          }
+          return '<div class="share-link-row"><span class="ri-icon">🔗</span>' +
+            '<span class="share-link-meta">Anyone with the link <span style="color:var(--text-muted)">· ' + escapeHtml(roleLabel(l.role)) + ' · ' + escapeHtml(_timeAgo(l.createdAt)) + '</span></span>' +
+            revokeControls(l) + '</div>';
+        }).join('')
+      : '';
   };
 
   app._copyShareUrl = function(btn) {
@@ -856,19 +899,55 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     setTimeout(function() { btn.textContent = prev; }, 1200);
   };
 
-  app._revokeShareLink = async function(linkId) {
-    try {
-      // Drop any transient invite status for this link's email so revoking an
-      // invite doesn't leave a stale pending-only row behind.
-      if (app._invitePending && Array.isArray(app._lastInvites)) {
-        const gone = app._lastInvites.find(l => l.id === linkId);
-        if (gone && gone.email) delete app._invitePending[String(gone.email).toLowerCase()];
-      }
-      await app.getNovaCloudClient().revokeShareLink(app._cloudProjectId, linkId);
-      if (app._freshLinkUrls) delete app._freshLinkUrls[linkId];
-      await app._renderShareLinks();
-    } catch (e) { app.addAIMessage && app.addAIMessage('workspace', 'Revoke failed: ' + e.message); }
+  // Step 1 of the two-step confirm: clicking 🗑 only ASKS (no network). Flips the
+  // row's action area to a confirm/cancel pair via the shared revokeControls.
+  app._askRevokeShareLink = function(linkId) {
+    app._revokeConfirmId = linkId;
+    app._renderInvitedRows();
+    app._renderAnonLinks();
   };
+
+  // Cancel: revert the confirm/cancel pair back to the trash button.
+  app._cancelRevokeShareLink = function() {
+    app._revokeConfirmId = null;
+    app._renderInvitedRows();
+    app._renderAnonLinks();
+  };
+
+  // Step 2: actually revoke. The row is removed OPTIMISTICALLY (synchronously,
+  // before the network call) and restored if the server revoke fails.
+  app._confirmRevokeShareLink = async function(linkId) {
+    app._revokeConfirmId = null;
+    // Drop any transient invite status for this link's email so revoking an
+    // invite doesn't leave a stale pending-only row behind.
+    if (app._invitePending && Array.isArray(app._lastInvites)) {
+      const gone = app._lastInvites.find(l => l.id === linkId);
+      if (gone && gone.email) delete app._invitePending[String(gone.email).toLowerCase()];
+    }
+    // Optimistic removal: hide the row now, before the request fires.
+    app._locallyRevoked = app._locallyRevoked || new Set();
+    app._locallyRevoked.add(linkId);
+    if (app._freshLinkUrls) delete app._freshLinkUrls[linkId];
+    app._renderInvitedRows();
+    app._renderAnonLinks();
+
+    try {
+      await app.getNovaCloudClient().revokeShareLink(app._cloudProjectId, linkId);
+      await app._renderShareLinks();
+      // Server no longer lists it, so the optimistic guard isn't needed — drop it
+      // to keep the Set from growing unbounded across many revokes.
+      app._locallyRevoked.delete(linkId);
+    } catch (e) {
+      // Restore the row and surface the failure honestly.
+      app._locallyRevoked.delete(linkId);
+      app._renderInvitedRows();
+      app._renderAnonLinks();
+      app.addAIMessage && app.addAIMessage('workspace', 'Could not remove the invite: ' + ((e && e.message) || e));
+    }
+  };
+
+  // Backwards-compatible alias — older callers/tests may use _revokeShareLink.
+  app._revokeShareLink = app._confirmRevokeShareLink;
 
   // ══════════════════════════════════════
   // SUBMIT A TICKET (Help → opens a GitHub issue server-side)
