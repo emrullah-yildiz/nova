@@ -360,8 +360,8 @@ const app = {
     // Refresh the landing project list: account projects when signed in, local
     // recents when signed out.
     if (this.currentPage === 'landing' && this.renderRecentProjects) {
-      const el = document.getElementById('recent-list');
-      if (el) delete el.dataset.cloudLoaded;
+      const myList = document.getElementById('my-projects-list');
+      if (myList) delete myList.dataset.cloudLoaded;
       this.renderRecentProjects();
     }
   },
@@ -872,8 +872,8 @@ const app = {
     this.renderAccount();
     if (this._updateChatStatus) this._updateChatStatus();
     if (this.currentPage === 'landing' && this.renderRecentProjects) {
-      const el = document.getElementById('recent-list');
-      if (el) delete el.dataset.cloudLoaded;
+      const myList = document.getElementById('my-projects-list');
+      if (myList) delete myList.dataset.cloudLoaded;
       this.renderRecentProjects();
     }
   },
