@@ -103,16 +103,19 @@ const app = {
   // ── ACCOUNTS (sign in with Google / SSO; session via httpOnly cookie) ──
 
   async initAccount() {
+    this._handleJoinParam();
+    this.renderAccount();
+    const configPromise = fetch('/api/auth/config', { credentials: 'include' })
+      .then(res => res.ok ? res.json() : { googleClientId: '', devLogin: false })
+      .catch(() => ({ googleClientId: '', devLogin: false }));
+    await this._handleVerifyParam();
     try {
-      const res = await fetch('/api/auth/config', { credentials: 'include' });
-      this._authConfig = res.ok ? await res.json() : { googleClientId: '', devLogin: false };
+      this._authConfig = await configPromise;
     } catch {
       this._authConfig = { googleClientId: '', devLogin: false };
     }
-    await this._handleVerifyParam();
-    this._handleJoinParam();
-    await this.refreshSession();
     this._loadGoogleIdentity();
+    await this.refreshSession();
   },
 
   // If opened from a share link (?join=<token>), stash the token and strip it
@@ -121,7 +124,10 @@ const app = {
   _handleJoinParam() {
     try {
       const token = new URLSearchParams(window.location.search).get('join') || '';
-      if (token) this._pendingJoinToken = token;
+      if (token) {
+        this._pendingJoinToken = token;
+        this._signInReason = 'join';
+      }
       const u = new URL(window.location.href);
       u.searchParams.delete('join');
       window.history.replaceState({}, document.title, u.pathname + u.search + u.hash);
@@ -197,7 +203,7 @@ const app = {
     } catch { /* ignore */ }
   },
 
-  async refreshSession() {
+  async refreshSession(options = {}) {
     try {
       const res = await fetch('/api/me', { credentials: 'include' });
       this.currentUser = res.ok ? (await res.json()).user : null;
@@ -205,12 +211,17 @@ const app = {
       this.currentUser = null;
     }
     this.renderAccount();
-    await this._syncAiPrefsForSession();
     // A pending share link: confirm WHICH account joins before redeeming (an
     // invite is redeemed by whoever's signed in — don't silently join as the
     // wrong account). Signed out → prompt sign-in; redeems on next refresh.
     if (this._pendingJoinToken) {
       if (this.currentUser && this.showJoinChooser) {
+        if (options.autoJoinPendingShare && this.redeemShareToken) {
+          const token = this._pendingJoinToken;
+          this._pendingJoinToken = '';
+          await this.redeemShareToken(token);
+          return;
+        }
         this.showJoinChooser(this._pendingJoinToken);
         return;
       } else if (!this.currentUser && this.signIn) {
@@ -218,6 +229,7 @@ const app = {
         this.signIn();
       }
     }
+    await this._syncAiPrefsForSession();
     // Refresh the landing project list: account projects when signed in, local
     // recents when signed out.
     if (this.currentPage === 'landing' && this.renderRecentProjects) {
@@ -386,6 +398,7 @@ const app = {
           client_id: clientId,
           callback: (resp) => this._onGoogleCredential(resp)
         });
+        this._renderGoogleButton();
       }
     };
     document.head.appendChild(s);
@@ -538,8 +551,9 @@ const app = {
         return false;
       }
       // Verified login succeeded.
+      const autoJoin = this._signInReason === 'join';
       this.closeSignIn();
-      await this.refreshSession();
+      await this.refreshSession({ autoJoinPendingShare: autoJoin });
     } catch (e) {
       this._showSignInError('Network error — please try again.');
     } finally {
@@ -596,8 +610,9 @@ const app = {
         this._showSignInError((data.error && data.error.message) || 'Google sign-in failed. Please try again.');
         return;
       }
+      const autoJoin = this._signInReason === 'join';
       this.closeSignIn();
-      await this.refreshSession();
+      await this.refreshSession({ autoJoinPendingShare: autoJoin });
     } catch (e) {
       this._showSignInError('Network error during Google sign-in — please try again.');
     }

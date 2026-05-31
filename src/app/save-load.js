@@ -146,10 +146,10 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     data.wires.forEach(w => { app.wires.push({ ...w }); });
 
     // Apply transform
-    app.applyTransform();
-    app.updatePortDots();
-    setTimeout(() => app.renderWires(), 50);
-    app.updateMenuState();
+    if (app.applyTransform) app.applyTransform();
+    if (app.updatePortDots) app.updatePortDots();
+    if (app.renderWires) setTimeout(() => app.renderWires(), 50);
+    if (app.updateMenuState) app.updateMenuState();
 
     // Update zoom indicator
     const zi = document.getElementById('zoom-indicator');
@@ -947,7 +947,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     const roleLabel = link.role === 'Viewer' ? 'Can view' : 'Can edit';
     mount.innerHTML = '<div class="share-created-link-row">' +
       '<input class="share-url-input" readonly value="' + escapeHtml(link.url) + '" title="' + escapeHtml(roleLabel) + ' link" onclick="this.select()" />' +
-      revokeControls(link) +
+      shareRoleSelect(link) + revokeControls(link) +
       '<button class="share-icon-btn" title="Copy link" aria-label="Copy link" data-url="' + escapeHtml(link.url) + '" onclick="app._copyShareUrl(this)">📋</button>' +
       '</div>';
   };
