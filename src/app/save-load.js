@@ -644,11 +644,65 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     app._renderShareLinks();
   };
 
+  // Rebuilds ONLY the #invite-list markup, synchronously, by merging the cached
+  // server invites (app._lastInvites — active links that have an .email) with the
+  // transient app._invitePending map (keyed by lowercased email). A pending entry
+  // merges onto the matching server row so an in-flight spinner becomes a status
+  // icon in place; pending emails with no server row yet (in-flight, or failures
+  // that never produced a link) render as their own rows. The status icon sits
+  // just left of the revoke button so it lands on the right of the row.
+  app._renderInvitedRows = function() {
+    const inviteList = document.getElementById('invite-list');
+    if (!inviteList) return;
+    const invites = Array.isArray(app._lastInvites) ? app._lastInvites : [];
+    const pending = app._invitePending || {};
+    const roleLabel = r => (r === 'Viewer' ? 'Can view' : 'Can edit');
+    const revokeBtn = l => '<button class="share-icon-btn danger" title="Remove" onclick="app._revokeShareLink(\'' + escapeJsString(l.id) + '\')">🗑</button>';
+
+    const statIcon = entry => {
+      if (!entry) return '';
+      const title = escapeHtml(entry.title || '');
+      if (entry.state === 'ok') return '<span class="invite-stat ok" title="' + title + '" aria-label="' + title + '">✓</span>';
+      if (entry.state === 'warn') return '<span class="invite-stat warn" title="' + title + '" aria-label="' + title + '">✓</span>';
+      if (entry.state === 'err') return '<span class="invite-stat err" title="' + title + '" aria-label="' + title + '">✕</span>';
+      return '<span class="invite-stat spin" title="' + title + '" aria-label="' + title + '">⟳</span>';
+    };
+
+    const seen = new Set();
+    const rows = [];
+
+    // Server invite rows, with the pending status icon merged in when present.
+    for (const l of invites) {
+      const key = String(l.email || '').toLowerCase();
+      seen.add(key);
+      rows.push('<div class="share-link-row"><span class="ri-icon">✉</span>' +
+        '<span class="share-link-meta">' + escapeHtml(l.email) +
+        ' <span style="color:var(--text-muted)">· ' + escapeHtml(roleLabel(l.role)) + ' · invited</span></span>' +
+        statIcon(pending[key]) + revokeBtn(l) + '</div>');
+    }
+
+    // Pending-only rows: in-flight spinners and failures that never got a link.
+    for (const key of Object.keys(pending)) {
+      if (seen.has(key)) continue;
+      const entry = pending[key];
+      rows.push('<div class="share-link-row"><span class="ri-icon">✉</span>' +
+        '<span class="share-link-meta">' + escapeHtml(entry.email || key) +
+        ' <span style="color:var(--text-muted)">· ' + escapeHtml(roleLabel(entry.role)) + ' · invited</span></span>' +
+        statIcon(entry) + '</div>');
+    }
+
+    inviteList.innerHTML = rows.length
+      ? '<div class="share-section-label">Invited</div>' + rows.join('')
+      : '';
+  };
+
   // Invite by email — splits the input on commas/whitespace and asks the server
-  // to email each a role-scoped join link. The status is HONEST: it only says
-  // "emailed" when the server confirmed a real provider delivered it. When the
-  // link was created but not emailed (no provider configured), we surface a
-  // copyable join link so the invite is still usable.
+  // to email each a role-scoped join link. Feedback is immediate and per-recipient:
+  // a spinner row appears for every email the moment Invite is clicked, then each
+  // resolves in place to a green check (emailed), an amber check (created but not
+  // emailed — share the link below) or a red cross (couldn't create the invite).
+  // The status line stays HONEST: it only says "emailed" when the server confirmed
+  // a real provider delivered it.
   app._sendInvites = async function() {
     const inp = document.getElementById('invite-email');
     const status = document.getElementById('invite-status');
@@ -656,38 +710,62 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     if (!raw) return;
     const role = (document.getElementById('invite-role') || {}).value || 'Editor';
     const emails = raw.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
+    if (emails.length === 0) return;
     const btn = document.getElementById('invite-send');
     if (btn) { btn.disabled = true; btn.textContent = 'Inviting…'; }
+
+    // Seed pending state so a spinner row shows for every email at once. Keys are
+    // lowercased to match the server's email normalization, so each pending entry
+    // merges onto the matching server row instead of duplicating it.
+    if (!app._invitePending) app._invitePending = {};
+    const pending = app._invitePending;
+    for (const email of emails) {
+      pending[email.toLowerCase()] = { email: email, role: role, state: 'pending', title: 'Sending invitation…' };
+    }
+    if (inp) inp.value = '';
+    app._renderInvitedRows();
+
     let delivered = 0, created = 0, undelivered = 0, failed = 0;
     const links = []; // { email, joinUrl } for created/undelivered (not-emailed) invites
-    let anyCreated = false;
+
+    // Sequential: the server uses an in-memory snapshot store, so parallel writes
+    // can clobber each other. After each request resolves, update that row's icon.
     for (const email of emails) {
+      const key = email.toLowerCase();
       try {
         const res = await app.getNovaCloudClient().inviteByEmail(app._cloudProjectId, { email: email, role: role });
         if (res && res.ok) {
-          anyCreated = true;
           const wasDelivered = !!(res.delivery && res.delivery.delivered);
           if (wasDelivered) {
             delivered++;
+            pending[key] = { email: email, role: role, state: 'ok', title: 'Invitation emailed to ' + email + '.' };
           } else {
-            // Classify the non-delivery honestly: a real provider that tried
-            // and failed (has an error / provider !== none|console) is an
-            // "undelivered" — NOT "not configured".
+            // Classify the non-delivery honestly: a real provider that tried and
+            // failed (has an error / provider !== none|console) is "undelivered" —
+            // NOT "not configured".
             const prov = res.delivery && res.delivery.provider;
-            if (prov === 'resend' || (res.delivery && res.delivery.error && prov !== 'none' && prov !== 'console')) {
-              undelivered++;
-            } else {
-              created++;
-            }
+            const err = res.delivery && res.delivery.error;
+            const realFailure = prov === 'resend' || (err && prov !== 'none' && prov !== 'console');
+            if (realFailure) undelivered++; else created++;
             if (res.joinUrl) links.push({ email: email, joinUrl: res.joinUrl });
+            const title = realFailure
+              ? "Invite created, but the email couldn't be delivered: " + (err || 'unknown error') + '. Share the link below.'
+              : "Invite created, but email delivery isn't configured — share the link below.";
+            pending[key] = { email: email, role: role, state: 'warn', title: title, joinUrl: res.joinUrl };
           }
         } else {
           failed++;
+          const msg = (res && res.error) ? String(res.error) : 'request failed';
+          pending[key] = { email: email, role: role, state: 'err', title: 'Could not create the invite: ' + msg };
         }
       } catch (e) {
         failed++;
+        const msg = (e && e.message) ? e.message : String(e);
+        pending[key] = { email: email, role: role, state: 'err', title: 'Could not create the invite: ' + msg };
       }
+      app._renderInvitedRows();
     }
+
     const result = buildInviteStatus({ delivered, created, undelivered, failed, links });
     if (status) {
       status.className = 'share-status ' + (result.state === 'err' ? 'err' : result.state === 'warn' ? 'warn' : 'ok');
@@ -705,8 +783,9 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       }
       status.innerHTML = html;
     }
-    if (inp && anyCreated) inp.value = '';
     if (btn) { btn.disabled = false; btn.textContent = 'Invite'; }
+    // Reconcile with server truth; pending icons persist because
+    // _renderInvitedRows merges _invitePending onto _lastInvites.
     await app._renderShareLinks();
   };
 
@@ -740,16 +819,13 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     const roleLabel = r => (r === 'Viewer' ? 'Can view' : 'Can edit');
     const revokeBtn = l => '<button class="share-icon-btn danger" title="Remove" onclick="app._revokeShareLink(\'' + escapeJsString(l.id) + '\')">🗑</button>';
 
-    // Invited people → directly under the email box.
+    // Invited people → directly under the email box. Delegated to
+    // _renderInvitedRows so live per-recipient invite status (spinner / check /
+    // cross from app._invitePending) merges onto the server rows.
     const invites = active.filter(l => l.email);
     if (inviteList) {
-      inviteList.innerHTML = invites.length
-        ? '<div class="share-section-label">Invited</div>' + invites.map(l =>
-            '<div class="share-link-row"><span class="ri-icon">✉</span>' +
-            '<span class="share-link-meta">' + escapeHtml(l.email) +
-            ' <span style="color:var(--text-muted)">· ' + escapeHtml(roleLabel(l.role)) + ' · invited</span></span>' +
-            revokeBtn(l) + '</div>').join('')
-        : '';
+      app._lastInvites = invites;
+      app._renderInvitedRows();
     }
 
     // "Anyone with the link" links → below that section.
@@ -782,6 +858,12 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
 
   app._revokeShareLink = async function(linkId) {
     try {
+      // Drop any transient invite status for this link's email so revoking an
+      // invite doesn't leave a stale pending-only row behind.
+      if (app._invitePending && Array.isArray(app._lastInvites)) {
+        const gone = app._lastInvites.find(l => l.id === linkId);
+        if (gone && gone.email) delete app._invitePending[String(gone.email).toLowerCase()];
+      }
       await app.getNovaCloudClient().revokeShareLink(app._cloudProjectId, linkId);
       if (app._freshLinkUrls) delete app._freshLinkUrls[linkId];
       await app._renderShareLinks();
