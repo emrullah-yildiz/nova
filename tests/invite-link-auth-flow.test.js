@@ -19,9 +19,10 @@ function resetApp() {
   app._pendingJoinEmail = '';
   app._signInReason = '';
   app._accountLoadingLabel = '';
-  app._authConfig = { googleClientId: '', devLogin: false };
-  app._verifyJustConfirmed = false;
-  app.renderRecentProjects = vi.fn();
+    app._authConfig = { googleClientId: '', devLogin: false };
+    app._verifyJustConfirmed = false;
+    app._setRememberedAuth(false);
+    app.renderRecentProjects = vi.fn();
   app.redeemShareToken = vi.fn(async () => {});
   app._showJoinStatus = vi.fn();
 }
@@ -46,6 +47,7 @@ describe('invite link auth flow', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    app._setRememberedAuth(false);
     delete window.NodeFlow;
   });
 
@@ -53,6 +55,7 @@ describe('invite link auth flow', () => {
     window.history.replaceState({}, '', '/?join=invite-token');
     global.fetch = vi.fn(async (url) => {
       if (url === '/api/auth/config') return jsonResponse(true, { googleClientId: 'google-client-id', devLogin: false });
+      if (url === '/api/auth/logout') return jsonResponse(true, { ok: true });
       if (url === '/api/me') return jsonResponse(false, {});
       throw new Error('unexpected fetch ' + url);
     });
@@ -63,6 +66,10 @@ describe('invite link auth flow', () => {
     expect(document.getElementById('signin-email').value).toBe('invited@example.com');
     expect(document.getElementById('signin-sub').textContent).toContain('Sign in as invited@example.com');
     expect(document.getElementById('account-area').textContent).toContain('Sign in');
+    expect(global.fetch).toHaveBeenCalledWith('/api/auth/logout', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ scope: 'all' })
+    }));
   });
 
   it('redeems immediately after the invited email signs in', async () => {
@@ -82,6 +89,24 @@ describe('invite link auth flow', () => {
 
     expect(app.redeemShareToken).toHaveBeenCalledWith('invite-token');
     expect(document.getElementById('signin-overlay')).toBeNull();
+    expect(JSON.parse(global.fetch.mock.calls.find(call => call[0] === '/api/auth/login')[1].body).remember).toBe(false);
+  });
+
+  it('sends remember=true only when the user checks Remember me', async () => {
+    app.openSignIn();
+    document.getElementById('signin-email').value = 'remember@example.com';
+    document.getElementById('signin-password').value = 'password123';
+    document.getElementById('signin-remember').checked = true;
+    global.fetch = vi.fn(async (url) => {
+      if (url === '/api/auth/login') return jsonResponse(true, { user: { email: 'remember@example.com' } });
+      if (url === '/api/me') return jsonResponse(true, { user: { email: 'remember@example.com', displayName: 'Remember' } });
+      throw new Error('unexpected fetch ' + url);
+    });
+
+    await app._submitEmailAuth({ preventDefault: () => {} });
+
+    expect(JSON.parse(global.fetch.mock.calls.find(call => call[0] === '/api/auth/login')[1].body).remember).toBe(true);
+    expect(app._hasRememberedAuth()).toBe(true);
   });
 
   it('keeps the wrong account on the landing page and does not redeem the invite', async () => {

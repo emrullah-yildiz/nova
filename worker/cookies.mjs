@@ -5,7 +5,8 @@
 export const SESSION_COOKIE_NAME = 'nova_session';
 
 export function serializeSessionCookie(token, maxAgeSeconds = 8 * 60 * 60) {
-  return `${SESSION_COOKIE_NAME}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAgeSeconds}`;
+  const maxAge = maxAgeSeconds === null ? '' : `; Max-Age=${maxAgeSeconds}`;
+  return `${SESSION_COOKIE_NAME}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax${maxAge}`;
 }
 
 export function clearSessionCookie() {
@@ -44,7 +45,8 @@ export function clampSlot(value) {
 export function serializeSlotCookie(slot, token, maxAgeSeconds = 8 * 60 * 60) {
   const s = clampSlot(slot);
   if (s === null) return '';
-  return `${SLOT_PREFIX}${s}=${token}; ${COOKIE_ATTRS}; HttpOnly; Max-Age=${maxAgeSeconds}`;
+  const maxAge = maxAgeSeconds === null ? '' : `; Max-Age=${maxAgeSeconds}`;
+  return `${SLOT_PREFIX}${s}=${token}; ${COOKIE_ATTRS}; HttpOnly${maxAge}`;
 }
 
 export function clearSlotCookie(slot) {
@@ -57,7 +59,8 @@ export function clearSlotCookie(slot) {
 export function serializeActivePointer(slot, maxAgeSeconds = 8 * 60 * 60) {
   const s = clampSlot(slot);
   if (s === null) return '';
-  return `${ACTIVE_SLOT_COOKIE}=${s}; ${COOKIE_ATTRS}; Max-Age=${maxAgeSeconds}`;
+  const maxAge = maxAgeSeconds === null ? '' : `; Max-Age=${maxAgeSeconds}`;
+  return `${ACTIVE_SLOT_COOKIE}=${s}; ${COOKIE_ATTRS}${maxAge}`;
 }
 
 export function clearActivePointer() {

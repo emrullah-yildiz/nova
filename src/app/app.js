@@ -115,6 +115,7 @@ const app = {
     const verifyPromise = this._handleVerifyParam();
     const previewPromise = this._loadPendingJoinInvite();
     await verifyPromise;
+    if (!googleRedirectPending) await this._clearUnrememberedAuthOnBoot();
     try {
       this._authConfig = await configPromise;
     } catch {
@@ -135,6 +136,30 @@ const app = {
   _setAccountLoading(label) {
     this._accountLoadingLabel = label || '';
     this.renderAccount();
+  },
+
+  _hasRememberedAuth() {
+    try { return localStorage.getItem('nova:auth:remembered') === '1'; }
+    catch { return false; }
+  },
+
+  _setRememberedAuth(remember) {
+    try {
+      if (remember) localStorage.setItem('nova:auth:remembered', '1');
+      else localStorage.removeItem('nova:auth:remembered');
+    } catch { /* ignore */ }
+  },
+
+  async _clearUnrememberedAuthOnBoot() {
+    if (this._hasRememberedAuth()) return;
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scope: 'all' })
+      });
+    } catch { /* no session to clear, or offline */ }
   },
 
   // If opened from a share link (?join=<token>), stash the token and strip it
@@ -570,6 +595,7 @@ const app = {
             '<label for="signin-password">Password</label>' +
             '<input id="signin-password" type="password" autocomplete="current-password" placeholder="At least 8 characters" required minlength="8">' +
           '</div>' +
+          '<label class="signin-remember"><input id="signin-remember" type="checkbox"> Remember me</label>' +
           '<div class="signin-error" id="signin-error"></div>' +
           '<button class="signin-submit" id="signin-submit" type="submit">Sign in</button>' +
         '</form>' +
@@ -614,6 +640,7 @@ const app = {
     try {
       sessionStorage.setItem('nova:oidc:nonce', nonce);
       sessionStorage.setItem('nova:oidc:state', state);
+      sessionStorage.setItem('nova:oidc:remember', document.getElementById('signin-remember') && document.getElementById('signin-remember').checked ? '1' : '0');
     } catch { /* sign-in still works; we just skip the client-side replay check */ }
     const params = new URLSearchParams({
       client_id: clientId,
@@ -669,6 +696,7 @@ const app = {
     const email = (emailEl && emailEl.value || '').trim();
     const password = (pwEl && pwEl.value) || '';
     const displayName = signup ? ((nameEl && nameEl.value || '').trim()) : '';
+    const remember = !!(document.getElementById('signin-remember') && document.getElementById('signin-remember').checked);
     if (!email || !password) { this._showSignInError('Email and password are required.'); return false; }
     if (signup && password.length < 8) { this._showSignInError('Password must be at least 8 characters.'); return false; }
     const submit = document.getElementById('signin-submit');
@@ -680,7 +708,7 @@ const app = {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(signup ? { email, password, displayName } : { email, password })
+        body: JSON.stringify(signup ? { email, password, displayName, remember } : { email, password, remember })
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -702,6 +730,7 @@ const app = {
       }
       // Verified login succeeded.
       const autoJoin = this._signInReason === 'join';
+      this._setRememberedAuth(remember);
       this.closeSignIn();
       await this.refreshSession({ autoJoinPendingShare: autoJoin });
     } catch (e) {
@@ -752,13 +781,18 @@ const app = {
       return;
     }
     const autoJoin = this._signInReason === 'join';
+    let remember = false;
+    try {
+      remember = sessionStorage.getItem('nova:oidc:remember') === '1';
+      sessionStorage.removeItem('nova:oidc:remember');
+    } catch { remember = false; }
     this._setAccountLoading('Signing in...');
     try {
       const r = await fetch('/api/auth/oidc/callback', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken })
+        body: JSON.stringify({ idToken, remember })
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -771,6 +805,7 @@ const app = {
         this._showSignInError((data.error && data.error.message) || 'Google sign-in failed. Please try again.');
         return;
       }
+      this._setRememberedAuth(remember);
       this.closeSignIn();
       // refreshSession runs right after this in initAccount; if we were called
       // some other way, reflect the new session now.
@@ -794,6 +829,7 @@ const app = {
     } catch { /* ignore */ }
     // Signing out one account may leave another active — refresh and let
     // refreshSession reflect whoever's now active (or signed out).
+    this._setRememberedAuth(false);
     this._cloudProjectId = '';
     this._lastCloudSaveSerialized = null;
     if (sc === 'current') {
