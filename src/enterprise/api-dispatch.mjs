@@ -313,21 +313,22 @@ async function handleInviteToProject({ store, context, params, body, emailServic
   // fallback link matches exactly what the email contains.
   const base = (appUrl || '').replace(/\/+$/, '');
   const joinUrl = base + '/?join=' + encodeURIComponent(link.token);
-  // Fire-and-forget: the invite link is already persisted, so don't block the
-  // response on the email provider's latency (200–500 ms). Delivery status is
-  // reported as 'pending'; the link is always included so the inviter can share
-  // it manually if the email is delayed or undeliverable.
-  const delivery = { delivered: false, provider: emailService ? 'pending' : 'none' };
+  let delivery = { delivered: false, provider: 'none' };
   if (emailService) {
-    const inviter = (context.user && (context.user.displayName || context.user.email)) || 'A Nova user';
-    const msg = buildInviteEmail({ appUrl, token: link.token, projectName: project.name, inviterName: inviter, role: payload.role });
-    emailService.send({ to: payload.email, subject: msg.subject, html: msg.html, text: msg.text })
-      .then(result => {
-        if (result && !result.delivered) console.error('[nova-invite] email to %s not delivered (%s): %s', payload.email, result.provider, result.error || 'no error reported');
-      })
-      .catch(error => {
-        console.error('[nova-invite] email to %s threw: %s', payload.email, (error && error.message) || String(error));
-      });
+    try {
+      const inviter = (context.user && (context.user.displayName || context.user.email)) || 'A Nova user';
+      const msg = buildInviteEmail({ appUrl, token: link.token, projectName: project.name, inviterName: inviter, role: payload.role });
+      const result = await emailService.send({ to: payload.email, subject: msg.subject, html: msg.html, text: msg.text });
+      delivery = {
+        delivered: !!(result && result.delivered),
+        provider: (result && result.provider) || 'unknown'
+      };
+      if (result && result.error) delivery.error = result.error;
+      if (!delivery.delivered) console.error('[nova-invite] email to %s not delivered (%s): %s', payload.email, delivery.provider, delivery.error || 'no error reported');
+    } catch (error) {
+      delivery = { delivered: false, provider: (emailService && emailService.provider) || 'unknown', error: (error && error.message) || String(error) };
+      console.error('[nova-invite] email to %s threw: %s', payload.email, delivery.error);
+    }
   }
   return {
     ok: true,
