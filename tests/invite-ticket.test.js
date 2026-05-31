@@ -4,7 +4,9 @@ import { createWebCryptoAuthService } from '../server/auth/webcrypto-auth.mjs';
 
 function captureEmails() {
   const sent = [];
-  return { sent, service: { provider: 'fake', async send(m) { sent.push(m); } } };
+  // A fake provider that "delivers" — returns the structured result the real
+  // services now return, so the handler can report honest delivery.
+  return { sent, service: { provider: 'resend', async send(m) { sent.push(m); return { delivered: true, provider: 'resend', id: 'fake-1' }; } } };
 }
 function tokenFromJoin(message) {
   return ((message.text || '') + ' ' + (message.html || '')).match(/join=([0-9a-f]{64})/)?.[1];
@@ -26,12 +28,19 @@ describe('invite by email', () => {
 
     const res = await dispatch({ method: 'POST', path: '/api/projects/' + projectId + '/invites', authorization: auth, body: { email: 'Friend@Example.com', role: 'Editor' } });
     expect(res.status).toBe(200);
-    expect(res.body.emailed).toBe(true);
+    expect(res.body.ok).toBe(true);
+    // Delivery is reported truthfully: the fake provider confirmed it sent.
+    expect(res.body.delivery).toMatchObject({ delivered: true, provider: 'resend' });
     expect(res.body.invite.email).toBe('friend@example.com'); // normalized
-    expect(res.body.invite.token).toBeUndefined();            // raw token not returned to the inviter
+    expect(res.body.invite.token).toBeUndefined();            // no raw token on the invite object
+    // The join URL (the same one in the email) is returned as a copyable fallback.
+    expect(res.body.joinUrl).toMatch(/^https:\/\/nova\.test\/\?join=[0-9a-f]{64}$/);
+    expect(res.body.emailed).toBeUndefined();                 // no more lying "emailed" flag
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toBe('friend@example.com'); // normalized recipient
     expect(tokenFromJoin(sent[0])).toBeTruthy();
+    // The join URL contains exactly the emailed token.
+    expect(res.body.joinUrl).toContain(tokenFromJoin(sent[0]));
 
     // The invite shows up as a pending share link (with the email).
     const links = await dispatch({ method: 'GET', path: '/api/projects/' + projectId + '/share-links', authorization: auth });

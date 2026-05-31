@@ -297,24 +297,45 @@ async function handlePutAiSettings({ store, context, body, secretsService }) {
 }
 
 // Invite someone to a project by email: creates a role-scoped, email-tagged
-// share link (admin-only, enforced in the store) and emails the join URL. The
-// raw token goes only to the invitee's inbox, never back to the client.
+// share link (admin-only, enforced in the store) and tries to email the join
+// URL. The response is HONEST about delivery — `ok:true` only means the
+// link/invite was created+persisted (which genuinely happened); whether an
+// email actually went out is reported separately in `delivery.delivered`, and
+// is only ever true when a real provider confirmed it. The join URL is always
+// returned so the UI can offer a copyable link as a fallback. The raw token
+// still goes to the invitee's inbox; we expose the join URL (token-bearing) to
+// the inviter only as that manual-share fallback.
 async function handleInviteToProject({ store, context, params, body, emailService, appUrl }) {
   const payload = validateInviteBody(body || {});
   const project = store.getProject(context, params[0]); // read-access check + name/org
   const link = store.inviteToProject(context, params[0], { email: payload.email, role: payload.role });
-  let emailed = false;
+  // Build the join URL the same way buildInviteEmail does, so the copyable
+  // fallback link matches exactly what the email contains.
+  const base = (appUrl || '').replace(/\/+$/, '');
+  const joinUrl = base + '/?join=' + encodeURIComponent(link.token);
+  let delivery = { delivered: false, provider: 'none' };
   if (emailService) {
     try {
       const inviter = (context.user && (context.user.displayName || context.user.email)) || 'A Nova user';
       const msg = buildInviteEmail({ appUrl, token: link.token, projectName: project.name, inviterName: inviter, role: payload.role });
-      await emailService.send({ to: payload.email, subject: msg.subject, html: msg.html, text: msg.text });
-      emailed = true;
+      const result = await emailService.send({ to: payload.email, subject: msg.subject, html: msg.html, text: msg.text });
+      delivery = {
+        delivered: !!(result && result.delivered),
+        provider: (result && result.provider) || 'unknown'
+      };
+      if (result && result.error) delivery.error = result.error;
+      if (!delivery.delivered) console.error('[nova-invite] email to %s not delivered (%s): %s', payload.email, delivery.provider, delivery.error || 'no error reported');
     } catch (error) {
-      console.error('[nova-invite] email to %s failed: %s', payload.email, (error && error.message) || error);
+      delivery = { delivered: false, provider: (emailService && emailService.provider) || 'unknown', error: (error && error.message) || String(error) };
+      console.error('[nova-invite] email to %s threw: %s', payload.email, delivery.error);
     }
   }
-  return { ok: true, emailed, invite: { id: link.id, email: payload.email, role: payload.role } };
+  return {
+    ok: true,
+    invite: { id: link.id, email: payload.email, role: payload.role },
+    joinUrl,
+    delivery
+  };
 }
 
 // In-app support ticket → a GitHub issue. Authenticated (reduces spam); the
