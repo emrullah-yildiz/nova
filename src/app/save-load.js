@@ -579,7 +579,8 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   };
 
   function _recentItemHtml(name, ago, cloudId) {
-    const icon = cloudId ? '☁' : '📄';
+    // 💾 = saved in this browser/device, ☁ = saved to the cloud account.
+    const icon = cloudId ? '☁' : '💾';
     const badge = cloudId
       ? '<span class="ri-type ri-type-cloud">cloud</span>'
       : '<span class="ri-type ri-type-local">local</span>';
@@ -629,7 +630,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   };
 
   // Async: fetch and render the signed-in user's account projects into the
-  // dedicated "My Projects" section. Falls back to a friendly empty/error state.
+  // dedicated "Cloud Projects" section. Falls back to a friendly empty/error state.
   app._renderCloudProjects = async function(options = {}) {
     const el = document.getElementById('my-projects-list');
     if (!el) return;
