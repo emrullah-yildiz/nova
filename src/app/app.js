@@ -155,11 +155,15 @@ const app = {
     document.body.appendChild(overlay);
   },
 
-  _joinContinue() {
+  async _joinContinue() {
     const token = this._pendingJoinToken;
+    // Clear the pending token so refreshSession doesn't reprocess it, but AWAIT
+    // the redeem+open so the chooser isn't torn down (leaving the user on the
+    // landing page) while it runs. redeemShareToken shows its own visible
+    // loading/error state and switches to the workspace on success.
     this._pendingJoinToken = '';
     const o = document.getElementById('join-chooser-overlay'); if (o) o.remove();
-    if (token && this.redeemShareToken) this.redeemShareToken(token);
+    if (token && this.redeemShareToken) await this.redeemShareToken(token);
   },
 
   _joinUseDifferent() {
