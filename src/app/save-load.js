@@ -618,14 +618,14 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     overlay.onclick = o.loading ? null : (e) => { if (e.target === overlay) overlay.remove(); };
     const title = o.loading ? 'Opening shared project…' : 'Couldn’t open the shared project';
     const mark = o.loading ? '<span class="join-spinner" aria-hidden="true"></span>' : '↗';
-    const body = '<p class="join-status-msg">' + escapeHtmlSL(o.message || '') + '</p>';
+    const body = '<p class="join-status-msg">' + escapeHtml(o.message || '') + '</p>';
     const footer = o.loading ? '' :
       '<div class="project-save-footer" style="gap:8px;justify-content:flex-end">' +
         '<button class="share-create-btn" onclick="(document.getElementById(\'join-status-overlay\')||{}).remove&&document.getElementById(\'join-status-overlay\').remove()">OK</button>' +
       '</div>';
     overlay.innerHTML = '<div class="project-save-dialog" role="dialog" aria-modal="true" aria-live="polite" style="width:min(420px,100%)">' +
       '<div class="project-save-header"><div class="project-save-mark">' + mark + '</div>' +
-      '<div><h3>' + escapeHtmlSL(title) + '</h3>' + body + '</div></div>' +
+      '<div><h3>' + escapeHtml(title) + '</h3>' + body + '</div></div>' +
       footer + '</div>';
     return overlay;
   };
