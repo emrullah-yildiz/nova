@@ -173,10 +173,41 @@ const app = {
         this._signInReason = 'join';
         this._pendingJoinInvite = null;
         this._pendingJoinEmail = '';
+        this._storePendingJoin();
+      } else {
+        this._restorePendingJoin();
       }
       const u = new URL(window.location.href);
       u.searchParams.delete('join');
       window.history.replaceState({}, document.title, u.pathname + u.search + u.hash);
+    } catch { /* ignore */ }
+  },
+
+  _storePendingJoin() {
+    try {
+      if (this._pendingJoinToken) sessionStorage.setItem('nova:pendingJoinToken', this._pendingJoinToken);
+      if (this._pendingJoinEmail) sessionStorage.setItem('nova:pendingJoinEmail', this._pendingJoinEmail);
+    } catch { /* ignore */ }
+  },
+
+  _restorePendingJoin() {
+    try {
+      const token = sessionStorage.getItem('nova:pendingJoinToken') || '';
+      if (!token) return;
+      this._pendingJoinToken = token;
+      this._pendingJoinEmail = sessionStorage.getItem('nova:pendingJoinEmail') || '';
+      this._pendingJoinInvite = this._pendingJoinEmail ? { email: this._pendingJoinEmail } : null;
+      this._signInReason = 'join';
+    } catch { /* ignore */ }
+  },
+
+  _clearPendingJoin() {
+    this._pendingJoinToken = '';
+    this._pendingJoinInvite = null;
+    this._pendingJoinEmail = '';
+    try {
+      sessionStorage.removeItem('nova:pendingJoinToken');
+      sessionStorage.removeItem('nova:pendingJoinEmail');
     } catch { /* ignore */ }
   },
 
@@ -194,6 +225,7 @@ const app = {
       const invite = res && (res.invite || res.shareLink || res);
       this._pendingJoinInvite = invite || null;
       this._pendingJoinEmail = invite && invite.email ? String(invite.email).trim().toLowerCase() : '';
+      this._storePendingJoin();
       return this._pendingJoinInvite;
     } catch {
       return null;
@@ -219,9 +251,7 @@ const app = {
 
   _handleJoinEmailMismatch(user) {
     const msg = this._joinEmailMismatchMessage(user && user.email);
-    this._pendingJoinToken = '';
-    this._pendingJoinInvite = null;
-    this._pendingJoinEmail = '';
+    this._clearPendingJoin();
     this._signInReason = '';
     if (this._showJoinStatus && msg) this._showJoinStatus({ loading: false, message: msg });
   },
@@ -259,7 +289,7 @@ const app = {
     // the redeem+open so the chooser isn't torn down (leaving the user on the
     // landing page) while it runs. redeemShareToken shows its own visible
     // loading/error state and switches to the workspace on success.
-    this._pendingJoinToken = '';
+    this._clearPendingJoin();
     const o = document.getElementById('join-chooser-overlay'); if (o) o.remove();
     if (token && this.redeemShareToken) await this.redeemShareToken(token);
   },
@@ -315,7 +345,7 @@ const app = {
         }
         if (options.autoJoinPendingShare && this.redeemShareToken) {
           const token = this._pendingJoinToken;
-          this._pendingJoinToken = '';
+          this._clearPendingJoin();
           await this.redeemShareToken(token);
           return;
         }
