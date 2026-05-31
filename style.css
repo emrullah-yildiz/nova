@@ -1949,6 +1949,8 @@ input[type="number"] {
 .account-btn { display: inline-flex; align-items: center; gap: 7px; background: none; border: none; color: var(--text-secondary, #a6adc8); font-size: 12px; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
 .account-btn:hover { background: var(--bg-surface-hover, #2e2e45); color: var(--text-primary, #cdd6f4); }
 .account-btn.account-signin { color: var(--accent-blue, #89b4fa); font-weight: 600; }
+.account-btn.account-loading { cursor: default; color: var(--text-secondary, #a6adc8); }
+.account-spinner { width: 14px; height: 14px; border: 2px solid var(--border-color, #313244); border-top-color: var(--accent-blue, #89b4fa); border-radius: 50%; animation: invite-spin 0.8s linear infinite; }
 .account-avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--accent-blue, #89b4fa); color: #11111b; font-weight: 700; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; }
 .account-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-menu { position: absolute; top: 110%; right: 0; min-width: 200px; background: var(--bg-secondary, #181825); border: 1px solid var(--border-color, #313244); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); padding: 6px; display: none; z-index: 1000; }

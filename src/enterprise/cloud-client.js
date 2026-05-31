@@ -92,6 +92,10 @@ export class NovaCloudClient {
     return this.request('/api/share/' + encodeURIComponent(token), { method: 'POST' });
   }
 
+  async previewShareLink(token) {
+    return this.request('/api/share/' + encodeURIComponent(token), { auth: false });
+  }
+
   // Invite someone by email → emails them a role-scoped join link.
   async inviteByEmail(projectId, { email, role }) {
     return this.request('/api/projects/' + encodeURIComponent(projectId) + '/invites', {

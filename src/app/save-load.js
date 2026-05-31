@@ -649,6 +649,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   app._joinErrorMessage = function(e) {
     const status = e && e.status;
     if (status === 403) {
+      if (e && e.code === 'INVITE_EMAIL_MISMATCH') return e.message;
       return 'Please verify your email first, then open the invite link again.';
     }
     if (status === 404) {
@@ -788,6 +789,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     for (const key of Object.keys(pending)) {
       if (seen.has(key)) continue;
       const entry = pending[key];
+      if (!entry || entry.state === 'err') continue;
       rows.push('<div class="share-link-row"><span class="ri-icon">✉</span>' +
         '<span class="share-link-meta">' + escapeHtml(entry.email || key) +
         ' <span style="color:var(--text-muted)">· ' + escapeHtml(roleLabel(entry.role)) + ' · invited</span></span>' +
@@ -810,11 +812,18 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     const inp = document.getElementById('invite-email');
     const status = document.getElementById('invite-status');
     const raw = (inp && inp.value || '').trim();
-    if (!raw) return;
+    if (!raw) {
+      if (status) { status.className = 'share-status err'; status.textContent = 'Enter one or more email addresses to invite.'; }
+      return;
+    }
     const role = (document.getElementById('invite-role') || {}).value || 'Editor';
     const emails = raw.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
-    if (emails.length === 0) return;
+    if (emails.length === 0) {
+      if (status) { status.className = 'share-status err'; status.textContent = 'Enter a valid email address.'; }
+      return;
+    }
     const btn = document.getElementById('invite-send');
+    if (status) { status.className = 'share-status'; status.textContent = 'Sending invitation' + (emails.length > 1 ? 's' : '') + '...'; }
     if (btn) { btn.disabled = true; btn.textContent = 'Inviting…'; }
 
     // Seed pending state so a spinner row shows for every email at once. Keys are
@@ -830,6 +839,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
 
     let delivered = 0, created = 0, undelivered = 0, failed = 0;
     const links = []; // { email, joinUrl } for created/undelivered (not-emailed) invites
+    const failures = [];
 
     // Sequential: the server uses an in-memory snapshot store, so parallel writes
     // can clobber each other. After each request resolves, update that row's icon.
@@ -859,19 +869,22 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
         } else {
           failed++;
           const msg = (res && res.error) ? String(res.error) : 'request failed';
-          pending[key] = { email: email, role: role, state: 'err', title: 'Could not create the invite: ' + msg };
+          failures.push({ email, message: msg });
+          delete pending[key];
         }
       } catch (e) {
         failed++;
         const msg = (e && e.message) ? e.message : String(e);
-        pending[key] = { email: email, role: role, state: 'err', title: 'Could not create the invite: ' + msg };
+        failures.push({ email, message: msg });
+        delete pending[key];
       }
       app._renderInvitedRows();
     }
 
     const result = buildInviteStatus({ delivered, created, undelivered, failed, links });
-    if (status) {
-      status.className = 'share-status ' + (result.state === 'err' ? 'err' : result.state === 'warn' ? 'warn' : 'ok');
+    const finalStatus = document.getElementById('invite-status') || status;
+    if (finalStatus) {
+      finalStatus.className = 'share-status ' + (result.state === 'err' ? 'err' : result.state === 'warn' ? 'warn' : 'ok');
       // Render the message plus any copyable join links for invites that were
       // created but not emailed.
       let html = '<span>' + escapeHtml(result.text) + '</span>';
@@ -881,10 +894,15 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
             '<div class="share-link-row">' +
               '<input class="share-url-input" readonly value="' + escapeHtml(l.joinUrl) + '" title="Join link for ' + escapeHtml(l.email) + '" onclick="this.select()" />' +
               '<button class="share-icon-btn" title="Copy link" data-url="' + escapeHtml(l.joinUrl) + '" onclick="app._copyShareUrl(this)">📋</button>' +
-            '</div>').join('') +
+          '</div>').join('') +
           '</div>';
       }
-      status.innerHTML = html;
+      if (failures.length) {
+        html += '<div class="invite-errors" style="margin-top:8px;display:flex;flex-direction:column;gap:4px">' +
+          failures.map(f => '<span>Could not invite ' + escapeHtml(f.email) + ': ' + escapeHtml(f.message) + '</span>').join('') +
+          '</div>';
+      }
+      finalStatus.innerHTML = html;
     }
     if (btn) { btn.disabled = false; btn.textContent = 'Invite'; }
     // Reconcile with server truth; pending icons persist because

@@ -92,7 +92,7 @@ describe('invite dialog: in-flight spinners survive close/reopen', () => {
     expect(spinCount()).toBe(0);
   });
 
-  it('closing while pending then rejecting shows a red cross after reopen', async () => {
+  it('closing while pending then rejecting removes the failed row and explains the failure', async () => {
     const d = deferred();
     const app = makeApp(() => d.promise);
 
@@ -112,7 +112,8 @@ describe('invite dialog: in-flight spinners survive close/reopen', () => {
     await sendPromise;
     await flush();
 
-    expect(errCount()).toBe(1);
+    expect(errCount()).toBe(0);
     expect(spinCount()).toBe(0);
+    expect(document.getElementById('invite-status').textContent).toContain('Could not invite oops@example.com: network down');
   });
 });
