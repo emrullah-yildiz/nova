@@ -29,13 +29,15 @@ describe('invite by email', () => {
     const res = await dispatch({ method: 'POST', path: '/api/projects/' + projectId + '/invites', authorization: auth, body: { email: 'Friend@Example.com', role: 'Editor' } });
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
-    // Delivery is reported truthfully: the fake provider confirmed it sent.
-    expect(res.body.delivery).toMatchObject({ delivered: true, provider: 'resend' });
+    // Email is sent fire-and-forget; response returns with pending status.
+    expect(res.body.delivery).toMatchObject({ delivered: false, provider: 'pending' });
     expect(res.body.invite.email).toBe('friend@example.com'); // normalized
     expect(res.body.invite.token).toBeUndefined();            // no raw token on the invite object
     // The join URL (the same one in the email) is returned as a copyable fallback.
     expect(res.body.joinUrl).toMatch(/^https:\/\/nova\.test\/\?join=[0-9a-f]{64}$/);
     expect(res.body.emailed).toBeUndefined();                 // no more lying "emailed" flag
+    // Email is sent asynchronously; wait for the microtask queue to drain.
+    await new Promise(r => setTimeout(r, 10));
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toBe('friend@example.com'); // normalized recipient
     expect(tokenFromJoin(sent[0])).toBeTruthy();

@@ -326,9 +326,20 @@ const app = {
   },
 
   async refreshSession(options = {}) {
+    let aiPrefsRes = null;
     try {
-      const res = await fetch('/api/me', { credentials: 'include' });
-      this.currentUser = res.ok ? (await res.json()).user : null;
+      if (options.user) {
+        // Auth response already returned the user — skip the /api/me round-trip.
+        this.currentUser = options.user;
+      } else {
+        // Page-load / re-check: fetch /api/me and /api/me/ai-settings in parallel.
+        const [meRes, aiRes] = await Promise.all([
+          fetch('/api/me', { credentials: 'include' }),
+          fetch('/api/me/ai-settings', { credentials: 'include' }).catch(() => null)
+        ]);
+        this.currentUser = meRes.ok ? (await meRes.json()).user : null;
+        aiPrefsRes = aiRes;
+      }
     } catch {
       this.currentUser = null;
     }
@@ -356,12 +367,12 @@ const app = {
         this.signIn();
       }
     }
-    await this._syncAiPrefsForSession();
+    await this._syncAiPrefsForSession(aiPrefsRes);
     // Refresh the landing project list: account projects when signed in, local
     // recents when signed out.
     if (this.currentPage === 'landing' && this.renderRecentProjects) {
-      const el = document.getElementById('recent-list');
-      if (el) delete el.dataset.cloudLoaded;
+      const myList = document.getElementById('my-projects-list');
+      if (myList) delete myList.dataset.cloudLoaded;
       this.renderRecentProjects();
     }
   },
@@ -370,7 +381,7 @@ const app = {
   // swap to the account-backed cache and hydrate it from the server (claiming
   // any anonymously-entered key if the account has none). Signed out: anonymous
   // sessionStorage. Never blocks session refresh.
-  async _syncAiPrefsForSession() {
+  async _syncAiPrefsForSession(preloadedAiRes) {
     const G = window.GPTClient;
     if (!G) return;
     try {
@@ -380,7 +391,7 @@ const app = {
         G._useSignedInPrefs();
         let settings = null;
         try {
-          const res = await fetch('/api/me/ai-settings', { credentials: 'include' });
+          const res = preloadedAiRes || await fetch('/api/me/ai-settings', { credentials: 'include' });
           if (res.ok) settings = (await res.json()).settings;
         } catch { settings = null; }
         if (settings && settings.keys && Object.keys(settings.keys).length) {
@@ -762,7 +773,7 @@ const app = {
       const autoJoin = this._signInReason === 'join';
       this._setRememberedAuth(remember);
       this.closeSignIn();
-      await this.refreshSession({ autoJoinPendingShare: autoJoin });
+      await this.refreshSession({ autoJoinPendingShare: autoJoin, user: data.user || null });
     } catch (e) {
       this._showSignInError('Network error — please try again.');
     } finally {
@@ -839,7 +850,7 @@ const app = {
       this.closeSignIn();
       // refreshSession runs right after this in initAccount; if we were called
       // some other way, reflect the new session now.
-      await this.refreshSession({ autoJoinPendingShare: autoJoin });
+      await this.refreshSession({ autoJoinPendingShare: autoJoin, user: data.user || null });
     } catch (e) {
       this._accountLoadingLabel = '';
       this.renderAccount();
@@ -872,8 +883,8 @@ const app = {
     this.renderAccount();
     if (this._updateChatStatus) this._updateChatStatus();
     if (this.currentPage === 'landing' && this.renderRecentProjects) {
-      const el = document.getElementById('recent-list');
-      if (el) delete el.dataset.cloudLoaded;
+      const myList = document.getElementById('my-projects-list');
+      if (myList) delete myList.dataset.cloudLoaded;
       this.renderRecentProjects();
     }
   },

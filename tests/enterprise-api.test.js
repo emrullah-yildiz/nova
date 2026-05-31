@@ -513,7 +513,7 @@ describe('enterprise API server', () => {
     }
   });
 
-  it('awaits async persistence restores and writes before responding', async () => {
+  it('fires async persistence in the background after responding', async () => {
     let persisted = null;
     const persistence = {
       async readSnapshot() {
@@ -541,6 +541,9 @@ describe('enterprise API server', () => {
       });
 
       expect(project.status).toBe(201);
+      // Persistence is now fire-and-forget: the response returns before the
+      // snapshot write completes. Give it a moment to settle.
+      await new Promise(resolve => setTimeout(resolve, 100));
       expect(persisted.projects.some(item => item.id === project.body.id)).toBe(true);
     } finally {
       await new Promise(resolve => server.close(resolve));

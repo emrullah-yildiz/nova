@@ -122,8 +122,9 @@ describe('invite redeem: land in the shared project or show a visible error', ()
     expect(visibleText()).toContain('opening shared project');
     expect(app.currentPage).toBe('landing');
 
-    // Resolve the redeem; openCloudProject runs and switches to the workspace.
-    d.resolve({ project: { id: 'prj1' } });
+    // Resolve the redeem; the full project (with versions) is now embedded in the
+    // redeem response so no second getProject round-trip is needed.
+    d.resolve({ project: { id: 'prj1', name: 'Shared Project', currentVersionId: 'v1', versions: [{ id: 'v1', graph: emptyGraph() }] } });
     await p;
     await flush();
 
