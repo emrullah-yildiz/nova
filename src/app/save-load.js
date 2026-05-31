@@ -558,21 +558,35 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     catch (e) { return []; }
   }
 
+  // Single dispatcher so onclick attributes stay short and HTML-safe.
+  app._openRecentItem = function(name, cloudId) {
+    if (cloudId) {
+      app.openCloudProject(cloudId)
+        .then(function(pr) { app._saveCloudProjectId(pr.id); })
+        .catch(function(e) { if (app.addAIMessage) app.addAIMessage('workspace', 'Open failed: ' + e.message); });
+    } else {
+      app.openFromLocal(name);
+    }
+  };
+
+  function _recentItemHtml(name, ago, cloudId) {
+    const icon = cloudId ? '☁' : '📄';
+    const badge = cloudId
+      ? '<span class=”ri-type ri-type-cloud”>cloud</span>'
+      : '<span class=”ri-type ri-type-local”>local</span>';
+    const onclick = cloudId
+      ? 'app._openRecentItem(\'\',\'' + escapeJsString(cloudId) + '\')'
+      : 'app._openRecentItem(\'' + escapeJsString(name) + '\',\'\')';
+    return '<button class=”recent-item” onclick=”' + onclick + '”>' +
+      '<span class=”ri-icon”>' + icon + '</span>' +
+      '<span class=”ri-name”>' + escapeHtml(name) + '</span>' +
+      badge +
+      '<span class=”ri-date”>' + escapeHtml(ago) + '</span></button>';
+  }
+
   function _browserRecentMarkup(recent) {
     if (!recent.length) return '';
-    return recent.map(r => {
-      const ago = _timeAgo(r.date);
-      if (r.cloudId) {
-        return '<button class=”recent-item” onclick=”app.openCloudProject(\'' + escapeJsString(r.cloudId) + '\').then(function(pr){app._saveCloudProjectId(pr.id);}).catch(function(e){app.addAIMessage&&app.addAIMessage(\'workspace\',\'Open failed: \'+e.message);})”>' +
-          '<span class=”ri-icon”>☁</span>' +
-          '<span class=”ri-name”>' + escapeHtml(r.name) + '</span>' +
-          '<span class=”ri-date”>' + escapeHtml(ago) + '</span></button>';
-      }
-      return '<button class=”recent-item” onclick=”app.openFromLocal(\'' + escapeJsString(r.name) + '\')”>' +
-        '<span class=”ri-icon”>📄</span>' +
-        '<span class=”ri-name”>' + escapeHtml(r.name) + '</span>' +
-        '<span class=”ri-date”>' + escapeHtml(ago) + '</span></button>';
-    }).join('');
+    return recent.map(r => _recentItemHtml(r.name, _timeAgo(r.date), r.cloudId || '')).join('');
   }
 
   const origRenderRecent = app.renderRecentProjects.bind(app);
@@ -625,14 +639,11 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
         el.innerHTML = '<div class="recent-empty" style="padding:12px;color:var(--text-muted);font-size:12px">No projects yet — save one to your account and it shows up here.</div>';
         return;
       }
-      const item = (p, icon) => '<button class="recent-item" onclick="app.openCloudProject(\'' + escapeJsString(p.id) + '\').then(function(pr){app._saveCloudProjectId(pr.id);}).catch(function(e){app.addAIMessage&&app.addAIMessage(\'workspace\',\'Open failed: \'+e.message);})">' +
-        '<span class="ri-icon">' + icon + '</span>' +
-        '<span class="ri-name">' + escapeHtml(p.name || 'Untitled') + '</span>' +
-        '<span class="ri-date">' + escapeHtml(_timeAgo(p.updatedAt || p.createdAt || Date.now())) + '</span></button>';
-      let html = owned.map(p => item(p, '☁')).join('');
+      const cloudItem = (p) => _recentItemHtml(p.name || 'Untitled', _timeAgo(p.updatedAt || p.createdAt || Date.now()), p.id);
+      let html = owned.map(cloudItem).join('');
       if (shared.length) {
         html += '<div class="recent-group" style="font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text-muted);padding:10px 4px 4px">Shared with you</div>' +
-          shared.map(p => item(p, '👥')).join('');
+          shared.map(cloudItem).join('');
       }
       el.innerHTML = html;
     } catch (e) {
