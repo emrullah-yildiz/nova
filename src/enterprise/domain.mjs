@@ -621,6 +621,23 @@ export class EnterpriseStore {
     return this.createShareLink(context, projectId, { role, expiresInMs, email });
   }
 
+  previewShareLink(rawToken) {
+    if (!rawToken || typeof rawToken !== 'string') throw createHttpError(400, 'A share token is required.');
+    const link = Array.from(this.shareLinks.values()).find(item => item.tokenHash === hashToken(rawToken));
+    if (!link) throw createHttpError(404, 'Share link not found.');
+    if (link.revokedAt || (link.expiresAt && link.expiresAt <= this.now())) throw createHttpError(410, 'This share link is no longer valid.');
+    const project = this.projects.get(link.projectId);
+    if (!project) throw createHttpError(404, 'Project not found.');
+    return {
+      id: link.id,
+      projectId: link.projectId,
+      projectName: project.name,
+      role: link.role,
+      email: link.email || '',
+      expiresAt: link.expiresAt
+    };
+  }
+
   listShareLinks(context, projectId) {
     const project = this.requireProjectAccess(context, projectId);
     this.requireProjectAdmin(context, project);
@@ -682,6 +699,9 @@ export class EnterpriseStore {
     if (!link) throw createHttpError(404, 'Share link not found.');
     if (link.revokedAt || (link.expiresAt && link.expiresAt <= this.now())) throw createHttpError(410, 'This share link is no longer valid.');
     if (!SHARE_LINK_ROLES.has(link.role)) throw createHttpError(400, 'Invalid share link.'); // defense in depth
+    if (link.email && String(user.email || '').trim().toLowerCase() !== link.email) {
+      throw createHttpError(403, 'This invite is for ' + link.email + '. Sign in with that account to open the shared project.', 'INVITE_EMAIL_MISMATCH');
+    }
     const project = this.projects.get(link.projectId);
     if (!project) throw createHttpError(404, 'Project not found.');
     // Same-org admins already have full access; redeeming is a no-op for them.

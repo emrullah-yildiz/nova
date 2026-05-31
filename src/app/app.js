@@ -104,7 +104,9 @@ const app = {
 
   async initAccount() {
     this._handleJoinParam();
-    this.renderAccount();
+    const googleRedirectPending = this._hasGoogleRedirect();
+    if (googleRedirectPending) this._setAccountLoading('Signing in...');
+    else this.renderAccount();
     const configPromise = fetch('/api/auth/config', { credentials: 'include' })
       .then(res => res.ok ? res.json() : { googleClientId: '', devLogin: false })
       .catch(() => ({ googleClientId: '', devLogin: false }));
@@ -114,12 +116,21 @@ const app = {
     } catch {
       this._authConfig = { googleClientId: '', devLogin: false };
     }
-    await this._handleVerifyParam();
-    this._handleJoinParam();
+    await this._loadPendingJoinInvite();
     // If we just came back from Google's account chooser, complete the sign-in
     // (sets the session cookie) BEFORE reading the session below.
-    await this._handleGoogleRedirect();
-    await this.refreshSession();
+    const handledGoogle = await this._handleGoogleRedirect();
+    if (!handledGoogle) await this.refreshSession();
+  },
+
+  _hasGoogleRedirect() {
+    try { return (window.location.hash || '').indexOf('id_token=') !== -1; }
+    catch { return false; }
+  },
+
+  _setAccountLoading(label) {
+    this._accountLoadingLabel = label || '';
+    this.renderAccount();
   },
 
   // If opened from a share link (?join=<token>), stash the token and strip it
@@ -131,11 +142,59 @@ const app = {
       if (token) {
         this._pendingJoinToken = token;
         this._signInReason = 'join';
+        this._pendingJoinInvite = null;
+        this._pendingJoinEmail = '';
       }
       const u = new URL(window.location.href);
       u.searchParams.delete('join');
       window.history.replaceState({}, document.title, u.pathname + u.search + u.hash);
     } catch { /* ignore */ }
+  },
+
+  async _loadPendingJoinInvite() {
+    const token = this._pendingJoinToken;
+    if (!token) return null;
+    try {
+      const client = this.getNovaCloudClient
+        ? this.getNovaCloudClient()
+        : (window.NodeFlow && window.NodeFlow.createNovaCloudClient
+            ? window.NodeFlow.createNovaCloudClient({ useCookie: true })
+            : null);
+      if (!client || !client.previewShareLink) return null;
+      const res = await client.previewShareLink(token);
+      const invite = res && (res.invite || res.shareLink || res);
+      this._pendingJoinInvite = invite || null;
+      this._pendingJoinEmail = invite && invite.email ? String(invite.email).trim().toLowerCase() : '';
+      return this._pendingJoinInvite;
+    } catch {
+      return null;
+    }
+  },
+
+  _joinExpectedEmail() {
+    return this._pendingJoinEmail || (this._pendingJoinInvite && this._pendingJoinInvite.email) || '';
+  },
+
+  _joinEmailMismatchMessage(actualEmail) {
+    const expected = this._joinExpectedEmail();
+    if (!expected) return '';
+    return 'This invite is for ' + expected + '. You signed in as ' + (actualEmail || 'another account') + ', so the project was not opened.';
+  },
+
+  _pendingJoinMatchesUser(user) {
+    const expected = String(this._joinExpectedEmail() || '').trim().toLowerCase();
+    if (!expected) return true;
+    const actual = String((user && user.email) || '').trim().toLowerCase();
+    return actual === expected;
+  },
+
+  _handleJoinEmailMismatch(user) {
+    const msg = this._joinEmailMismatchMessage(user && user.email);
+    this._pendingJoinToken = '';
+    this._pendingJoinInvite = null;
+    this._pendingJoinEmail = '';
+    this._signInReason = '';
+    if (this._showJoinStatus && msg) this._showJoinStatus({ loading: false, message: msg });
   },
 
   // Before redeeming an invite, confirm which signed-in account joins — an
@@ -214,12 +273,17 @@ const app = {
     } catch {
       this.currentUser = null;
     }
+    this._accountLoadingLabel = '';
     this.renderAccount();
     // A pending share link: confirm WHICH account joins before redeeming (an
     // invite is redeemed by whoever's signed in — don't silently join as the
     // wrong account). Signed out → prompt sign-in; redeems on next refresh.
     if (this._pendingJoinToken) {
       if (this.currentUser && this.showJoinChooser) {
+        if (!this._pendingJoinMatchesUser(this.currentUser)) {
+          this._handleJoinEmailMismatch(this.currentUser);
+          return;
+        }
         if (options.autoJoinPendingShare && this.redeemShareToken) {
           const token = this._pendingJoinToken;
           this._pendingJoinToken = '';
@@ -302,7 +366,12 @@ const app = {
         if (menu.classList.contains('visible')) this._renderAccountSwitcher();
       };
     } else {
-      el.innerHTML = '<button class="account-btn account-signin" onclick="app.signIn()">Sign in</button>';
+      const loading = this._accountLoadingLabel;
+      if (loading) {
+        el.innerHTML = '<button class="account-btn account-loading" disabled><span class="account-spinner" aria-hidden="true"></span><span>' + this.escapeHtml(loading) + '</span></button>';
+      } else {
+        el.innerHTML = '<button class="account-btn account-signin" onclick="app.signIn()">Sign in</button>';
+      }
     }
     this.renderVerifyBanner();
   },
@@ -429,8 +498,8 @@ const app = {
   // validate state/nonce and exchange it for a session.
   async _handleGoogleRedirect() {
     let hash = '';
-    try { hash = window.location.hash || ''; } catch { return; }
-    if (hash.indexOf('id_token=') === -1) return;
+    try { hash = window.location.hash || ''; } catch { return false; }
+    if (hash.indexOf('id_token=') === -1) return false;
     const params = new URLSearchParams(hash.replace(/^#/, ''));
     const idToken = params.get('id_token');
     const state = params.get('state');
@@ -448,15 +517,16 @@ const app = {
       sessionStorage.removeItem('nova:oidc:state');
       sessionStorage.removeItem('nova:oidc:nonce');
     } catch { /* ignore */ }
-    if (!idToken) return;
+    if (!idToken) { this._accountLoadingLabel = ''; this.renderAccount(); return true; }
     // CSRF: the redirect must echo the state we generated.
-    if (expectedState && state !== expectedState) return;
+    if (expectedState && state !== expectedState) { this._accountLoadingLabel = ''; this.renderAccount(); return true; }
     // Replay: the token's nonce must match the one we sent.
     if (expectedNonce) {
       const claims = this._decodeJwtPayload(idToken);
-      if (!claims || claims.nonce !== expectedNonce) return;
+      if (!claims || claims.nonce !== expectedNonce) { this._accountLoadingLabel = ''; this.renderAccount(); return true; }
     }
     await this._completeGoogleSignIn(idToken);
+    return true;
   },
 
   signIn() { this.openSignIn(); },
@@ -467,8 +537,9 @@ const app = {
     if (document.getElementById('signin-overlay')) return;
     const cfg = this._authConfig || {};
     const reason = this._signInReason || '';
+    const joinEmail = reason === 'join' ? this._joinExpectedEmail() : '';
     const subtitle = reason === 'join'
-      ? 'Sign in to open this shared project.'
+      ? (joinEmail ? 'Sign in as ' + joinEmail + ' to open this shared project.' : 'Sign in to open this shared project.')
       : reason === 'share'
         ? 'Sign in to invite people to this project.'
         : 'Sign in to save and sync your work.';
@@ -489,7 +560,7 @@ const app = {
           '</div>' +
           '<div class="signin-field">' +
             '<label for="signin-email">Email</label>' +
-            '<input id="signin-email" type="email" autocomplete="email" placeholder="you@example.com" required>' +
+            '<input id="signin-email" type="email" autocomplete="email" placeholder="you@example.com" required value="' + this.escapeHtml(joinEmail || '') + '">' +
           '</div>' +
           '<div class="signin-field">' +
             '<label for="signin-password">Password</label>' +
@@ -549,6 +620,8 @@ const app = {
       nonce,
       state
     });
+    const joinEmail = this._joinExpectedEmail();
+    if (joinEmail) params.set('login_hint', joinEmail);
     window.location.assign('https://accounts.google.com/o/oauth2/v2/auth?' + params.toString());
   },
 
@@ -564,7 +637,10 @@ const app = {
     if (nameField) nameField.style.display = signup ? '' : 'none';
     if (submit) submit.textContent = signup ? 'Create account' : 'Sign in';
     if (sub) {
-      if (this._signInReason === 'join') sub.textContent = signup ? 'Create an account to open this shared project.' : 'Sign in to open this shared project.';
+      const joinEmail = this._joinExpectedEmail();
+      if (this._signInReason === 'join') sub.textContent = signup
+        ? (joinEmail ? 'Create or verify ' + joinEmail + ' to open this shared project.' : 'Create an account to open this shared project.')
+        : (joinEmail ? 'Sign in as ' + joinEmail + ' to open this shared project.' : 'Sign in to open this shared project.');
       else if (this._signInReason === 'share') sub.textContent = signup ? 'Create an account to invite people to this project.' : 'Sign in to invite people to this project.';
       else sub.textContent = signup ? 'Create an account to save and sync your work.' : 'Sign in to save and sync your work.';
     }
@@ -572,6 +648,11 @@ const app = {
       ? 'Already have an account? <button type="button" onclick="app.toggleSignInMode()">Sign in</button>'
       : 'New to Nova? <button type="button" onclick="app.toggleSignInMode()">Create an account</button>';
     if (pw) pw.setAttribute('autocomplete', signup ? 'new-password' : 'current-password');
+    const joinEmail = this._joinExpectedEmail();
+    if (this._signInReason === 'join' && joinEmail) {
+      const email = document.getElementById('signin-email');
+      if (email && !email.value) email.value = joinEmail;
+    }
     this._showSignInError('');
   },
 
@@ -660,10 +741,14 @@ const app = {
   // back from Google's account chooser (see _handleGoogleRedirect).
   async _completeGoogleSignIn(idToken) {
     if (!idToken) {
+      this._accountLoadingLabel = '';
+      this.renderAccount();
       this.openSignIn();
       this._showSignInError('Google did not return a sign-in. Try again, or use email + password.');
       return;
     }
+    const autoJoin = this._signInReason === 'join';
+    this._setAccountLoading('Signing in...');
     try {
       const r = await fetch('/api/auth/oidc/callback', {
         method: 'POST',
@@ -676,16 +761,19 @@ const app = {
         // Surface the server's real reason (e.g. audience/issuer mismatch)
         // rather than a generic message. The modal isn't open after a redirect,
         // so open it to show the error.
+        this._accountLoadingLabel = '';
+        this.renderAccount();
         this.openSignIn();
         this._showSignInError((data.error && data.error.message) || 'Google sign-in failed. Please try again.');
         return;
       }
-      const autoJoin = this._signInReason === 'join';
       this.closeSignIn();
       // refreshSession runs right after this in initAccount; if we were called
       // some other way, reflect the new session now.
-      await this.refreshSession();
+      await this.refreshSession({ autoJoinPendingShare: autoJoin });
     } catch (e) {
+      this._accountLoadingLabel = '';
+      this.renderAccount();
       this.openSignIn();
       this._showSignInError('Network error during Google sign-in — please try again.');
     }

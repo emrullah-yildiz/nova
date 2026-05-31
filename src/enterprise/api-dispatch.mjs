@@ -65,6 +65,7 @@ export function matchRoute(method, path, options = {}) {
       return { projects: page.items, pagination: page.pagination };
     }],
     ['POST', /^\/api\/projects$/, false, 201, ({ store, context, body }) => store.createProject(context, validateCreateProjectBody(body || {}))],
+    ['GET', /^\/api\/share\/([^/]+)$/, true, 200, ({ store, params }) => ({ invite: store.previewShareLink(params[0]) })],
     ['POST', /^\/api\/share\/([^/]+)$/, false, 200, ({ store, context, params }) => ({ project: store.redeemShareLink(context, params[0]) })],
     ['POST', /^\/api\/projects\/([^/]+)\/share-links$/, false, 201, ({ store, context, params, body }) => store.createShareLink(context, params[0], validateShareLinkBody(body || {}))],
     ['POST', /^\/api\/projects\/([^/]+)\/invites$/, false, 200, handleInviteToProject],
