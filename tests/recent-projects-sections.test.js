@@ -34,7 +34,11 @@ function makeApp(client) {
 describe('landing recent projects sections', () => {
   beforeEach(() => {
     globalThis.localStorage = makeStorage();
-    document.body.innerHTML = '<div id="recent-list"></div>';
+    // Match the two-section HTML structure: recent-list for browser recents,
+    // my-projects-section/my-projects-list for cloud account projects.
+    document.body.innerHTML =
+      '<div id="recent-list"></div>' +
+      '<div id="my-projects-section" style="display:none"><div id="my-projects-list"></div></div>';
   });
 
   it('shows browser-local recents first and signed-in account projects second', async () => {
@@ -45,18 +49,23 @@ describe('landing recent projects sections', () => {
     });
 
     app.renderRecentProjects();
+
+    // recent-list immediately shows browser recents
     expect(document.getElementById('recent-list').textContent).toContain('Browser Draft');
-    expect(document.getElementById('recent-list').textContent).toContain('Loading your projects');
+    // my-projects-list shows loading placeholder while cloud fetch is in flight
+    expect(document.getElementById('my-projects-list').textContent).toContain('Loading your projects');
 
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    const text = document.getElementById('recent-list').textContent;
-    expect(text).toContain('Recent in this browser');
-    expect(text).toContain('Browser Draft');
-    expect(text).toContain('My projects');
-    expect(text).toContain('Cloud Project');
-    expect(text).toContain('Shared with you');
-    expect(text).toContain('Shared Project');
-    expect(text.indexOf('Browser Draft')).toBeLessThan(text.indexOf('Cloud Project'));
+    // recent-list keeps browser recents and does NOT contain cloud items
+    const recentText = document.getElementById('recent-list').textContent;
+    expect(recentText).toContain('Browser Draft');
+    expect(recentText).not.toContain('Cloud Project');
+
+    // my-projects-list contains cloud-owned and shared projects
+    const myText = document.getElementById('my-projects-list').textContent;
+    expect(myText).toContain('Cloud Project');
+    expect(myText).toContain('Shared with you');
+    expect(myText).toContain('Shared Project');
   });
 });
