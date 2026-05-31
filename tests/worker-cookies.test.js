@@ -16,6 +16,18 @@ describe('session cookie helpers', () => {
     expect(c).toMatch(/Path=\//);
   });
 
+  it('can serialize browser-session cookies without max-age', () => {
+    const legacy = serializeSessionCookie('abc.def', null);
+    const slot = serializeSlotCookie(1, 'tok', null);
+    const pointer = serializeActivePointer(1, null);
+
+    expect(legacy).not.toMatch(/Max-Age/);
+    expect(slot).not.toMatch(/Max-Age/);
+    expect(pointer).not.toMatch(/Max-Age/);
+    expect(slot).toMatch(/HttpOnly/);
+    expect(pointer).not.toMatch(/HttpOnly/);
+  });
+
   it('clear cookie expires immediately', () => {
     expect(clearSessionCookie()).toMatch(/Max-Age=0/);
   });

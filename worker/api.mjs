@@ -178,7 +178,7 @@ export async function handleEnterpriseApi(request, env) {
       if (slot === null || !map[slot]) {
         return Response.json({ ok: false, error: { message: 'That account is no longer signed in.', code: 'SLOT_NOT_FOUND' } }, { status: 401, headers: headersWith(env) });
       }
-      return Response.json({ ok: true, user: map[slot].user }, { status: 200, headers: headersWith(env, [serializeActivePointer(slot)]) });
+      return Response.json({ ok: true, user: map[slot].user }, { status: 200, headers: headersWith(env, [serializeActivePointer(slot, null)]) });
     }
 
     const { status, body: payload } = await dispatch({
@@ -198,8 +198,10 @@ export async function handleEnterpriseApi(request, env) {
       let userId = null;
       try { userId = (await store.authenticateAsync(payload.token)).userId; } catch { /* fall back to a free slot */ }
       const slot = pickSlot(map, userId);
-      cookies.push(serializeSlotCookie(slot, payload.token));
-      cookies.push(serializeActivePointer(slot));
+      const remember = !!(body && body.remember);
+      const cookieMaxAge = remember ? undefined : null;
+      cookies.push(serializeSlotCookie(slot, payload.token, cookieMaxAge));
+      cookies.push(serializeActivePointer(slot, cookieMaxAge));
       if (parseCookie(cookieHeader)) cookies.push(clearSessionCookie()); // migrate legacy → slotted
     }
     return Response.json(payload, { status, headers: headersWith(env, cookies) });
