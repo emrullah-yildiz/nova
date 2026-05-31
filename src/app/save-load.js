@@ -561,9 +561,18 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   // Single dispatcher so onclick attributes stay short and HTML-safe.
   app._openRecentItem = function(name, cloudId) {
     if (cloudId) {
+      if (!app.currentUser) {
+        // Not signed in — show the sign-in modal so the user can authenticate
+        // first, then they can click the project again.
+        if (app.signIn) app.signIn();
+        return;
+      }
       app.openCloudProject(cloudId)
         .then(function(pr) { app._saveCloudProjectId(pr.id); })
-        .catch(function(e) { if (app.addAIMessage) app.addAIMessage('workspace', 'Open failed: ' + e.message); });
+        .catch(function(e) {
+          const msg = (e && e.message) || 'Could not open project.';
+          if (app.addAIMessage) app.addAIMessage('workspace', '❌ ' + msg);
+        });
     } else {
       app.openFromLocal(name);
     }
@@ -572,16 +581,16 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   function _recentItemHtml(name, ago, cloudId) {
     const icon = cloudId ? '☁' : '📄';
     const badge = cloudId
-      ? '<span class=”ri-type ri-type-cloud”>cloud</span>'
-      : '<span class=”ri-type ri-type-local”>local</span>';
+      ? '<span class="ri-type ri-type-cloud">cloud</span>'
+      : '<span class="ri-type ri-type-local">local</span>';
     const onclick = cloudId
       ? 'app._openRecentItem(\'\',\'' + escapeJsString(cloudId) + '\')'
       : 'app._openRecentItem(\'' + escapeJsString(name) + '\',\'\')';
-    return '<button class=”recent-item” onclick=”' + onclick + '”>' +
-      '<span class=”ri-icon”>' + icon + '</span>' +
-      '<span class=”ri-name”>' + escapeHtml(name) + '</span>' +
+    return '<button class="recent-item" onclick="' + onclick + '">' +
+      '<span class="ri-icon">' + icon + '</span>' +
+      '<span class="ri-name">' + escapeHtml(name) + '</span>' +
       badge +
-      '<span class=”ri-date”>' + escapeHtml(ago) + '</span></button>';
+      '<span class="ri-date">' + escapeHtml(ago) + '</span></button>';
   }
 
   function _browserRecentMarkup(recent) {
