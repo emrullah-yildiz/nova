@@ -105,18 +105,22 @@ const app = {
   async initAccount() {
     this._handleJoinParam();
     const googleRedirectPending = this._hasGoogleRedirect();
+    const joinRedirectPending = !!this._pendingJoinToken && !googleRedirectPending;
     if (googleRedirectPending) this._setAccountLoading('Signing in...');
+    else if (joinRedirectPending) this._setAccountLoading('Opening invite...');
     else this.renderAccount();
     const configPromise = fetch('/api/auth/config', { credentials: 'include' })
       .then(res => res.ok ? res.json() : { googleClientId: '', devLogin: false })
       .catch(() => ({ googleClientId: '', devLogin: false }));
-    await this._handleVerifyParam();
+    const verifyPromise = this._handleVerifyParam();
+    const previewPromise = this._loadPendingJoinInvite();
+    await verifyPromise;
     try {
       this._authConfig = await configPromise;
     } catch {
       this._authConfig = { googleClientId: '', devLogin: false };
     }
-    await this._loadPendingJoinInvite();
+    await previewPromise;
     // If we just came back from Google's account chooser, complete the sign-in
     // (sets the session cookie) BEFORE reading the session below.
     const handledGoogle = await this._handleGoogleRedirect();
