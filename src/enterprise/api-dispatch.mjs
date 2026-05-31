@@ -70,6 +70,7 @@ export function matchRoute(method, path, options = {}) {
     ['POST', /^\/api\/projects\/([^/]+)\/invites$/, false, 200, handleInviteToProject],
     ['POST', /^\/api\/feedback\/ticket$/, false, 201, handleSubmitTicket],
     ['GET', /^\/api\/projects\/([^/]+)\/share-links$/, false, 200, ({ store, context, params }) => ({ shareLinks: store.listShareLinks(context, params[0]) })],
+    ['PATCH', /^\/api\/projects\/([^/]+)\/share-links\/([^/]+)$/, false, 200, ({ store, context, params, body }) => store.updateShareLinkRole(context, params[0], params[1], validateShareLinkBody(body || {}).role)],
     ['POST', /^\/api\/projects\/([^/]+)\/share-links\/([^/]+)\/revoke$/, false, 200, ({ store, context, params }) => store.revokeShareLink(context, params[0], params[1])],
     ['GET', /^\/api\/projects\/([^/]+)$/, false, 200, ({ store, context, params }) => store.getProject(context, params[0])],
     ['POST', /^\/api\/projects\/([^/]+)\/members$/, false, 200, ({ store, context, params, body }) => store.addProjectMember(context, params[0], validateProjectMemberBody(body || {}))],

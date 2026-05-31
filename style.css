@@ -114,7 +114,7 @@ input:focus, textarea:focus { border-color: var(--accent-blue); }
 
 .menu-right { display: flex; align-items: center; gap: 8px; }
 .menu-invite-btn {
-  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 14px;
+  display: none; align-items: center; gap: 6px; height: 28px; padding: 0 14px;
   border: none; border-radius: 7px; background: var(--accent-blue, #89b4fa); color: #11111b;
   font-size: 12px; font-weight: 700; cursor: pointer;
 }
@@ -1485,6 +1485,9 @@ input[type="number"] {
 .share-create-btn:disabled { opacity: 0.6; cursor: default; }
 .share-section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-muted); padding: 4px 0 2px; }
 .share-link-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border-color); }
+.share-created-link-row { display: flex; align-items: center; gap: 8px; padding: 0 0 12px; }
+.share-role-select { flex: 0 0 136px; }
+.share-role-select select { height: 36px; font-size: 13px; }
 .share-url-input {
   flex: 1; min-width: 0; height: 36px; padding: 0 10px;
   background: var(--bg-surface); color: var(--text-secondary);
