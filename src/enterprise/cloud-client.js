@@ -202,7 +202,13 @@ export class NovaCloudClient {
     const data = text ? JSON.parse(text) : null;
     if (!response.ok) {
       const message = data && data.error && data.error.message ? data.error.message : 'Nova Cloud request failed.';
-      throw new Error(message);
+      const err = new Error(message);
+      // Surface the HTTP status (and server error code) so callers can map
+      // specific failures to actionable messages — e.g. 403 unverified / 410
+      // expired / 404 invalid for the invite-redeem flow.
+      err.status = response.status;
+      if (data && data.error && data.error.code) err.code = data.error.code;
+      throw err;
     }
     return data;
   }
