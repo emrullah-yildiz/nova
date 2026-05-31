@@ -183,9 +183,11 @@ input:focus, textarea:focus { border-color: var(--accent-blue); }
 
 .recent-section h3 { font-size: 14px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 16px; }
 
-.recent-list { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.recent-list { display: block; width: 100%; }
 
-.recent-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: var(--radius-sm); cursor: pointer; background: transparent; width: 100%; text-align: left; }
+.recent-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+  border-radius: var(--radius-sm); cursor: pointer; background: transparent;
+  width: 100%; text-align: left; margin-bottom: 2px; box-sizing: border-box; }
 
 .recent-item:hover { background: var(--bg-surface); }
 
