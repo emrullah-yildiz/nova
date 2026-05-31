@@ -29,15 +29,24 @@ function makeApp(inviteImpl) {
   const app = {
     _cloudProjectId: 'proj-1',
     currentUser: { email: 'owner@example.com', displayName: 'Owner' },
-    getNovaCloudClient: () => client,
     addAIMessage: () => {},
     _saveCloudProjectId: () => {},
     signIn: () => {},
+    // installSaveLoad patches this at install time (app.renderRecentProjects.bind),
+    // so it must exist as a function on the fake app.
+    renderRecentProjects: () => {},
   };
   installSaveLoad(app);
+  // installSaveLoad installs its own app.getNovaCloudClient that caches/returns
+  // app._novaCloudClient — so seed the cache with our stub client. Every handler
+  // resolves the client through getNovaCloudClient(), so this is all that's needed.
+  app._novaCloudClient = client;
   return app;
 }
 
+const spinCount = () => document.querySelectorAll('#invite-list .invite-stat.spin').length;
+const okCount = () => document.querySelectorAll('#invite-list .invite-stat.ok').length;
+const errCount = () => document.querySelectorAll('#invite-list .invite-stat.err').length;
 const flush = () => Promise.resolve();
 
 describe('invite dialog: in-flight spinners survive close/reopen', () => {
@@ -53,11 +62,10 @@ describe('invite dialog: in-flight spinners survive close/reopen', () => {
     app.showShareDialog();
     document.getElementById('invite-email').value = 'friend@example.com';
     const sendPromise = app._sendInvites();
-    await flush(); // let the synchronous seeding + first render settle
 
-    // b. A spinner row exists for that email.
-    let spin = document.querySelectorAll('#invite-list .invite-stat.spin');
-    expect(spin.length).toBe(1);
+    // b. A spinner row exists for that email (rendered synchronously before the
+    //    first await inside _sendInvites).
+    expect(spinCount()).toBe(1);
 
     // c. Click "Done" — remove the overlay while the invite is still in-flight.
     document.getElementById('share-dialog-overlay').remove();
@@ -67,8 +75,8 @@ describe('invite dialog: in-flight spinners survive close/reopen', () => {
     app.showShareDialog();
 
     // e. SYNCHRONOUSLY (before resolving the deferred) the spinner row is back.
-    spin = document.querySelectorAll('#invite-list .invite-stat.spin');
-    expect(spin.length).toBe(1);
+    //    This is the regression: before the fix the reopened list is blank here.
+    expect(spinCount()).toBe(1);
 
     // f. Resolve the in-flight invite; the row turns into a green check (ok)
     //    live in the reopened dialog.
@@ -80,9 +88,8 @@ describe('invite dialog: in-flight spinners survive close/reopen', () => {
     await sendPromise;
     await flush();
 
-    const ok = document.querySelectorAll('#invite-list .invite-stat.ok');
-    expect(ok.length).toBe(1);
-    expect(document.querySelectorAll('#invite-list .invite-stat.spin').length).toBe(0);
+    expect(okCount()).toBe(1);
+    expect(spinCount()).toBe(0);
   });
 
   it('closing while pending then rejecting shows a red cross after reopen', async () => {
@@ -92,22 +99,20 @@ describe('invite dialog: in-flight spinners survive close/reopen', () => {
     app.showShareDialog();
     document.getElementById('invite-email').value = 'oops@example.com';
     const sendPromise = app._sendInvites();
-    await flush();
 
-    expect(document.querySelectorAll('#invite-list .invite-stat.spin').length).toBe(1);
+    expect(spinCount()).toBe(1);
 
-    // Close while pending.
+    // Close while pending, then reopen — spinner must still be there.
     document.getElementById('share-dialog-overlay').remove();
-    // Reopen.
     app.showShareDialog();
-    expect(document.querySelectorAll('#invite-list .invite-stat.spin').length).toBe(1);
+    expect(spinCount()).toBe(1);
 
     // Reject the in-flight invite → red cross.
     d.reject(new Error('network down'));
     await sendPromise;
     await flush();
 
-    expect(document.querySelectorAll('#invite-list .invite-stat.err').length).toBe(1);
-    expect(document.querySelectorAll('#invite-list .invite-stat.spin').length).toBe(0);
+    expect(errCount()).toBe(1);
+    expect(spinCount()).toBe(0);
   });
 });
