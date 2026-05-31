@@ -561,9 +561,18 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   // Single dispatcher so onclick attributes stay short and HTML-safe.
   app._openRecentItem = function(name, cloudId) {
     if (cloudId) {
+      if (!app.currentUser) {
+        // Not signed in — show the sign-in modal so the user can authenticate
+        // first, then they can click the project again.
+        if (app.signIn) app.signIn();
+        return;
+      }
       app.openCloudProject(cloudId)
         .then(function(pr) { app._saveCloudProjectId(pr.id); })
-        .catch(function(e) { if (app.addAIMessage) app.addAIMessage('workspace', 'Open failed: ' + e.message); });
+        .catch(function(e) {
+          const msg = (e && e.message) || 'Could not open project.';
+          if (app.addAIMessage) app.addAIMessage('workspace', '❌ ' + msg);
+        });
     } else {
       app.openFromLocal(name);
     }
