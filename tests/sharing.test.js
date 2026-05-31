@@ -76,6 +76,20 @@ describe('share links + cross-org access', () => {
     expect(() => store.createShareLink(owner.context, project.id, { role: ROLES.OWNER })).toThrow(/Editor or Viewer/);
   });
 
+  it('updates an invite role in place without creating a new invite', () => {
+    const { store, owner, collaborator, project } = setup();
+    const invite = store.inviteToProject(owner.context, project.id, { email: collaborator.user.email, role: ROLES.VIEWER });
+    store.redeemShareLink(collaborator.context, invite.token);
+    expect(() => store.updateProjectGraph(collaborator.context, project.id, { graph: { nodes: [], wires: [] } })).toThrow(/write/i);
+
+    const updated = store.updateShareLinkRole(owner.context, project.id, invite.id, ROLES.EDITOR);
+
+    expect(updated.id).toBe(invite.id);
+    expect(updated.role).toBe(ROLES.EDITOR);
+    expect(store.listShareLinks(owner.context, project.id)).toHaveLength(1);
+    expect(store.updateProjectGraph(collaborator.context, project.id, { graph: { nodes: [], wires: [] }, message: 'promoted' }).versions.length).toBeGreaterThan(1);
+  });
+
   it('redeem: unknown→404, revoked→410, expired→410, unverified→403, idempotent, never downgrades', () => {
     const { store, owner, collaborator, project } = setup();
 

@@ -157,11 +157,15 @@ const app = {
     document.body.appendChild(overlay);
   },
 
-  _joinContinue() {
+  async _joinContinue() {
     const token = this._pendingJoinToken;
+    // Clear the pending token so refreshSession doesn't reprocess it, but AWAIT
+    // the redeem+open so the chooser isn't torn down (leaving the user on the
+    // landing page) while it runs. redeemShareToken shows its own visible
+    // loading/error state and switches to the workspace on success.
     this._pendingJoinToken = '';
     const o = document.getElementById('join-chooser-overlay'); if (o) o.remove();
-    if (token && this.redeemShareToken) this.redeemShareToken(token);
+    if (token && this.redeemShareToken) await this.redeemShareToken(token);
   },
 
   _joinUseDifferent() {
@@ -169,6 +173,7 @@ const app = {
     // Keep _pendingJoinToken set and ADD another account (no sign-out — this is
     // multi-account). The new login becomes active; refreshSession then re-runs
     // the join chooser for that account, where the user clicks Continue.
+    this._signInReason = 'join';
     if (this.signIn) this.signIn();
   },
 
@@ -211,6 +216,7 @@ const app = {
         this.showJoinChooser(this._pendingJoinToken);
         return;
       } else if (!this.currentUser && this.signIn) {
+        this._signInReason = 'join';
         this.signIn();
       }
     }
@@ -446,13 +452,19 @@ const app = {
   openSignIn() {
     if (document.getElementById('signin-overlay')) return;
     const cfg = this._authConfig || {};
+    const reason = this._signInReason || '';
+    const subtitle = reason === 'join'
+      ? 'Sign in to open this shared project.'
+      : reason === 'share'
+        ? 'Sign in to invite people to this project.'
+        : 'Sign in to save and sync your work.';
     const overlay = document.createElement('div');
     overlay.id = 'signin-overlay';
     overlay.innerHTML =
       '<div class="signin-panel" role="dialog" aria-modal="true" aria-label="Sign in to Nova">' +
         '<button class="signin-close" aria-label="Close" onclick="app.closeSignIn()">&times;</button>' +
         '<div class="signin-title">Welcome to Nova</div>' +
-        '<div class="signin-sub" id="signin-sub">Sign in to save and sync your work.</div>' +
+        '<div class="signin-sub" id="signin-sub">' + this.escapeHtml(subtitle) + '</div>' +
         (cfg.googleClientId
           ? '<div class="signin-google" id="signin-google"></div><div class="signin-divider"><span>or</span></div>'
           : '') +
@@ -489,6 +501,7 @@ const app = {
   closeSignIn() {
     const overlay = document.getElementById('signin-overlay');
     if (overlay) overlay.remove();
+    this._signInReason = '';
     if (this._escSignIn) { document.removeEventListener('keydown', this._escSignIn); this._escSignIn = null; }
   },
 
@@ -536,7 +549,11 @@ const app = {
     const pw = document.getElementById('signin-password');
     if (nameField) nameField.style.display = signup ? '' : 'none';
     if (submit) submit.textContent = signup ? 'Create account' : 'Sign in';
-    if (sub) sub.textContent = signup ? 'Create an account to save and sync your work.' : 'Sign in to save and sync your work.';
+    if (sub) {
+      if (this._signInReason === 'join') sub.textContent = signup ? 'Create an account to open this shared project.' : 'Sign in to open this shared project.';
+      else if (this._signInReason === 'share') sub.textContent = signup ? 'Create an account to invite people to this project.' : 'Sign in to invite people to this project.';
+      else sub.textContent = signup ? 'Create an account to save and sync your work.' : 'Sign in to save and sync your work.';
+    }
     if (toggle) toggle.innerHTML = signup
       ? 'Already have an account? <button type="button" onclick="app.toggleSignInMode()">Sign in</button>'
       : 'New to Nova? <button type="button" onclick="app.toggleSignInMode()">Create an account</button>';
@@ -578,7 +595,10 @@ const app = {
       // Sign-up no longer signs you in — it requires email verification first.
       if (signup && data.verificationRequired) {
         if (this._signInMode === 'signup') this.toggleSignInMode(); // back to the Sign-in form
-        this._showVerifyNotice(email, 'Account created. We emailed a verification link to ' + email + ' — click it to finish signing in.');
+        const verifyMsg = this._signInReason === 'join'
+          ? 'Account created. We emailed a verification link to ' + email + ' — click it, then open the invite link again.'
+          : 'Account created. We emailed a verification link to ' + email + ' — click it to finish signing in.';
+        this._showVerifyNotice(email, verifyMsg);
         return false;
       }
       // Verified login succeeded.
@@ -714,7 +734,13 @@ const app = {
 
     if (cl) cl.classList.toggle('disabled', !ws);
 
-    ['mi-save','mi-saveas','mi-cloud-save','mi-cloud-open','mi-export','mi-import'].forEach(id => {
+    const invite = document.getElementById('btn-invite');
+    if (invite) {
+      invite.style.display = ws ? 'inline-flex' : 'none';
+      invite.disabled = !ws;
+    }
+
+    ['mi-save','mi-saveas','mi-cloud-open','mi-export','mi-import'].forEach(id => {
 
       const el = document.getElementById(id);
 

@@ -46,6 +46,7 @@ describe('NovaCloudClient auth transport', () => {
     await client.listSharedProjects({ limit: 10 });
     await client.createShareLink('prj_1', { role: 'Editor' });
     await client.listShareLinks('prj_1');
+    await client.updateShareLinkRole('prj_1', 'shl_9', { role: 'Viewer' });
     await client.revokeShareLink('prj_1', 'shl_9');
     await client.redeemShareLink('tok abc/?');
 
@@ -53,10 +54,12 @@ describe('NovaCloudClient auth transport', () => {
       'GET /api/projects/shared?limit=10',
       'POST /api/projects/prj_1/share-links',
       'GET /api/projects/prj_1/share-links',
+      'PATCH /api/projects/prj_1/share-links/shl_9',
       'POST /api/projects/prj_1/share-links/shl_9/revoke',
       'POST /api/share/tok%20abc%2F%3F' // token is URL-encoded
     ]);
     expect(calls[1].init.body).toBe(JSON.stringify({ role: 'Editor', expiresInMs: 0 }));
+    expect(calls[3].init.body).toBe(JSON.stringify({ role: 'Viewer' }));
     expect(calls.every(c => c.init.credentials === 'include')).toBe(true);
   });
 

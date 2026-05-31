@@ -34,6 +34,15 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     .replace(/</g, '\\x3c');
   const isCloudEnabled = () => !!getRuntimeConfig().cloudProjectsEnabled;
 
+  const shareRoleSelect = l => {
+    const role = l && l.role === 'Viewer' ? 'Viewer' : 'Editor';
+    const disabled = app._roleUpdating && app._roleUpdating[l.id] ? ' disabled' : '';
+    return '<span class="share-select share-role-select"><select aria-label="Access level" onchange="app._updateShareLinkRole(\'' + escapeJsString(l.id) + '\', this.value)"' + disabled + '>' +
+      '<option value="Editor"' + (role === 'Editor' ? ' selected' : '') + '>Can edit</option>' +
+      '<option value="Viewer"' + (role === 'Viewer' ? ' selected' : '') + '>Can view</option>' +
+      '</select></span>';
+  };
+
   // Shared revoke-button renderer used by BOTH the invited-people list
   // (_renderInvitedRows) and the anon-link list (_renderAnonLinks) so the
   // two-step inline confirm behaves identically. When this link is the one being
@@ -601,30 +610,91 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     }
   };
 
-  // Join a shared project by redeeming a share token, then open it.
+  // A page-independent status overlay for the invite/redeem flow. The workspace
+  // chat isn't visible on the landing page, so redeem progress and errors are
+  // surfaced here instead — otherwise failures (403 unverified, 410 revoked,
+  // 404 invalid) vanish and the invitee just sits on the landing page.
+  app._showJoinStatus = function(opts) {
+    const o = opts || {};
+    let overlay = document.getElementById('join-status-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'join-status-overlay';
+      overlay.className = 'project-save-overlay';
+      document.body.appendChild(overlay);
+    }
+    // Dismissable only when it's showing an error (not while loading).
+    overlay.onclick = o.loading ? null : (e) => { if (e.target === overlay) overlay.remove(); };
+    const title = o.loading ? 'Opening shared project…' : 'Couldn’t open the shared project';
+    const mark = o.loading ? '<span class="join-spinner" aria-hidden="true"></span>' : '↗';
+    const body = '<p class="join-status-msg">' + escapeHtml(o.message || '') + '</p>';
+    const footer = o.loading ? '' :
+      '<div class="project-save-footer" style="gap:8px;justify-content:flex-end">' +
+        '<button class="share-create-btn" onclick="(document.getElementById(\'join-status-overlay\')||{}).remove&&document.getElementById(\'join-status-overlay\').remove()">OK</button>' +
+      '</div>';
+    overlay.innerHTML = '<div class="project-save-dialog" role="dialog" aria-modal="true" aria-live="polite" style="width:min(420px,100%)">' +
+      '<div class="project-save-header"><div class="project-save-mark">' + mark + '</div>' +
+      '<div><h3>' + escapeHtml(title) + '</h3>' + body + '</div></div>' +
+      footer + '</div>';
+    return overlay;
+  };
+
+  app._clearJoinStatus = function() {
+    const o = document.getElementById('join-status-overlay');
+    if (o) o.remove();
+  };
+
+  // Turn a redeem/open error into a clear, actionable, page-independent message.
+  // The cloud client throws Error with .status (403/404/410) and sometimes .code.
+  app._joinErrorMessage = function(e) {
+    const status = e && e.status;
+    if (status === 403) {
+      return 'Please verify your email first, then open the invite link again.';
+    }
+    if (status === 404) {
+      return 'This invite link is invalid.';
+    }
+    if (status === 410) {
+      return 'This invite link has expired or was revoked. Ask the project owner for a new one.';
+    }
+    return 'Couldn’t open the shared project: ' + ((e && e.message) || 'unknown error') + '.';
+  };
+
+  // Join a shared project by redeeming a share token, then open it. Shows a
+  // visible loading state while awaiting and a visible, actionable error on
+  // failure — regardless of which page the invitee is currently on.
   app.redeemShareToken = async function(token) {
     if (!token) return;
+    app._showJoinStatus({ loading: true });
     try {
       const client = app.getNovaCloudClient();
       const res = await client.redeemShareLink(token);
       const projectId = res && res.project && res.project.id;
       if (projectId) {
+        // openCloudProject switches to the workspace (via newProject) and loads
+        // the graph; once that's done the loading overlay is no longer needed.
         await app.openCloudProject(projectId);
         app._saveCloudProjectId(projectId);
       }
+      app._clearJoinStatus();
     } catch (e) {
-      app.addAIMessage && app.addAIMessage('workspace', 'Could not open the shared project: ' + e.message);
+      const msg = app._joinErrorMessage(e);
+      app._showJoinStatus({ loading: false, message: msg });
+      // Also mirror to the workspace chat (harmless, visible later if they're
+      // already in a project) without relying on it for the user-facing report.
+      app.addAIMessage && app.addAIMessage('workspace', msg);
     }
   };
 
   // Share dialog: generate a viewer/editor link for the current cloud project
   // and manage existing links. Requires sign-in + a saved cloud project.
   app.showShareDialog = function() {
-    if (!app.currentUser) { app.addAIMessage && app.addAIMessage('workspace', 'Sign in to share this project.'); if (app.signIn) app.signIn(); return; }
+    if (!app.currentUser) { app.addAIMessage && app.addAIMessage('workspace', 'Sign in to share this project.'); app._signInReason = 'share'; if (app.signIn) app.signIn(); return; }
     if (!app._cloudProjectId) { app.addAIMessage && app.addAIMessage('workspace', 'Save this project to your account first (File → Save → Save to cloud), then share it.'); return; }
     const existing = document.getElementById('share-dialog-overlay');
     if (existing) existing.remove();
     app._freshLinkUrls = {}; // raw URLs are only known for links created this session
+    app._lastCreatedAnyoneLink = null;
     // Persist the transient per-recipient invite status across close/reopen:
     // initialize once, and NEVER reset it here. An invite that was still being
     // sent when the dialog was closed keeps its pending entry, so reopening can
@@ -659,6 +729,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       '<div class="share-anyone"><span class="share-anyone-label">🔗 Anyone with the link</span>' +
         '<span class="share-select"><select id="anyone-role" aria-label="Link access"><option value="Editor">Can edit</option><option value="Viewer">Can view</option></select></span>' +
         '<button class="share-link-btn" id="anyone-create" onclick="app._createAnyoneLink()">Copy link</button></div>' +
+      '<div id="anyone-created-link"></div>' +
       // Anonymous link list
       '<div id="share-link-list" style="max-height:24vh;overflow-y:auto"></div>' +
       '<div class="project-save-footer"><span>' + escapeHtml(ownerName) + ' · owner</span>' +
@@ -709,8 +780,8 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       seen.add(key);
       rows.push('<div class="share-link-row"><span class="ri-icon">✉</span>' +
         '<span class="share-link-meta">' + escapeHtml(l.email) +
-        ' <span style="color:var(--text-muted)">· ' + escapeHtml(roleLabel(l.role)) + ' · invited</span></span>' +
-        statIcon(pending[key]) + revokeControls(l) + '</div>');
+        ' <span style="color:var(--text-muted)">· invited</span></span>' +
+        shareRoleSelect(l) + statIcon(pending[key]) + revokeControls(l) + '</div>');
     }
 
     // Pending-only rows: in-flight spinners and failures that never got a link.
@@ -831,6 +902,8 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       const url = (typeof location !== 'undefined' ? location.origin : '') + '/?join=' + encodeURIComponent(link.token);
       app._freshLinkUrls = app._freshLinkUrls || {};
       app._freshLinkUrls[link.id] = url;
+      app._lastCreatedAnyoneLink = { id: link.id, role: role, url: url };
+      app._renderAnyoneCreatedLink();
       try { if (navigator.clipboard) navigator.clipboard.writeText(url); } catch (e) { /* ignore */ }
       await app._renderShareLinks();
     } catch (e) {
@@ -858,7 +931,25 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     app._lastInvites = active.filter(l => l.email);
     app._lastAnonLinks = active.filter(l => !l.email);
     app._renderInvitedRows();
+    app._renderAnyoneCreatedLink();
     app._renderAnonLinks();
+  };
+
+  app._renderAnyoneCreatedLink = function() {
+    const mount = document.getElementById('anyone-created-link');
+    if (!mount) return;
+    const link = app._lastCreatedAnyoneLink;
+    const revoked = app._locallyRevoked = app._locallyRevoked || new Set();
+    if (!link || !link.url || revoked.has(link.id)) {
+      mount.innerHTML = '';
+      return;
+    }
+    const roleLabel = link.role === 'Viewer' ? 'Can view' : 'Can edit';
+    mount.innerHTML = '<div class="share-created-link-row">' +
+      '<input class="share-url-input" readonly value="' + escapeHtml(link.url) + '" title="' + escapeHtml(roleLabel) + ' link" onclick="this.select()" />' +
+      revokeControls(link) +
+      '<button class="share-icon-btn" title="Copy link" aria-label="Copy link" data-url="' + escapeHtml(link.url) + '" onclick="app._copyShareUrl(this)">📋</button>' +
+      '</div>';
   };
 
   // Rebuilds ONLY the #share-link-list markup, synchronously, from the cached
@@ -871,7 +962,8 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     const linkList = document.getElementById('share-link-list');
     if (!linkList) return;
     const revoked = app._locallyRevoked = app._locallyRevoked || new Set();
-    const anon = (Array.isArray(app._lastAnonLinks) ? app._lastAnonLinks : []).filter(l => !revoked.has(l.id));
+    const currentId = app._lastCreatedAnyoneLink && app._lastCreatedAnyoneLink.id;
+    const anon = (Array.isArray(app._lastAnonLinks) ? app._lastAnonLinks : []).filter(l => !revoked.has(l.id) && l.id !== currentId);
     const fresh = app._freshLinkUrls || {};
     const roleLabel = r => (r === 'Viewer' ? 'Can view' : 'Can edit');
 
@@ -880,14 +972,57 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
           if (fresh[l.id]) {
             return '<div class="share-link-row">' +
               '<input class="share-url-input" readonly value="' + escapeHtml(fresh[l.id]) + '" title="' + escapeHtml(roleLabel(l.role)) + ' link" onclick="this.select()" />' +
+              shareRoleSelect(l) + revokeControls(l) +
               '<button class="share-icon-btn" title="Copy link" data-url="' + escapeHtml(fresh[l.id]) + '" onclick="app._copyShareUrl(this)">📋</button>' +
-              revokeControls(l) + '</div>';
+              '</div>';
           }
           return '<div class="share-link-row"><span class="ri-icon">🔗</span>' +
-            '<span class="share-link-meta">Anyone with the link <span style="color:var(--text-muted)">· ' + escapeHtml(roleLabel(l.role)) + ' · ' + escapeHtml(_timeAgo(l.createdAt)) + '</span></span>' +
-            revokeControls(l) + '</div>';
+            '<span class="share-link-meta">Anyone with the link <span style="color:var(--text-muted)">· ' + escapeHtml(_timeAgo(l.createdAt)) + '</span></span>' +
+            shareRoleSelect(l) + revokeControls(l) + '</div>';
         }).join('')
       : '';
+  };
+
+  app._updateShareLinkRole = async function(linkId, role) {
+    if (!linkId || !['Editor', 'Viewer'].includes(role)) return;
+    const applyRole = nextRole => {
+      for (const listName of ['_lastInvites', '_lastAnonLinks']) {
+        const list = Array.isArray(app[listName]) ? app[listName] : [];
+        const item = list.find(l => l.id === linkId);
+        if (item) item.role = nextRole;
+      }
+      if (app._lastCreatedAnyoneLink && app._lastCreatedAnyoneLink.id === linkId) {
+        app._lastCreatedAnyoneLink.role = nextRole;
+      }
+    };
+    const all = []
+      .concat(Array.isArray(app._lastInvites) ? app._lastInvites : [])
+      .concat(Array.isArray(app._lastAnonLinks) ? app._lastAnonLinks : []);
+    const created = app._lastCreatedAnyoneLink && app._lastCreatedAnyoneLink.id === linkId ? app._lastCreatedAnyoneLink : null;
+    const existing = all.find(l => l.id === linkId) || created;
+    const previousRole = existing && existing.role;
+    if (previousRole === role) return;
+
+    app._roleUpdating = app._roleUpdating || {};
+    app._roleUpdating[linkId] = true;
+    applyRole(role);
+    app._renderInvitedRows();
+    app._renderAnyoneCreatedLink();
+    app._renderAnonLinks();
+
+    try {
+      const updated = await app.getNovaCloudClient().updateShareLinkRole(app._cloudProjectId, linkId, { role });
+      if (updated && updated.role) applyRole(updated.role);
+      await app._renderShareLinks();
+    } catch (e) {
+      if (previousRole) applyRole(previousRole);
+      app.addAIMessage && app.addAIMessage('workspace', 'Could not change access: ' + ((e && e.message) || e));
+    } finally {
+      delete app._roleUpdating[linkId];
+      app._renderInvitedRows();
+      app._renderAnyoneCreatedLink();
+      app._renderAnonLinks();
+    }
   };
 
   app._copyShareUrl = function(btn) {
@@ -904,6 +1039,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   app._askRevokeShareLink = function(linkId) {
     app._revokeConfirmId = linkId;
     app._renderInvitedRows();
+    app._renderAnyoneCreatedLink();
     app._renderAnonLinks();
   };
 
@@ -911,6 +1047,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   app._cancelRevokeShareLink = function() {
     app._revokeConfirmId = null;
     app._renderInvitedRows();
+    app._renderAnyoneCreatedLink();
     app._renderAnonLinks();
   };
 
@@ -918,6 +1055,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   // before the network call) and restored if the server revoke fails.
   app._confirmRevokeShareLink = async function(linkId) {
     app._revokeConfirmId = null;
+    const revokedCreatedLink = app._lastCreatedAnyoneLink && app._lastCreatedAnyoneLink.id === linkId;
     // Drop any transient invite status for this link's email so revoking an
     // invite doesn't leave a stale pending-only row behind.
     if (app._invitePending && Array.isArray(app._lastInvites)) {
@@ -929,11 +1067,16 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     app._locallyRevoked.add(linkId);
     if (app._freshLinkUrls) delete app._freshLinkUrls[linkId];
     app._renderInvitedRows();
+    app._renderAnyoneCreatedLink();
     app._renderAnonLinks();
 
     try {
       await app.getNovaCloudClient().revokeShareLink(app._cloudProjectId, linkId);
       await app._renderShareLinks();
+      if (revokedCreatedLink) {
+        app._lastCreatedAnyoneLink = null;
+        app._renderAnyoneCreatedLink();
+      }
       // Server no longer lists it, so the optimistic guard isn't needed — drop it
       // to keep the Set from growing unbounded across many revokes.
       app._locallyRevoked.delete(linkId);
@@ -941,6 +1084,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       // Restore the row and surface the failure honestly.
       app._locallyRevoked.delete(linkId);
       app._renderInvitedRows();
+      app._renderAnyoneCreatedLink();
       app._renderAnonLinks();
       app.addAIMessage && app.addAIMessage('workspace', 'Could not remove the invite: ' + ((e && e.message) || e));
     }
@@ -1016,44 +1160,28 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   // ══════════════════════════════════════
   function _ensureCloudMenuItems() {
     const saveAs = document.getElementById('mi-saveas');
-    if (!saveAs || document.getElementById('mi-cloud-save')) return;
-
-    const cloudSave = document.createElement('button');
-    cloudSave.className = 'menu-dropdown-item disabled';
-    cloudSave.id = 'mi-cloud-save';
-    cloudSave.textContent = 'Save to Cloud';
+    if (!saveAs || document.getElementById('mi-cloud-open')) return;
 
     const cloudOpen = document.createElement('button');
     cloudOpen.className = 'menu-dropdown-item disabled';
     cloudOpen.id = 'mi-cloud-open';
     cloudOpen.textContent = 'Open from Cloud';
 
-    const share = document.createElement('button');
-    share.className = 'menu-dropdown-item disabled';
-    share.id = 'mi-share';
-    share.textContent = 'Share…';
-
-    saveAs.insertAdjacentElement('afterend', share);
     saveAs.insertAdjacentElement('afterend', cloudOpen);
-    saveAs.insertAdjacentElement('afterend', cloudSave);
   }
 
   _ensureCloudMenuItems();
 
   const miSave = document.getElementById('mi-save');
   const miSaveAs = document.getElementById('mi-saveas');
-  const miCloudSave = document.getElementById('mi-cloud-save');
   const miCloudOpen = document.getElementById('mi-cloud-open');
-  const miShare = document.getElementById('mi-share');
   const miOpen = document.getElementById('mi-open');
   const miExport = document.getElementById('mi-export');
   const miImport = document.getElementById('mi-import');
 
   if (miSave) { miSave.classList.remove('disabled'); miSave.onclick = function() { app.showSaveDialog(); }; }
   if (miSaveAs) { miSaveAs.classList.remove('disabled'); miSaveAs.onclick = function() { app.showSaveDialog(); }; }
-  if (miCloudSave) { miCloudSave.classList.remove('disabled'); miCloudSave.onclick = function() { app.saveCloudFromDialog(app._projectName || 'Untitled').catch(function(){}); }; }
   if (miCloudOpen) { miCloudOpen.classList.remove('disabled'); miCloudOpen.onclick = function() { app.showCloudOpenDialog(); }; }
-  if (miShare) { miShare.classList.remove('disabled'); miShare.onclick = function() { app.showShareDialog(); }; }
   if (miOpen) { miOpen.classList.remove('disabled'); miOpen.onclick = function() { app.showOpenDialog(); }; }
   if (miExport) { miExport.classList.remove('disabled'); miExport.onclick = function() { app.saveToFile(); }; }
   if (miImport) { miImport.classList.remove('disabled'); miImport.onclick = function() { app.openFromFile(); }; }
