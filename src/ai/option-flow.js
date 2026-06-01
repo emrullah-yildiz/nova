@@ -7,16 +7,18 @@ export function parseOptionGroups(fullText) {
   let lastNum = 0;
 
   function ensureGroup(title) {
-    if (!current || (current.options.length > 0 && title && current.title !== title)) {
+    if (!current) {
       current = { title: title || 'Options', options: [] };
       groups.push(current);
       lastNum = 0;
     } else if (title) {
+      if (current.options.length > 0 && current.title !== title) {
+        current = { title, options: [] };
+        groups.push(current);
+        lastNum = 0;
+        return current;
+      }
       current.title = title;
-    } else if (!current) {
-      current = { title: 'Options', options: [] };
-      groups.push(current);
-      lastNum = 0;
     }
     return current;
   }
