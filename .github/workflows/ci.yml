@@ -153,12 +153,13 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         shell: bash
         run: |
-          # Strip any character a pasted secret may carry that isn't part of a
-          # Cloudflare token/account id (newline, CR, spaces, quotes, …). A
-          # trailing newline makes the Authorization header invalid — wrangler
-          # fails with: Headers.set: "..." is an invalid header value.
-          CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -cd 'A-Za-z0-9_.-')"
-          CLOUDFLARE_ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -cd 'A-Za-z0-9_.-')"
+          # Strip only whitespace (newline/CR/space/tab) a pasted secret may
+          # carry — a trailing newline makes the Authorization header invalid
+          # (wrangler: Headers.set: "..." is an invalid header value). We do NOT
+          # filter by charset: that could silently corrupt an otherwise-valid
+          # token and make Cloudflare reject it with 9106 "invalid token".
+          CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')"
+          CLOUDFLARE_ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
           export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
           echo "::add-mask::$CLOUDFLARE_API_TOKEN"
           echo "::add-mask::$CLOUDFLARE_ACCOUNT_ID"
@@ -224,12 +225,13 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         shell: bash
         run: |
-          # Strip any character a pasted secret may carry that isn't part of a
-          # Cloudflare token/account id (newline, CR, spaces, quotes, …). A
-          # trailing newline makes the Authorization header invalid — wrangler
-          # fails with: Headers.set: "..." is an invalid header value.
-          CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -cd 'A-Za-z0-9_.-')"
-          CLOUDFLARE_ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -cd 'A-Za-z0-9_.-')"
+          # Strip only whitespace (newline/CR/space/tab) a pasted secret may
+          # carry — a trailing newline makes the Authorization header invalid
+          # (wrangler: Headers.set: "..." is an invalid header value). We do NOT
+          # filter by charset: that could silently corrupt an otherwise-valid
+          # token and make Cloudflare reject it with 9106 "invalid token".
+          CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')"
+          CLOUDFLARE_ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
           export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
           echo "::add-mask::$CLOUDFLARE_API_TOKEN"
           echo "::add-mask::$CLOUDFLARE_ACCOUNT_ID"
