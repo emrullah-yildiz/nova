@@ -2934,6 +2934,8 @@ const app = {
 
           <div class="cv-actions">
 
+            <button class="cv-btn" id="cv-save-btn" style="display:none;color:var(--accent-green)" onclick="app.saveCvNodeCode()" title="Save this node's code">💾 Save</button>
+
             <button class="cv-lang-btn cv-lang-active" id="cv-btn-python" onclick="app.setCodeLang('python')">Python</button>
 
             <button class="cv-lang-btn" id="cv-btn-csharp" onclick="app.setCodeLang('csharp')">C#</button>
@@ -2947,6 +2949,8 @@ const app = {
           </div>
 
         </div>
+
+        <div class="cv-tabs" id="cv-tabs" style="display:flex;gap:4px;padding:3px 10px 0;border-bottom:1px solid var(--border-color)"></div>
 
         <div class="cv-editor-wrap">
 
@@ -2980,7 +2984,13 @@ const app = {
 
       const codeHL = document.getElementById('cv-code-highlight');
 
-      codeTA.addEventListener('input', () => { this.highlightCode(); });
+      codeTA.addEventListener('input', () => {
+        // On the node tab, edits are staged into a draft (independent of the
+        // full script) until the user clicks Save. On the full tab, behave as
+        // before (the full-script editor).
+        if (this._cvTab === 'node') this._cvNodeDraft = codeTA.value;
+        this.highlightCode();
+      });
 
       codeTA.addEventListener('scroll', () => { codeHL.scrollTop = codeTA.scrollTop; codeHL.scrollLeft = codeTA.scrollLeft; });
 
@@ -3012,12 +3022,88 @@ const app = {
 
     this.codeViewerOpen = true;
 
-    this._codeViewerNode = singleNode || null;
+    // Tabbed terminal: a persistent "Full Script" tab plus, when a Python node
+    // is opened, a tab for that node. The node tab is edited independently
+    // (staged in _cvNodeDraft) and committed with Save — it is NOT the full
+    // script.
+    if (singleNode) {
+      this._cvNode = singleNode;
+      this._cvNodeDraft = (singleNode.controlValues && singleNode.controlValues.code) || '';
+      this._cvTab = 'node';
+      if (this._cvFullCode == null && typeof this.generateFullScript === 'function') {
+        this._cvFullCode = this.generateFullScript();
+      }
+    } else {
+      if (code != null) this._cvFullCode = code;
+      this._cvTab = 'full';
+    }
 
-    this.updateCodeViewer(code, singleNode);
-
+    this.renderCvTabs();
+    this.renderCvActiveTab();
     this.syncCodeViewerLayout();
 
+  },
+
+  // Build the tab strip: always a Full Script tab; a node tab when one is open.
+  renderCvTabs() {
+    const tabs = document.getElementById('cv-tabs');
+    if (!tabs) return;
+    const tabStyle = (active) => 'padding:4px 10px;font-size:11px;cursor:pointer;border:none;border-bottom:2px solid '
+      + (active ? 'var(--accent-green,#94e2d5)' : 'transparent') + ';background:transparent;color:'
+      + (active ? 'var(--text-primary)' : 'var(--text-muted)');
+    let h = '<button style="' + tabStyle(this._cvTab !== 'node') + '" onclick="app.setCvTab(\'full\')">Full Script</button>';
+    if (this._cvNode) {
+      const nd = this._cvNode;
+      const label = nd.def.name + ' (' + nd.id + ')';
+      h += '<button style="' + tabStyle(this._cvTab === 'node') + '" onclick="app.setCvTab(\'node\')">' + label
+        + ' <span style="opacity:.6;margin-left:4px" onclick="event.stopPropagation();app.closeCvNodeTab()" title="Close tab">✕</span></button>';
+    }
+    tabs.innerHTML = h;
+    tabs.style.display = this._cvNode ? 'flex' : 'none'; // only show the strip when there's a node tab
+  },
+
+  // Show the active tab's code in the editor and toggle the Save button.
+  renderCvActiveTab() {
+    const onNode = this._cvTab === 'node' && this._cvNode;
+    const code = onNode ? (this._cvNodeDraft || '') : (this._cvFullCode || '');
+    this._codeViewerNode = onNode ? this._cvNode : null;
+    this.updateCodeViewer(code, this._codeViewerNode);
+    const saveBtn = document.getElementById('cv-save-btn');
+    if (saveBtn) saveBtn.style.display = onNode ? '' : 'none';
+  },
+
+  setCvTab(tab) {
+    this._cvTab = (tab === 'node' && this._cvNode) ? 'node' : 'full';
+    this.renderCvTabs();
+    this.renderCvActiveTab();
+  },
+
+  closeCvNodeTab() {
+    this._cvNode = null;
+    this._cvNodeDraft = '';
+    this._cvTab = 'full';
+    this.renderCvTabs();
+    this.renderCvActiveTab();
+  },
+
+  // Commit the node tab's edited code back to the node: store the code,
+  // re-derive ports (rename/add/remove follow the code), rewire, re-render the
+  // node, and refresh the Full Script tab since the graph changed.
+  saveCvNodeCode() {
+    const nd = this._cvNode;
+    if (!nd) return;
+    const ta = document.getElementById('cv-code');
+    const code = ta ? ta.value : (this._cvNodeDraft || '');
+    this._cvNodeDraft = code;
+    if (typeof this.pySyncPorts === 'function') {
+      this.pySyncPorts(nd.id, code); // sets code + re-derives ports + rewires + re-renders node
+    } else if (nd.controlValues) {
+      nd.controlValues.code = code;
+    }
+    if (typeof this.generateFullScript === 'function') this._cvFullCode = this.generateFullScript();
+    if (this.invalidateCompute) this.invalidateCompute();
+    const saveBtn = document.getElementById('cv-save-btn');
+    if (saveBtn) { const t = saveBtn.textContent; saveBtn.textContent = '✓ Saved'; setTimeout(() => { if (saveBtn) saveBtn.textContent = t; }, 1200); }
   },
 
 
