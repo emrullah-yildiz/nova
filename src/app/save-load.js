@@ -796,6 +796,10 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     // Reset any stale inline-confirm state so a half-finished "remove?" prompt
     // from a previous open doesn't linger.
     app._revokeConfirmId = null;
+    // Session invite-id cache is scoped to one dialog session: clear it on open
+    // so invites created for a DIFFERENT project don't leak in as phantom rows.
+    // The server list (_renderShareLinks below) is authoritative for reopens.
+    app._sessionInvites = {};
     const overlay = document.createElement('div');
     overlay.id = 'share-dialog-overlay';
     overlay.className = 'project-save-overlay';
@@ -847,7 +851,21 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     const inviteList = document.getElementById('invite-list');
     if (!inviteList) return;
     const revoked = app._locallyRevoked = app._locallyRevoked || new Set();
-    const invites = (Array.isArray(app._lastInvites) ? app._lastInvites : []).filter(l => !revoked.has(l.id));
+    // Merge server-truth invites (_lastInvites) with this session's just-created
+    // invites (_sessionInvites). Both carry a link id, so every merged row renders
+    // the server-style row WITH the role dropdown. Dedupe by lowercased email,
+    // preferring the server entry (freshest role) when present.
+    const sessionInvites = app._sessionInvites || {};
+    const byEmail = new Map();
+    for (const key of Object.keys(sessionInvites)) {
+      const s = sessionInvites[key];
+      if (s && s.id && !revoked.has(s.id)) byEmail.set(key, { id: s.id, email: s.email || key, role: s.role });
+    }
+    for (const l of (Array.isArray(app._lastInvites) ? app._lastInvites : [])) {
+      if (revoked.has(l.id)) continue;
+      byEmail.set(String(l.email || '').toLowerCase(), l); // server entry wins
+    }
+    const invites = Array.from(byEmail.values());
     const pending = app._invitePending || {};
     const roleLabel = r => (r === 'Viewer' ? 'Can view' : 'Can edit');
 
@@ -936,6 +954,13 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       try {
         const res = await app.getNovaCloudClient().inviteByEmail(app._cloudProjectId, { email: email, role: role });
         if (res && res.ok) {
+          // Remember the freshly-created invite link id so its row renders with a
+          // working role dropdown immediately — independent of the listShareLinks
+          // refresh (which can lag or momentarily omit the new link).
+          if (res.invite && res.invite.id) {
+            app._sessionInvites = app._sessionInvites || {};
+            app._sessionInvites[key] = { id: res.invite.id, email: email, role: role };
+          }
           const wasDelivered = !!(res.delivery && res.delivery.delivered);
           if (wasDelivered) {
             delivered++;
@@ -1099,6 +1124,12 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       }
       if (app._lastCreatedAnyoneLink && app._lastCreatedAnyoneLink.id === linkId) {
         app._lastCreatedAnyoneLink.role = nextRole;
+      }
+      // Keep this session's invite cache in sync so the optimistic role survives
+      // the immediate re-render and any later listShareLinks reconcile.
+      const session = app._sessionInvites || {};
+      for (const key of Object.keys(session)) {
+        if (session[key] && session[key].id === linkId) session[key].role = nextRole;
       }
     };
     const all = []
