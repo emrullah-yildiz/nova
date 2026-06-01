@@ -156,9 +156,13 @@ export async function resolveRoomAccess(env, request, projectId) {
   }
 }
 
-export async function handleEnterpriseApi(request, env) {
+export async function handleEnterpriseApi(request, env, ctx) {
   const url = new URL(request.url);
   const cookieHeader = request.headers.get('cookie');
+  // Lets the dispatcher offload the persistence flush to the runtime: the
+  // response returns immediately while the isolate is kept alive until the Neon
+  // write completes. Null in non-Worker contexts (the dispatcher then awaits).
+  const waitUntil = ctx && typeof ctx.waitUntil === 'function' ? (p) => ctx.waitUntil(p) : null;
 
   // Public client config: lets the static SPA discover how to render sign-in
   // (Google client id is public; the secret never leaves the Worker).
@@ -209,7 +213,8 @@ export async function handleEnterpriseApi(request, env) {
       searchParams: url.searchParams,
       authorization: activeAuthorization(request, cookieHeader),
       body,
-      appUrl: env.NOVA_PUBLIC_URL || url.origin
+      appUrl: env.NOVA_PUBLIC_URL || url.origin,
+      waitUntil
     });
 
     const cookies = [];

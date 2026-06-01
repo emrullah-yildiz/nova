@@ -126,7 +126,13 @@ app.get('/api/projects/:id/room', async (c) => {
 // driven by worker-safe deps (Neon serverless DB, KV session state, R2 objects,
 // WebCrypto auth) — see worker/api.mjs. Registered last so /api/health and
 // /api/proxy/chat above win first.
-app.all('/api/*', (c) => handleEnterpriseApi(c.req.raw, c.env));
+app.all('/api/*', (c) => {
+  // Pass the execution context so the API can offload its persistence flush to
+  // ctx.waitUntil — fast responses without dropping the background DB write.
+  let ctx = null;
+  try { ctx = c.executionCtx; } catch { ctx = null; }
+  return handleEnterpriseApi(c.req.raw, c.env, ctx);
+});
 
 function forwardBody(provider, body) {
   return {
