@@ -23,7 +23,7 @@ understand another agent's completed work through a decision log and handoff log
 - `docs/README.md` is the doc index.
 - `docs/architecture-decisions.md` records durable decisions.
 - `docs/agent-handoff.md` records short-lived task context.
-- `docs/agent-merge-checklist.md` is the merge checklist for task branches.
+- `docs/agent-merge-checklist.md` is the start-to-end checklist for task branches.
 - `docs/ai-agent-token-guide.md` is the token-usage guide.
 - Do not add new roadmap docs when an existing current doc can be updated.
 

@@ -1,14 +1,63 @@
-# AI Agent Merge Checklist
+# AI Agent Task Checklist
 
-Use this checklist before merging any task branch into `develop`.
+Use this checklist as the start and end point for every AI-agent task. It is
+both an instruction sheet for the agent and a technical GitHub checklist for the
+branch.
 
-## Branch
+The expected flow is:
 
-- [ ] Branch starts from `develop`.
+1. Start from `develop`.
+2. Read the token guide.
+3. Create one branch for one task.
+4. Make the smallest useful change.
+5. Validate and update docs.
+6. Merge the task branch into `develop`.
+7. Delete the task branch.
+8. Push `develop`.
+
+## Start
+
+- [ ] Read `docs/ai-agent-token-guide.md` before opening broad files or coding.
+- [ ] Read `docs/README.md` to find the few docs relevant to the task.
+- [ ] Read `docs/architecture-decisions.md` before changing architecture, deployment, auth, storage, AI proxying, collaboration, or Connect/Revit behavior.
+- [ ] Confirm the worktree is clean or identify unrelated user changes:
+
+```powershell
+git status --short --branch
+```
+
+- [ ] Switch to the integration branch and update it:
+
+```powershell
+git switch develop
+git pull --ff-only origin develop
+```
+
+- [ ] Create a task branch from `develop`:
+
+```powershell
+git switch -c type/short-task-name
+```
+
 - [ ] Branch name matches the task.
+- [ ] One branch contains one task only.
+
+## Work
+
+- [ ] Use targeted `rg` searches before reading large files.
+- [ ] Inspect only files directly involved in the task.
+- [ ] Keep the diff small and avoid unrelated refactors.
+- [ ] Do not revert unrelated user work.
+- [ ] Do not commit generated files, logs, local exports, screenshots, build artifacts, secrets, or private URLs.
+- [ ] If requirements are unclear, make a conservative assumption and record it in the handoff or decision log.
+
+## Branch Review
+
+- [ ] Branch started from `develop`.
 - [ ] `git status --short --branch` shows only expected changes.
 - [ ] No unrelated user work was reverted or mixed in.
-- [ ] Generated files, logs, local exports, screenshots, and build artifacts are excluded.
+- [ ] `git diff --stat` has an expected scope.
+- [ ] Deleted files are intentional.
 
 ## Documentation
 
@@ -34,7 +83,7 @@ rg -n "old-doc|old-term|Vercel|Cloudflare Pages|TODO|FIXME" README.md docs src w
 
 ## Validation
 
-Run the smallest relevant checks first.
+Run the smallest relevant checks first, then broader checks when risk increases.
 
 Docs-only:
 
@@ -66,16 +115,56 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-## Final Review
+## Commit
 
-- [ ] Review `git diff --stat`.
-- [ ] Review deleted files intentionally.
 - [ ] Review changed docs for contradictions.
-- [ ] Review tests for meaningful assertions.
-- [ ] Record unrun checks and why.
-- [ ] Merge to `develop`.
-- [ ] Delete the task branch.
-- [ ] Push `develop`.
+- [ ] Review tests for meaningful assertions when tests changed.
+- [ ] Record unrun checks and why in the handoff or final response.
+- [ ] Stage only intended files:
+
+```powershell
+git add path/to/file docs/relevant-doc.md
+```
+
+- [ ] Commit with a concise task-focused message:
+
+```powershell
+git commit -m "type: short task summary"
+```
+
+## End
+
+- [ ] Switch back to `develop`:
+
+```powershell
+git switch develop
+```
+
+- [ ] Merge the task branch into `develop`:
+
+```powershell
+git merge --no-ff type/short-task-name -m "merge: short task summary"
+```
+
+- [ ] Delete the completed task branch locally:
+
+```powershell
+git branch -d type/short-task-name
+```
+
+- [ ] Push `develop`:
+
+```powershell
+git push origin develop
+```
+
+- [ ] Confirm the final state:
+
+```powershell
+git status --short --branch
+```
+
+- [ ] Final response includes files changed, validation run, known gaps, and branch/merge status.
 
 ## Merge Blockers
 
