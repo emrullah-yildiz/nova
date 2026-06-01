@@ -2940,8 +2940,6 @@ const app = {
 
             <button class="cv-lang-btn" id="cv-btn-csharp" onclick="app.setCodeLang('csharp')">C#</button>
 
-            <button class="cv-btn" onclick="app.runEditedCode()" title="Run edited code">▶</button>
-
             <button class="cv-btn" onclick="app.copyCode()" title="Copy">📋</button>
 
             <button class="cv-btn" onclick="app.toggleCodeViewer()" title="Close">✕</button>
@@ -3084,6 +3082,14 @@ const app = {
     this._cvTab = 'full';
     this.renderCvTabs();
     this.renderCvActiveTab();
+  },
+
+  // View → Terminal: open the code terminal on the Full Script tab, showing
+  // the Python version of the whole graph.
+  openTerminal() {
+    this.codeLang = 'python';
+    const code = (typeof this.generateFullScript === 'function') ? this.generateFullScript() : (this._cvFullCode || '');
+    this.showCodeViewer(code, null);
   },
 
   // Commit the node tab's edited code back to the node: store the code,
