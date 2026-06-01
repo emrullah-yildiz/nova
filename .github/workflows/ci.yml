@@ -124,7 +124,7 @@ jobs:
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     environment:
       name: dev
-      url: https://nova-dev.e-y-myacc.workers.dev
+      url: https://nova-dev.ey-myacc.workers.dev
     steps:
       - uses: actions/checkout@v5
 
@@ -158,7 +158,7 @@ jobs:
       - name: Verify dev deployment
         shell: bash
         run: |
-          URL="https://nova-dev.e-y-myacc.workers.dev/nova-deployment.json"
+          URL="https://nova-dev.ey-myacc.workers.dev/nova-deployment.json"
           for attempt in {1..12}; do
             BODY="$(curl -fsS "$URL" || true)"
             if echo "$BODY" | grep -q "${GITHUB_SHA}"; then
