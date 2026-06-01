@@ -1,15 +1,14 @@
 // Cloudflare Worker entry — Nova API + static SPA (Phase 0).
 //
-// Currently hosts: a health check and the AI proxy (ported from
-// api/proxy/chat.mjs, reusing its tested pure helpers). The full enterprise
-// API (auth/projects/versions/members/share-links/sessions) mounts here next,
-// reusing src/enterprise domain logic + server/auth/webcrypto.mjs + the Neon
-// serverless driver. Static SPA assets are served via the ASSETS binding.
+// Hosts the health check, AI proxy, feedback endpoint, realtime rooms, and the
+// enterprise API (auth/projects/versions/members/share-links/sessions). Static
+// SPA assets are served via the ASSETS binding.
 //
-// The legacy Vercel deployment remains the source of truth until cutover.
+// Cloudflare Workers is the source of truth for production and dev deploys.
 
 import { Hono } from 'hono';
 import { PROVIDERS, resolveProvider, pickModel, shouldFallthrough, summarizeFailure } from '../api/proxy/chat.mjs';
+import { handleFeedbackRequest } from '../api/feedback/refusals.mjs';
 import { handleEnterpriseApi, resolveRoomAccess } from './api.mjs';
 import { colorForUser, firstNameOf } from '../src/app/collab-core.js';
 
@@ -91,6 +90,9 @@ app.post('/api/proxy/chat', async (c) => {
   if (fail.retryAfter) headers['Retry-After'] = String(fail.retryAfter);
   return c.json(fail.body, fail.status, headers);
 });
+
+app.options('/api/feedback/refusals', (c) => handleFeedbackRequest(c.req.raw, c.env));
+app.post('/api/feedback/refusals', (c) => handleFeedbackRequest(c.req.raw, c.env));
 
 // Live-collaboration room: a WebSocket upgrade that authenticates the cookie
 // session, checks project access, and hands the socket to the per-project

@@ -2,7 +2,7 @@
 //
 // Covers BOTH sides:
 //
-// 1. The Vercel function — validates payloads, rate-limits, builds the
+// 1. The server-side handler validates payloads, rate-limits, builds the
 //    GitHub issue body, POSTs through (with a mocked fetch). Same shape
 //    as the proxy-chain tests so the seams stay testable.
 // 2. The browser client — consent state machine, session buffer,

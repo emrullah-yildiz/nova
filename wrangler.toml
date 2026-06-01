@@ -1,6 +1,6 @@
 # Cloudflare Workers config for the Nova API + static SPA.
 # Phase 0 of the all-Cloudflare migration (see docs/accounts-collaboration.md).
-# The legacy Vercel deployment stays live until cutover; this is additive.
+# The Worker is the single deployment target for both the SPA and API.
 
 name = "nova"
 main = "worker/index.mjs"
@@ -10,6 +10,10 @@ compatibility_flags = ["nodejs_compat"]
 # Don't wipe variables/secrets set in the dashboard on each `wrangler deploy`
 # (default reconciles them to this file, dropping dashboard-only ones).
 keep_vars = true
+workers_dev = false
+routes = [
+  { pattern = "hi-nova.work", custom_domain = true }
+]
 
 # Serve the Vite build as static assets; the Worker handles /api/* and falls
 # back to these for everything else (SPA). Run `npm run build` first.
@@ -22,7 +26,7 @@ binding = "ASSETS"
 # …) are NOT put here — set them with `wrangler secret put <NAME>` or the dashboard
 # "Secret" type (kept across deploys by keep_vars above).
 [vars]
-NOVA_CORS_ORIGIN = "*"
+NOVA_CORS_ORIGIN = "https://hi-nova.work"
 NOVA_ALLOW_DEV_LOGIN = "false"
 # The Google OAuth client id is PUBLIC (it's sent to every browser), so it lives
 # here. Paste your full client id, ending in .apps.googleusercontent.com:
@@ -32,6 +36,32 @@ NOVA_PUBLIC_URL = "https://hi-nova.work"
 # From-address for verification emails. The domain (hi-nova.work) is verified in
 # Resend; the API key itself is a SECRET — set it with `wrangler secret put RESEND_API_KEY`.
 NOVA_EMAIL_FROM = "Nova <noreply@hi-nova.work>"
+
+[env.dev]
+name = "nova-dev"
+workers_dev = true
+
+[env.dev.vars]
+NOVA_CORS_ORIGIN = "https://nova-dev.e-y-myacc.workers.dev"
+NOVA_ALLOW_DEV_LOGIN = "false"
+GOOGLE_CLIENT_ID = "766511449312-a3f505pvirs8f5gjol9ntmu09rue37jl.apps.googleusercontent.com"
+NOVA_PUBLIC_URL = "https://nova-dev.e-y-myacc.workers.dev"
+NOVA_EMAIL_FROM = "Nova Dev <noreply@hi-nova.work>"
+
+# Replace these IDs with dev-only namespaces when they are available. Keeping
+# the bindings explicit prevents dev deploys from silently losing sessions,
+# verification tokens, or rate limiting.
+[[env.dev.kv_namespaces]]
+binding = "SESSION_KV"
+id = "2959d0665b324e53b58c2d1d5b752ffe"
+
+[[env.dev.kv_namespaces]]
+binding = "RATE_KV"
+id = "2959d0665b324e53b58c2d1d5b752ffe"
+
+[[env.dev.durable_objects.bindings]]
+name = "PROJECT_ROOM"
+class_name = "ProjectRoom"
 
 # KV: shared session state (sessions + email-verification tokens) and AI-proxy
 # per-IP rate limiting. Both bindings point at the same "nova-sessions"
