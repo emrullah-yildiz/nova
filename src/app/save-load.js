@@ -239,7 +239,8 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     app._projectName = project.name;
     app._lastCloudSaveSerialized = JSON.stringify(app.serializeGraph());
     app.addAIMessage('workspace', 'Opened **' + project.name + '** from your account.');
-    _saveToRecent(project.name, project.id);
+    // Cloud projects are tracked by the "Cloud Projects" section (fetched from
+    // the account), not the local-only recents list — so we don't add them here.
     app._startCollab(project.id);
     return project;
   };
@@ -556,13 +557,14 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   // ══════════════════════════════════════
   // RECENT PROJECTS (for landing page)
   // ══════════════════════════════════════
-  function _saveToRecent(name, cloudId) {
+  // Records a BROWSER-saved project in the local recents list. Cloud projects
+  // are intentionally not tracked here — they belong to the "Cloud Projects"
+  // section, which is fetched from the account.
+  function _saveToRecent(name) {
     try {
       let recent = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
       recent = recent.filter(r => r.name !== name);
-      const entry = { name: name, date: Date.now() };
-      if (cloudId) entry.cloudId = cloudId;
-      recent.unshift(entry);
+      recent.unshift({ name: name, date: Date.now() });
       if (recent.length > 10) recent = recent.slice(0, 10);
       localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
     } catch (e) { /* ignore */ }
@@ -596,8 +598,9 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
   };
 
   function _recentItemHtml(name, ago, cloudId) {
-    // 💾 = saved in this browser/device, ☁ = saved to the cloud account.
-    const icon = cloudId ? '☁' : '💾';
+    // 🖥 = saved in this browser/device (opens instantly from localStorage),
+    // ☁ = saved to the cloud account (opens over the network).
+    const icon = cloudId ? '☁' : '🖥️';
     const badge = cloudId
       ? '<span class="ri-type ri-type-cloud">cloud</span>'
       : '<span class="ri-type ri-type-local">local</span>';
@@ -611,9 +614,15 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       '<span class="ri-date">' + escapeHtml(ago) + '</span></button>';
   }
 
+  // The "Local projects" list holds ONLY browser-saved projects. Cloud projects
+  // live in their own "Cloud Projects" section (fetched from the account), so we
+  // filter out any legacy recent entries that carry a cloudId — this keeps each
+  // section's contents matching its title and makes local clicks always open
+  // straight from localStorage (no network, no sign-in).
   function _browserRecentMarkup(recent) {
-    if (!recent.length) return '';
-    return recent.map(r => _recentItemHtml(r.name, _timeAgo(r.date), r.cloudId || '')).join('');
+    const local = (recent || []).filter(r => !r.cloudId);
+    if (!local.length) return '';
+    return local.map(r => _recentItemHtml(r.name, _timeAgo(r.date), '')).join('');
   }
 
   const origRenderRecent = app.renderRecentProjects.bind(app);
@@ -752,7 +761,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
         app._projectName = project.name;
         app._lastCloudSaveSerialized = JSON.stringify(app.serializeGraph());
         app.addAIMessage('workspace', 'Opened **' + project.name + '** from your account.');
-        _saveToRecent(project.name, project.id);
+        // Cloud project — tracked by the "Cloud Projects" section, not local recents.
         app._saveCloudProjectId(project.id);
         app._startCollab(project.id);
       }
