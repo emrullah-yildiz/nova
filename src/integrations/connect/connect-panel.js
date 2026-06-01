@@ -11,6 +11,23 @@ const PANEL_ID = 'nova-connect-panel';
 const STYLE_ID = 'nova-connect-panel-style';
 const STORAGE_KEY = 'nova_connect_settings';
 
+// The Revit release the downloadable add-in installer targets, and where the
+// installer ZIP is served (public/downloads → dist/downloads via Vite).
+export const REVIT_TARGET_VERSION = '2027';
+export const NOVA_CONNECT_DOWNLOAD_URL = '/downloads/NovaConnect-Setup.zip';
+
+// Pure: the "Download Nova Connect" section shown at the top of the Connect
+// panel. Kept separate + exported so the download wiring (URL + Revit version
+// note) is unit-testable without rendering the whole panel.
+export function novaConnectDownloadMarkup(version = REVIT_TARGET_VERSION) {
+  return '<div class="ncp-download">' +
+    '<h3 class="ncp-download-title">Nova Connect for Revit</h3>' +
+    '<p class="ncp-download-note">Requires Autodesk Revit ' + escapeHtml(version) + ' · Windows.</p>' +
+    '<a class="ncp-download-btn" href="' + NOVA_CONNECT_DOWNLOAD_URL + '" download>⬇ Download Nova Connect</a>' +
+    '<p class="ncp-download-sub">The installer checks for Revit and adds the plug-in automatically.</p>' +
+  '</div>';
+}
+
 export function installNovaConnectPanel(targetApp = getRuntimeGlobal().app, runtimeGlobal = getRuntimeGlobal()) {
   if (!targetApp || runtimeGlobal.__novaConnectPanelInstalled) return targetApp;
   runtimeGlobal.__novaConnectPanelInstalled = true;
@@ -131,6 +148,7 @@ function installAppMethods(app, runtimeGlobal) {
         '<div><h2>Nova Connect</h2><p class="ncp-status ncp-status-' + escapeHtml(status) + '">' + escapeHtml(status) + '</p></div>' +
         '<button class="ncp-icon-btn" onclick="app.closeNovaConnectPanel()" title="Close">×</button>' +
       '</div>' +
+      novaConnectDownloadMarkup() +
       '<label class="ncp-label">Hub URL<input id="nova-connect-url" value="' + escapeHtml(settings.url) + '" autocomplete="off" placeholder="ws://127.0.0.1:8765"></label>' +
       '<label class="ncp-label">Pairing Token (optional)<input id="nova-connect-token" value="' + escapeHtml(settings.token) + '" autocomplete="off" placeholder="Leave empty if not required"></label>' +
       '<label class="ncp-label">Project ID (optional)<input id="nova-connect-project" value="' + escapeHtml(settings.projectId) + '" autocomplete="off" placeholder="Auto-detected from Revit"></label>' +
@@ -319,6 +337,43 @@ function injectStyles(document) {
     .ncp-icon-btn:hover {
       background: var(--bg-primary);
       border-color: var(--text-muted);
+    }
+    .ncp-download {
+      margin-bottom: 18px;
+      padding: 14px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: var(--bg-surface);
+    }
+    .ncp-download-title {
+      margin: 0 0 4px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .ncp-download-note {
+      margin: 0 0 10px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .ncp-download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 14px;
+      border-radius: 7px;
+      background: var(--accent-blue);
+      color: var(--bg-tertiary, #11111b);
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: filter 120ms ease;
+    }
+    .ncp-download-btn:hover { filter: brightness(1.08); }
+    .ncp-download-sub {
+      margin: 8px 0 0;
+      font-size: 11px;
+      color: var(--text-muted);
     }
     .ncp-label {
       display: grid;
