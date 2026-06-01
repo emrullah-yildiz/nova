@@ -254,7 +254,15 @@ export function validateGeneratedCodeTypes(code) {
 }
 
 // Small helper so the integration can format a single human-readable hint.
+// Where the fix is mechanical and high-confidence (e.g. a curve slot fed a
+// point) we append the concrete repair so the fix-retry doesn't have to guess.
 export function formatMismatchHint(mismatch) {
   const { method, paramIndex, expected, got, argText, line } = mismatch;
-  return `line ${line}: Geo.${method}() arg ${paramIndex + 1} (\`${argText}\`) is ${got}, but it expects ${expected}`;
+  let repair = '';
+  if (expected === 'curve' && (got === 'point' || got === 'vector')) {
+    repair = ' — make a curve from the points first, e.g. `seg = Geo.Line3(p1, p2)`, then pass `seg`';
+  } else if (expected.endsWith('[]')) {
+    repair = ` — pass a list whose elements are ${expected.slice(0, -2)} values`;
+  }
+  return `line ${line}: Geo.${method}() arg ${paramIndex + 1} (\`${argText}\`) is ${got}, but it expects ${expected}${repair}`;
 }

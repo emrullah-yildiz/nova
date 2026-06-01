@@ -334,7 +334,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (m) mockInputs[m[1]] = parseFloat(m[2]);
     });
     const testResult = PythonRunner.execute(code, mockInputs);
-    if (!testResult.error) {
+    // A definite argument-type mismatch (e.g. Geo.pipe fed two points, or
+    // Geo.combineAll fed points) usually produces NO runtime error — the bad
+    // geometry is silently dropped — so the code would otherwise sail through
+    // to approval and render nothing. Treat such a mismatch as a failure that
+    // warrants a fix pass, using a synthesized message when the runtime was
+    // happy. The type-validator is intentionally conservative (only flags
+    // definitely-wrong types), and the fix loop is capped, so this is safe.
+    if (!testResult.error && typeCheck.ok) {
       if (bubble) {
         bubble.innerHTML = app.fmt('✨ ' + explanation + '\n\nReview the code below. **Approve** to build the visual graph, or **Cancel**.');
       }
@@ -344,7 +351,8 @@ document.addEventListener('DOMContentLoaded', () => {
       msgContainer.scrollTop = msgContainer.scrollHeight;
       return;
     }
-    const errorMsg = testResult.error;
+    const errorMsg = testResult.error
+      || ('Argument-type mismatch (no values rendered): ' + typeCheck.mismatches.slice(0, 3).map(formatMismatchHint).join('; '));
     console.warn('[NodeFlow] Code validation failed:', errorMsg);
     if (bubble) {
       // Surface validator findings inline so the user sees what went wrong
