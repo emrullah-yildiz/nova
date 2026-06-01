@@ -211,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (bubble) {
             bubble.classList.remove('streaming');
             bubble.removeAttribute('id');
-            bubble.innerHTML = app.fmt('⚙️ **Free model not available on this deployment.**\n\nThe site owner needs to set `GROQ_API_KEY` in Vercel environment variables, or you can bring your own free key below.')
+            bubble.innerHTML = app.fmt('⚙️ **Free model not available on this deployment.**\n\nThe site owner needs to set `GROQ_API_KEY` as a Cloudflare Worker secret, or you can bring your own free key below.')
               + app._byokCardHtml();
           }
           msgContainer.scrollTop = msgContainer.scrollHeight;

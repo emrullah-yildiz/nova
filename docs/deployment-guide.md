@@ -1,78 +1,91 @@
 # Nova Deployment Guide
 
-This guide focuses on the current production target: Vercel for the web app
-and serverless API, with Neon Postgres for cloud project persistence.
+Nova deploys only to Cloudflare Workers. The Worker serves both the Vite SPA
+from `dist/` and the `/api/*` backend from `worker/index.mjs`.
+
+## Branches And Domains
+
+| Git branch | Worker environment | Public URL |
+|---|---|---|
+| `develop` | `nova-dev` (`--env dev`) | `https://nova-dev.e-y-myacc.workers.dev` |
+| `main` | `nova` | `https://hi-nova.work` |
+
+Do not attach `hi-nova.work` to preview or dev deployments. Production traffic
+should only point at the default `nova` Worker deployment from `main`.
 
 ## Architecture
 
 Nova deploys as:
 
-1. **Vercel frontend** - Vite-built static files from `dist/`.
-2. **Vercel API routes** - `api/**/*.mjs`, including Nova Cloud and the free AI proxy.
-3. **Neon Postgres** - durable storage for projects, versions, members, runs, and audit data.
+1. **Cloudflare Worker** - serves static assets, API routes, AI proxy, auth, and realtime entrypoints.
+2. **Cloudflare assets binding** - serves the Vite build from `dist/`.
+3. **Durable Objects** - host project collaboration rooms.
+4. **KV** - stores session/email-verification state and AI rate-limit buckets.
+5. **Neon Postgres** - stores users, organizations, projects, versions, members, runs, and audit data.
 
-The production URL can serve both the app and the API:
+## Deploy
 
-```text
-https://your-vercel-app.vercel.app
-https://your-vercel-app.vercel.app/health
-https://your-vercel-app.vercel.app/api/projects
-```
-
-## Vercel Project Settings
-
-Use these build settings:
+GitHub Actions deploys automatically:
 
 ```text
-Framework preset: Other
-Build command: npm run build
-Output directory: dist
-Install command: npm install
+develop -> npm run build -> wrangler deploy --env dev
+main    -> npm run build -> wrangler deploy
 ```
 
-## Environment Variables
+Manual deployment is still useful for emergency verification:
 
-Add these in Vercel Project Settings -> Environment Variables.
+```bash
+npm run build
+npx wrangler deploy --env dev
+npx wrangler deploy
+```
 
-### API variables
+## Required Cloudflare Secrets
+
+Set secrets per Worker environment in Cloudflare or with Wrangler:
+
+```bash
+npx wrangler secret put NOVA_SESSION_SECRET
+npx wrangler secret put NOVA_DATABASE_URL
+npx wrangler secret put GROQ_API_KEY
+npx wrangler secret put RESEND_API_KEY
+```
+
+For the dev environment:
+
+```bash
+npx wrangler secret put NOVA_SESSION_SECRET --env dev
+npx wrangler secret put NOVA_DATABASE_URL --env dev
+npx wrangler secret put GROQ_API_KEY --env dev
+npx wrangler secret put RESEND_API_KEY --env dev
+```
+
+Use a separate Neon database or schema for `dev` so changes from `develop` do
+not touch production data.
+
+## Runtime Variables
+
+Non-secret variables live in `wrangler.toml`.
+
+Production:
 
 ```text
-NOVA_DATABASE_URL=postgresql://...
-NOVA_SESSION_SECRET=<long random secret>
-NOVA_ALLOW_DEV_LOGIN=true
-NOVA_CORS_ORIGIN=https://your-vercel-app.vercel.app
+NOVA_PUBLIC_URL=https://hi-nova.work
+NOVA_CORS_ORIGIN=https://hi-nova.work
+NOVA_ALLOW_DEV_LOGIN=false
 ```
 
-`NOVA_ALLOW_DEV_LOGIN=true` is currently required because the web app uses the
-demo login flow. Before a public launch with real users, replace dev login with
-real auth and set it to `false`.
-
-Optional AI provider secrets:
+Dev:
 
 ```text
-GROQ_API_KEY=<groq key for the free proxy>
-NOVA_GROQ_API_KEY=<groq key for enterprise AI provider routing>
-NOVA_OPENAI_API_KEY=<openai key>
-NOVA_OPENROUTER_API_KEY=<openrouter key>
+NOVA_PUBLIC_URL=https://nova-dev.e-y-myacc.workers.dev
+NOVA_CORS_ORIGIN=https://nova-dev.e-y-myacc.workers.dev
+NOVA_ALLOW_DEV_LOGIN=false
 ```
-
-### Frontend variables
-
-```text
-VITE_NOVA_ENV=production
-VITE_NOVA_API_BASE_URL=https://your-vercel-app.vercel.app
-VITE_NOVA_CONNECTOR_PAIRING_URL=https://your-vercel-app.vercel.app/api/connectors/sessions
-VITE_NOVA_ENTERPRISE_AI_ENABLED=false
-VITE_NOVA_CLOUD_PROJECTS_ENABLED=true
-```
-
-The checked-in `public/nova-config.js` is loaded at runtime. For production,
-make sure it points at the deployed API URL or is generated/overridden by your
-deployment process.
 
 ## Database Migrations
 
-Run migrations against Neon before relying on cloud saves:
+Run migrations against the target Neon database before relying on cloud saves:
 
 ```bash
 npm run migrate:neon -- up
@@ -81,37 +94,28 @@ npm run migrate:neon -- up
 For local migration commands, keep the Neon connection string in `.env.local`.
 Do not commit `.env.local`.
 
-## Local Development With Neon
+## Local Development
 
-Start the API:
+Run a local Worker with the same entrypoint used in production:
 
 ```bash
-npm run dev:neon:api
+npm run build
+npm run cf:dev
 ```
 
-Start the frontend:
+For frontend-only iteration:
 
 ```bash
 npm run dev
 ```
-
-The local frontend defaults to `http://127.0.0.1:8787` for the API.
 
 ## Verification
 
 After deploying, check:
 
 ```text
-https://your-vercel-app.vercel.app/health
+https://nova-dev.e-y-myacc.workers.dev/api/health
+https://hi-nova.work/api/health
 ```
 
-Expected response:
-
-```json
-{
-  "ok": true,
-  "service": "nova-enterprise-api"
-}
-```
-
-Then open Nova, create a graph, and use `File -> Save to Cloud`.
+Then open Nova, sign in, create a graph, and use `File -> Save to Cloud`.

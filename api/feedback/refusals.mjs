@@ -1,4 +1,4 @@
-// Phase 10: Vercel server function — receives a session's worth of
+// Phase 10: server-side feedback handler — receives a session's worth of
 // plan-mode refusals from the browser and opens ONE summary GitHub issue
 // on the maintainer's repo. Token lives in the function's env (never
 // reaches the browser), so even users who can read the source can't
@@ -33,9 +33,9 @@ const MAX_BODY_LEN = 50_000; // GitHub caps issue bodies around 65k
 
 const rateBuckets = new Map();
 
-function corsHeaders() {
+function corsHeaders(env = process.env) {
   return {
-    'Access-Control-Allow-Origin': process.env.NOVA_CORS_ORIGIN || '*',
+    'Access-Control-Allow-Origin': env.NOVA_CORS_ORIGIN || '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Cache-Control': 'no-store'
@@ -63,9 +63,9 @@ function checkRate(ip) {
   return { over: bucket.count > limit, remaining: Math.max(0, limit - bucket.count) };
 }
 
-function sendJson(res, status, payload) {
+function sendJson(res, status, payload, env = process.env) {
   res.statusCode = status;
-  for (const [k, v] of Object.entries({ 'Content-Type': 'application/json', ...corsHeaders() })) {
+  for (const [k, v] of Object.entries({ 'Content-Type': 'application/json', ...corsHeaders(env) })) {
     res.setHeader(k, v);
   }
   res.end(JSON.stringify(payload));
@@ -171,8 +171,60 @@ async function createIssue(payload, token, repo) {
   return { ok: true, issueUrl: data.html_url, issueNumber: data.number };
 }
 
-export async function onRequestOptions() {
-  return new Response(null, { status: 204, headers: corsHeaders() });
+export async function onRequestOptions(env = process.env) {
+  return new Response(null, { status: 204, headers: corsHeaders(env) });
+}
+
+function jsonResponse(status, payload, env) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders(env) }
+  });
+}
+
+export async function handleFeedbackRequest(request, env = process.env) {
+  if (request.method === 'OPTIONS') return onRequestOptions(env);
+  if (request.method !== 'POST') {
+    return jsonResponse(405, { ok: false, error: 'method not allowed' }, env);
+  }
+
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    || request.headers.get('x-real-ip')
+    || 'unknown';
+  const rate = checkRate(ip);
+  if (rate.over) {
+    return jsonResponse(429, { ok: false, error: 'rate limit reached for this IP - try again later' }, env);
+  }
+
+  const token = env.FEEDBACK_GITHUB_TOKEN;
+  const repo = env.FEEDBACK_GITHUB_REPO || DEFAULT_REPO;
+  if (!token) {
+    return jsonResponse(503, { ok: false, error: 'feedback not configured: FEEDBACK_GITHUB_TOKEN missing' }, env);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse(400, { ok: false, error: 'invalid JSON body' }, env);
+  }
+
+  const valid = validatePayload(body);
+  if (!valid.ok) {
+    return jsonResponse(400, { ok: false, error: valid.error }, env);
+  }
+
+  try {
+    const result = await createIssue(valid, token, repo);
+    if (!result.ok) {
+      console.error('[nova-feedback] github error', result.status, result.error);
+      return jsonResponse(502, { ok: false, error: 'github rejected the submission', upstreamStatus: result.status }, env);
+    }
+    return jsonResponse(201, { ok: true, issueUrl: result.issueUrl, issueNumber: result.issueNumber }, env);
+  } catch (err) {
+    console.error('[nova-feedback] network error', err && err.message);
+    return jsonResponse(502, { ok: false, error: 'network error talking to github' }, env);
+  }
 }
 
 export default async function handler(req, res) {
