@@ -52,12 +52,12 @@ id = "2959d0665b324e53b58c2d1d5b752ffe"
 # binding = "HYPERDRIVE"
 # id = "<hyperdrive-id>"
 
-# Realtime collaboration rooms (Phase 4). Uncomment once the ProjectRoom class
-# ships in the worker entry — a DO binding without its class fails to deploy.
-# [[durable_objects.bindings]]
-# name = "PROJECT_ROOM"
-# class_name = "ProjectRoom"
-#
-# [[migrations]]
-# tag = "v1"
-# new_classes = ["ProjectRoom"]
+# Realtime collaboration rooms: one ProjectRoom Durable Object per project,
+# fanning out cursors + edit-ops over WebSockets (see worker/room.mjs).
+[[durable_objects.bindings]]
+name = "PROJECT_ROOM"
+class_name = "ProjectRoom"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["ProjectRoom"]

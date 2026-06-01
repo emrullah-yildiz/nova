@@ -83,10 +83,10 @@ describe('landing recent projects sections', () => {
     // Must be a <button> so it is keyboard-accessible and has correct semantics
     expect(btn.tagName).toBe('BUTTON');
 
-    // Icon span
+    // Icon span — local/browser projects use the 💾 (save-to-device) glyph
     const icon = btn.querySelector('.ri-icon');
     expect(icon).not.toBeNull();
-    expect(icon.textContent).toBe('📄');
+    expect(icon.textContent).toBe('💾');
 
     // Name span contains the project name
     const name = btn.querySelector('.ri-name');
