@@ -5,8 +5,8 @@ Status: **Draft / proposal** (not yet implemented). Owner: TBD. Last updated: 20
 This document describes the planned user-profile and collaboration system for Nova,
 targeting an **all-Cloudflare** platform. It is meant to be reviewed before any code.
 
-Related: `backend-architecture.md`, `enterprise-mvp-requirements.md`,
-`web-enterprise-production.md`, `deployment-guide.md`.
+Related: `architecture-decisions.md`, `deployment-guide.md`,
+`agent-handoff.md`, `revit-plugin-architecture.md`.
 
 ---
 

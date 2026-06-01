@@ -20,9 +20,9 @@ const GPTClient = {
   // configures GROQ_API_KEY/GEMINI_API_KEY on the Worker.
   FREE_TIER_ENABLED: false,
 
-  // Free-tier proxy route — only used when FREE_TIER_ENABLED is true. POSTs to
-  // Nova's own serverless API route, which forwards to Groq with a
-  // server-side GROQ_API_KEY.
+  // Free-tier proxy route - only used when FREE_TIER_ENABLED is true. POSTs to
+  // Nova's own Worker route, which forwards to Groq with a server-side
+  // GROQ_API_KEY.
   PROXY_URL: '/api/proxy/chat',
   // 8B-Instant has dramatically higher TPM than 70B on Groq's free tier and
   // is plenty for chat triage. The proxy will upgrade to a larger model for
