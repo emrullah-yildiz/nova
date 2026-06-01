@@ -1,4 +1,4 @@
-// Phase 11: strict plan-mode commitment.
+// Python-first AI generation contract.
 //
 // Tests cover the two new mechanisms:
 //
@@ -7,12 +7,9 @@
 //    canonical names BEFORE validators run, so the first attempt
 //    succeeds instead of burning a fix-retry round trip.
 //
-// 2. The system prompt's strict-mode contract — build-intent prompts
-//    must produce a nova-plan or refusal; Python is rejected. The
-//    integration layer's strict rejection handler is exercised
-//    indirectly via the prompt content (full DOM integration test
-//    is out of scope for this PR — see plan-pipeline.test.js for the
-//    happy-path E2E).
+// 2. The system prompt's Python-first contract — build-intent prompts
+//    should produce parser-friendly Python, while nova-plan remains
+//    accepted for simple fully-covered graphs.
 
 import { rewriteGeoAliases, rewriteGeoAliasesInResponse, getAliasMap } from '../src/ai/geo-alias-rewriter.js';
 import { GPTClient } from '../src/ai/gpt-client.js';
@@ -130,21 +127,21 @@ b = Geo.createQuad(c, d, e, f)
   });
 });
 
-describe('strict-mode system prompt commitment', () => {
+describe('python-first system prompt commitment', () => {
   // The structural commitment is encoded in the system prompt's text.
-  // These tests pin that the strict-mode contract is present so a future
-  // refactor that loosens it back to "Python is fine sometimes" will
-  // immediately fail.
+  // These tests pin that the assistant should return buildable,
+  // parser-friendly Python instead of blocking useful responses.
 
   const sys = GPTClient.buildSystemPrompt('');
 
-  it('declares plan-mode as the REQUIRED format for build requests', () => {
-    expect(sys).toContain('STRICT MODE');
-    expect(sys).toContain('nova-plan or refusal ONLY');
+  it('declares parser-friendly Python as the preferred format for build requests', () => {
+    expect(sys).toContain('PYTHON-FIRST BUILD MODE');
+    expect(sys).toContain('parser-friendly Python');
   });
 
-  it('explicitly forbids Python for build requests', () => {
-    expect(sys.toLowerCase()).toContain('not acceptable for build');
+  it('keeps nova-plan available as an optional structured format', () => {
+    expect(sys).toContain('OPTIONAL STRUCTURED FORMAT');
+    expect(sys).toContain('nova-plan fenced block is still accepted');
   });
 
   it('still documents the refusal block format with reason + suggestions', () => {
@@ -153,10 +150,9 @@ describe('strict-mode system prompt commitment', () => {
     expect(sys).toContain('suggestions');
   });
 
-  it('still allows plain-text Python for questions and explanations', () => {
-    // Strict mode applies to BUILD requests, not to chat. The prompt
-    // should make that distinction so the AI doesn't refuse trivial
-    // explanatory text.
-    expect(sys).toMatch(/question|explanation|plain text/i);
+  it('tells the AI how to declare Custom.Python ports when fallback is needed', () => {
+    expect(sys).toContain('# in: floors:number, resolution:number');
+    expect(sys).toContain('# out: profiles:list');
+    expect(sys).toContain('Custom.Python');
   });
 });

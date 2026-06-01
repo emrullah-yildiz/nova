@@ -140,18 +140,9 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
 
-        // Phase 11: STRICT MODE for build-intent prompts. If the user
-        // asked for something buildable and the AI fell back to Python
-        // instead of nova-plan/refusal, reject and re-prompt for a plan.
-        // This is the architectural commitment — the AI doesn't get to
-        // choose the easier path.
+        // Python-first mode: nova-plan is still accepted above, and
+        // parser-friendly Python is also a valid build response.
         const parsed = GPTClient.parseResponse(cleanedText);
-        const buildIntent = (typeof GPTClient.hasBuildIntent === 'function') ? GPTClient.hasBuildIntent(txt) : false;
-        if (parsed && parsed.code && ch === 'workspace' && buildIntent) {
-          app._strictModeRejectPython(parsed, cleanedText, bubble, msgContainer, ch, txt);
-          msgContainer.scrollTop = msgContainer.scrollHeight;
-          return;
-        }
         if (parsed && parsed.code && ch === 'workspace') {
           app._validateAndPresent(parsed, bubble, msgContainer, ch, txt);
         } else if (parsed && parsed.code && ch === 'landing') {
@@ -705,73 +696,6 @@ document.addEventListener('DOMContentLoaded', () => {
       bubble.innerHTML = app.fmt('✨ ' + intro + '\n\nReady to build: **' + graph.nodes.length + ' nodes**, **' + graph.wires.length + ' wires**. Click **Approve** to drop them on the canvas.');
     }
     if (typeof app.showApproveButtons === 'function') app.showApproveButtons();
-  };
-
-  // Phase 11: strict-mode rejection of Python on build-intent prompts.
-  // The AI is told "emit nova-plan or refusal" in the system prompt,
-  // but model adherence varies. If it returns Python anyway for a
-  // build request, retry ONCE asking for a plan/refusal explicitly.
-  // If retry also returns Python, surface a clean failure pointing
-  // the user at the manual GitHub issue path — never silently fall
-  // back to the legacy parser, which is the whole point of the
-  // architecture.
-
-  app._strictModeRejectPython = function(parsed, fullText, bubble, msgContainer, ch, originalPrompt) {
-    if (!app._strictRetries) app._strictRetries = 0;
-    app._strictRetries += 1;
-
-    if (app._strictRetries > 1) {
-      // Two strikes — bail out cleanly. Don't keep burning the user's
-      // tokens on a model that won't follow the contract.
-      app._strictRetries = 0;
-      if (bubble) {
-        bubble.innerHTML = app.fmt(
-          '🛑 **The AI returned Python instead of a structured plan.**\n\n' +
-          'Plan-mode is required for build requests, but the model did not follow the contract on two attempts.\n\n' +
-          'You can manually file this as a feature request and we\'ll prioritise adding what\'s needed:'
-        );
-      }
-      // Surface a "manual issue" hint regardless of consent state since
-      // this is a model-adherence failure, not a true refusal.
-      return;
-    }
-
-    if (bubble) {
-      bubble.innerHTML = app.fmt(
-        '⏳ The AI returned Python, but plan-mode is required for build requests. Asking it to re-emit as a `nova-plan` block or refusal...'
-      );
-    }
-
-    const reprompt = 'Your previous response contained a ```python block, but build requests in Nova MUST be expressed as a ```nova-plan block OR an explicit refusal. Re-emit the SAME design intent as a nova-plan if possible, or a refusal block if you cannot. Do not include any ```python.\n\nOriginal request: ' + originalPrompt;
-
-    GPTClient.callStream(
-      reprompt, ch, '',
-      function() {},
-      function(retryText) {
-        const aliasResult2 = rewriteGeoAliasesInResponse(retryText);
-        const cleaned2 = aliasResult2.text;
-        const planExtract = extractPlanFromResponse(cleaned2);
-        if (planExtract && ch === 'workspace') {
-          app._strictRetries = 0;
-          app._handleNovaPlan(planExtract, cleaned2, bubble, msgContainer, ch, originalPrompt);
-          return;
-        }
-        // Still no plan — recursive call will hit the bail-out branch.
-        const parsedRetry = GPTClient.parseResponse(cleaned2);
-        if (parsedRetry && parsedRetry.code) {
-          app._strictModeRejectPython(parsedRetry, cleaned2, bubble, msgContainer, ch, originalPrompt);
-        } else {
-          // No code AND no plan — just narration. Show it; the user can
-          // rephrase. Reset the retry counter for the next turn.
-          app._strictRetries = 0;
-          if (bubble) bubble.innerHTML = app.fmt(retryText);
-        }
-      },
-      function(errMsg) {
-        app._strictRetries = 0;
-        if (bubble) bubble.innerHTML = app.fmt('❌ Re-prompt failed: ' + errMsg);
-      }
-    );
   };
 
   app._novaPlanFixRetry = function(originalPlanText, issuesText, bubble, msgContainer, ch, originalPrompt) {
