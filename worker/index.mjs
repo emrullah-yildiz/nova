@@ -10,7 +10,10 @@
 
 import { Hono } from 'hono';
 import { PROVIDERS, resolveProvider, pickModel, shouldFallthrough, summarizeFailure } from '../api/proxy/chat.mjs';
-import { handleEnterpriseApi } from './api.mjs';
+import { handleEnterpriseApi, resolveRoomAccess } from './api.mjs';
+import { colorForUser, firstNameOf } from '../src/app/collab-core.js';
+
+export { ProjectRoom } from './room.mjs';
 
 const MAX_TOKENS_CAP = 512;
 const RATE_LIMIT = 30;            // requests…
@@ -87,6 +90,36 @@ app.post('/api/proxy/chat', async (c) => {
   const headers = { ...cors(env) };
   if (fail.retryAfter) headers['Retry-After'] = String(fail.retryAfter);
   return c.json(fail.body, fail.status, headers);
+});
+
+// Live-collaboration room: a WebSocket upgrade that authenticates the cookie
+// session, checks project access, and hands the socket to the per-project
+// ProjectRoom Durable Object. Registered BEFORE the /api/* catch-all so the
+// upgrade isn't swallowed by the REST dispatcher.
+app.get('/api/projects/:id/room', async (c) => {
+  const env = c.env;
+  const request = c.req.raw;
+  if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {
+    return c.json({ error: { message: 'Expected a WebSocket upgrade.', code: 'UPGRADE_REQUIRED' } }, 426, cors(env));
+  }
+  if (!env.PROJECT_ROOM) {
+    return c.json({ error: { message: 'Realtime collaboration is not enabled for this deployment.', code: 'COLLAB_DISABLED' } }, 503, cors(env));
+  }
+  const projectId = c.req.param('id');
+  const access = await resolveRoomAccess(env, request, projectId);
+  if (!access.ok) {
+    return c.json({ error: { message: 'Not allowed to join this project room.', code: 'ROOM_FORBIDDEN' } }, access.status || 403, cors(env));
+  }
+
+  // Resolve presence identity here (trusted) and pass it to the DO via headers.
+  const headers = new Headers(request.headers);
+  headers.set('X-Nova-User-Id', String(access.user.id));
+  headers.set('X-Nova-First-Name', firstNameOf(access.user));
+  headers.set('X-Nova-Color', colorForUser(access.user.id));
+  headers.set('X-Nova-Role', access.canEdit ? 'Editor' : 'Viewer');
+
+  const stub = env.PROJECT_ROOM.get(env.PROJECT_ROOM.idFromName(projectId));
+  return stub.fetch(new Request(request.url, { method: request.method, headers, body: request.body }));
 });
 
 // Enterprise API (auth/projects/versions/members/…): the shared dispatcher
