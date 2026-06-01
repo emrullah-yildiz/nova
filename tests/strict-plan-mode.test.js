@@ -155,4 +155,11 @@ describe('python-first system prompt commitment', () => {
     expect(sys).toContain('# out: profiles:list');
     expect(sys).toContain('Custom.Python');
   });
+
+  it('requires design clarification options to be asked one question at a time', () => {
+    expect(sys).toContain('Ask exactly one design question');
+    expect(sys).toContain('Never include more than one numbered option group');
+    expect(sys).toContain('Decide yourself');
+    expect(sys).toContain('Other');
+  });
 });

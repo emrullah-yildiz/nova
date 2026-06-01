@@ -7,6 +7,12 @@ import { validatePlanShape } from './plan-schema.js';
 import { validatePlanAgainstRegistry } from './plan-validator.js';
 import { buildGraphFromPlan, planToPython } from './plan-builder.js';
 import { rewriteGeoAliasesInResponse } from './geo-alias-rewriter.js';
+import {
+  buildDecideYourselfReply,
+  buildOptionReply,
+  buildOtherReply,
+  firstOptionGroup
+} from './option-flow.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   app.respond = function(ch, txt) {
@@ -549,58 +555,86 @@ document.addEventListener('DOMContentLoaded', () => {
   // Scans the AI reply for `[1] Option — description` patterns and renders
   // them as inline clickable cards below the chat bubble. No-op when the
   // reply has fewer than two such items.
-  app._showOptionButtons = function(fullText, ch) {
-    if (!fullText) return;
-    var options = [];
-    var lines = fullText.split('\n');
-    var currentGroup = '';
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i].trim();
-      var groupMatch = line.match(/^\*\*([^*]+)\*\*\s*:?\s*$/);
-      if (groupMatch) { currentGroup = groupMatch[1].trim(); continue; }
-      var m = line.match(/^\[(\d)\]\s*\*?\*?([^—–\n]+?)(?:\*?\*?)(?:\s*[—–-]\s*(.+))?$/);
-      if (m && m[2]) {
-        var label = m[2].replace(/\*\*/g, '').trim();
-        var desc = m[3] ? m[3].trim() : '';
-        if (label.length >= 2 && label.length < 100) {
-          options.push({ num: m[1], label: label, desc: desc, group: currentGroup });
-        }
-      }
-    }
-    if (options.length < 2) return;
-
+  app._renderOptionGroup = function(group, ch) {
     var msgContainer = document.getElementById(ch === 'landing' ? 'landing-chat-messages' : 'ws-chat-messages');
-    if (!msgContainer) return;
+    if (!msgContainer || !group || !group.options || group.options.length < 2) return;
 
     var cardEl = document.createElement('div');
     cardEl.className = 'chat-msg ai';
-    var cardHtml = '<div class="chat-avatar">✦</div><div class="chat-bubble" style="padding:6px 0">';
+    cardEl.innerHTML = '<div class="chat-avatar">&#10022;</div><div class="chat-bubble" style="padding:6px 0"></div>';
 
-    var groups = {};
-    var groupOrder = [];
-    options.forEach(function(opt) {
-      var g = opt.group || 'Options';
-      if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
-      groups[g].push(opt);
+    var bubble = cardEl.querySelector('.chat-bubble');
+    var title = document.createElement('div');
+    title.style.cssText = 'font-size:10px;font-weight:700;color:var(--accent-blue);text-transform:uppercase;letter-spacing:0.5px;padding:6px 12px 4px;opacity:0.8';
+    title.textContent = group.title || 'Options';
+    bubble.appendChild(title);
+
+    group.options.forEach(function(opt) {
+      bubble.appendChild(app._createOptionCard(ch, buildOptionReply(group.title, opt), opt.num, opt.label, opt.desc));
     });
 
-    groupOrder.forEach(function(gName) {
-      cardHtml += '<div style="font-size:10px;font-weight:700;color:var(--accent-blue);text-transform:uppercase;letter-spacing:0.5px;padding:6px 12px 4px;opacity:0.8">' + gName + '</div>';
-      groups[gName].forEach(function(opt) {
-        var safeReply = (gName + ': ' + opt.num + '. ' + opt.label).replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        cardHtml += '<button class="nf-option-card" onclick="app._selectOption(\'' + ch + '\',\'' + safeReply + '\')" style="display:flex;align-items:flex-start;gap:8px;width:100%;padding:7px 12px;border:none;background:transparent;cursor:pointer;text-align:left;border-radius:0;transition:background 0.15s"'
-          + ' onmouseover="this.style.background=\'rgba(137,180,250,0.08)\'" onmouseout="this.style.background=\'transparent\'">';
-        cardHtml += '<span style="min-width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:6px;background:rgba(137,180,250,0.12);color:var(--accent-blue);font-size:11px;font-weight:700">' + opt.num + '</span>';
-        cardHtml += '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--text-primary)">' + opt.label + '</div>';
-        if (opt.desc) cardHtml += '<div style="font-size:11px;color:var(--text-muted);margin-top:1px">' + opt.desc + '</div>';
-        cardHtml += '</div></button>';
-      });
+    var hasBuiltInAction = group.options.some(function(opt) {
+      var label = String(opt.label || '').toLowerCase();
+      return label.indexOf('decide yourself') !== -1 || label === 'other';
     });
+    if (!hasBuiltInAction) {
+      var actionRow = document.createElement('div');
+      actionRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px 10px;border-top:1px solid var(--border-color)';
+      actionRow.appendChild(app._createOptionAction(ch, buildDecideYourselfReply(group.title), 'Decide yourself'));
+      actionRow.appendChild(app._createOptionAction(ch, buildOtherReply(group.title), 'Other'));
+      bubble.appendChild(actionRow);
+    }
 
-    cardHtml += '</div>';
-    cardEl.innerHTML = cardHtml;
     msgContainer.appendChild(cardEl);
     msgContainer.scrollTop = msgContainer.scrollHeight;
+  };
+
+  app._createOptionCard = function(ch, reply, num, label, desc) {
+    var btn = document.createElement('button');
+    btn.className = 'nf-option-card';
+    btn.style.cssText = 'display:flex;align-items:flex-start;gap:8px;width:100%;padding:7px 12px;border:none;background:transparent;cursor:pointer;text-align:left;border-radius:0;transition:background 0.15s';
+    btn.onmouseover = function() { btn.style.background = 'rgba(137,180,250,0.08)'; };
+    btn.onmouseout = function() { btn.style.background = 'transparent'; };
+    btn.onclick = function() { app._selectOption(ch, reply); };
+
+    var badge = document.createElement('span');
+    badge.style.cssText = 'min-width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:6px;background:rgba(137,180,250,0.12);color:var(--accent-blue);font-size:11px;font-weight:700';
+    badge.textContent = num;
+    btn.appendChild(badge);
+
+    var copy = document.createElement('div');
+    copy.style.cssText = 'flex:1;min-width:0';
+    var labelEl = document.createElement('div');
+    labelEl.style.cssText = 'font-size:12px;font-weight:600;color:var(--text-primary)';
+    labelEl.textContent = label;
+    copy.appendChild(labelEl);
+
+    if (desc) {
+      var descEl = document.createElement('div');
+      descEl.style.cssText = 'font-size:11px;color:var(--text-muted);margin-top:1px';
+      descEl.textContent = desc;
+      copy.appendChild(descEl);
+    }
+
+    btn.appendChild(copy);
+    return btn;
+  };
+
+  app._createOptionAction = function(ch, reply, label) {
+    var btn = document.createElement('button');
+    btn.className = 'nf-option-card nf-option-action';
+    btn.style.cssText = 'flex:1;min-width:118px;padding:7px 10px;border:1px solid rgba(137,180,250,0.24);background:rgba(137,180,250,0.08);color:var(--accent-blue);border-radius:6px;font-size:11px;font-weight:700;cursor:pointer';
+    btn.textContent = label;
+    btn.onclick = function() { app._selectOption(ch, reply); };
+    return btn;
+  };
+
+  app._showOptionButtons = function(fullText, ch) {
+    if (!fullText) return;
+    var firstGroup = firstOptionGroup(fullText);
+    if (!firstGroup) return;
+    app._renderOptionGroup(firstGroup, ch);
+    return;
   };
 
   app._selectOption = function(ch, reply) {
