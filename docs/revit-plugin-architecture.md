@@ -174,33 +174,35 @@ Before enterprise pilot:
 ## Installing the add-in (downloadable installer)
 
 The Connect panel has a **Download Nova Connect** button that serves a packaged
-installer at `/downloads/NovaConnect-Setup.zip`. It targets **Autodesk Revit
-2027** (the version the add-in is built against — see
+installer at `/downloads/NovaConnect-Setup.exe`. It targets **Autodesk Revit
+2027** (the version the add-in is built against - see
 `integrations/revit-addin/Nova.RevitAddin.csproj`) and is **Windows-only**.
 
 End-user flow:
 
-1. Click **Download Nova Connect** in the Connect panel → `NovaConnect-Setup.zip`.
-2. Extract the ZIP and double-click **`Install Nova Connect.bat`**.
+1. Click **Download Nova Connect** in the Connect panel -> `NovaConnect-Setup.exe`.
+2. Double-click **`NovaConnect-Setup.exe`**.
 3. The installer detects Revit 2027 (Program Files install or the per-user
    `%APPDATA%\Autodesk\Revit\Addins\2027` folder) and **warns + asks to confirm**
    if it isn't found.
 4. It copies `Nova.RevitAddin.dll` into `%APPDATA%\Autodesk\Revit\Addins\2027\Nova\`
    and writes `Nova.addin` (from `Nova.addin.template`, filling `{{ASSEMBLY_PATH}}`).
-5. Restart Revit → **Add-Ins → External Tools → Nova Connect**.
+5. Restart Revit -> **Add-Ins -> External Tools -> Nova Connect**.
 
-`Uninstall Nova Connect.bat` reverses it.
+Run `NovaConnect-Setup.exe /uninstall` to remove it.
 
 Building/refreshing the installer (maintainers):
 
 - Build the add-in: `dotnet build integrations/revit-addin/Nova.RevitAddin.csproj -c Debug`
 - Package it: `npm run build:connect-installer` (PowerShell; runs
-  `scripts/build-connect-installer.ps1`) → writes
-  `public/downloads/NovaConnect-Setup.zip`, which Vite copies into `dist/` on
-  `npm run build`. Commit the regenerated ZIP so the download stays current.
+  `scripts/build-connect-installer.ps1`) -> writes
+  `public/downloads/NovaConnect-Setup.exe`, which Vite copies into `dist/` on
+  `npm run build`. Commit the regenerated EXE so the download stays current.
 
-The installer is an unsigned `.bat`/PowerShell script bundle (no `.exe`), so
-Windows SmartScreen may show a "More info → Run anyway" prompt — expected without
-a code-signing certificate. To target another Revit release, change
-`$RevitVersion` in the install/uninstall scripts and rebuild the add-in against
-that Revit's API.
+The installer is a single-file, self-contained `.exe` built from
+`installer/nova-connect/NovaConnect.Installer.csproj`. It runs as the current
+user, writes only to Revit's per-user Addins folder, does not request admin
+rights, and does not use `.bat` files or PowerShell execution-policy bypasses.
+Without a code-signing certificate, Windows SmartScreen may still show a
+publisher warning. To target another Revit release, update `RevitVersion` in the
+installer program and rebuild the add-in against that Revit's API.

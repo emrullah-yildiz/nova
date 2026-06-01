@@ -12,9 +12,9 @@ const STYLE_ID = 'nova-connect-panel-style';
 const STORAGE_KEY = 'nova_connect_settings';
 
 // The Revit release the downloadable add-in installer targets, and where the
-// installer ZIP is served (public/downloads → dist/downloads via Vite).
+// installer EXE is served (public/downloads -> dist/downloads via Vite).
 export const REVIT_TARGET_VERSION = '2027';
-export const NOVA_CONNECT_DOWNLOAD_URL = '/downloads/NovaConnect-Setup.zip';
+export const NOVA_CONNECT_DOWNLOAD_URL = '/downloads/NovaConnect-Setup.exe';
 
 // Pure: the "Download Nova Connect" section shown at the top of the Connect
 // panel. Kept separate + exported so the download wiring (URL + Revit version

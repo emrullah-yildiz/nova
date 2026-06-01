@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>NovaConnect-Setup</AssemblyName>
+    <RootNamespace>Nova.ConnectInstaller</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\integrations\revit-addin\bin\Debug\net10.0-windows\Nova.RevitAddin.dll" LogicalName="Payload.Nova.RevitAddin.dll" />
+    <EmbeddedResource Include="..\..\integrations\revit-addin\bin\Debug\net10.0-windows\Nova.RevitAddin.deps.json" LogicalName="Payload.Nova.RevitAddin.deps.json" Condition="Exists('..\..\integrations\revit-addin\bin\Debug\net10.0-windows\Nova.RevitAddin.deps.json')" />
+    <EmbeddedResource Include="..\..\integrations\revit-addin\Nova.addin.template" LogicalName="Payload.Nova.addin.template" />
+  </ItemGroup>
+</Project>
