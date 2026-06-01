@@ -1,6 +1,6 @@
 /* eslint-disable no-redeclare */
 
-import { resolvePythonPorts } from './python-port-decl.js';
+import { resolvePythonPorts, nextPythonPorts } from './python-port-decl.js';
 
 // ============================================
 // NODEFLOW AI — Python Runner (Local JS eval)
@@ -314,7 +314,7 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     h += '<div class="node-control">';
     h += '<div class="py-code-container" id="' + nd.id + '-pycontainer">';
     h += '<div class="py-code-display" id="' + nd.id + '-pydisplay"></div>';
-    h += '<textarea class="py-node-code" id="' + nd.id + '-pycode" spellcheck="false" onchange="app.pyCodeChange(\'' + nd.id + '\',this.value)" oninput="app.pyCodeChange(\'' + nd.id + '\',this.value);app.pyHighlight(\'' + nd.id + '\')" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onscroll="app.pySyncScroll(\'' + nd.id + '\')">' + code + '</textarea>';
+    h += '<textarea class="py-node-code" id="' + nd.id + '-pycode" spellcheck="false" onchange="app.pySyncPorts(\'' + nd.id + '\',this.value)" oninput="app.pyCodeChange(\'' + nd.id + '\',this.value);app.pyHighlight(\'' + nd.id + '\')" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onscroll="app.pySyncScroll(\'' + nd.id + '\')">' + code + '</textarea>';
     h += '</div>';
     h += '</div>';
     h += '<div class="py-node-toolbar"><button class="py-node-btn run" onclick="event.stopPropagation();app.pyRunNode(\'' + nd.id + '\')">▶ Run</button>';
@@ -412,6 +412,36 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
 
   app.pyCodeChange = function(nodeId, code) {
     const nd = this.nodes.find(n => n.id === nodeId); if (nd) nd.controlValues.code = code;
+  };
+
+  // Re-derive the node's ports from its code and re-render if they changed.
+  // Called on the textarea's `change` (commit) event — not on every
+  // keystroke — so the editor keeps focus while typing, and the ports snap
+  // to the declared `# in:`/`# out:` headers (or the inferred result name)
+  // when the edit is committed. This is what lets the node be edited "to the
+  // new design": change the header, the ports follow.
+  app.pySyncPorts = function(nodeId, code) {
+    const nd = this.nodes.find(n => n.id === nodeId);
+    if (!nd) return;
+    nd.controlValues.code = code;
+    const next = nextPythonPorts(code, { inputs: nd._dynInputs, outputs: nd._dynOutputs });
+    if (!next.inputsChanged && !next.outputsChanged) return;
+
+    // Drop wires whose port no longer exists, then adopt the new ports.
+    if (next.removedInputs.length) {
+      this.wires = this.wires.filter(w => !(w.toNode === nodeId && next.removedInputs.indexOf(w.toPort) >= 0));
+    }
+    if (next.removedOutputs.length) {
+      this.wires = this.wires.filter(w => !(w.fromNode === nodeId && next.removedOutputs.indexOf(w.fromPort) >= 0));
+    }
+    nd._dynInputs = next.inputs;
+    nd._dynOutputs = next.outputs;
+    if (next.inputTypes) nd._dynInputTypes = next.inputTypes;
+    nd._dynOutputTypes = next.outputTypes;
+
+    const el = document.getElementById(nodeId);
+    if (el) this.enhancePythonNode(nd, el);
+    this.renderWires();
   };
 
   // ── Global error registry — AI assistant can read this ──
