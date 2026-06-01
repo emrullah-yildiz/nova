@@ -796,6 +796,10 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     // Reset any stale inline-confirm state so a half-finished "remove?" prompt
     // from a previous open doesn't linger.
     app._revokeConfirmId = null;
+    // Session invite-id cache is scoped to one dialog session: clear it on open
+    // so invites created for a DIFFERENT project don't leak in as phantom rows.
+    // The server list (_renderShareLinks below) is authoritative for reopens.
+    app._sessionInvites = {};
     const overlay = document.createElement('div');
     overlay.id = 'share-dialog-overlay';
     overlay.className = 'project-save-overlay';
@@ -847,7 +851,21 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     const inviteList = document.getElementById('invite-list');
     if (!inviteList) return;
     const revoked = app._locallyRevoked = app._locallyRevoked || new Set();
-    const invites = (Array.isArray(app._lastInvites) ? app._lastInvites : []).filter(l => !revoked.has(l.id));
+    // Merge server-truth invites (_lastInvites) with this session's just-created
+    // invites (_sessionInvites). Both carry a link id, so every merged row renders
+    // the server-style row WITH the role dropdown. Dedupe by lowercased email,
+    // preferring the server entry (freshest role) when present.
+    const sessionInvites = app._sessionInvites || {};
+    const byEmail = new Map();
+    for (const key of Object.keys(sessionInvites)) {
+      const s = sessionInvites[key];
+      if (s && s.id && !revoked.has(s.id)) byEmail.set(key, { id: s.id, email: s.email || key, role: s.role });
+    }
+    for (const l of (Array.isArray(app._lastInvites) ? app._lastInvites : [])) {
+      if (revoked.has(l.id)) continue;
+      byEmail.set(String(l.email || '').toLowerCase(), l); // server entry wins
+    }
+    const invites = Array.from(byEmail.values());
     const pending = app._invitePending || {};
     const roleLabel = r => (r === 'Viewer' ? 'Can view' : 'Can edit');
 
@@ -936,6 +954,13 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       try {
         const res = await app.getNovaCloudClient().inviteByEmail(app._cloudProjectId, { email: email, role: role });
         if (res && res.ok) {
+          // Remember the freshly-created invite link id so its row renders with a
+          // working role dropdown immediately — independent of the listShareLinks
+          // refresh (which can lag or momentarily omit the new link).
+          if (res.invite && res.invite.id) {
+            app._sessionInvites = app._sessionInvites || {};
+            app._sessionInvites[key] = { id: res.invite.id, email: email, role: role };
+          }
           const wasDelivered = !!(res.delivery && res.delivery.delivered);
           if (wasDelivered) {
             delivered++;
@@ -1100,6 +1125,12 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       if (app._lastCreatedAnyoneLink && app._lastCreatedAnyoneLink.id === linkId) {
         app._lastCreatedAnyoneLink.role = nextRole;
       }
+      // Keep this session's invite cache in sync so the optimistic role survives
+      // the immediate re-render and any later listShareLinks reconcile.
+      const session = app._sessionInvites || {};
+      for (const key of Object.keys(session)) {
+        if (session[key] && session[key].id === linkId) session[key].role = nextRole;
+      }
     };
     const all = []
       .concat(Array.isArray(app._lastInvites) ? app._lastInvites : [])
@@ -1210,9 +1241,12 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     overlay.id = 'ticket-dialog-overlay';
     overlay.className = 'project-save-overlay';
     overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    // Signed in (guarded above) — show who the ticket is filed as. The server
+    // attaches this verified identity to the issue so the maintainer can follow up.
+    const ticketReporter = (app.currentUser && (app.currentUser.displayName || app.currentUser.email)) || 'your account';
     overlay.innerHTML = '<div class="project-save-dialog" role="dialog" aria-modal="true" style="width:min(520px,100%)">' +
       '<div class="project-save-header"><div class="project-save-mark">🎫</div>' +
-      '<div><h3>Submit a ticket</h3><p>Report a bug or request a feature — this opens an issue on the Nova GitHub repo.</p></div>' +
+      '<div><h3>Submit a ticket</h3><p>Report a bug or request a feature — we may follow up using your account email.</p></div>' +
       '<button class="project-save-close" onclick="document.getElementById(\'ticket-dialog-overlay\').remove()" aria-label="Close">x</button></div>' +
       '<div class="share-controls" style="margin-bottom:10px">' +
         '<span class="share-select"><select id="ticket-category" aria-label="Category"><option value="bug">Bug</option><option value="feature">Feature request</option><option value="question">Question</option></select></span>' +
@@ -1220,7 +1254,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       '</div>' +
       '<textarea id="ticket-body" class="ticket-textarea" placeholder="What happened? Steps to reproduce, what you expected, screenshots links…"></textarea>' +
       '<div id="ticket-status" class="share-status"></div>' +
-      '<div class="project-save-footer"><span>Posted to the public Nova repo — don\'t include secrets.</span>' +
+      '<div class="project-save-footer"><span>Submitting as ' + escapeHtml(ticketReporter) + ' — don\'t include passwords or secrets.</span>' +
       '<button class="share-create-btn" id="ticket-submit" onclick="app._submitTicket()">Submit</button></div></div>';
     document.body.appendChild(overlay);
     setTimeout(function() { const t = document.getElementById('ticket-title'); if (t) t.focus(); }, 50);

@@ -76,6 +76,20 @@ describe('submit a ticket', () => {
     expect(calls[0].labels).toContain('bug');
   });
 
+  it('embeds the verified reporter identity (email + app) in the issue body', async () => {
+    const { calls, service } = fakeIssues();
+    const { dispatch, auth } = await ownerWithProject({ issueService: service });
+    const res = await dispatch({ method: 'POST', path: '/api/feedback/ticket', authorization: auth, body: { title: 'T', body: 'The report text.', category: 'question' } });
+    expect(res.status).toBe(201);
+    const issueBody = calls[0].body;
+    // Original report is preserved…
+    expect(issueBody).toContain('The report text.');
+    // …and a Reporter section with the authenticated email + app URL is appended.
+    expect(issueBody).toContain('**Reporter**');
+    expect(issueBody).toContain('owner@demo.nova');
+    expect(issueBody).toContain('https://nova.test');
+  });
+
   it('503s when no issue service is configured', async () => {
     const { dispatch, auth } = await ownerWithProject(); // no issueService, no FEEDBACK_GITHUB_TOKEN
     await expect(dispatch({ method: 'POST', path: '/api/feedback/ticket', authorization: auth, body: { title: 't', body: 'b' } }))
