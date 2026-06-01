@@ -137,6 +137,36 @@ cutters = Geo.combineAll(holes)`;
     expect(graph.wires.some(w => w.fromNode === w.toNode)).toBe(false);
   });
 
+  it('keeps a multi-line list literal as ONE node instead of fragmenting per line', () => {
+    const code = `shift_x_odd = 6.0
+shift_x_even = -6.0
+seg_data = [
+    (shift_x_odd,  0.0, 0),
+    (shift_x_even, 0.0, 1),
+    (shift_x_odd,  0.0, 2),
+]
+result = Geo.combineAll(seg_data)`;
+
+    const graph = CodeParser.parseToGraph(code);
+    const segNodes = graph.nodes.filter(n =>
+      (n.type === 'custom-python' || n.type === 'Custom.Python') &&
+      (n.outputVars || []).includes('seg_data'));
+    // Exactly one node owns seg_data, and it holds the WHOLE literal.
+    expect(segNodes).toHaveLength(1);
+    const seg = segNodes[0];
+    expect(seg.controls.code).toContain('seg_data = [');
+    expect(seg.controls.code).toContain('0.0, 2');
+    expect(seg.controls.code.trim().endsWith(']')).toBe(true);
+    // Its reads are wired by variable name; loop temporaries are not invented.
+    expect(seg.controls._dynInputs).toEqual(expect.arrayContaining(['shift_x_odd', 'shift_x_even']));
+    // No stray fragment nodes from the tuple lines or the closing bracket.
+    const fragments = graph.nodes.filter(n =>
+      (n.type === 'custom-python' || n.type === 'Custom.Python') &&
+      /^[\])]/.test((n.controls.code || '').trim()));
+    expect(fragments).toHaveLength(0);
+    expect(graph.wires.some(w => w.fromNode === w.toNode)).toBe(false);
+  });
+
   it('wires a reassigned variable input from the previous producer, not the new node itself', () => {
     const code = `origin = Geo.Point3(0, 0, 0)
 result = Geo.createSphere(origin, 1)
