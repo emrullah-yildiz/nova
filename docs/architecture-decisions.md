@@ -5,6 +5,27 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-01 - Deployments Expose Commit Metadata
+
+**Status:** Accepted
+
+**Context:** The production Worker routes page can be confused with the
+develop deployment because `hi-nova.work` and `nova.e-y-myacc.workers.dev`
+belong to the top-level `nova` Worker. Develop branch updates deploy to the
+separate `nova-dev` Worker and were not easy to verify visually.
+
+**Decision:** GitHub Actions writes `dist/nova-deployment.json` immediately
+before each Worker deploy and verifies that the public deployment URL serves the
+current GitHub commit SHA. The dev metadata URL is
+`https://nova-dev.e-y-myacc.workers.dev/nova-deployment.json`; production is
+`https://hi-nova.work/nova-deployment.json`.
+
+**Consequences:**
+
+- A `develop` push fails CI if the dev URL does not expose the pushed commit.
+- Humans can verify dev before merging/promoting to `main`.
+- The metadata file is generated in CI and should not be committed.
+
 ## 2026-06-01 - Worker Deploy CI Pins Wrangler 4
 
 **Status:** Accepted

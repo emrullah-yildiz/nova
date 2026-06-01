@@ -122,6 +122,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment:
+      name: dev
+      url: https://nova-dev.e-y-myacc.workers.dev
     steps:
       - uses: actions/checkout@v5
 
@@ -130,7 +133,21 @@ jobs:
           name: dist
           path: dist
 
+      - name: Write deployment metadata
+        shell: bash
+        run: |
+          cat > dist/nova-deployment.json <<EOF
+          {
+            "environment": "dev",
+            "branch": "${GITHUB_REF_NAME}",
+            "sha": "${GITHUB_SHA}",
+            "runId": "${GITHUB_RUN_ID}",
+            "deployedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
       - name: Deploy to Cloudflare Workers (dev)
+        id: deploy
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
@@ -138,11 +155,31 @@ jobs:
           wranglerVersion: '4.95.0'
           command: deploy --env dev
 
+      - name: Verify dev deployment
+        shell: bash
+        run: |
+          URL="https://nova-dev.e-y-myacc.workers.dev/nova-deployment.json"
+          for attempt in {1..12}; do
+            BODY="$(curl -fsS "$URL" || true)"
+            if echo "$BODY" | grep -q "${GITHUB_SHA}"; then
+              echo "Dev deployment verified at $URL" >> "$GITHUB_STEP_SUMMARY"
+              echo "$BODY" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Waiting for dev deployment metadata ($attempt/12)..."
+            sleep 5
+          done
+          echo "Dev deployment did not expose commit ${GITHUB_SHA} at $URL" >&2
+          exit 1
+
   deploy-production:
     name: Deploy Production Worker
     runs-on: ubuntu-latest
     needs: build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://hi-nova.work
     steps:
       - uses: actions/checkout@v5
 
@@ -151,10 +188,41 @@ jobs:
           name: dist
           path: dist
 
+      - name: Write deployment metadata
+        shell: bash
+        run: |
+          cat > dist/nova-deployment.json <<EOF
+          {
+            "environment": "production",
+            "branch": "${GITHUB_REF_NAME}",
+            "sha": "${GITHUB_SHA}",
+            "runId": "${GITHUB_RUN_ID}",
+            "deployedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
       - name: Deploy to Cloudflare Workers (production)
+        id: deploy
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
           wranglerVersion: '4.95.0'
           command: deploy --env=""
+
+      - name: Verify production deployment
+        shell: bash
+        run: |
+          URL="https://hi-nova.work/nova-deployment.json"
+          for attempt in {1..12}; do
+            BODY="$(curl -fsS "$URL" || true)"
+            if echo "$BODY" | grep -q "${GITHUB_SHA}"; then
+              echo "Production deployment verified at $URL" >> "$GITHUB_STEP_SUMMARY"
+              echo "$BODY" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Waiting for production deployment metadata ($attempt/12)..."
+            sleep 5
+          done
+          echo "Production deployment did not expose commit ${GITHUB_SHA} at $URL" >&2
+          exit 1

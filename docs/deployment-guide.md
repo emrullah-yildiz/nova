@@ -13,6 +13,11 @@ from `dist/` and the `/api/*` backend from `worker/index.mjs`.
 Do not attach `hi-nova.work` to preview or dev deployments. Production traffic
 should only point at the default `nova` Worker deployment from `main`.
 
+The Cloudflare dashboard screenshot for `nova.e-y-myacc.workers.dev` shows the
+top-level production Worker. Develop branch updates are deployed to the separate
+`nova-dev` Worker environment and should be checked at
+`https://nova-dev.e-y-myacc.workers.dev`.
+
 ## Architecture
 
 Nova deploys as:
@@ -115,7 +120,11 @@ After deploying, check:
 
 ```text
 https://nova-dev.e-y-myacc.workers.dev/api/health
+https://nova-dev.e-y-myacc.workers.dev/nova-deployment.json
 https://hi-nova.work/api/health
+https://hi-nova.work/nova-deployment.json
 ```
 
-Then open Nova, sign in, create a graph, and use `File -> Save to Cloud`.
+The `nova-deployment.json` response should contain the GitHub commit SHA from
+the deploy run. Then open Nova, sign in, create a graph, and use
+`File -> Save to Cloud`.
