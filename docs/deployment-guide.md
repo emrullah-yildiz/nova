@@ -18,6 +18,11 @@ top-level production Worker. Develop branch updates are deployed to the separate
 `nova-dev` Worker environment and should be checked at
 `https://nova-dev.ey-myacc.workers.dev`.
 
+In Cloudflare, the `nova-dev` Worker should show only its Workers.dev URL. If
+`nova-dev` lists `hi-nova.work`, remove that custom domain/route from `nova-dev`
+in **Workers & Pages -> nova-dev -> Settings -> Domains & Routes**. Keep
+`hi-nova.work` attached only to the production `nova` Worker.
+
 ## Architecture
 
 Nova deploys as:
