@@ -354,7 +354,8 @@ input:focus, textarea:focus { border-color: var(--accent-blue); }
 /* 3D-only mode: hide every 2D layer entirely (matches today's clean 3D view). */
 .canvas-area.view-3d:not(.split-view) #node-canvas,
 .canvas-area.view-3d:not(.split-view) .wire-layer,
-.canvas-area.view-3d:not(.split-view) .canvas-grid-svg { display: none; }
+.canvas-area.view-3d:not(.split-view) .canvas-grid-svg,
+.canvas-area.view-3d:not(.split-view) #portal-overlay { display: none; }
 
 /* Split-on: drop the 2D grid (it would compete with the 3D content). */
 .canvas-area.split-view .canvas-grid-svg { display: none; }
@@ -368,6 +369,9 @@ input:focus, textarea:focus { border-color: var(--accent-blue); }
 .canvas-area.split-view.view-3d #viewport-3d { z-index: 5; pointer-events: auto; opacity: 1; }
 .canvas-area.split-view.view-3d #node-canvas { pointer-events: none; opacity: 0.4; }
 .canvas-area.split-view.view-3d .wire-layer { opacity: 0.4; }
+
+/* Portal rings stay usable above the 3D canvas in layered split view. */
+.canvas-area.split-view #portal-overlay { z-index: 6; }
 
 
 
