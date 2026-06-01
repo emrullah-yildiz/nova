@@ -1990,6 +1990,24 @@ const app = {
   // edit — used to block local mutations. Remote ops set _applyingRemoteOp.
   _editBlocked(){ return this._collabReadOnly && !this._applyingRemoteOp; },
 
+  // Visible live-session indicator so connection state isn't a black box: a small
+  // pill in the canvas shows connecting / live (+peer count) / offline.
+  _onCollabStatus(state,peerCount,role){
+    const area=document.getElementById('canvas-area');
+    if(!area)return;
+    let pill=document.getElementById('collab-status');
+    if(state==='disconnected'){ if(pill)pill.remove(); return; }
+    if(!pill){pill=document.createElement('div');pill.id='collab-status';pill.className='collab-status';area.appendChild(pill);}
+    pill.classList.remove('connecting','connected','error');
+    if(state==='connecting'){pill.classList.add('connecting');pill.textContent='○ Connecting…';}
+    else if(state==='error'){pill.classList.add('error');pill.textContent='⚠ Live offline';}
+    else{ // connected
+      pill.classList.add('connected');
+      const others=peerCount||0;
+      pill.textContent='● Live'+(others?(' · '+others+' here'):'')+(role==='Viewer'?' · viewing':'');
+    }
+  },
+
   zoomIn(){this.zoom=Math.min(3,this.zoom+0.15);this.applyTransform();document.getElementById('zoom-indicator').textContent=Math.round(this.zoom*100)+'%';},
 
   zoomOut(){this.zoom=Math.max(0.25,this.zoom-0.15);this.applyTransform();document.getElementById('zoom-indicator').textContent=Math.round(this.zoom*100)+'%';},

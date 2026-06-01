@@ -58,6 +58,10 @@ id = "2959d0665b324e53b58c2d1d5b752ffe"
 name = "PROJECT_ROOM"
 class_name = "ProjectRoom"
 
+# SQLite-backed Durable Object class. The free Workers plan REQUIRES
+# new_sqlite_classes (the legacy key-value-backed new_classes is paid-only).
+# ProjectRoom keeps presence in memory and uses no DO storage, so the SQLite
+# backend is a no-cost fit.
 [[migrations]]
 tag = "v1"
-new_classes = ["ProjectRoom"]
+new_sqlite_classes = ["ProjectRoom"]

@@ -513,7 +513,7 @@ describe('enterprise API server', () => {
     }
   });
 
-  it('fires async persistence in the background after responding', async () => {
+  it('awaits async persistence so the write completes before responding', async () => {
     let persisted = null;
     const persistence = {
       async readSnapshot() {
@@ -541,9 +541,10 @@ describe('enterprise API server', () => {
       });
 
       expect(project.status).toBe(201);
-      // Persistence is now fire-and-forget: the response returns before the
-      // snapshot write completes. Give it a moment to settle.
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // The flush is awaited before the response returns, so by the time the
+      // client sees 201 the snapshot has already been written — no sleep needed.
+      // (On Workers a fire-and-forget flush could be dropped when the isolate is
+      // evicted, which is exactly the data-loss this await prevents.)
       expect(persisted.projects.some(item => item.id === project.body.id)).toBe(true);
     } finally {
       await new Promise(resolve => server.close(resolve));
