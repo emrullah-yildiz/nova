@@ -133,25 +133,28 @@ function bearerToken(authorization) {
 // { method, path, searchParams, authorization, body }. Returns { status, body }.
 export function createApiDispatcher({ store, authService, aiProvider, objectStorage, emailService = null, secretsService = null, issueService = null, appUrl = '', allowDevLogin = false }) {
   return async function dispatch(request) {
-    const { method, path, searchParams, authorization, body } = request;
+    const { method, path, searchParams, authorization, body, waitUntil } = request;
     const route = matchRoute(method, path, { allowDevLogin });
     if (!route) throw createHttpError(404, 'Route not found.');
     const context = route.public ? null : await store.authenticateAsync(bearerToken(authorization));
     const url = { searchParams: searchParams instanceof URLSearchParams ? searchParams : new URLSearchParams(searchParams || '') };
     const result = await route.handler({ store, context, params: route.params, body: body || {}, url, aiProvider, authService, objectStorage, emailService, secretsService, issueService, appUrl: request.appUrl || appUrl });
-    // AWAIT the persistence flush before responding. On Cloudflare Workers the
-    // isolate may be evicted as soon as the response is returned, so a
-    // fire-and-forget flush (without ctx.waitUntil) can be abandoned mid-write —
-    // which silently drops the mutation (e.g. a share link that was "created"
-    // but never persisted, so the invitee's link reads as invalid). A flush
-    // FAILURE is still swallowed (logged, not surfaced): the in-memory state is
-    // intact and a later write rewrites it, so a successful mutation must not be
-    // turned into a client error by a transient DB hiccup.
+    // Persistence flush. The write MUST complete, but the client shouldn't wait
+    // for it. On Cloudflare we hand the promise to ctx.waitUntil (passed in as
+    // `waitUntil`): the response returns immediately while the runtime keeps the
+    // isolate alive until the Neon write finishes — fast AND no data loss. When
+    // there's no waitUntil (Node http server, tests) we await it so the write
+    // still completes before responding. A flush FAILURE is always swallowed
+    // (logged, not surfaced): the in-memory state is intact and a later write
+    // rewrites it, so a transient DB hiccup never fails a successful mutation.
     if (store.flushPersistence) {
-      try { await store.flushPersistence(); }
-      catch (error) {
-        if (typeof console !== 'undefined') console.error('[nova] persist flush failed (mutation still succeeded): %s', (error && error.message) || error);
-      }
+      const flush = Promise.resolve()
+        .then(() => store.flushPersistence())
+        .catch(error => {
+          if (typeof console !== 'undefined') console.error('[nova] persist flush failed (mutation still succeeded): %s', (error && error.message) || error);
+        });
+      if (typeof waitUntil === 'function') waitUntil(flush);
+      else await flush;
     }
     return { status: route.status || 200, body: result };
   };
