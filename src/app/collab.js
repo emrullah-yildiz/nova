@@ -27,22 +27,42 @@ export class CollaboClient {
     this._pendingCursor = null;
   }
 
+  _log(...args) {
+    if (typeof console !== 'undefined') console.log('[nova-collab]', ...args);
+  }
+
+  // Report connection state to the app so it can show a visible indicator.
+  _emitStatus(state) {
+    if (this.app && this.app._onCollabStatus) {
+      try { this.app._onCollabStatus(state, this._peers.size, this.role); } catch (e) { /* ignore */ }
+    }
+  }
+
   connect(projectId) {
-    if (!projectId || !this._WebSocket) return;
+    if (!projectId || !this._WebSocket) { this._log('connect skipped: no projectId or no WebSocket impl'); return; }
     this.disconnect();
     this.projectId = projectId;
     const proto = (typeof location !== 'undefined' && location.protocol === 'https:') ? 'wss:' : 'ws:';
     const host = typeof location !== 'undefined' ? location.host : '';
     const url = proto + '//' + host + '/api/projects/' + encodeURIComponent(projectId) + '/room';
+    this._log('connecting to', url);
+    this._emitStatus('connecting');
     try {
       this.ws = new this._WebSocket(url);
     } catch (e) {
+      this._log('connect threw', e && e.message);
       this.ws = null;
+      this._emitStatus('error');
       return;
     }
+    this.ws.addEventListener('open', () => { this._log('socket open'); this._emitStatus('connected'); });
     this.ws.addEventListener('message', (ev) => this._onMessage(ev));
-    this.ws.addEventListener('close', () => this._clearAllPeers());
-    this.ws.addEventListener('error', () => { /* keep state; close handler cleans up */ });
+    this.ws.addEventListener('close', (ev) => {
+      this._log('socket closed', 'code=' + (ev && ev.code), 'reason=' + (ev && ev.reason));
+      this._clearAllPeers();
+      this._emitStatus('disconnected');
+    });
+    this.ws.addEventListener('error', () => { this._log('socket error'); this._emitStatus('error'); });
   }
 
   disconnect() {
@@ -54,6 +74,7 @@ export class CollaboClient {
     this.projectId = null;
     this.role = 'Viewer';
     this.canEdit = false;
+    this._emitStatus('disconnected');
   }
 
   get connected() {
@@ -114,15 +135,21 @@ export class CollaboClient {
           if (this.app && this.app._onCollabRole) this.app._onCollabRole(this.role, this.canEdit);
         }
         (msg.peers || []).forEach(p => this._ensurePeer(p.userId, p.firstName, p.color));
+        this._log('joined room as', this.role, '— peers already here:', (msg.peers || []).length);
+        this._emitStatus('connected');
         break;
       case 'join':
         this._ensurePeer(msg.userId, msg.firstName, msg.color);
+        this._log('peer joined:', msg.firstName, '(' + msg.userId + ')');
+        this._emitStatus('connected');
         break;
       case 'cursor':
         this._movePeer(msg.userId, msg.x, msg.y);
         break;
       case 'leave':
         this._removePeer(msg.userId);
+        this._log('peer left:', msg.userId);
+        this._emitStatus('connected');
         break;
       case 'op':
         this._applyRemoteOp(msg.op);

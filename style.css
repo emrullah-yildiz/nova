@@ -2036,3 +2036,15 @@ input[type="number"] {
   box-shadow: var(--shadow-md);
 }
 
+/* Live-session status pill (bottom-right of the canvas). */
+.collab-status {
+  position: absolute; bottom: 14px; right: 14px; z-index: 56;
+  padding: 4px 11px; border-radius: 12px;
+  background: rgba(24,24,37,0.92); border: 1px solid var(--border-color);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+  pointer-events: none; box-shadow: var(--shadow-md);
+}
+.collab-status.connecting { color: var(--accent-yellow, #f9e2af); }
+.collab-status.connected  { color: var(--accent-green, #a6e3a1); }
+.collab-status.error      { color: var(--accent-red, #f38ba8); }
+

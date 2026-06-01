@@ -139,14 +139,19 @@ export function createApiDispatcher({ store, authService, aiProvider, objectStor
     const context = route.public ? null : await store.authenticateAsync(bearerToken(authorization));
     const url = { searchParams: searchParams instanceof URLSearchParams ? searchParams : new URLSearchParams(searchParams || '') };
     const result = await route.handler({ store, context, params: route.params, body: body || {}, url, aiProvider, authService, objectStorage, emailService, secretsService, issueService, appUrl: request.appUrl || appUrl });
-    // Persistence is write-behind: the handler already mutated the in-memory
-    // store. Flush to the DB in the background so the client doesn't wait for it.
-    // A flush failure is logged but never surfaced to the caller — the in-memory
-    // state is intact and the next write will include this mutation too.
+    // AWAIT the persistence flush before responding. On Cloudflare Workers the
+    // isolate may be evicted as soon as the response is returned, so a
+    // fire-and-forget flush (without ctx.waitUntil) can be abandoned mid-write —
+    // which silently drops the mutation (e.g. a share link that was "created"
+    // but never persisted, so the invitee's link reads as invalid). A flush
+    // FAILURE is still swallowed (logged, not surfaced): the in-memory state is
+    // intact and a later write rewrites it, so a successful mutation must not be
+    // turned into a client error by a transient DB hiccup.
     if (store.flushPersistence) {
-      store.flushPersistence().catch(error => {
+      try { await store.flushPersistence(); }
+      catch (error) {
         if (typeof console !== 'undefined') console.error('[nova] persist flush failed (mutation still succeeded): %s', (error && error.message) || error);
-      });
+      }
     }
     return { status: route.status || 200, body: result };
   };
