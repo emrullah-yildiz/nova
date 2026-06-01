@@ -27,6 +27,8 @@ Thumbs.db
 integrations/revit-addin/bin/
 integrations/revit-addin/obj/
 integrations/revit-addin/artifacts/
+installer/nova-connect/bin/
+installer/nova-connect/obj/
 
 # Playwright screenshot artifacts from local runs
 tests/e2e/__artifacts__/

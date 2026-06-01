@@ -5,9 +5,8 @@
 # points at it. Detects whether the target Revit version is installed and warns
 # before proceeding if it is not.
 #
-# Run by double-clicking "Install Nova Connect.bat" (which launches this with an
-# execution-policy bypass), or directly:
-#   powershell -ExecutionPolicy Bypass -File Install-NovaConnect.ps1
+# Legacy manual installer. The downloadable installer is now
+# NovaConnect-Setup.exe, built from NovaConnect.Installer.csproj.
 
 $ErrorActionPreference = 'Stop'
 
@@ -32,7 +31,7 @@ Write-Host "=====================================================" -ForegroundCo
 # --- Sanity: the files we ship must sit next to this script -------------------
 if (-not (Test-Path $dllSource)) {
   Write-Err "Nova.RevitAddin.dll was not found next to this installer."
-  Write-Err "Make sure you extracted the whole ZIP before running it."
+  Write-Err "Make sure the add-in payload is next to this script before running it."
   Read-Host "Press Enter to exit"
   exit 1
 }

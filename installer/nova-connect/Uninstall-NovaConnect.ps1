@@ -3,8 +3,8 @@
 # Removes the Nova Connect add-in: deletes the .addin manifest and the Nova
 # folder containing the add-in DLL from Revit's per-user Addins folder.
 #
-# Run by double-clicking "Uninstall Nova Connect.bat" or directly:
-#   powershell -ExecutionPolicy Bypass -File Uninstall-NovaConnect.ps1
+# Legacy manual uninstaller. The downloadable installer now supports:
+#   NovaConnect-Setup.exe /uninstall
 
 $ErrorActionPreference = 'Stop'
 

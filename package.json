@@ -28,7 +28,7 @@
     "db:migrate": "node scripts/run-migrations.mjs",
     "cf:dev": "wrangler dev",
     "cf:deploy": "npm run build && wrangler deploy",
-    "build:connect-installer": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-connect-installer.ps1"
+    "build:connect-installer": "powershell -NoProfile -File scripts/build-connect-installer.ps1"
   },
   "keywords": [
     "visual-scripting",

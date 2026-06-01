@@ -1,9 +1,8 @@
-# Builds the downloadable Nova Connect installer ZIP.
+# Builds the downloadable Nova Connect installer EXE.
 #
-# Stages the installer scripts (installer/nova-connect/), the Revit add-in
-# manifest template, and the compiled add-in DLL into a temp folder, then zips
-# them to public/downloads/NovaConnect-Setup.zip. Vite copies public/ into dist/
-# at build time, so the result is served at /downloads/NovaConnect-Setup.zip.
+# Publishes a single-file, self-contained Windows installer executable to
+# public/downloads/NovaConnect-Setup.exe. Vite copies public/ into dist/ at
+# build time, so the result is served at /downloads/NovaConnect-Setup.exe.
 #
 # Run from the repo root (Windows):  pwsh scripts/build-connect-installer.ps1
 # or:  npm run build:connect-installer
@@ -18,13 +17,14 @@ $installer  = Join-Path $repoRoot 'installer\nova-connect'
 $addinDir   = Join-Path $repoRoot 'integrations\revit-addin'
 $buildOut   = Join-Path $addinDir 'bin\Debug\net10.0-windows'
 $template   = Join-Path $addinDir 'Nova.addin.template'
+$project    = Join-Path $installer 'NovaConnect.Installer.csproj'
 $outDir     = Join-Path $repoRoot 'public\downloads'
-$zipPath    = Join-Path $outDir 'NovaConnect-Setup.zip'
+$exePath    = Join-Path $outDir 'NovaConnect-Setup.exe'
 
 $dll  = Join-Path $buildOut 'Nova.RevitAddin.dll'
 $deps = Join-Path $buildOut 'Nova.RevitAddin.deps.json'
 
-Write-Host "Building Nova Connect installer ZIP..." -ForegroundColor Cyan
+Write-Host "Building Nova Connect installer EXE..." -ForegroundColor Cyan
 
 if (-not (Test-Path $dll)) {
   Write-Host "ERROR: $dll not found." -ForegroundColor Red
@@ -35,28 +35,37 @@ if (-not (Test-Path $template)) {
   Write-Host "ERROR: manifest template not found at $template" -ForegroundColor Red
   exit 1
 }
+if (-not (Test-Path $project)) {
+  Write-Host "ERROR: installer project not found at $project" -ForegroundColor Red
+  exit 1
+}
 
-# Stage everything in a clean temp folder so the ZIP has a flat, predictable layout.
-$stage = Join-Path ([System.IO.Path]::GetTempPath()) ("nova-connect-" + [System.Guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path $stage -Force | Out-Null
+New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+if (Test-Path $exePath) { Remove-Item $exePath -Force }
+
+$publishDir = Join-Path ([System.IO.Path]::GetTempPath()) ("nova-connect-publish-" + [System.Guid]::NewGuid().ToString('N'))
 try {
-  Copy-Item (Join-Path $installer 'Install Nova Connect.bat')   $stage
-  Copy-Item (Join-Path $installer 'Install-NovaConnect.ps1')    $stage
-  Copy-Item (Join-Path $installer 'Uninstall Nova Connect.bat') $stage
-  Copy-Item (Join-Path $installer 'Uninstall-NovaConnect.ps1')  $stage
-  Copy-Item (Join-Path $installer 'README.txt')                 $stage
-  Copy-Item $template (Join-Path $stage 'Nova.addin.template')
-  Copy-Item $dll  $stage
-  if (Test-Path $deps) { Copy-Item $deps $stage }
+  dotnet publish $project `
+    -c Release `
+    -r win-x64 `
+    --self-contained true `
+    -p:PublishSingleFile=true `
+    -p:EnableCompressionInSingleFile=true `
+    -p:DebugType=None `
+    -p:DebugSymbols=false `
+    -o $publishDir
 
-  New-Item -ItemType Directory -Path $outDir -Force | Out-Null
-  if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-  Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zipPath -Force
+  $publishedExe = Join-Path $publishDir 'NovaConnect-Setup.exe'
+  if (-not (Test-Path $publishedExe)) {
+    Write-Host "ERROR: dotnet publish did not produce $publishedExe" -ForegroundColor Red
+    exit 1
+  }
 
-  $sizeKb = [math]::Round((Get-Item $zipPath).Length / 1KB, 1)
-  Write-Host "Wrote $zipPath ($sizeKb KB)" -ForegroundColor Green
-  Write-Host "It will be served at /downloads/NovaConnect-Setup.zip after a build/deploy." -ForegroundColor White
+  Copy-Item $publishedExe $exePath -Force
+  $sizeMb = [math]::Round((Get-Item $exePath).Length / 1MB, 2)
+  Write-Host "Wrote $exePath ($sizeMb MB)" -ForegroundColor Green
+  Write-Host "It will be served at /downloads/NovaConnect-Setup.exe after a build/deploy." -ForegroundColor White
 }
 finally {
-  Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item $publishDir -Recurse -Force -ErrorAction SilentlyContinue
 }

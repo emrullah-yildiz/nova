@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // The Connect panel must offer a "Download Nova Connect" button that points at
-// the served installer ZIP and states the Revit 2027 requirement.
+// the served installer EXE and states the Revit 2027 requirement.
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -11,17 +11,17 @@ import {
 } from '../src/integrations/connect/connect-panel.js';
 
 describe('Nova Connect download section', () => {
-  it('targets Revit 2027 and the served installer ZIP', () => {
+  it('targets Revit 2027 and the served installer EXE', () => {
     expect(REVIT_TARGET_VERSION).toBe('2027');
-    expect(NOVA_CONNECT_DOWNLOAD_URL).toBe('/downloads/NovaConnect-Setup.zip');
+    expect(NOVA_CONNECT_DOWNLOAD_URL).toBe('/downloads/NovaConnect-Setup.exe');
   });
 
-  it('renders a download button wired to the installer ZIP', () => {
+  it('renders a download button wired to the installer EXE', () => {
     document.body.innerHTML = novaConnectDownloadMarkup();
     const btn = document.querySelector('a.ncp-download-btn');
     expect(btn).not.toBeNull();
     // Links to the served installer, and is a real download.
-    expect(btn.getAttribute('href')).toBe('/downloads/NovaConnect-Setup.zip');
+    expect(btn.getAttribute('href')).toBe('/downloads/NovaConnect-Setup.exe');
     expect(btn.hasAttribute('download')).toBe(true);
     expect(btn.textContent).toContain('Download Nova Connect');
   });
