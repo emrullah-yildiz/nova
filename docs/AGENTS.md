@@ -27,7 +27,7 @@ These instructions apply to the entire repository.
   - `docs/revit-plugin-architecture.md`
   - `docs/deployment-guide.md`
   - `docs/agent-handoff.md`
-- Before merging a branch, use `docs/agent-merge-checklist.md` to verify docs, tests, validation commands, and merge blockers.
+- Use `docs/agent-merge-checklist.md` as the start and end checklist for every task branch.
 
 ## Coding Style
 

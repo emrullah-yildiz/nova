@@ -7,7 +7,7 @@ Nova. Keep it small, current, and decision-oriented.
 
 - `AGENTS.md` - repository instructions for AI agents and contributors.
 - `ai-agent-token-guide.md` - how agents should minimize token usage and avoid repeated analysis.
-- `agent-merge-checklist.md` - required checklist before merging a task branch into `develop`.
+- `agent-merge-checklist.md` - start-to-end task checklist for branch creation, validation, merge to `develop`, and branch cleanup.
 - `agent-handoff.md` - compact handoff log for context another agent should inherit.
 - `architecture-decisions.md` - durable architecture decisions and their consequences.
 
