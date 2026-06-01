@@ -181,6 +181,31 @@ const CodeParser = {
 
     // Resolve wires
     const wires = [];
+
+    // Resolve a single ref into a wire feeding (toNodeId, toPort): a wired
+    // variable (varToNode), a named constant, or a numeric/string literal
+    // (for which an input node is created). Returns true if a wire was made.
+    // Shared by the main loop and the inline-list expansion below.
+    const resolveRefToPort = (ref, toNodeId, toPort, baseX, baseY) => {
+      if (!ref || ref === '_') return false;
+      const src = varToNode[ref];
+      if (src && src.nodeId && src.nodeId !== toNodeId) {
+        wires.push({ fromNode: src.nodeId, fromPort: src.portId, toNode: toNodeId, toPort });
+        return true;
+      }
+      let litType = null, litVal = null;
+      if (this.CONSTANTS[ref]) { litType = 'number-input'; litVal = this.CONSTANTS[ref]; }
+      else if (/^-?[\d.]+$/.test(ref)) { litType = 'number-input'; litVal = ref; }
+      else if (/^["'].*["']$/.test(ref)) { litType = 'text-input'; litVal = ref.slice(1, -1); }
+      if (litType) {
+        const litId = 'node-' + nextId++;
+        graphNodes.push({ id: litId, type: litType, variable: null, controls: { val: litVal }, inputRefs: {}, rawCode: ref, outputVars: [], x: baseX, y: baseY });
+        wires.push({ fromNode: litId, fromPort: 'value', toNode: toNodeId, toPort });
+        return true;
+      }
+      return false;
+    };
+
     graphNodes.forEach(gn => {
       const def = NODE_TYPE_MAP[gn.type];
       if (!def) return;
@@ -189,29 +214,39 @@ const CodeParser = {
         const ref = gn.inputRefs[portId];
         if (!ref || ref === '_') return;
 
-        const src = gn.inputSources && gn.inputSources[portId] ? gn.inputSources[portId] : varToNode[ref];
-        if (src && src.nodeId && src.nodeId !== gn.id) {
-          wires.push({ fromNode: src.nodeId, fromPort: src.portId, toNode: gn.id, toPort: portId });
+        // Inline list literal passed straight as an argument, e.g.
+        //   result = Geo.combineAll([tower, panels])
+        // The whole `[...]` arrives as a single ref string that varToNode
+        // can't resolve, so nothing would wire in (the consumer's port is
+        // left dangling — the dropped-final-combine bug). Synthesise a
+        // List.Create node, wire each element into it, and feed its `list`
+        // output to this port.
+        const listM = typeof ref === 'string' && ref.match(/^\[(.+)\]$/);
+        if (listM && gn.type !== 'list-create') {
+          const items = this.splitArgs(listM[1]);
+          const listId = 'node-' + nextId++;
+          const itemRefs = {};
+          items.forEach((it, idx) => { itemRefs['item' + idx] = it; });
+          graphNodes.push({
+            id: listId, type: 'list-create', variable: null,
+            controls: {}, inputRefs: itemRefs, inputSources: {},
+            rawCode: ref, outputVars: [],
+            _dynInputIds: items.map((_, idx) => 'item' + idx),
+            x: gn.x - sp.x, y: gn.y
+          });
+          items.forEach((it, idx) => resolveRefToPort(it, listId, 'item' + idx, gn.x - 2 * sp.x, gn.y + idx * 40));
+          wires.push({ fromNode: listId, fromPort: 'list', toNode: gn.id, toPort: portId });
           return;
         }
 
-        if (this.CONSTANTS[ref]) {
-          const litId = 'node-' + nextId++;
-          graphNodes.push({ id: litId, type: 'number-input', variable: null, controls: { val: this.CONSTANTS[ref] }, inputRefs: {}, rawCode: ref, outputVars: [], x: gn.x - sp.x, y: gn.y });
-          wires.push({ fromNode: litId, fromPort: 'value', toNode: gn.id, toPort: portId });
+        // Explicit source from the parser (inputSources) takes precedence
+        // over a name lookup, matching the prior resolution order.
+        const explicitSrc = gn.inputSources && gn.inputSources[portId];
+        if (explicitSrc && explicitSrc.nodeId && explicitSrc.nodeId !== gn.id) {
+          wires.push({ fromNode: explicitSrc.nodeId, fromPort: explicitSrc.portId, toNode: gn.id, toPort: portId });
           return;
         }
-        if (/^-?[\d.]+$/.test(ref)) {
-          const litId = 'node-' + nextId++;
-          graphNodes.push({ id: litId, type: 'number-input', variable: null, controls: { val: ref }, inputRefs: {}, rawCode: ref, outputVars: [], x: gn.x - sp.x, y: gn.y });
-          wires.push({ fromNode: litId, fromPort: 'value', toNode: gn.id, toPort: portId });
-          return;
-        }
-        if (/^["'].*["']$/.test(ref)) {
-          const litId = 'node-' + nextId++;
-          graphNodes.push({ id: litId, type: 'text-input', variable: null, controls: { val: ref.slice(1, -1) }, inputRefs: {}, rawCode: ref, outputVars: [], x: gn.x - sp.x, y: gn.y });
-          wires.push({ fromNode: litId, fromPort: 'value', toNode: gn.id, toPort: portId });
-        }
+        resolveRefToPort(ref, gn.id, portId, gn.x - sp.x, gn.y);
       });
     });
 

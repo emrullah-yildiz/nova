@@ -128,6 +128,53 @@ shell = Geo.loft(pts)`;
   });
 });
 
+describe('inline list-literal arguments are wired through a List.Create node', () => {
+  const isList = (t) => t === 'list-create' || t === 'List.Create';
+  const isCombine = (t) => t === 'op-combine-all' || t === 'Solid.CombineAll';
+
+  it('Geo.combineAll([a, b]) builds a List.Create feeding the combine node, with both elements wired in', () => {
+    _resetAutoGeoMapForTests();
+    const code = `tower = Geo.smooth(base)
+panels = Geo.hexPanelGrid(tower, size)
+result = Geo.combineAll([tower, panels])
+print(result)`;
+    const g = CodeParser.parseToGraph(code);
+
+    const listNode = g.nodes.find((n) => isList(n.type));
+    const combineNode = g.nodes.find((n) => isCombine(n.type));
+    expect(listNode).toBeDefined();
+    expect(combineNode).toBeDefined();
+
+    // List output feeds the combine node's `meshes` input — the previously
+    // dangling final combine.
+    const feed = g.wires.find((w) => w.fromNode === listNode.id && w.toNode === combineNode.id);
+    expect(feed).toBeDefined();
+    expect(feed.toPort).toBe('meshes');
+
+    // Both elements are wired into the List.Create's item ports.
+    const intoList = g.wires.filter((w) => w.toNode === listNode.id);
+    expect(intoList.length).toBe(2);
+    const intoPorts = intoList.map((w) => w.toPort).sort();
+    expect(intoPorts).toEqual(['item0', 'item1']);
+
+    // No self-wires, no orphaned combine input.
+    expect(g.wires.some((w) => w.fromNode === w.toNode)).toBe(false);
+  });
+
+  it('numeric/string elements in an inline list become input-node literals wired into the list', () => {
+    _resetAutoGeoMapForTests();
+    const g = CodeParser.parseToGraph('result = Geo.combineAll([a, 5])');
+    const listNode = g.nodes.find((n) => isList(n.type));
+    expect(listNode).toBeDefined();
+    // item1 (the literal 5) is fed by a generated number-input node.
+    const litWire = g.wires.find((w) => w.toNode === listNode.id && w.toPort === 'item1');
+    expect(litWire).toBeDefined();
+    const litNode = g.nodes.find((n) => n.id === litWire.fromNode);
+    expect(litNode.type).toBe('number-input');
+    expect(litNode.controls.val).toBe('5');
+  });
+});
+
 describe('nextPythonPorts — live port sync on code edit', () => {
   it('declared headers become the authoritative ports', () => {
     const code = '# in: floors:number, height:number\n# out: profiles:curve\nprofiles = []';
