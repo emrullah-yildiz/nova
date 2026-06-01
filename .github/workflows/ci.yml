@@ -153,6 +153,15 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         shell: bash
         run: |
+          # Strip any character a pasted secret may carry that isn't part of a
+          # Cloudflare token/account id (newline, CR, spaces, quotes, …). A
+          # trailing newline makes the Authorization header invalid — wrangler
+          # fails with: Headers.set: "..." is an invalid header value.
+          CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -cd 'A-Za-z0-9_.-')"
+          CLOUDFLARE_ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -cd 'A-Za-z0-9_.-')"
+          export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+          echo "::add-mask::$CLOUDFLARE_API_TOKEN"
+          echo "::add-mask::$CLOUDFLARE_ACCOUNT_ID"
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "::warning title=Deploy skipped::CF_API_TOKEN / CF_ACCOUNT_ID secrets are not set — skipping Cloudflare dev deploy. See docs/deployment-guide.md (GitHub Actions deploy credentials)."
             echo "deployed=false" >> "$GITHUB_OUTPUT"
@@ -215,6 +224,15 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         shell: bash
         run: |
+          # Strip any character a pasted secret may carry that isn't part of a
+          # Cloudflare token/account id (newline, CR, spaces, quotes, …). A
+          # trailing newline makes the Authorization header invalid — wrangler
+          # fails with: Headers.set: "..." is an invalid header value.
+          CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -cd 'A-Za-z0-9_.-')"
+          CLOUDFLARE_ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -cd 'A-Za-z0-9_.-')"
+          export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+          echo "::add-mask::$CLOUDFLARE_API_TOKEN"
+          echo "::add-mask::$CLOUDFLARE_ACCOUNT_ID"
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "::warning title=Deploy skipped::CF_API_TOKEN / CF_ACCOUNT_ID secrets are not set — skipping Cloudflare production deploy. See docs/deployment-guide.md (GitHub Actions deploy credentials)."
             echo "deployed=false" >> "$GITHUB_OUTPUT"
