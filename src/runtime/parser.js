@@ -215,7 +215,13 @@ const CodeParser = {
       });
     });
 
-    return { nodes: graphNodes, wires, nextId };
+    // Defensive catch-all: a node that both reads and writes the same
+    // variable (e.g. `acc.append(x)` in a loop block) can resolve to a wire
+    // from the node back to itself. The per-port guard above already blocks
+    // the known path; this filter guarantees no self-wire survives any path,
+    // since they are never valid in the graph model and corrupt eval order.
+    const cleanWires = wires.filter(w => w.fromNode !== w.toNode);
+    return { nodes: graphNodes, wires: cleanWires, nextId };
   },
 
   // ══════════════════════════════════════
@@ -600,16 +606,21 @@ const CodeParser = {
   },
 
   pyNode(code, firstInput) {
-    // Log WHY this expression couldn't be mapped to a visual node
+    // Log WHY this expression couldn't be mapped to a visual node.
+    // A real function call must START with an identifier before the "(".
+    // Grouping parens like "(a * b) + (c / 2)" begin with "(" and were
+    // previously mis-reported as "Unmapped function call: ()" — they are
+    // just compound arithmetic kept as a Python value node.
     var reason = 'Unknown expression pattern';
-    if (code && code.indexOf('(') >= 0) {
-      var fnName = code.substring(0, code.indexOf('(')).trim();
+    var fnHead = (code || '').match(/^\s*([a-zA-Z_][a-zA-Z0-9_.]*)\s*\(/);
+    if (fnHead) {
+      var fnName = fnHead[1];
       if (fnName.indexOf('.') >= 0) reason = 'Unrecognized function: ' + fnName;
       else reason = 'Unmapped function call: ' + fnName + '()';
     } else if (code && code.indexOf('[') >= 0) {
       reason = 'Complex subscript or list comprehension';
-    } else if (code && (code.indexOf(' + ') >= 0 || code.indexOf(' - ') >= 0 || code.indexOf(' * ') >= 0)) {
-      reason = 'Complex expression with nested operations (cannot decompose)';
+    } else if (code && (code.indexOf('(') >= 0 || code.indexOf(' + ') >= 0 || code.indexOf(' - ') >= 0 || code.indexOf(' * ') >= 0 || code.indexOf(' / ') >= 0)) {
+      reason = 'Compound arithmetic expression (kept as a Python value node)';
     } else {
       reason = 'No matching visual node pattern for: ' + (code || '').substring(0, 60);
     }
