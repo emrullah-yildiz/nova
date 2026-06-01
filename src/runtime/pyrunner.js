@@ -1,6 +1,6 @@
 /* eslint-disable no-redeclare */
 
-import { resolvePythonPorts, nextPythonPorts, renamePythonPort } from './python-port-decl.js';
+import { resolvePythonPorts, nextPythonPorts, renamePythonPort, setInputHeader } from './python-port-decl.js';
 
 // ============================================
 // NODEFLOW AI — Python Runner (Local JS eval)
@@ -303,27 +303,26 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     const body = el.querySelector('.node-body');
     if (!body) return;
     const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const btnBase = 'width:22px;height:18px;border-radius:4px;background:var(--bg-surface-hover);border:1px solid var(--border-color);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0';
     let h = '';
 
-    // Input ports — named, each with a remove (−) button.
-    nd._dynInputs.forEach((pid, i) => {
+    // Input ports — named, renamable (double-click the label).
+    nd._dynInputs.forEach(pid => {
       h += '<div class="node-port-row input-only"><div class="node-port input port-type-any">';
       h += '<span class="port-dot port-type-any" data-port="' + esc(pid) + '" data-dir="input" data-node="' + nd.id + '"></span>';
-      h += '<span class="port-label py-port-label" data-port="' + esc(pid) + '" data-dir="input">' + esc(pid) + '</span></div>';
-      h += '<button class="py-node-btn port" onclick="event.stopPropagation();app.pyRemoveInput(\'' + nd.id + '\',' + i + ')" title="Remove input">−</button></div>';
+      h += '<span class="port-label py-port-label" data-port="' + esc(pid) + '" data-dir="input">' + esc(pid) + '</span></div></div>';
     });
-    h += '<div class="py-port-dynamic"><button class="py-node-btn port" onclick="event.stopPropagation();app.pyAddInput(\'' + nd.id + '\')" title="Add input">+ Input</button></div>';
 
-    // Read-only, syntax-highlighted code preview. Editing happens in the
-    // code terminal — double-click the node body to open it there.
-    const code = nd.controlValues.code || 'output0 = input0';
-    h += '<div class="node-control">';
-    h += '<div class="py-code-preview" id="' + nd.id + '-pypreview" title="Double-click to edit in the code terminal" '
-      + 'style="font-family:var(--font-mono,monospace);font-size:11px;line-height:1.45;white-space:pre;overflow:auto;max-height:128px;'
-      + 'padding:6px 8px;background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:4px;cursor:text">'
-      + app._pyColorize(code) + '</div>';
+    // Add / remove input — same control layout as List.Create: a centered
+    // +/− pair. Adding/removing is a code edit (writes the `# in:` header).
+    h += '<div style="display:flex;gap:4px;padding:2px 12px;justify-content:center">';
+    h += '<button style="' + btnBase + ';color:var(--accent-green)" onclick="event.stopPropagation();app.pyAddInput(\'' + nd.id + '\')" onmousedown="event.stopPropagation()" title="Add input">+</button>';
+    h += '<button style="' + btnBase + ';color:var(--accent-red)" onclick="event.stopPropagation();app.pyRemoveInput(\'' + nd.id + '\')" onmousedown="event.stopPropagation()" title="Remove last input">−</button>';
     h += '</div>';
-    h += '<div class="py-node-toolbar"><span class="py-node-hint" style="font-size:10px;color:var(--text-muted)">{ } double-click to edit</span>'
+
+    // No code preview — just a hint that double-clicking edits in the terminal.
+    h += '<div class="py-node-toolbar" style="padding:4px 12px;display:flex;justify-content:space-between;align-items:center">'
+      + '<span class="py-node-hint" style="font-size:10px;color:var(--text-muted)">{ } double-click to edit</span>'
       + '<span class="py-node-status" id="' + nd.id + '-pystatus"></span></div>';
 
     // Output ports — named.
@@ -479,19 +478,41 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     }
   }, 500);
 
-  app.pyAddInput = function(nodeId) {
-    const nd = this.nodes.find(n => n.id === nodeId); if (!nd) return;
-    if (!nd._dynInputs) nd._dynInputs = ['input0'];
-    nd._dynInputs.push('input' + nd._dynInputs.length);
-    const el = document.getElementById(nodeId); if (el) this.enhancePythonNode(nd, el);
+  // Re-derive a node's ports from its code (code is the source of truth for
+  // ports) and re-render. Used after any edit that changes the code.
+  app._pyResyncPortsFromCode = function(nd) {
+    const resolved = resolvePythonPorts(nd.controlValues.code || '');
+    nd._dynInputs = resolved.inputs.map(p => p.id);
+    nd._dynOutputs = resolved.outputs.map(p => p.id);
+    nd._dynInputTypes = {}; resolved.inputs.forEach(p => { nd._dynInputTypes[p.id] = p.type || 'any'; });
+    nd._dynOutputTypes = {}; resolved.outputs.forEach(p => { nd._dynOutputTypes[p.id] = p.type || 'any'; });
+    const el = document.getElementById(nd.id);
+    if (el) this.enhancePythonNode(nd, el);
+    if (this.renderWires) this.renderWires();
   };
 
-  app.pyRemoveInput = function(nodeId, idx) {
-    const nd = this.nodes.find(n => n.id === nodeId); if (!nd || !nd._dynInputs || nd._dynInputs.length <= 0) return;
-    const removed = nd._dynInputs.splice(idx, 1)[0];
-    this.wires = this.wires.filter(w => !(w.toNode === nodeId && w.toPort === removed));
-    const el = document.getElementById(nodeId); if (el) this.enhancePythonNode(nd, el);
-    this.renderWires();
+  // Add an input port — expressed as a code edit: append a fresh name to the
+  // `# in:` header (NOT a `name = None` assignment, which the runtime would
+  // clobber). The port then follows from the code.
+  app.pyAddInput = function(nodeId) {
+    const nd = this.nodes.find(n => n.id === nodeId); if (!nd) return;
+    const cur = Array.isArray(nd._dynInputs) ? nd._dynInputs.slice() : [];
+    let n = cur.length, name = 'input' + n;
+    while (cur.indexOf(name) >= 0) { n++; name = 'input' + n; }
+    nd.controlValues.code = setInputHeader(nd.controlValues.code || '', cur.concat([name]));
+    this._pyResyncPortsFromCode(nd);
+  };
+
+  // Remove the LAST input port (List.Create-style −): drop it from the
+  // `# in:` header and unwire it.
+  app.pyRemoveInput = function(nodeId) {
+    const nd = this.nodes.find(n => n.id === nodeId); if (!nd) return;
+    const cur = Array.isArray(nd._dynInputs) ? nd._dynInputs.slice() : [];
+    if (cur.length === 0) return;
+    const removed = cur.pop();
+    nd.controlValues.code = setInputHeader(nd.controlValues.code || '', cur);
+    this.wires = (this.wires || []).filter(w => !(w.toNode === nodeId && w.toPort === removed));
+    this._pyResyncPortsFromCode(nd);
   };
 
   app.pyCodeChange = function(nodeId, code) {
