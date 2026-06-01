@@ -105,4 +105,50 @@ for i in range(floors):
     expect(ports.has('floors')).toBe(true);
     expect(ports.has('resolution')).toBe(true);
   });
+
+  it('does not expose local loop temporaries as Custom.Python outputs or self inputs', () => {
+    const code = `num_petals = 8
+petal_height = 8
+base_radius = 2.5
+twist_degrees = 40
+hole_radius = 0.35
+holes = []
+for p in range(num_petals):
+    petal_angle = 2 * math.pi * p / num_petals
+    for i in range(6):
+        t = (i + 1) / 7
+        twist_angle = math.radians(twist_degrees * t)
+        total_angle = petal_angle + twist_angle
+        lean = base_radius + 3.5 * math.sin(t * math.pi * 0.9)
+        hole = Geo.createSphere(Geo.Point3(lean, 0, t * petal_height), hole_radius)
+        holes.append(hole)
+cutters = Geo.combineAll(holes)`;
+
+    const graph = CodeParser.parseToGraph(code);
+    const pyNode = graph.nodes.find(n => n.type === 'custom-python' || n.type === 'Custom.Python');
+    expect(pyNode).toBeDefined();
+    expect(pyNode.outputVars).toEqual(['holes']);
+    expect(pyNode.controls._dynInputs).toEqual(expect.arrayContaining([
+      'num_petals', 'petal_height', 'base_radius', 'twist_degrees', 'hole_radius'
+    ]));
+    expect(pyNode.controls._dynInputs).not.toEqual(expect.arrayContaining([
+      'petal_angle', 'twist_angle', 'total_angle', 'lean'
+    ]));
+    expect(graph.wires.some(w => w.fromNode === w.toNode)).toBe(false);
+  });
+
+  it('wires a reassigned variable input from the previous producer, not the new node itself', () => {
+    const code = `origin = Geo.Point3(0, 0, 0)
+result = Geo.createSphere(origin, 1)
+result = Geo.smooth(result, 3, 0.5)
+print(result)`;
+
+    const graph = CodeParser.parseToGraph(code);
+    const smooth = graph.nodes.find(n => n.type === 'op-smooth' || n.type === 'Solid.Smooth');
+    expect(smooth).toBeDefined();
+    const smoothInput = graph.wires.find(w => w.toNode === smooth.id && w.toPort === 'mesh');
+    expect(smoothInput).toBeDefined();
+    expect(smoothInput.fromNode).not.toBe(smooth.id);
+    expect(graph.wires.some(w => w.fromNode === w.toNode)).toBe(false);
+  });
 });
