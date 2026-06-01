@@ -1,6 +1,6 @@
 /* eslint-disable no-redeclare */
 
-import { resolvePythonPorts, nextPythonPorts } from './python-port-decl.js';
+import { resolvePythonPorts, nextPythonPorts, renamePythonPort } from './python-port-decl.js';
 
 // ============================================
 // NODEFLOW AI — Python Runner (Local JS eval)
@@ -302,35 +302,119 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     if (!nd._dynOutputs) nd._dynOutputs = nd.def.outputs.length > 0 ? nd.def.outputs.map(p => p.id) : ['output0'];
     const body = el.querySelector('.node-body');
     if (!body) return;
+    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     let h = '';
+
+    // Input ports — named, each with a remove (−) button.
     nd._dynInputs.forEach((pid, i) => {
       h += '<div class="node-port-row input-only"><div class="node-port input port-type-any">';
-      h += '<span class="port-dot port-type-any" data-port="' + pid + '" data-dir="input" data-node="' + nd.id + '"></span>';
-      h += '<span class="port-label py-port-label">' + pid + '</span></div>';
-      h += '<button class="py-node-btn port" onclick="event.stopPropagation();app.pyRemoveInput(\'' + nd.id + '\',' + i + ')" title="Remove">−</button></div>';
+      h += '<span class="port-dot port-type-any" data-port="' + esc(pid) + '" data-dir="input" data-node="' + nd.id + '"></span>';
+      h += '<span class="port-label py-port-label" data-port="' + esc(pid) + '" data-dir="input">' + esc(pid) + '</span></div>';
+      h += '<button class="py-node-btn port" onclick="event.stopPropagation();app.pyRemoveInput(\'' + nd.id + '\',' + i + ')" title="Remove input">−</button></div>';
     });
-    h += '<div class="py-port-dynamic"><button class="py-node-btn port" onclick="event.stopPropagation();app.pyAddInput(\'' + nd.id + '\')">+ Input</button></div>';
-    const code = (nd.controlValues.code || 'output0 = input0').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    h += '<div class="py-port-dynamic"><button class="py-node-btn port" onclick="event.stopPropagation();app.pyAddInput(\'' + nd.id + '\')" title="Add input">+ Input</button></div>';
+
+    // Read-only, syntax-highlighted code preview. Editing happens in the
+    // code terminal — double-click the node body to open it there.
+    const code = nd.controlValues.code || 'output0 = input0';
     h += '<div class="node-control">';
-    h += '<div class="py-code-container" id="' + nd.id + '-pycontainer">';
-    h += '<div class="py-code-display" id="' + nd.id + '-pydisplay"></div>';
-    h += '<textarea class="py-node-code" id="' + nd.id + '-pycode" spellcheck="false" onchange="app.pySyncPorts(\'' + nd.id + '\',this.value)" oninput="app.pyCodeChange(\'' + nd.id + '\',this.value);app.pyHighlight(\'' + nd.id + '\')" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onscroll="app.pySyncScroll(\'' + nd.id + '\')">' + code + '</textarea>';
+    h += '<div class="py-code-preview" id="' + nd.id + '-pypreview" title="Double-click to edit in the code terminal" '
+      + 'style="font-family:var(--font-mono,monospace);font-size:11px;line-height:1.45;white-space:pre;overflow:auto;max-height:128px;'
+      + 'padding:6px 8px;background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:4px;cursor:text">'
+      + app._pyColorize(code) + '</div>';
     h += '</div>';
-    h += '</div>';
-    h += '<div class="py-node-toolbar"><button class="py-node-btn run" onclick="event.stopPropagation();app.pyRunNode(\'' + nd.id + '\')">▶ Run</button>';
-    h += '<span class="py-node-status" id="' + nd.id + '-pystatus">ready</span></div>';
+    h += '<div class="py-node-toolbar"><span class="py-node-hint" style="font-size:10px;color:var(--text-muted)">{ } double-click to edit</span>'
+      + '<span class="py-node-status" id="' + nd.id + '-pystatus"></span></div>';
+
+    // Output ports — named.
     nd._dynOutputs.forEach(pid => {
       h += '<div class="node-port-row output-only"><div class="node-port output port-type-any">';
-      h += '<span class="port-label py-port-label">' + pid + '</span>';
-      h += '<span class="port-dot port-type-any" data-port="' + pid + '" data-dir="output" data-node="' + nd.id + '"></span>';
+      h += '<span class="port-label py-port-label" data-port="' + esc(pid) + '" data-dir="output">' + esc(pid) + '</span>';
+      h += '<span class="port-dot port-type-any" data-port="' + esc(pid) + '" data-dir="output" data-node="' + nd.id + '"></span>';
       h += '</div></div>';
     });
+
     body.innerHTML = h;
     el.querySelectorAll('.port-dot').forEach(d => {
       d.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); app.onPortDown(e, d.dataset.node, d.dataset.port, d.dataset.dir); });
     });
-    // Trigger syntax highlighting
-    setTimeout(function() { app.pyHighlight(nd.id); }, 10);
+    // Double-click a port LABEL → rename it inline. Stops propagation so it
+    // doesn't also trigger the body's "open in terminal" dblclick.
+    el.querySelectorAll('.py-port-label').forEach(lbl => {
+      lbl.title = 'Double-click to rename';
+      lbl.addEventListener('dblclick', e => {
+        e.stopPropagation();
+        app.pyStartPortRename(lbl, nd.id, lbl.dataset.dir === 'output' ? 'output' : 'input', lbl.dataset.port);
+      });
+    });
+    // Double-click the body → open this node's code in the terminal to edit.
+    body.addEventListener('dblclick', e => { e.stopPropagation(); app.pyOpenInTerminal(nd.id); });
+  };
+
+  // Replace a port label with an inline text input for renaming.
+  app.pyStartPortRename = function(labelEl, nodeId, direction, oldId) {
+    if (!labelEl || labelEl._renaming) return;
+    labelEl._renaming = true;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = oldId;
+    input.className = 'py-port-rename';
+    input.style.cssText = 'width:84px;font-size:11px;font-family:var(--font-mono,monospace);padding:1px 4px;'
+      + 'background:var(--bg-tertiary);border:1px solid var(--accent-green,#94e2d5);border-radius:3px;color:var(--text-primary)';
+    input.onclick = (e) => e.stopPropagation();
+    input.onmousedown = (e) => e.stopPropagation();
+    let done = false;
+    const cancel = () => {
+      if (done) return; done = true;
+      const el = document.getElementById(nodeId);
+      const nd = app.nodes.find(n => n.id === nodeId);
+      if (el && nd) app.enhancePythonNode(nd, el);
+    };
+    const commit = () => {
+      if (done) return; done = true;
+      app.pyRenamePort(nodeId, direction, oldId, input.value);
+    };
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    };
+    input.onblur = commit;
+    labelEl.replaceWith(input);
+    input.focus();
+    input.select();
+  };
+
+  // Apply a port rename: variable references + wires + port list, then
+  // re-render. Returns true on success. No-ops (returns false) on a bad,
+  // duplicate, or unknown name so the inline editor can just snap back.
+  app.pyRenamePort = function(nodeId, direction, oldId, newId) {
+    const nd = this.nodes.find(n => n.id === nodeId);
+    if (!nd) return false;
+    const res = renamePythonPort({
+      direction, oldId, newId,
+      code: nd.controlValues.code || '',
+      dynInputs: nd._dynInputs || [],
+      dynOutputs: nd._dynOutputs || [],
+      wires: this.wires || [],
+      nodeId
+    });
+    nd._dynInputs = res.dynInputs;
+    nd._dynOutputs = res.dynOutputs;
+    nd.controlValues.code = res.code;
+    this.wires = res.wires;
+    const el = document.getElementById(nodeId);
+    if (el) this.enhancePythonNode(nd, el);
+    if (this.renderWires) this.renderWires();
+    return res.ok;
+  };
+
+  // Open a Python node's code in the code terminal for editing. (The tabbed
+  // multi-node terminal arrives in a follow-up; for now this shows the node's
+  // code in the single-node code viewer.)
+  app.pyOpenInTerminal = function(nodeId) {
+    const nd = this.nodes.find(n => n.id === nodeId);
+    if (!nd || typeof this.showCodeViewer !== 'function') return;
+    this.showCodeViewer(nd.controlValues.code || '', nd);
   };
 
   // ── SYNTAX HIGHLIGHTING ──

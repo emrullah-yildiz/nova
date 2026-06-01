@@ -19,7 +19,8 @@ import {
   parsePythonPortDecls,
   lastTopLevelAssignment,
   resolvePythonPorts,
-  nextPythonPorts
+  nextPythonPorts,
+  renamePythonPort
 } from '../src/runtime/python-port-decl.js';
 
 getLiveCoreRegistry();
@@ -125,6 +126,149 @@ shell = Geo.loft(pts)`;
     expect(r.source).toBe('default');
     expect(r.inputs[0].id).toBe('input0');
     expect(r.outputs[0].id).toBe('output0');
+  });
+});
+
+describe('inline list-literal arguments are wired through a List.Create node', () => {
+  const isList = (t) => t === 'list-create' || t === 'List.Create';
+  const isCombine = (t) => t === 'op-combine-all' || t === 'Solid.CombineAll';
+
+  it('Geo.combineAll([a, b]) builds a List.Create feeding the combine node, with both elements wired in', () => {
+    _resetAutoGeoMapForTests();
+    const code = `tower = Geo.smooth(base)
+panels = Geo.hexPanelGrid(tower, size)
+result = Geo.combineAll([tower, panels])
+print(result)`;
+    const g = CodeParser.parseToGraph(code);
+
+    const listNode = g.nodes.find((n) => isList(n.type));
+    const combineNode = g.nodes.find((n) => isCombine(n.type));
+    expect(listNode).toBeDefined();
+    expect(combineNode).toBeDefined();
+
+    // List output feeds the combine node's `meshes` input — the previously
+    // dangling final combine.
+    const feed = g.wires.find((w) => w.fromNode === listNode.id && w.toNode === combineNode.id);
+    expect(feed).toBeDefined();
+    expect(feed.toPort).toBe('meshes');
+
+    // Both elements are wired into the List.Create's item ports.
+    const intoList = g.wires.filter((w) => w.toNode === listNode.id);
+    expect(intoList.length).toBe(2);
+    const intoPorts = intoList.map((w) => w.toPort).sort();
+    expect(intoPorts).toEqual(['item0', 'item1']);
+
+    // No self-wires, no orphaned combine input.
+    expect(g.wires.some((w) => w.fromNode === w.toNode)).toBe(false);
+  });
+
+  it('numeric/string elements in an inline list become input-node literals wired into the list', () => {
+    _resetAutoGeoMapForTests();
+    const g = CodeParser.parseToGraph('result = Geo.combineAll([a, 5])');
+    const listNode = g.nodes.find((n) => isList(n.type));
+    expect(listNode).toBeDefined();
+    // item1 (the literal 5) is fed by a generated number-input node.
+    const litWire = g.wires.find((w) => w.toNode === listNode.id && w.toPort === 'item1');
+    expect(litWire).toBeDefined();
+    const litNode = g.nodes.find((n) => n.id === litWire.fromNode);
+    expect(litNode.type).toBe('number-input');
+    expect(litNode.controls.val).toBe('5');
+  });
+});
+
+describe('renamePythonPort — rename a port + its variable + its wires atomically', () => {
+  it('renames an input port: updates the port list, code references, and incoming wires', () => {
+    const r = renamePythonPort({
+      direction: 'input',
+      oldId: 'floors',
+      newId: 'levels',
+      code: '# in: floors:number\nz = floors * 4\nprint(floors)',
+      dynInputs: ['floors', 'height'],
+      dynOutputs: ['z'],
+      wires: [
+        { fromNode: 'n2', fromPort: 'value', toNode: 'n1', toPort: 'floors' },
+        { fromNode: 'n3', fromPort: 'value', toNode: 'n1', toPort: 'height' }
+      ],
+      nodeId: 'n1'
+    });
+    expect(r.ok).toBe(true);
+    expect(r.dynInputs).toEqual(['levels', 'height']);
+    expect(r.dynOutputs).toEqual(['z']); // outputs untouched
+    expect(r.code).toBe('# in: levels:number\nz = levels * 4\nprint(levels)');
+    // the wire into the renamed port follows; the other input wire is left alone
+    expect(r.wires.find(w => w.toNode === 'n1' && w.fromNode === 'n2').toPort).toBe('levels');
+    expect(r.wires.find(w => w.fromNode === 'n3').toPort).toBe('height');
+  });
+
+  it('renames an output port: updates the assignment and outgoing wires', () => {
+    const r = renamePythonPort({
+      direction: 'output',
+      oldId: 'result',
+      newId: 'tower',
+      code: 'result = Geo.loft(profiles)',
+      dynInputs: ['profiles'],
+      dynOutputs: ['result'],
+      wires: [{ fromNode: 'n1', fromPort: 'result', toNode: 'n9', toPort: 'mesh' }],
+      nodeId: 'n1'
+    });
+    expect(r.ok).toBe(true);
+    expect(r.dynOutputs).toEqual(['tower']);
+    expect(r.dynInputs).toEqual(['profiles']);
+    expect(r.code).toBe('tower = Geo.loft(profiles)');
+    expect(r.wires[0].fromPort).toBe('tower');
+  });
+
+  it('only renames whole-word matches — substrings are left intact', () => {
+    const r = renamePythonPort({
+      direction: 'input',
+      oldId: 'w',
+      newId: 'width',
+      code: 'w = 1\nww = 2\nx = w + ww',
+      dynInputs: ['w'],
+      dynOutputs: [],
+      wires: [],
+      nodeId: 'n1'
+    });
+    expect(r.code).toBe('width = 1\nww = 2\nx = width + ww');
+  });
+
+  it('rejects an invalid identifier and leaves everything unchanged', () => {
+    const args = {
+      direction: 'input', oldId: 'a', newId: '2bad',
+      code: 'a = 1', dynInputs: ['a'], dynOutputs: [], wires: [{ toNode: 'n1', toPort: 'a', fromNode: 'x', fromPort: 'v' }], nodeId: 'n1'
+    };
+    const r = renamePythonPort(args);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('invalid-name');
+    expect(r.dynInputs).toEqual(['a']);
+    expect(r.code).toBe('a = 1');
+    expect(r.wires[0].toPort).toBe('a');
+  });
+
+  it('rejects a duplicate name in the same direction', () => {
+    const r = renamePythonPort({
+      direction: 'input', oldId: 'a', newId: 'b',
+      code: 'c = a + b', dynInputs: ['a', 'b'], dynOutputs: [], wires: [], nodeId: 'n1'
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('duplicate');
+    expect(r.dynInputs).toEqual(['a', 'b']);
+  });
+
+  it('rejects renaming a port that does not exist in that direction', () => {
+    const r = renamePythonPort({
+      direction: 'output', oldId: 'a', newId: 'z',
+      code: 'a = 1', dynInputs: ['a'], dynOutputs: ['out'], wires: [], nodeId: 'n1'
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('unknown-port');
+  });
+
+  it('renaming to the same name is a successful no-op', () => {
+    const r = renamePythonPort({ direction: 'input', oldId: 'a', newId: 'a', code: 'a = 1', dynInputs: ['a'], dynOutputs: [], wires: [], nodeId: 'n1' });
+    expect(r.ok).toBe(true);
+    expect(r.dynInputs).toEqual(['a']);
+    expect(r.code).toBe('a = 1');
   });
 });
 
