@@ -2006,3 +2006,33 @@ input[type="number"] {
 .verify-banner .verify-dismiss { background: none; border: none; color: inherit; font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; opacity: 0.65; }
 .verify-banner .verify-dismiss:hover { opacity: 1; }
 
+/* ===== LIVE COLLABORATION CURSORS ===== */
+/* One overlay per remote peer, absolutely positioned inside #canvas-area. JS
+   sets left/top in DOM coords (canvas point mapped through pan/zoom). The
+   smooth transition makes throttled (20fps) updates glide rather than jump. */
+.collab-cursor {
+  position: absolute; top: 0; left: 0; z-index: 55;
+  pointer-events: none; will-change: transform;
+  transform: translate(-2px, -2px);
+  transition: left 0.06s linear, top 0.06s linear;
+}
+.collab-cursor-arrow { display: block; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.3)); }
+.collab-cursor-label {
+  position: absolute; left: 14px; top: 12px;
+  padding: 1px 7px; border-radius: 9px;
+  font-size: 11px; font-weight: 600; line-height: 1.5;
+  color: #fff; white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+  text-shadow: 0 1px 1px rgba(0,0,0,0.25);
+}
+
+/* "View only" badge shown to viewers in a co-edit session. */
+.collab-viewonly-badge {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 56; padding: 4px 12px; border-radius: 12px;
+  background: rgba(24,24,37,0.92); border: 1px solid var(--border-color);
+  color: var(--text-secondary); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.3px; pointer-events: none;
+  box-shadow: var(--shadow-md);
+}
+

@@ -873,6 +873,7 @@ const app = {
     this._setRememberedAuth(false);
     this._cloudProjectId = '';
     this._lastCloudSaveSerialized = null;
+    if (this._stopCollab) this._stopCollab();
     if (sc === 'current') {
       await this.refreshSession();
       return;
@@ -983,6 +984,8 @@ const app = {
 
   closeProject() {
 
+    if(this._stopCollab) this._stopCollab();
+
     this.nodes=[]; this.wires=[]; this.selectedNodes=[]; this._undoStack=[]; this._redoStack=[]; this._lastHistorySnapshot=null;
     this._hasRun=false; this._isRunningGraph=false; this._lastRunVersion=0;
     this._cloudProjectId='';
@@ -1030,6 +1033,8 @@ const app = {
 
   addWire(fn,fp,tn,tp) {
 
+    if(this._editBlocked&&this._editBlocked()) return;
+
     this.wires = this.wires.filter(w => !(w.toNode===tn && w.toPort===tp));
 
     const wire = {fromNode:fn,fromPort:fp,toNode:tn,toPort:tp};
@@ -1040,6 +1045,8 @@ const app = {
     this.wires.push(wire); if(typeof Viewer3D!=='undefined') Viewer3D._needsRebuild=true;
 
     if(this.invalidateCompute) this.invalidateCompute();
+
+    if(!this._applyingRemoteOp&&this._collab) this._collab.broadcastOp({kind:'wire.add',fromNode:fn,fromPort:fp,toNode:tn,toPort:tp});
 
   },
 
@@ -1197,11 +1204,17 @@ const app = {
 
   // ── NODES ──
 
-  addNodeToCanvas(type,x,y) {
+  addNodeToCanvas(type,x,y,opts) {
+
+    if(this._editBlocked&&this._editBlocked()) return null;
 
     const def=NODE_TYPE_MAP[type]; if(!def) return null;
 
-    const id='node-'+this.nextNodeId++;
+    // A collab peer's node.add carries an explicit id; if we already have it
+    // (echo or re-send), don't duplicate.
+    if(opts&&opts.id&&this.nodes.find(n=>n.id===opts.id)) return null;
+
+    const id=(opts&&opts.id)||('node-'+this.nextNodeId++);
 
     this.nodeZCounter++;
 
@@ -1209,10 +1222,50 @@ const app = {
 
     def.controls.forEach(c=>{nd.controlValues[c.id]=c.default;});
 
+    if(opts&&opts.controls) Object.keys(opts.controls).forEach(k=>{nd.controlValues[k]=opts.controls[k];});
+
     this.nodes.push(nd); this.renderNode(nd); this.updateMenuState(); if(typeof Viewer3D!=='undefined') Viewer3D._needsRebuild=true;
+
+    // When applying a remote add, keep our id counter ahead of received ids so
+    // our next local node never collides with one a peer already created.
+    if(opts&&opts.id){const num=parseInt(String(opts.id).replace(/\D/g,''),10);if(!isNaN(num)&&num>=this.nextNodeId)this.nextNodeId=num+1;}
+
+    if(!this._applyingRemoteOp&&this._collab) this._collab.broadcastOp({kind:'node.add',id,type,x:nd.x,y:nd.y,controls:{...nd.controlValues}});
 
     return nd;
 
+  },
+
+  // Remote node.add → recreate the exact node (same id) without re-broadcasting.
+  applyRemoteNodeAdd(op){
+    if(!op||!op.type||!op.id) return;
+    this.addNodeToCanvas(op.type,op.x||0,op.y||0,{id:op.id,controls:op.controls});
+    if(this.invalidateCompute) this.invalidateCompute();
+  },
+
+  // Remote node.move → set position + DOM without re-broadcasting.
+  applyRemoteNodeMove(op){
+    if(!op||!op.id) return;
+    const nd=this.nodes.find(n=>n.id===op.id); if(!nd) return;
+    nd.x=Math.round(op.x); nd.y=Math.round(op.y);
+    const el=document.getElementById(nd.id);
+    if(el){el.style.left=nd.x+'px';el.style.top=nd.y+'px';}
+    this.renderWires();
+  },
+
+  // Broadcast the final position(s) when a node drag ends.
+  _broadcastNodeMove(){
+    if(this._applyingRemoteOp||!this._collab) return;
+    const group=(this._dragGroup&&this._dragGroup.length>1)?this._dragGroup.map(g=>g.nd):(this.draggingNode?[this.draggingNode]:[]);
+    for(const nd of group) this._collab.broadcastOp({kind:'node.move',id:nd.id,x:nd.x,y:nd.y});
+  },
+
+  // Remote wire.remove → drop the matching wire without re-broadcasting.
+  applyRemoteWireRemove(op){
+    if(!op) return;
+    this.wires=this.wires.filter(w=>!(w.fromNode===op.fromNode&&w.fromPort===op.fromPort&&w.toNode===op.toNode&&w.toPort===op.toPort));
+    if(this.invalidateCompute) this.invalidateCompute();
+    this.renderWires();
   },
 
   // Convert hex (#rrggbb) to rgba string
@@ -1559,9 +1612,9 @@ const app = {
 
   },
 
-  onCtrl(nid,cid,val) { const nd=this.nodes.find(n=>n.id===nid); if(nd) nd.controlValues[cid]=val; if(this.invalidateCompute) this.invalidateCompute(); if(typeof Viewer3D!=='undefined') Viewer3D._needsRebuild=true; },
+  onCtrl(nid,cid,val) { if(this._editBlocked&&this._editBlocked()) return; const nd=this.nodes.find(n=>n.id===nid); if(nd) nd.controlValues[cid]=val; if(this.invalidateCompute) this.invalidateCompute(); if(typeof Viewer3D!=='undefined') Viewer3D._needsRebuild=true; if(!this._applyingRemoteOp&&this._collab) this._collab.broadcastOp({kind:'node.control',id:nid,ctrlId:cid,value:val}); },
 
-  removeNode(id) { if(this.invalidateCompute) this.invalidateCompute(); if(typeof Viewer3D!=='undefined') Viewer3D._needsRebuild=true;
+  removeNode(id) { if(this._editBlocked&&this._editBlocked()) return; if(this.invalidateCompute) this.invalidateCompute(); if(typeof Viewer3D!=='undefined') Viewer3D._needsRebuild=true;
 
     this.wires=this.wires.filter(w=>w.fromNode!==id&&w.toNode!==id);
 
@@ -1570,6 +1623,8 @@ const app = {
     const el=document.getElementById(id); if(el) el.remove();
 
     this.renderWires(); this.updateMenuState();
+
+    if(!this._applyingRemoteOp&&this._collab) this._collab.broadcastOp({kind:'node.remove',id});
 
   },
 
@@ -1612,7 +1667,7 @@ const app = {
   // ── NODE DRAG ──
 
   _dragGroup: null,
-  onNodeDragStart(e,nd) {if(e.button!==0)return;e.preventDefault();const el=document.getElementById(nd.id);const r=el.getBoundingClientRect();this.draggingNode=nd;this.dragOffset={x:e.clientX-r.left,y:e.clientY-r.top};if(this.selectedNodes.indexOf(nd.id)>=0&&this.selectedNodes.length>1){const a=document.getElementById('canvas-area').getBoundingClientRect();const ax=Math.round((e.clientX-a.left-this.dragOffset.x-this.panX)/this.zoom);const ay=Math.round((e.clientY-a.top-this.dragOffset.y-this.panY)/this.zoom);this._dragGroup=[];for(var i=0;i<this.selectedNodes.length;i++){var snd=this.nodes.find(function(n){return n.id===this.selectedNodes[i];}.bind(this));if(snd)this._dragGroup.push({nd:snd,dx:snd.x-ax,dy:snd.y-ay});}}else{this._dragGroup=null;}},
+  onNodeDragStart(e,nd) {if(e.button!==0)return;if(this._editBlocked&&this._editBlocked())return;e.preventDefault();const el=document.getElementById(nd.id);const r=el.getBoundingClientRect();this.draggingNode=nd;this.dragOffset={x:e.clientX-r.left,y:e.clientY-r.top};if(this.selectedNodes.indexOf(nd.id)>=0&&this.selectedNodes.length>1){const a=document.getElementById('canvas-area').getBoundingClientRect();const ax=Math.round((e.clientX-a.left-this.dragOffset.x-this.panX)/this.zoom);const ay=Math.round((e.clientY-a.top-this.dragOffset.y-this.panY)/this.zoom);this._dragGroup=[];for(var i=0;i<this.selectedNodes.length;i++){var snd=this.nodes.find(function(n){return n.id===this.selectedNodes[i];}.bind(this));if(snd)this._dragGroup.push({nd:snd,dx:snd.x-ax,dy:snd.y-ay});}}else{this._dragGroup=null;}},
 
   onNodeDragMove(e) {
 
@@ -1830,13 +1885,15 @@ const app = {
 
       if(this.isResizingChat) this.onChatResize(e);
 
+      this._broadcastCursor(e);
+
     });
 
     document.addEventListener('mouseup',e=>{
 
       if(this.isPanning){this.isPanning=false;this.panStart=null;area.style.cursor='';}
 
-      if(this.draggingNode){this.draggingNode=null;this._dragGroup=null;}
+      if(this.draggingNode){this._broadcastNodeMove();this.draggingNode=null;this._dragGroup=null;}
 
       this.onWireEnd(e);
 
@@ -1899,7 +1956,39 @@ const app = {
 
     this.renderWires();
 
+    // Keep peers' cursors anchored to the graph as we pan/zoom.
+    if(this._collab) this._collab.refreshPositions();
+
   },
+
+  // Stream this user's cursor (in canvas/graph coords) to collaborators. Only
+  // active in the workspace with a live room; cheap no-op otherwise.
+  _broadcastCursor(e){
+    if(!this._collab||this.currentPage!=='workspace')return;
+    const area=document.getElementById('canvas-area');
+    if(!area||e.target.closest('#viewport-3d'))return;
+    const r=area.getBoundingClientRect();
+    const cx=(e.clientX-r.left-this.panX)/this.zoom;
+    const cy=(e.clientY-r.top-this.panY)/this.zoom;
+    this._collab.sendCursor(cx,cy);
+  },
+
+  // The room reports our resolved role on join. Viewers get a read-only gate
+  // (local edits blocked + a "View only" badge); the server is the real
+  // authority — it drops a viewer's ops regardless of the client.
+  _onCollabRole(role,canEdit){
+    this._collabReadOnly=!canEdit;
+    const area=document.getElementById('canvas-area');
+    if(!area)return;
+    let badge=document.getElementById('collab-viewonly-badge');
+    if(this._collabReadOnly){
+      if(!badge){badge=document.createElement('div');badge.id='collab-viewonly-badge';badge.className='collab-viewonly-badge';badge.textContent='👁 View only';area.appendChild(badge);}
+    }else if(badge){badge.remove();}
+  },
+
+  // True when a live session has us as a viewer and this is a local (not remote)
+  // edit — used to block local mutations. Remote ops set _applyingRemoteOp.
+  _editBlocked(){ return this._collabReadOnly && !this._applyingRemoteOp; },
 
   zoomIn(){this.zoom=Math.min(3,this.zoom+0.15);this.applyTransform();document.getElementById('zoom-indicator').textContent=Math.round(this.zoom*100)+'%';},
 

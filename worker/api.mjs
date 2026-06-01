@@ -134,6 +134,28 @@ function pickSlot(map, userId) {
   return 0;
 }
 
+// Resolve the room access for a collaboration WebSocket: authenticate the
+// cookie session, confirm the user can at least READ the project, and report
+// whether they can WRITE (edit) it. Returns { ok, status, user, canEdit } —
+// status is an HTTP code to send back when ok is false (401 unauthenticated,
+// 403/404 no access). Reused by the /api/projects/:id/room upgrade handler.
+export async function resolveRoomAccess(env, request, projectId) {
+  const cookieHeader = request.headers.get('cookie');
+  const authorization = activeAuthorization(request, cookieHeader);
+  if (!authorization) return { ok: false, status: 401 };
+  const token = authorization.replace(/^Bearer\s+/i, '');
+  try {
+    const { store } = await getApi(env);
+    const context = await store.authenticateAsync(token);
+    // getProject throws 404 when the user has no read access, hiding existence.
+    const project = store.getProject(context, projectId);
+    const canEdit = store.canWriteProject(context, project);
+    return { ok: true, status: 200, user: context.user, canEdit };
+  } catch (error) {
+    return { ok: false, status: error && error.status ? error.status : 401 };
+  }
+}
+
 export async function handleEnterpriseApi(request, env) {
   const url = new URL(request.url);
   const cookieHeader = request.headers.get('cookie');

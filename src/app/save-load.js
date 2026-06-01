@@ -1,6 +1,7 @@
 import { NODE_TYPE_MAP } from '../core/nodes.js';
 import { getRuntimeConfig } from '../config/runtime-config.js';
 import { buildInviteStatus } from './invite-status.js';
+import { CollaboClient } from './collab.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -239,7 +240,23 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     app._lastCloudSaveSerialized = JSON.stringify(app.serializeGraph());
     app.addAIMessage('workspace', 'Opened **' + project.name + '** from your account.');
     _saveToRecent(project.name, project.id);
+    app._startCollab(project.id);
     return project;
+  };
+
+  // Open (or re-open) the live collaboration session for a cloud project. Safe
+  // to call repeatedly — it tears down any previous room first. Realtime is
+  // best-effort: a connection failure must never block opening the project.
+  app._startCollab = function(projectId) {
+    if (!projectId) return;
+    try {
+      if (!app._collab) app._collab = new CollaboClient(app);
+      app._collab.connect(projectId);
+    } catch (e) { /* realtime is best-effort */ }
+  };
+
+  app._stopCollab = function() {
+    try { if (app._collab) app._collab.disconnect(); } catch (e) { /* ignore */ }
   };
 
   app.saveCloudFromDialog = async function(name) {
@@ -737,6 +754,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
         app.addAIMessage('workspace', 'Opened **' + project.name + '** from your account.');
         _saveToRecent(project.name, project.id);
         app._saveCloudProjectId(project.id);
+        app._startCollab(project.id);
       }
       app._clearJoinStatus();
     } catch (e) {
