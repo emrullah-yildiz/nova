@@ -5,6 +5,28 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-01 - Worker Deploy CI Pins Wrangler 4
+
+**Status:** Accepted
+
+**Context:** GitHub Actions used `cloudflare/wrangler-action@v3` without an
+explicit Wrangler version, and a dev deploy run used Wrangler `3.90.0` while the
+repo depends on Wrangler `4.95.0`. This made deploy behavior depend on the
+action runner installation instead of the repository.
+
+**Decision:** Dev and production deploy jobs pin `wranglerVersion: '4.95.0'`.
+Dev deploys with `wrangler deploy --env dev`. Production deploys with
+`wrangler deploy --env=""` to explicitly target the top-level Worker
+configuration.
+
+**Consequences:**
+
+- CI deploys use the same Wrangler major/minor as local validation.
+- The default production Worker environment is explicit despite having a named
+  `dev` environment in `wrangler.toml`.
+- When upgrading Wrangler, update `package.json`, `.github/workflows/ci.yml`,
+  and this decision together.
+
 ## 2026-06-01 - Documentation Is Decision-Oriented And Agent-Friendly
 
 **Status:** Accepted
