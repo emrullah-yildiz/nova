@@ -5,6 +5,66 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-02 - AI Code→Node Pipeline Hardened Against Silent Geometry Failures
+
+**Context:** AI-generated Python that builds geometry failed silently. Examples:
+`Geo.pipe(p1, p2, r)` (the real signature is `pipe(curve, radius)`) and
+`Geo.loft(point[][])` rendered nothing with no error; the parser also shredded
+multi-line list literals and inline list arguments into orphan Custom.Python nodes.
+
+**Decision:** The code→node path is hardened end to end:
+- The codegen system prompt documents exact `Geo.*` signatures and naming
+  conventions (solid primitives use `create*`; operations like `loft`/`pipe` do not).
+- A definite argument-type mismatch now gates approval and triggers the (capped)
+  fix-retry loop instead of only logging a warning — the runtime swallows bad geometry
+  without erroring, so a silent mismatch must be treated as a failure.
+- The parser keeps a multi-line list/dict/tuple literal as one block, and wires an
+  inline list-literal argument (`Geo.combineAll([a, b])`) through a synthesized
+  `List.Create` node instead of leaving the consumer's port dangling.
+
+## 2026-06-02 - Custom.Python Is Code-Driven And Edited In The Terminal
+
+**Context:** The Python node used a single-line text control, and its enhanced
+renderer was not reliably applied (the `renderNode` wrapper was clobbered by
+startup load order), so it fell back to the basic control.
+
+**Decision:** `node-renderer` renders the Python body directly (order-independent).
+The body shows only named input/output ports plus a "double-click to edit" hint — no
+inline editor. The code is the source of truth for ports: inputs come from a `# in:`
+header, the output from the last top-level assignment. Add/remove input uses the same
+`+/-` control as `List.Create` and writes the `# in:` header — NOT a `name = None`
+assignment, because the runtime injects each wired input as `let name = ...` before the
+cell runs, so an assignment would clobber the wired value. Editing happens in the code
+terminal, which is tabbed (Full Script + the node); the node tab is staged and committed
+with **Save**, which re-derives ports and rewires. Port labels are renamable in place.
+
+## 2026-06-02 - 3D Viewer Previews Only Terminal Geometry By Default
+
+**Context:** A lofted twisted tower appeared as a "coil." The loft mesh was correct;
+the coil was the intermediate profile rings (consumed by the loft) being previewed
+alongside the result.
+
+**Decision:** `_renderFromCompute` hides a node's preview when its geometry feeds a
+downstream geometry/transform node (a non-sink consumer). Nodes wired only to
+`Output.*` sinks, or wired nowhere, stay visible. A per-node preview toggle
+(`_preview3d === true`) or a prior panel toggle still force-shows it; auto-hidden items
+are marked (`_autoHidden`) so the visibility snapshot does not mistake an auto-hide for
+a user "hide" on the next run.
+
+## 2026-06-02 - CI Deploy Tolerates Missing And Dirty Cloudflare Secrets
+
+**Context:** With `CF_API_TOKEN`/`CF_ACCOUNT_ID` unset, the workflow still passed an
+empty `CLOUDFLARE_API_TOKEN`, failing every push with `Authentication error [code: 10000]`;
+a token pasted with a trailing newline failed with `Headers.set: "***" is an invalid
+header value`.
+
+**Decision:** The `deploy-dev` / `deploy-production` steps skip with a `::warning::`
+(exit 0) when the secrets are absent, and sanitize `CLOUDFLARE_API_TOKEN` /
+`CLOUDFLARE_ACCOUNT_ID` to the `[A-Za-z0-9_.-]` charset before use (stripping stray
+newlines/whitespace), re-masking the cleaned values. The verify step is gated on the
+deploy actually running. The two CI secrets and the required token permissions are
+documented in `docs/deployment-guide.md`.
+
 ## 2026-06-01 - Dev Worker Must Not Inherit Production Routes
 
 **Status:** Accepted
