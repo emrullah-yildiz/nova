@@ -29,7 +29,7 @@ GitHub Actions deploys automatically:
 
 ```text
 develop -> npm run build -> wrangler deploy --env dev
-main    -> npm run build -> wrangler deploy
+main    -> npm run build -> wrangler deploy --env=""
 ```
 
 Manual deployment is still useful for emergency verification:
@@ -37,7 +37,7 @@ Manual deployment is still useful for emergency verification:
 ```bash
 npm run build
 npx wrangler deploy --env dev
-npx wrangler deploy
+npx wrangler deploy --env=""
 ```
 
 ## Required Cloudflare Secrets
