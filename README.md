@@ -11,8 +11,9 @@ The application combines a node-based design canvas, a 3D viewport, a custom geo
 - Vite-powered browser application with explicit `src/` module imports.
 - Graph execution, geometry utilities, node registry, AI workflow, and UI modules are organized under `src/`.
 - Vitest and Playwright coverage are present.
-- GitHub Actions gates linting, unit tests, browser workflow tests, build, and dependency audit.
-- Enterprise backend foundation is present for API contracts, auth/RBAC, project persistence, AI mediation, Connect pairing, and audit logging. It is still a pilot baseline, not a full production SaaS backend.
+- GitHub Actions gates linting, unit tests, browser workflow tests, build, dependency audit, and Cloudflare Worker deploys.
+- Cloudflare Workers are the only deployment target. `develop` deploys to `nova-dev`; `main` deploys to `hi-nova.work`.
+- The Worker hosts static assets, API routes, AI proxying, feedback, auth/project routes, and realtime room entrypoints.
 
 ## Run Locally
 
@@ -40,10 +41,11 @@ npm run dev
 npm run build
 ```
 
-5. Start the local enterprise API:
+5. Start the local Cloudflare Worker shape:
 
 ```bash
-npm run dev:api
+npm run build
+npm run cf:dev
 ```
 
 6. Run browser workflow checks:
@@ -70,18 +72,18 @@ npm run test:e2e
 - `scripts/connect-hub.cjs` - local Nova Connect WebSocket hub prototype
 - `tests/` - Vitest and Playwright tests
 
-## Enterprise Planning
+## Documentation
 
-Current enterprise planning documents:
+Start with `docs/README.md`. The most important current docs are:
 
-- `docs/backend-architecture.md`
-- `docs/web-enterprise-production.md`
-- `docs/enterprise-mvp-requirements.md`
-- `docs/public-release-checklist.md`
-- `docs/revit-plugin-architecture.md`
+- `docs/AGENTS.md` - repository instructions for AI agents and contributors.
+- `docs/ai-agent-token-guide.md` - token-efficient working rules for agents.
+- `docs/agent-merge-checklist.md` - checklist before merging task branches to `develop`.
+- `docs/agent-handoff.md` - short task handoffs for multi-agent collaboration.
+- `docs/architecture-decisions.md` - durable architecture decision log.
+- `docs/deployment-guide.md` - Cloudflare Worker deployment and branch/domain mapping.
+- `docs/accounts-collaboration.md` - accounts, sharing, and realtime collaboration architecture.
+- `docs/revit-plugin-architecture.md` - Nova Connect and Revit integration architecture.
 
-Enterprise readiness work should continue toward managed Postgres/Redis persistence, production OIDC verification, deployment observability, and hardened Nova Connect relay infrastructure.
-
-## Public Release
-
-Before making the repository public, use `docs/public-release-checklist.md` to verify repository hygiene, secret scanning, documentation accuracy, CI gates, licensing, and GitHub repository settings.
+Before merging a task branch, use `docs/agent-merge-checklist.md` and record
+durable decisions in `docs/architecture-decisions.md`.
