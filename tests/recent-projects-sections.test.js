@@ -83,10 +83,10 @@ describe('landing recent projects sections', () => {
     // Must be a <button> so it is keyboard-accessible and has correct semantics
     expect(btn.tagName).toBe('BUTTON');
 
-    // Icon span — local/browser projects use the 💾 (save-to-device) glyph
+    // Icon span — local/browser projects use the 🖥️ desktop glyph
     const icon = btn.querySelector('.ri-icon');
     expect(icon).not.toBeNull();
-    expect(icon.textContent).toBe('💾');
+    expect(icon.textContent).toBe('🖥️');
 
     // Name span contains the project name
     const name = btn.querySelector('.ri-name');
@@ -107,23 +107,22 @@ describe('landing recent projects sections', () => {
     expect(btn.getAttribute('onclick')).toContain('My Facade');
   });
 
-  it('cloud project row has cloud icon and cloud badge', () => {
+  it('the Local projects list excludes legacy cloud entries (they belong in Cloud Projects)', () => {
+    // A legacy recent entry that carries a cloudId must NOT appear in the
+    // browser-only "Local projects" list — only genuine local saves do.
     localStorage.setItem('nodeflow_recent_projects', JSON.stringify([
-      { name: 'Cloud Proj', cloudId: 'prj_abc123', date: Date.now() - 1000 }
+      { name: 'Cloud Proj', cloudId: 'prj_abc123', date: Date.now() - 1000 },
+      { name: 'Browser Proj', date: Date.now() - 2000 }
     ]));
-    const app = makeApp();
+    const app = makeApp({ currentUser: null });
     app.renderRecentProjects();
 
-    const btn = document.querySelector('#recent-list button.recent-item');
-    expect(btn).not.toBeNull();
-    expect(btn.querySelector('.ri-icon').textContent).toBe('☁');
-    expect(btn.querySelector('.ri-name').textContent).toBe('Cloud Proj');
-
-    const badge = btn.querySelector('.ri-type');
-    expect(badge.classList.contains('ri-type-cloud')).toBe(true);
-    expect(badge.textContent).toBe('cloud');
-
-    expect(btn.getAttribute('onclick')).toContain('prj_abc123');
+    const buttons = document.querySelectorAll('#recent-list button.recent-item');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].querySelector('.ri-name').textContent).toBe('Browser Proj');
+    expect(buttons[0].querySelector('.ri-icon').textContent).toBe('🖥️');
+    // No cloud entry leaked into the local list
+    expect(document.getElementById('recent-list').textContent).not.toContain('Cloud Proj');
   });
 
   it('multiple local projects each get their own button', () => {
@@ -163,10 +162,22 @@ describe('landing recent projects sections', () => {
     expect(openFromLocal).toHaveBeenCalledWith('LocalProj');
   });
 
-  it('cloud row when signed in dispatches openCloudProject', async () => {
-    localStorage.setItem('nodeflow_recent_projects', JSON.stringify([
-      { name: 'CloudProj', cloudId: 'prj_xyz789', date: Date.now() - 500 }
-    ]));
+  it('a cloud row in Cloud Projects renders with the cloud icon + dispatch onclick', async () => {
+    const app = makeApp({}, {
+      listProjects: async () => ({ projects: [{ id: 'prj_xyz789', name: 'CloudProj', updatedAt: Date.now() }] }),
+      listSharedProjects: async () => ({ projects: [] })
+    });
+    app.renderRecentProjects();
+    await new Promise(r => setTimeout(r, 0));
+
+    const btn = document.querySelector('#my-projects-list button.recent-item');
+    expect(btn).not.toBeNull();
+    expect(btn.querySelector('.ri-icon').textContent).toBe('☁');
+    expect(btn.querySelector('.ri-type').classList.contains('ri-type-cloud')).toBe(true);
+    expect(btn.getAttribute('onclick')).toBe("app._openRecentItem('','prj_xyz789')");
+  });
+
+  it('_openRecentItem with a cloudId dispatches openCloudProject when signed in', async () => {
     const getProject = vi.fn(async () => ({
       id: 'prj_xyz789', name: 'CloudProj', currentVersionId: 'v1',
       versions: [{ id: 'v1', graph: { nodes: [], wires: [] } }]
@@ -177,10 +188,6 @@ describe('landing recent projects sections', () => {
       { getProject }
     );
     app.ensureNovaCloudSession = async () => app._novaCloudClient;
-    app.renderRecentProjects();
-
-    const btn = document.querySelector('#recent-list button.recent-item');
-    expect(btn.getAttribute('onclick')).toBe("app._openRecentItem('','prj_xyz789')");
 
     app._openRecentItem('', 'prj_xyz789');
     await new Promise(r => setTimeout(r, 0));
