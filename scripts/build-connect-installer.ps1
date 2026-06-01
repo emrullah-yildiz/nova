@@ -20,6 +20,7 @@ $template   = Join-Path $addinDir 'Nova.addin.template'
 $project    = Join-Path $installer 'NovaConnect.Installer.csproj'
 $outDir     = Join-Path $repoRoot 'public\downloads'
 $exePath    = Join-Path $outDir 'NovaConnect-Setup.exe'
+$hashPath   = Join-Path $outDir 'NovaConnect-Setup.exe.sha256'
 
 $dll  = Join-Path $buildOut 'Nova.RevitAddin.dll'
 $deps = Join-Path $buildOut 'Nova.RevitAddin.deps.json'
@@ -42,6 +43,7 @@ if (-not (Test-Path $project)) {
 
 New-Item -ItemType Directory -Path $outDir -Force | Out-Null
 if (Test-Path $exePath) { Remove-Item $exePath -Force }
+if (Test-Path $hashPath) { Remove-Item $hashPath -Force }
 
 $publishDir = Join-Path ([System.IO.Path]::GetTempPath()) ("nova-connect-publish-" + [System.Guid]::NewGuid().ToString('N'))
 try {
@@ -64,8 +66,31 @@ try {
   }
 
   Copy-Item $publishedExe $exePath -Force
+
+  if ($env:NOVA_CODESIGN_THUMBPRINT) {
+    $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue
+    if (-not $signtool) {
+      Write-Host "ERROR: NOVA_CODESIGN_THUMBPRINT is set, but signtool.exe was not found." -ForegroundColor Red
+      exit 1
+    }
+
+    $timestampUrl = if ($env:NOVA_CODESIGN_TIMESTAMP_URL) { $env:NOVA_CODESIGN_TIMESTAMP_URL } else { 'http://timestamp.digicert.com' }
+    Write-Host "Signing installer with certificate thumbprint $env:NOVA_CODESIGN_THUMBPRINT..." -ForegroundColor Cyan
+    & $signtool.Source sign /fd SHA256 /tr $timestampUrl /td SHA256 /sha1 $env:NOVA_CODESIGN_THUMBPRINT $exePath
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host "ERROR: signtool failed with exit code $LASTEXITCODE" -ForegroundColor Red
+      exit $LASTEXITCODE
+    }
+  } else {
+    Write-Host "Code signing skipped. Set NOVA_CODESIGN_THUMBPRINT to sign the installer." -ForegroundColor Yellow
+  }
+
+  $hash = (Get-FileHash -Path $exePath -Algorithm SHA256).Hash.ToLowerInvariant()
+  Set-Content -Path $hashPath -Value "$hash  NovaConnect-Setup.exe" -Encoding ascii
+
   $sizeMb = [math]::Round((Get-Item $exePath).Length / 1MB, 2)
   Write-Host "Wrote $exePath ($sizeMb MB)" -ForegroundColor Green
+  Write-Host "Wrote $hashPath" -ForegroundColor Green
   Write-Host "It will be served at /downloads/NovaConnect-Setup.exe after a build/deploy." -ForegroundColor White
 }
 finally {
