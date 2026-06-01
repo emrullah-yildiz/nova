@@ -165,3 +165,51 @@ export function nextPythonPorts(code, current = {}) {
     removedOutputs: curOut.filter(id => outputs.indexOf(id) < 0)
   };
 }
+
+const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+// Renames a Custom.Python node's input or output port. Because a port id IS
+// the variable name the Python block reads (input) or assigns (output), a
+// rename has to touch three things together: the port list, every whole-word
+// reference in the code, and any wires attached to that port. Doing them as
+// one atomic transform keeps them from drifting apart.
+//
+// opts: { direction:'input'|'output', oldId, newId, code, dynInputs,
+//         dynOutputs, wires, nodeId }
+// Returns { ok, reason?, dynInputs, dynOutputs, code, wires }. On failure
+// (bad name, duplicate, unknown port) the inputs are returned unchanged so the
+// caller can no-op safely. Pure — no DOM, no app state.
+export function renamePythonPort(opts = {}) {
+  const direction = opts.direction === 'output' ? 'output' : 'input';
+  const oldId = opts.oldId;
+  const newId = typeof opts.newId === 'string' ? opts.newId.trim() : '';
+  const code = typeof opts.code === 'string' ? opts.code : '';
+  const dynInputs = Array.isArray(opts.dynInputs) ? opts.dynInputs : [];
+  const dynOutputs = Array.isArray(opts.dynOutputs) ? opts.dynOutputs : [];
+  const wires = Array.isArray(opts.wires) ? opts.wires : [];
+  const nodeId = opts.nodeId;
+
+  const unchanged = { dynInputs, dynOutputs, code, wires };
+  const list = direction === 'input' ? dynInputs : dynOutputs;
+
+  if (!IDENT_RE.test(newId)) return { ok: false, reason: 'invalid-name', ...unchanged };
+  if (list.indexOf(oldId) < 0) return { ok: false, reason: 'unknown-port', ...unchanged };
+  if (newId === oldId) return { ok: true, ...unchanged };
+  if (list.indexOf(newId) >= 0) return { ok: false, reason: 'duplicate', ...unchanged };
+
+  const rename = (id) => (id === oldId ? newId : id);
+  const nextInputs = direction === 'input' ? dynInputs.map(rename) : dynInputs.slice();
+  const nextOutputs = direction === 'output' ? dynOutputs.map(rename) : dynOutputs.slice();
+
+  // Whole-word rename of the variable everywhere it appears (headers + body).
+  const wordRe = new RegExp('\\b' + oldId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'g');
+  const nextCode = code.replace(wordRe, newId);
+
+  const nextWires = wires.map(w => {
+    if (direction === 'input' && w.toNode === nodeId && w.toPort === oldId) return { ...w, toPort: newId };
+    if (direction === 'output' && w.fromNode === nodeId && w.fromPort === oldId) return { ...w, fromPort: newId };
+    return w;
+  });
+
+  return { ok: true, dynInputs: nextInputs, dynOutputs: nextOutputs, code: nextCode, wires: nextWires };
+}

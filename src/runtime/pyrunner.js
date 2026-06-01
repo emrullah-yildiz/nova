@@ -1,6 +1,6 @@
 /* eslint-disable no-redeclare */
 
-import { resolvePythonPorts, nextPythonPorts } from './python-port-decl.js';
+import { resolvePythonPorts, nextPythonPorts, renamePythonPort } from './python-port-decl.js';
 
 // ============================================
 // NODEFLOW AI — Python Runner (Local JS eval)
@@ -338,8 +338,74 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     el.querySelectorAll('.port-dot').forEach(d => {
       d.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); app.onPortDown(e, d.dataset.node, d.dataset.port, d.dataset.dir); });
     });
+    // Double-click a port LABEL → rename it inline. Stops propagation so it
+    // doesn't also trigger the body's "open in terminal" dblclick.
+    el.querySelectorAll('.py-port-label').forEach(lbl => {
+      lbl.title = 'Double-click to rename';
+      lbl.addEventListener('dblclick', e => {
+        e.stopPropagation();
+        app.pyStartPortRename(lbl, nd.id, lbl.dataset.dir === 'output' ? 'output' : 'input', lbl.dataset.port);
+      });
+    });
     // Double-click the body → open this node's code in the terminal to edit.
     body.addEventListener('dblclick', e => { e.stopPropagation(); app.pyOpenInTerminal(nd.id); });
+  };
+
+  // Replace a port label with an inline text input for renaming.
+  app.pyStartPortRename = function(labelEl, nodeId, direction, oldId) {
+    if (!labelEl || labelEl._renaming) return;
+    labelEl._renaming = true;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = oldId;
+    input.className = 'py-port-rename';
+    input.style.cssText = 'width:84px;font-size:11px;font-family:var(--font-mono,monospace);padding:1px 4px;'
+      + 'background:var(--bg-tertiary);border:1px solid var(--accent-green,#94e2d5);border-radius:3px;color:var(--text-primary)';
+    input.onclick = (e) => e.stopPropagation();
+    input.onmousedown = (e) => e.stopPropagation();
+    let done = false;
+    const cancel = () => {
+      if (done) return; done = true;
+      const el = document.getElementById(nodeId);
+      const nd = app.nodes.find(n => n.id === nodeId);
+      if (el && nd) app.enhancePythonNode(nd, el);
+    };
+    const commit = () => {
+      if (done) return; done = true;
+      app.pyRenamePort(nodeId, direction, oldId, input.value);
+    };
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    };
+    input.onblur = commit;
+    labelEl.replaceWith(input);
+    input.focus();
+    input.select();
+  };
+
+  // Apply a port rename: variable references + wires + port list, then
+  // re-render. Returns true on success. No-ops (returns false) on a bad,
+  // duplicate, or unknown name so the inline editor can just snap back.
+  app.pyRenamePort = function(nodeId, direction, oldId, newId) {
+    const nd = this.nodes.find(n => n.id === nodeId);
+    if (!nd) return false;
+    const res = renamePythonPort({
+      direction, oldId, newId,
+      code: nd.controlValues.code || '',
+      dynInputs: nd._dynInputs || [],
+      dynOutputs: nd._dynOutputs || [],
+      wires: this.wires || [],
+      nodeId
+    });
+    nd._dynInputs = res.dynInputs;
+    nd._dynOutputs = res.dynOutputs;
+    nd.controlValues.code = res.code;
+    this.wires = res.wires;
+    const el = document.getElementById(nodeId);
+    if (el) this.enhancePythonNode(nd, el);
+    if (this.renderWires) this.renderWires();
+    return res.ok;
   };
 
   // Open a Python node's code in the code terminal for editing. (The tabbed

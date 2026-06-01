@@ -19,7 +19,8 @@ import {
   parsePythonPortDecls,
   lastTopLevelAssignment,
   resolvePythonPorts,
-  nextPythonPorts
+  nextPythonPorts,
+  renamePythonPort
 } from '../src/runtime/python-port-decl.js';
 
 getLiveCoreRegistry();
@@ -172,6 +173,102 @@ print(result)`;
     const litNode = g.nodes.find((n) => n.id === litWire.fromNode);
     expect(litNode.type).toBe('number-input');
     expect(litNode.controls.val).toBe('5');
+  });
+});
+
+describe('renamePythonPort — rename a port + its variable + its wires atomically', () => {
+  it('renames an input port: updates the port list, code references, and incoming wires', () => {
+    const r = renamePythonPort({
+      direction: 'input',
+      oldId: 'floors',
+      newId: 'levels',
+      code: '# in: floors:number\nz = floors * 4\nprint(floors)',
+      dynInputs: ['floors', 'height'],
+      dynOutputs: ['z'],
+      wires: [
+        { fromNode: 'n2', fromPort: 'value', toNode: 'n1', toPort: 'floors' },
+        { fromNode: 'n3', fromPort: 'value', toNode: 'n1', toPort: 'height' }
+      ],
+      nodeId: 'n1'
+    });
+    expect(r.ok).toBe(true);
+    expect(r.dynInputs).toEqual(['levels', 'height']);
+    expect(r.dynOutputs).toEqual(['z']); // outputs untouched
+    expect(r.code).toBe('# in: levels:number\nz = levels * 4\nprint(levels)');
+    // the wire into the renamed port follows; the other input wire is left alone
+    expect(r.wires.find(w => w.toNode === 'n1' && w.fromNode === 'n2').toPort).toBe('levels');
+    expect(r.wires.find(w => w.fromNode === 'n3').toPort).toBe('height');
+  });
+
+  it('renames an output port: updates the assignment and outgoing wires', () => {
+    const r = renamePythonPort({
+      direction: 'output',
+      oldId: 'result',
+      newId: 'tower',
+      code: 'result = Geo.loft(profiles)',
+      dynInputs: ['profiles'],
+      dynOutputs: ['result'],
+      wires: [{ fromNode: 'n1', fromPort: 'result', toNode: 'n9', toPort: 'mesh' }],
+      nodeId: 'n1'
+    });
+    expect(r.ok).toBe(true);
+    expect(r.dynOutputs).toEqual(['tower']);
+    expect(r.dynInputs).toEqual(['profiles']);
+    expect(r.code).toBe('tower = Geo.loft(profiles)');
+    expect(r.wires[0].fromPort).toBe('tower');
+  });
+
+  it('only renames whole-word matches — substrings are left intact', () => {
+    const r = renamePythonPort({
+      direction: 'input',
+      oldId: 'w',
+      newId: 'width',
+      code: 'w = 1\nww = 2\nx = w + ww',
+      dynInputs: ['w'],
+      dynOutputs: [],
+      wires: [],
+      nodeId: 'n1'
+    });
+    expect(r.code).toBe('width = 1\nww = 2\nx = width + ww');
+  });
+
+  it('rejects an invalid identifier and leaves everything unchanged', () => {
+    const args = {
+      direction: 'input', oldId: 'a', newId: '2bad',
+      code: 'a = 1', dynInputs: ['a'], dynOutputs: [], wires: [{ toNode: 'n1', toPort: 'a', fromNode: 'x', fromPort: 'v' }], nodeId: 'n1'
+    };
+    const r = renamePythonPort(args);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('invalid-name');
+    expect(r.dynInputs).toEqual(['a']);
+    expect(r.code).toBe('a = 1');
+    expect(r.wires[0].toPort).toBe('a');
+  });
+
+  it('rejects a duplicate name in the same direction', () => {
+    const r = renamePythonPort({
+      direction: 'input', oldId: 'a', newId: 'b',
+      code: 'c = a + b', dynInputs: ['a', 'b'], dynOutputs: [], wires: [], nodeId: 'n1'
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('duplicate');
+    expect(r.dynInputs).toEqual(['a', 'b']);
+  });
+
+  it('rejects renaming a port that does not exist in that direction', () => {
+    const r = renamePythonPort({
+      direction: 'output', oldId: 'a', newId: 'z',
+      code: 'a = 1', dynInputs: ['a'], dynOutputs: ['out'], wires: [], nodeId: 'n1'
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('unknown-port');
+  });
+
+  it('renaming to the same name is a successful no-op', () => {
+    const r = renamePythonPort({ direction: 'input', oldId: 'a', newId: 'a', code: 'a = 1', dynInputs: ['a'], dynOutputs: [], wires: [], nodeId: 'n1' });
+    expect(r.ok).toBe(true);
+    expect(r.dynInputs).toEqual(['a']);
+    expect(r.code).toBe('a = 1');
   });
 });
 
