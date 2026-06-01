@@ -50,6 +50,37 @@ npx wrangler deploy --env dev
 npx wrangler deploy --env=""
 ```
 
+## GitHub Actions deploy credentials
+
+The `deploy-dev` / `deploy-production` jobs in `.github/workflows/ci.yml`
+authenticate to Cloudflare with two **repository secrets**
+(*Settings → Secrets and variables → Actions → New repository secret* — add
+them as Secrets, not Variables):
+
+| Secret | Value |
+|---|---|
+| `CF_API_TOKEN` | A Cloudflare API token (see below) |
+| `CF_ACCOUNT_ID` | The account ID that owns the `nova` / `nova-dev` Workers (`npx wrangler whoami`, or Cloudflare dash → *Workers & Pages → Account ID*) |
+
+If either secret is missing, the deploy step **skips with a warning** instead
+of failing the pipeline — so CI stays green until deployment is wired up.
+
+Create the token from the **"Edit Cloudflare Workers"** template
+(*My Profile → API Tokens → Create Token*), scoped to:
+
+- **Account Resources** → the account that owns the Workers (`ey.myacc@gmail.com`).
+- **Zone Resources** → `hi-nova.work` (required for the production custom-domain
+  route; dev uses `workers.dev` and doesn't need it).
+
+That template grants exactly what `wrangler deploy` needs here: *Workers
+Scripts: Edit* (the script, the `[assets]` upload, and the `ProjectRoom`
+Durable Object migration), *Workers KV Storage: Edit* (`SESSION_KV` /
+`RATE_KV`), *Account Settings: Read*, and *User Memberships: Read*. A token
+missing Workers permissions, or scoped to a different account than
+`CF_ACCOUNT_ID`, fails with `Authentication error [code: 10000]`.
+
+Paste the token value with no trailing newline/space.
+
 ## Required Cloudflare Secrets
 
 Set secrets per Worker environment in Cloudflare or with Wrangler:
