@@ -55,10 +55,10 @@ explicit Wrangler version, and a dev deploy run used Wrangler `3.90.0` while the
 repo depends on Wrangler `4.95.0`. This made deploy behavior depend on the
 action runner installation instead of the repository.
 
-**Decision:** Dev and production deploy jobs pin `wranglerVersion: '4.95.0'`.
-Dev deploys with `wrangler deploy --env dev`. Production deploys with
-`wrangler deploy --env=""` to explicitly target the top-level Worker
-configuration.
+**Decision:** Dev and production deploy jobs run explicit shell commands with
+`npx wrangler@4.95.0` instead of the action wrapper. Dev deploys with
+`wrangler deploy --env dev`. Production deploys with `wrangler deploy --env=""`
+to explicitly target the top-level Worker configuration.
 
 **Consequences:**
 
