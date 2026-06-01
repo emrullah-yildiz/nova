@@ -134,6 +134,12 @@ const CodeParser = {
       }
 
       const nodeId = 'node-' + nextId++;
+      const inputSources = {};
+      Object.keys(inputRefs).forEach(portId => {
+        const ref = inputRefs[portId];
+        const src = typeof ref === 'string' ? varToNode[ref] : null;
+        if (src && src.nodeId) inputSources[portId] = { nodeId: src.nodeId, portId: src.portId };
+      });
 
       // Position based on dependencies
       const depCols = Object.values(inputRefs)
@@ -150,7 +156,7 @@ const CodeParser = {
 
       const gn = {
         id: nodeId, type: nodeType, variable: outputVars[0] || null,
-        controls, inputRefs, rawCode: block.code || block.expression || '',
+        controls, inputRefs, inputSources, rawCode: block.code || block.expression || '',
         outputVars,
         x: 80 + col * sp.x, y: 80 + row * sp.y
       };
@@ -183,8 +189,8 @@ const CodeParser = {
         const ref = gn.inputRefs[portId];
         if (!ref || ref === '_') return;
 
-        const src = varToNode[ref];
-        if (src && src.nodeId) {
+        const src = gn.inputSources && gn.inputSources[portId] ? gn.inputSources[portId] : varToNode[ref];
+        if (src && src.nodeId && src.nodeId !== gn.id) {
           wires.push({ fromNode: src.nodeId, fromPort: src.portId, toNode: gn.id, toPort: portId });
           return;
         }
@@ -330,6 +336,8 @@ const CodeParser = {
   _analyzeBlock(code, knownVars) {
     const reads = new Set();
     const writes = new Set();
+    const appended = new Set();
+    const emptyListInits = new Set();
     const knownSet = new Set(knownVars);
 
     code.split('\n').forEach(line => {
@@ -337,11 +345,14 @@ const CodeParser = {
       if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('import ')) return;
 
       const assignM = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=/);
-      if (assignM && !trimmed.startsWith('==')) writes.add(assignM[1]);
+      if (assignM && !trimmed.startsWith('==')) {
+        writes.add(assignM[1]);
+        if (/^[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*\[\s*\]$/.test(trimmed)) emptyListInits.add(assignM[1]);
+      }
       const forM = trimmed.match(/^for\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+in/);
       if (forM) writes.add(forM[1]);
       const appendM = trimmed.match(/([a-zA-Z_][a-zA-Z0-9_]*)\.append/);
-      if (appendM) { writes.add(appendM[1]); }
+      if (appendM) { writes.add(appendM[1]); appended.add(appendM[1]); }
 
       knownSet.forEach(v => {
         const re = new RegExp('\\b' + v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
@@ -349,19 +360,21 @@ const CodeParser = {
       });
     });
 
-    // Keep reads that are from outside (known vars), remove internal ones
+    // Keep reads that are from outside. Variables assigned inside this block
+    // are local temporaries, even if an earlier block used the same name.
     const internalWrites = new Set(writes);
-    // But if a variable is both read from outside AND written inside, it's still a read
-    // Filter writes: exclude loop vars, single-letter temps, and internal vars
     const loopVars = new Set();
     code.split('\n').forEach(line => {
       const fm = line.trim().match(/^for\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+in/);
       if (fm) loopVars.add(fm[1]);
     });
+    const outputCandidates = appended.size > 0
+      ? Array.from(appended)
+      : Array.from(writes).filter(w => !emptyListInits.has(w));
 
     return {
-      reads: Array.from(reads).filter(r => knownSet.has(r)),
-      writes: Array.from(writes).filter(w =>
+      reads: Array.from(reads).filter(r => knownSet.has(r) && !internalWrites.has(r)),
+      writes: outputCandidates.filter(w =>
         w !== '_' && !w.startsWith('__') && !loopVars.has(w) &&
         !(w.length === 1 && /[a-z]/.test(w))  // exclude single-letter vars like x, y, z, i, j, k
       )
