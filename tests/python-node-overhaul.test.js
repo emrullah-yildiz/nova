@@ -18,7 +18,8 @@ import { CodeParser, _resetAutoGeoMapForTests } from '../src/runtime/parser.js';
 import {
   parsePythonPortDecls,
   lastTopLevelAssignment,
-  resolvePythonPorts
+  resolvePythonPorts,
+  nextPythonPorts
 } from '../src/runtime/python-port-decl.js';
 
 getLiveCoreRegistry();
@@ -124,6 +125,46 @@ shell = Geo.loft(pts)`;
     expect(r.source).toBe('default');
     expect(r.inputs[0].id).toBe('input0');
     expect(r.outputs[0].id).toBe('output0');
+  });
+});
+
+describe('nextPythonPorts — live port sync on code edit', () => {
+  it('declared headers become the authoritative ports', () => {
+    const code = '# in: floors:number, height:number\n# out: profiles:curve\nprofiles = []';
+    const r = nextPythonPorts(code, { inputs: ['input0'], outputs: ['output0'] });
+    expect(r.source).toBe('declared');
+    expect(r.inputs).toEqual(['floors', 'height']);
+    expect(r.outputs).toEqual(['profiles']);
+    expect(r.inputTypes).toEqual({ floors: 'number', height: 'number' });
+    expect(r.inputsChanged).toBe(true);
+    expect(r.outputsChanged).toBe(true);
+    expect(r.removedInputs).toEqual(['input0']);
+    expect(r.removedOutputs).toEqual(['output0']);
+  });
+
+  it('without headers, preserves existing (manual/wired) inputs and only tracks the output name', () => {
+    const r = nextPythonPorts('result = Geo.createBox(p, 1, 1, 1)', { inputs: ['p', 'size'], outputs: ['output0'] });
+    expect(r.source).toBe('inferred');
+    expect(r.inputs).toEqual(['p', 'size']); // manual inputs preserved
+    expect(r.inputsChanged).toBe(false);
+    expect(r.outputs).toEqual(['result']);
+    expect(r.outputsChanged).toBe(true);
+    expect(r.removedOutputs).toEqual(['output0']);
+  });
+
+  it('reports no change when the resolved ports match the current ports', () => {
+    const code = '# in: a:number\n# out: b:number\nb = a';
+    const r = nextPythonPorts(code, { inputs: ['a'], outputs: ['b'] });
+    expect(r.inputsChanged).toBe(false);
+    expect(r.outputsChanged).toBe(false);
+    expect(r.removedInputs).toEqual([]);
+    expect(r.removedOutputs).toEqual([]);
+  });
+
+  it('renaming the result variable moves the output port and flags the old one removed', () => {
+    const r = nextPythonPorts('tower = Geo.loft(profiles)', { inputs: ['input0'], outputs: ['shell'] });
+    expect(r.outputs).toEqual(['tower']);
+    expect(r.removedOutputs).toEqual(['shell']);
   });
 });
 

@@ -115,3 +115,53 @@ export function resolvePythonPorts(code) {
     source: lastVar ? 'inferred' : 'default'
   };
 }
+
+// Decides what a Custom.Python node's ports should become after its code
+// is edited, given the ports it currently has. This is the live-edit
+// counterpart to resolvePythonPorts: it lets the node track `# in:`/`# out:`
+// header edits and result-variable renames as the user types.
+//
+// Rules:
+//  • Declared headers are authoritative for BOTH inputs and outputs.
+//  • Without headers, manually-managed inputs (added via "+ Input" or wired
+//    by the parser) are preserved — only the OUTPUT name tracks the last
+//    top-level assignment, so `result = ...` surfaces a `result` port.
+//
+// `current` is { inputs: string[], outputs: string[] } of existing port ids.
+// Returns the new port ids + types, a per-direction `changed` flag, and the
+// ids that were removed (so the caller can drop their wires). Pure — no DOM,
+// no app state — so it's unit-testable.
+export function nextPythonPorts(code, current = {}) {
+  const curIn = Array.isArray(current.inputs) ? current.inputs : [];
+  const curOut = Array.isArray(current.outputs) ? current.outputs : [];
+  const resolved = resolvePythonPorts(code);
+
+  let inputs, inputTypes;
+  if (resolved.source === 'declared') {
+    inputs = resolved.inputs.map(p => p.id);
+    inputTypes = {};
+    resolved.inputs.forEach(p => { inputTypes[p.id] = p.type || 'any'; });
+  } else {
+    // No headers → keep whatever inputs the node already has (manual / wired);
+    // fall back to the resolved generic input only when there are none yet.
+    inputs = curIn.length ? curIn.slice() : resolved.inputs.map(p => p.id);
+    inputTypes = null;
+  }
+
+  const outputs = resolved.outputs.map(p => p.id);
+  const outputTypes = {};
+  resolved.outputs.forEach(p => { outputTypes[p.id] = p.type || 'any'; });
+
+  const eq = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+  return {
+    inputs,
+    outputs,
+    inputTypes,
+    outputTypes,
+    source: resolved.source,
+    inputsChanged: !eq(inputs, curIn),
+    outputsChanged: !eq(outputs, curOut),
+    removedInputs: curIn.filter(id => inputs.indexOf(id) < 0),
+    removedOutputs: curOut.filter(id => outputs.indexOf(id) < 0)
+  };
+}
