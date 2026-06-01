@@ -245,6 +245,31 @@ const CodeParser = {
         i++; continue;
       }
 
+      // Multi-line bracket continuation — e.g. a list literal written as
+      //   seg_data = [
+      //       (a, b, 0),
+      //       (c, d, 1),
+      //   ]
+      // Without this, each physical line becomes its own orphan Custom.Python
+      // node (the list can never reassemble at runtime). Collect the whole
+      // statement until the brackets balance and keep it as ONE block so the
+      // value and its variable wiring stay intact. Block starters (for/if/def)
+      // manage their own multi-line bodies by indentation, so skip them here.
+      if (!/^(for |while |if |elif |else:|def |class |with |try:|except|finally:)/.test(trimmed)
+          && this._openBracketDepth(raw) > 0) {
+        const blockLines = [raw];
+        let depth = this._openBracketDepth(raw);
+        i++;
+        while (i < lines.length && depth > 0) {
+          const contRaw = lines[i];
+          blockLines.push(contRaw);
+          depth += this._openBracketDepth(contRaw);
+          i++;
+        }
+        blocks.push({ type: 'multiline', code: blockLines.join('\n').trimEnd() });
+        continue;
+      }
+
       // Check for "var = []" followed by a for-loop that appends to var → merge
       const emptyListMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*\[\s*\]$/);
       if (emptyListMatch) {
@@ -657,6 +682,26 @@ const CodeParser = {
       }
     }
     return -1;
+  },
+
+  // Net change in (){}[] nesting for one physical line, ignoring brackets
+  // inside string literals and trailing # comments. >0 means the statement
+  // continues on the next physical line (Python implicit line joining).
+  _openBracketDepth(line) {
+    var depth = 0, inStr = false, strCh = '';
+    for (var k = 0; k < line.length; k++) {
+      var ch = line[k];
+      if (inStr) {
+        if (ch === '\\' && k + 1 < line.length) { k++; continue; }
+        if (ch === strCh) inStr = false;
+        continue;
+      }
+      if (ch === '"' || ch === "'") { inStr = true; strCh = ch; continue; }
+      if (ch === '#') break;
+      if (ch === '(' || ch === '[' || ch === '{') depth++;
+      else if (ch === ')' || ch === ']' || ch === '}') depth--;
+    }
+    return depth;
   },
 
   _stripComment(str) {
