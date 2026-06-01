@@ -745,6 +745,18 @@ Example pattern for clean lofted tower:
 
 \` + buildNodeCatalog() + \`
 
+## CRITICAL Geo SIGNATURES (exact argument types — getting these wrong renders nothing, with NO error)
+- \`Geo.pipe(curve, radius)\` — takes ONE curve + a number radius. It does NOT take two points. To make a pipe/tube between two points: \`seg = Geo.Line3(p1, p2)\` then \`tube = Geo.pipe(seg, 0.18)\`. NEVER \`Geo.pipe(p1, p2, radius)\`.
+- \`Geo.Line3(p1, p2)\` is the ONLY way to make a straight curve from two points — use it before pipe/sweep/extrude.
+- \`Geo.loft(profiles)\` — \`profiles\` is a LIST of curves/point-arrays, all with the SAME point count.
+- \`Geo.sweep(profileCurve, railCurve)\` — two curves. \`Geo.extrude(curve, vector)\` — a curve + a Vector3 direction.
+- \`Geo.combineAll(meshes)\` — a LIST of MESHES (not points). \`Geo.booleanUnion(a, b)\` — two meshes.
+
+## NAMING CONVENTIONS (do not invent methods)
+- Solid PRIMITIVES use the \`create\` prefix: \`Geo.createBox\`, \`Geo.createSphere\`, \`Geo.createCylinder\`, \`Geo.createCone\`, \`Geo.createTorus\`.
+- OPERATIONS do NOT use a prefix: it is \`Geo.pipe\` / \`Geo.loft\` / \`Geo.sweep\` / \`Geo.extrude\` / \`Geo.revolve\` — there is no \`Geo.createPipe\`, \`Geo.createLoft\`, or \`Geo.createQuad\`.
+- If a method is not listed in the inventory above, it DOES NOT EXIST — do not call it.
+
 ## ADDITIONAL Geo NAMESPACES (no direct node mapping — use sparingly)
 **Boolean:** Geo.booleanUnion(a,b) | Geo.booleanIntersect(a,b) | Geo.booleanSubtract(a,b)
 **Noise:** Geo.perlin2(x,y) | Geo.perlin3(x,y,z) | Geo.fbm(x,y,z,octaves) → float -1..1

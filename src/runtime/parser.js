@@ -134,6 +134,12 @@ const CodeParser = {
       }
 
       const nodeId = 'node-' + nextId++;
+      const inputSources = {};
+      Object.keys(inputRefs).forEach(portId => {
+        const ref = inputRefs[portId];
+        const src = typeof ref === 'string' ? varToNode[ref] : null;
+        if (src && src.nodeId) inputSources[portId] = { nodeId: src.nodeId, portId: src.portId };
+      });
 
       // Position based on dependencies
       const depCols = Object.values(inputRefs)
@@ -150,7 +156,7 @@ const CodeParser = {
 
       const gn = {
         id: nodeId, type: nodeType, variable: outputVars[0] || null,
-        controls, inputRefs, rawCode: block.code || block.expression || '',
+        controls, inputRefs, inputSources, rawCode: block.code || block.expression || '',
         outputVars,
         x: 80 + col * sp.x, y: 80 + row * sp.y
       };
@@ -183,8 +189,8 @@ const CodeParser = {
         const ref = gn.inputRefs[portId];
         if (!ref || ref === '_') return;
 
-        const src = varToNode[ref];
-        if (src && src.nodeId) {
+        const src = gn.inputSources && gn.inputSources[portId] ? gn.inputSources[portId] : varToNode[ref];
+        if (src && src.nodeId && src.nodeId !== gn.id) {
           wires.push({ fromNode: src.nodeId, fromPort: src.portId, toNode: gn.id, toPort: portId });
           return;
         }
@@ -209,7 +215,13 @@ const CodeParser = {
       });
     });
 
-    return { nodes: graphNodes, wires, nextId };
+    // Defensive catch-all: a node that both reads and writes the same
+    // variable (e.g. `acc.append(x)` in a loop block) can resolve to a wire
+    // from the node back to itself. The per-port guard above already blocks
+    // the known path; this filter guarantees no self-wire survives any path,
+    // since they are never valid in the graph model and corrupt eval order.
+    const cleanWires = wires.filter(w => w.fromNode !== w.toNode);
+    return { nodes: graphNodes, wires: cleanWires, nextId };
   },
 
   // ══════════════════════════════════════
@@ -231,6 +243,31 @@ const CodeParser = {
           trimmed.startsWith('using ') || /^-+$/.test(trimmed)) {
         blocks.push({ type: 'skip' });
         i++; continue;
+      }
+
+      // Multi-line bracket continuation — e.g. a list literal written as
+      //   seg_data = [
+      //       (a, b, 0),
+      //       (c, d, 1),
+      //   ]
+      // Without this, each physical line becomes its own orphan Custom.Python
+      // node (the list can never reassemble at runtime). Collect the whole
+      // statement until the brackets balance and keep it as ONE block so the
+      // value and its variable wiring stay intact. Block starters (for/if/def)
+      // manage their own multi-line bodies by indentation, so skip them here.
+      if (!/^(for |while |if |elif |else:|def |class |with |try:|except|finally:)/.test(trimmed)
+          && this._openBracketDepth(raw) > 0) {
+        const blockLines = [raw];
+        let depth = this._openBracketDepth(raw);
+        i++;
+        while (i < lines.length && depth > 0) {
+          const contRaw = lines[i];
+          blockLines.push(contRaw);
+          depth += this._openBracketDepth(contRaw);
+          i++;
+        }
+        blocks.push({ type: 'multiline', code: blockLines.join('\n').trimEnd() });
+        continue;
       }
 
       // Check for "var = []" followed by a for-loop that appends to var → merge
@@ -330,6 +367,8 @@ const CodeParser = {
   _analyzeBlock(code, knownVars) {
     const reads = new Set();
     const writes = new Set();
+    const appended = new Set();
+    const emptyListInits = new Set();
     const knownSet = new Set(knownVars);
 
     code.split('\n').forEach(line => {
@@ -337,11 +376,14 @@ const CodeParser = {
       if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('import ')) return;
 
       const assignM = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=/);
-      if (assignM && !trimmed.startsWith('==')) writes.add(assignM[1]);
+      if (assignM && !trimmed.startsWith('==')) {
+        writes.add(assignM[1]);
+        if (/^[a-zA-Z_][a-zA-Z0-9_]*\s*=\s*\[\s*\]$/.test(trimmed)) emptyListInits.add(assignM[1]);
+      }
       const forM = trimmed.match(/^for\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+in/);
       if (forM) writes.add(forM[1]);
       const appendM = trimmed.match(/([a-zA-Z_][a-zA-Z0-9_]*)\.append/);
-      if (appendM) { writes.add(appendM[1]); }
+      if (appendM) { writes.add(appendM[1]); appended.add(appendM[1]); }
 
       knownSet.forEach(v => {
         const re = new RegExp('\\b' + v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
@@ -349,19 +391,21 @@ const CodeParser = {
       });
     });
 
-    // Keep reads that are from outside (known vars), remove internal ones
+    // Keep reads that are from outside. Variables assigned inside this block
+    // are local temporaries, even if an earlier block used the same name.
     const internalWrites = new Set(writes);
-    // But if a variable is both read from outside AND written inside, it's still a read
-    // Filter writes: exclude loop vars, single-letter temps, and internal vars
     const loopVars = new Set();
     code.split('\n').forEach(line => {
       const fm = line.trim().match(/^for\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+in/);
       if (fm) loopVars.add(fm[1]);
     });
+    const outputCandidates = appended.size > 0
+      ? Array.from(appended)
+      : Array.from(writes).filter(w => !emptyListInits.has(w));
 
     return {
-      reads: Array.from(reads).filter(r => knownSet.has(r)),
-      writes: Array.from(writes).filter(w =>
+      reads: Array.from(reads).filter(r => knownSet.has(r) && !internalWrites.has(r)),
+      writes: outputCandidates.filter(w =>
         w !== '_' && !w.startsWith('__') && !loopVars.has(w) &&
         !(w.length === 1 && /[a-z]/.test(w))  // exclude single-letter vars like x, y, z, i, j, k
       )
@@ -587,16 +631,21 @@ const CodeParser = {
   },
 
   pyNode(code, firstInput) {
-    // Log WHY this expression couldn't be mapped to a visual node
+    // Log WHY this expression couldn't be mapped to a visual node.
+    // A real function call must START with an identifier before the "(".
+    // Grouping parens like "(a * b) + (c / 2)" begin with "(" and were
+    // previously mis-reported as "Unmapped function call: ()" — they are
+    // just compound arithmetic kept as a Python value node.
     var reason = 'Unknown expression pattern';
-    if (code && code.indexOf('(') >= 0) {
-      var fnName = code.substring(0, code.indexOf('(')).trim();
+    var fnHead = (code || '').match(/^\s*([a-zA-Z_][a-zA-Z0-9_.]*)\s*\(/);
+    if (fnHead) {
+      var fnName = fnHead[1];
       if (fnName.indexOf('.') >= 0) reason = 'Unrecognized function: ' + fnName;
       else reason = 'Unmapped function call: ' + fnName + '()';
     } else if (code && code.indexOf('[') >= 0) {
       reason = 'Complex subscript or list comprehension';
-    } else if (code && (code.indexOf(' + ') >= 0 || code.indexOf(' - ') >= 0 || code.indexOf(' * ') >= 0)) {
-      reason = 'Complex expression with nested operations (cannot decompose)';
+    } else if (code && (code.indexOf('(') >= 0 || code.indexOf(' + ') >= 0 || code.indexOf(' - ') >= 0 || code.indexOf(' * ') >= 0 || code.indexOf(' / ') >= 0)) {
+      reason = 'Compound arithmetic expression (kept as a Python value node)';
     } else {
       reason = 'No matching visual node pattern for: ' + (code || '').substring(0, 60);
     }
@@ -633,6 +682,26 @@ const CodeParser = {
       }
     }
     return -1;
+  },
+
+  // Net change in (){}[] nesting for one physical line, ignoring brackets
+  // inside string literals and trailing # comments. >0 means the statement
+  // continues on the next physical line (Python implicit line joining).
+  _openBracketDepth(line) {
+    var depth = 0, inStr = false, strCh = '';
+    for (var k = 0; k < line.length; k++) {
+      var ch = line[k];
+      if (inStr) {
+        if (ch === '\\' && k + 1 < line.length) { k++; continue; }
+        if (ch === strCh) inStr = false;
+        continue;
+      }
+      if (ch === '"' || ch === "'") { inStr = true; strCh = ch; continue; }
+      if (ch === '#') break;
+      if (ch === '(' || ch === '[' || ch === '{') depth++;
+      else if (ch === ')' || ch === ']' || ch === '}') depth--;
+    }
+    return depth;
   },
 
   _stripComment(str) {

@@ -105,4 +105,80 @@ for i in range(floors):
     expect(ports.has('floors')).toBe(true);
     expect(ports.has('resolution')).toBe(true);
   });
+
+  it('does not expose local loop temporaries as Custom.Python outputs or self inputs', () => {
+    const code = `num_petals = 8
+petal_height = 8
+base_radius = 2.5
+twist_degrees = 40
+hole_radius = 0.35
+holes = []
+for p in range(num_petals):
+    petal_angle = 2 * math.pi * p / num_petals
+    for i in range(6):
+        t = (i + 1) / 7
+        twist_angle = math.radians(twist_degrees * t)
+        total_angle = petal_angle + twist_angle
+        lean = base_radius + 3.5 * math.sin(t * math.pi * 0.9)
+        hole = Geo.createSphere(Geo.Point3(lean, 0, t * petal_height), hole_radius)
+        holes.append(hole)
+cutters = Geo.combineAll(holes)`;
+
+    const graph = CodeParser.parseToGraph(code);
+    const pyNode = graph.nodes.find(n => n.type === 'custom-python' || n.type === 'Custom.Python');
+    expect(pyNode).toBeDefined();
+    expect(pyNode.outputVars).toEqual(['holes']);
+    expect(pyNode.controls._dynInputs).toEqual(expect.arrayContaining([
+      'num_petals', 'petal_height', 'base_radius', 'twist_degrees', 'hole_radius'
+    ]));
+    expect(pyNode.controls._dynInputs).not.toEqual(expect.arrayContaining([
+      'petal_angle', 'twist_angle', 'total_angle', 'lean'
+    ]));
+    expect(graph.wires.some(w => w.fromNode === w.toNode)).toBe(false);
+  });
+
+  it('keeps a multi-line list literal as ONE node instead of fragmenting per line', () => {
+    const code = `shift_x_odd = 6.0
+shift_x_even = -6.0
+seg_data = [
+    (shift_x_odd,  0.0, 0),
+    (shift_x_even, 0.0, 1),
+    (shift_x_odd,  0.0, 2),
+]
+result = Geo.combineAll(seg_data)`;
+
+    const graph = CodeParser.parseToGraph(code);
+    const segNodes = graph.nodes.filter(n =>
+      (n.type === 'custom-python' || n.type === 'Custom.Python') &&
+      (n.outputVars || []).includes('seg_data'));
+    // Exactly one node owns seg_data, and it holds the WHOLE literal.
+    expect(segNodes).toHaveLength(1);
+    const seg = segNodes[0];
+    expect(seg.controls.code).toContain('seg_data = [');
+    expect(seg.controls.code).toContain('0.0, 2');
+    expect(seg.controls.code.trim().endsWith(']')).toBe(true);
+    // Its reads are wired by variable name; loop temporaries are not invented.
+    expect(seg.controls._dynInputs).toEqual(expect.arrayContaining(['shift_x_odd', 'shift_x_even']));
+    // No stray fragment nodes from the tuple lines or the closing bracket.
+    const fragments = graph.nodes.filter(n =>
+      (n.type === 'custom-python' || n.type === 'Custom.Python') &&
+      /^[\])]/.test((n.controls.code || '').trim()));
+    expect(fragments).toHaveLength(0);
+    expect(graph.wires.some(w => w.fromNode === w.toNode)).toBe(false);
+  });
+
+  it('wires a reassigned variable input from the previous producer, not the new node itself', () => {
+    const code = `origin = Geo.Point3(0, 0, 0)
+result = Geo.createSphere(origin, 1)
+result = Geo.smooth(result, 3, 0.5)
+print(result)`;
+
+    const graph = CodeParser.parseToGraph(code);
+    const smooth = graph.nodes.find(n => n.type === 'op-smooth' || n.type === 'Solid.Smooth');
+    expect(smooth).toBeDefined();
+    const smoothInput = graph.wires.find(w => w.toNode === smooth.id && w.toPort === 'mesh');
+    expect(smoothInput).toBeDefined();
+    expect(smoothInput.fromNode).not.toBe(smooth.id);
+    expect(graph.wires.some(w => w.fromNode === w.toNode)).toBe(false);
+  });
 });
