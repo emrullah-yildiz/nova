@@ -604,6 +604,14 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
       d.addEventListener('mousedown', function(e) { e.stopPropagation(); e.preventDefault(); app.onPortDown(e, d.dataset.node, d.dataset.port, d.dataset.dir); });
     });
     canvas.appendChild(el);
+    // Custom body for Python/Code nodes (named ports, +/- inputs, read-only
+    // preview, double-click to edit in the terminal). Called directly here —
+    // node-renderer owns the winning renderNode, so this is independent of
+    // load-order (a separate renderNode wrapper could be clobbered).
+    if ((nd.type === 'custom-python' || nd.type === 'custom-code' ||
+         nd.type === 'Custom.Python' || nd.type === 'Custom.Code') && app.enhancePythonNode) {
+      app.enhancePythonNode(nd, el);
+    }
     if (app.refreshNodeWarningBadges) setTimeout(function() { app.refreshNodeWarningBadges(); }, 0);
   };
 

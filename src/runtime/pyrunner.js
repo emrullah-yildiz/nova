@@ -302,35 +302,53 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     if (!nd._dynOutputs) nd._dynOutputs = nd.def.outputs.length > 0 ? nd.def.outputs.map(p => p.id) : ['output0'];
     const body = el.querySelector('.node-body');
     if (!body) return;
+    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     let h = '';
+
+    // Input ports — named, each with a remove (−) button.
     nd._dynInputs.forEach((pid, i) => {
       h += '<div class="node-port-row input-only"><div class="node-port input port-type-any">';
-      h += '<span class="port-dot port-type-any" data-port="' + pid + '" data-dir="input" data-node="' + nd.id + '"></span>';
-      h += '<span class="port-label py-port-label">' + pid + '</span></div>';
-      h += '<button class="py-node-btn port" onclick="event.stopPropagation();app.pyRemoveInput(\'' + nd.id + '\',' + i + ')" title="Remove">−</button></div>';
+      h += '<span class="port-dot port-type-any" data-port="' + esc(pid) + '" data-dir="input" data-node="' + nd.id + '"></span>';
+      h += '<span class="port-label py-port-label" data-port="' + esc(pid) + '" data-dir="input">' + esc(pid) + '</span></div>';
+      h += '<button class="py-node-btn port" onclick="event.stopPropagation();app.pyRemoveInput(\'' + nd.id + '\',' + i + ')" title="Remove input">−</button></div>';
     });
-    h += '<div class="py-port-dynamic"><button class="py-node-btn port" onclick="event.stopPropagation();app.pyAddInput(\'' + nd.id + '\')">+ Input</button></div>';
-    const code = (nd.controlValues.code || 'output0 = input0').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    h += '<div class="py-port-dynamic"><button class="py-node-btn port" onclick="event.stopPropagation();app.pyAddInput(\'' + nd.id + '\')" title="Add input">+ Input</button></div>';
+
+    // Read-only, syntax-highlighted code preview. Editing happens in the
+    // code terminal — double-click the node body to open it there.
+    const code = nd.controlValues.code || 'output0 = input0';
     h += '<div class="node-control">';
-    h += '<div class="py-code-container" id="' + nd.id + '-pycontainer">';
-    h += '<div class="py-code-display" id="' + nd.id + '-pydisplay"></div>';
-    h += '<textarea class="py-node-code" id="' + nd.id + '-pycode" spellcheck="false" onchange="app.pySyncPorts(\'' + nd.id + '\',this.value)" oninput="app.pyCodeChange(\'' + nd.id + '\',this.value);app.pyHighlight(\'' + nd.id + '\')" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onscroll="app.pySyncScroll(\'' + nd.id + '\')">' + code + '</textarea>';
+    h += '<div class="py-code-preview" id="' + nd.id + '-pypreview" title="Double-click to edit in the code terminal" '
+      + 'style="font-family:var(--font-mono,monospace);font-size:11px;line-height:1.45;white-space:pre;overflow:auto;max-height:128px;'
+      + 'padding:6px 8px;background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:4px;cursor:text">'
+      + app._pyColorize(code) + '</div>';
     h += '</div>';
-    h += '</div>';
-    h += '<div class="py-node-toolbar"><button class="py-node-btn run" onclick="event.stopPropagation();app.pyRunNode(\'' + nd.id + '\')">▶ Run</button>';
-    h += '<span class="py-node-status" id="' + nd.id + '-pystatus">ready</span></div>';
+    h += '<div class="py-node-toolbar"><span class="py-node-hint" style="font-size:10px;color:var(--text-muted)">{ } double-click to edit</span>'
+      + '<span class="py-node-status" id="' + nd.id + '-pystatus"></span></div>';
+
+    // Output ports — named.
     nd._dynOutputs.forEach(pid => {
       h += '<div class="node-port-row output-only"><div class="node-port output port-type-any">';
-      h += '<span class="port-label py-port-label">' + pid + '</span>';
-      h += '<span class="port-dot port-type-any" data-port="' + pid + '" data-dir="output" data-node="' + nd.id + '"></span>';
+      h += '<span class="port-label py-port-label" data-port="' + esc(pid) + '" data-dir="output">' + esc(pid) + '</span>';
+      h += '<span class="port-dot port-type-any" data-port="' + esc(pid) + '" data-dir="output" data-node="' + nd.id + '"></span>';
       h += '</div></div>';
     });
+
     body.innerHTML = h;
     el.querySelectorAll('.port-dot').forEach(d => {
       d.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); app.onPortDown(e, d.dataset.node, d.dataset.port, d.dataset.dir); });
     });
-    // Trigger syntax highlighting
-    setTimeout(function() { app.pyHighlight(nd.id); }, 10);
+    // Double-click the body → open this node's code in the terminal to edit.
+    body.addEventListener('dblclick', e => { e.stopPropagation(); app.pyOpenInTerminal(nd.id); });
+  };
+
+  // Open a Python node's code in the code terminal for editing. (The tabbed
+  // multi-node terminal arrives in a follow-up; for now this shows the node's
+  // code in the single-node code viewer.)
+  app.pyOpenInTerminal = function(nodeId) {
+    const nd = this.nodes.find(n => n.id === nodeId);
+    if (!nd || typeof this.showCodeViewer !== 'function') return;
+    this.showCodeViewer(nd.controlValues.code || '', nd);
   };
 
   // ── SYNTAX HIGHLIGHTING ──
