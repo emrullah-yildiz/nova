@@ -58,8 +58,10 @@ describe('composition cookbook in the system prompt', () => {
     expect(sys).toMatch(/naming the SPECIFIC|not just .too complex/i);
   });
 
-  it('still forbids Python fallback (Phase 11 contract is preserved)', () => {
-    expect(sys).toContain('Do NOT fall back to Python');
+  it('allows explicit Python fallback without invented nodes', () => {
+    expect(sys).toContain('use a small Custom.Python block');
+    expect(sys).toContain('# in:');
+    expect(sys).toContain('# out:');
     expect(sys).toContain('Do NOT invent nodes');
   });
 
