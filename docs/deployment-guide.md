@@ -7,16 +7,16 @@ from `dist/` and the `/api/*` backend from `worker/index.mjs`.
 
 | Git branch | Worker environment | Public URL |
 |---|---|---|
-| `develop` | `nova-dev` (`--env dev`) | `https://nova-dev.e-y-myacc.workers.dev` |
+| `develop` | `nova-dev` (`--env dev`) | `https://nova-dev.ey-myacc.workers.dev` |
 | `main` | `nova` | `https://hi-nova.work` |
 
 Do not attach `hi-nova.work` to preview or dev deployments. Production traffic
 should only point at the default `nova` Worker deployment from `main`.
 
-The Cloudflare dashboard screenshot for `nova.e-y-myacc.workers.dev` shows the
+The Cloudflare dashboard screenshot for `nova.ey-myacc.workers.dev` shows the
 top-level production Worker. Develop branch updates are deployed to the separate
 `nova-dev` Worker environment and should be checked at
-`https://nova-dev.e-y-myacc.workers.dev`.
+`https://nova-dev.ey-myacc.workers.dev`.
 
 ## Architecture
 
@@ -83,8 +83,8 @@ NOVA_ALLOW_DEV_LOGIN=false
 Dev:
 
 ```text
-NOVA_PUBLIC_URL=https://nova-dev.e-y-myacc.workers.dev
-NOVA_CORS_ORIGIN=https://nova-dev.e-y-myacc.workers.dev
+NOVA_PUBLIC_URL=https://nova-dev.ey-myacc.workers.dev
+NOVA_CORS_ORIGIN=https://nova-dev.ey-myacc.workers.dev
 NOVA_ALLOW_DEV_LOGIN=false
 ```
 
@@ -119,8 +119,8 @@ npm run dev
 After deploying, check:
 
 ```text
-https://nova-dev.e-y-myacc.workers.dev/api/health
-https://nova-dev.e-y-myacc.workers.dev/nova-deployment.json
+https://nova-dev.ey-myacc.workers.dev/api/health
+https://nova-dev.ey-myacc.workers.dev/nova-deployment.json
 https://hi-nova.work/api/health
 https://hi-nova.work/nova-deployment.json
 ```

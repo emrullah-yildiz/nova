@@ -5,19 +5,39 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-01 - Dev Worker Must Not Inherit Production Routes
+
+**Status:** Accepted
+
+**Context:** Bootstrapping the `nova-dev` environment showed that Wrangler
+created the dev Worker at `https://nova-dev.ey-myacc.workers.dev`, while docs
+and CI used the wrong hostname `nova-dev.e-y-myacc.workers.dev`. The dev deploy
+also inherited the top-level `hi-nova.work` custom domain route.
+
+**Decision:** `[env.dev]` sets `routes = []` and `workers_dev = true`.
+Develop branch previews use only
+`https://nova-dev.ey-myacc.workers.dev`. The `hi-nova.work` custom domain
+belongs only to the top-level production `nova` Worker.
+
+**Consequences:**
+
+- Dev deploys cannot overwrite the production custom domain route.
+- CI verifies dev using `nova-dev.ey-myacc.workers.dev`.
+- Any future custom dev domain must be added explicitly under `[env.dev]`.
+
 ## 2026-06-01 - Deployments Expose Commit Metadata
 
 **Status:** Accepted
 
 **Context:** The production Worker routes page can be confused with the
-develop deployment because `hi-nova.work` and `nova.e-y-myacc.workers.dev`
+develop deployment because `hi-nova.work` and `nova.ey-myacc.workers.dev`
 belong to the top-level `nova` Worker. Develop branch updates deploy to the
 separate `nova-dev` Worker and were not easy to verify visually.
 
 **Decision:** GitHub Actions writes `dist/nova-deployment.json` immediately
 before each Worker deploy and verifies that the public deployment URL serves the
 current GitHub commit SHA. The dev metadata URL is
-`https://nova-dev.e-y-myacc.workers.dev/nova-deployment.json`; production is
+`https://nova-dev.ey-myacc.workers.dev/nova-deployment.json`; production is
 `https://hi-nova.work/nova-deployment.json`.
 
 **Consequences:**
@@ -82,7 +102,7 @@ targets.
 
 | Branch | Worker | URL |
 |---|---|---|
-| `develop` | `nova-dev` via `wrangler deploy --env dev` | `https://nova-dev.e-y-myacc.workers.dev` |
+| `develop` | `nova-dev` via `wrangler deploy --env dev` | `https://nova-dev.ey-myacc.workers.dev` |
 | `main` | `nova` via `wrangler deploy --env=""` | `https://hi-nova.work` |
 
 **Rationale:** One Worker origin simplifies cookies, CORS, API routing, static
