@@ -1241,9 +1241,12 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     overlay.id = 'ticket-dialog-overlay';
     overlay.className = 'project-save-overlay';
     overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    // Signed in (guarded above) — show who the ticket is filed as. The server
+    // attaches this verified identity to the issue so the maintainer can follow up.
+    const ticketReporter = (app.currentUser && (app.currentUser.displayName || app.currentUser.email)) || 'your account';
     overlay.innerHTML = '<div class="project-save-dialog" role="dialog" aria-modal="true" style="width:min(520px,100%)">' +
       '<div class="project-save-header"><div class="project-save-mark">🎫</div>' +
-      '<div><h3>Submit a ticket</h3><p>Report a bug or request a feature — this opens an issue on the Nova GitHub repo.</p></div>' +
+      '<div><h3>Submit a ticket</h3><p>Report a bug or request a feature — we may follow up using your account email.</p></div>' +
       '<button class="project-save-close" onclick="document.getElementById(\'ticket-dialog-overlay\').remove()" aria-label="Close">x</button></div>' +
       '<div class="share-controls" style="margin-bottom:10px">' +
         '<span class="share-select"><select id="ticket-category" aria-label="Category"><option value="bug">Bug</option><option value="feature">Feature request</option><option value="question">Question</option></select></span>' +
@@ -1251,7 +1254,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       '</div>' +
       '<textarea id="ticket-body" class="ticket-textarea" placeholder="What happened? Steps to reproduce, what you expected, screenshots links…"></textarea>' +
       '<div id="ticket-status" class="share-status"></div>' +
-      '<div class="project-save-footer"><span>Posted to the public Nova repo — don\'t include secrets.</span>' +
+      '<div class="project-save-footer"><span>Submitting as ' + escapeHtml(ticketReporter) + ' — don\'t include passwords or secrets.</span>' +
       '<button class="share-create-btn" id="ticket-submit" onclick="app._submitTicket()">Submit</button></div></div>';
     document.body.appendChild(overlay);
     setTimeout(function() { const t = document.getElementById('ticket-title'); if (t) t.focus(); }, 50);

@@ -348,12 +348,29 @@ async function handleInviteToProject({ store, context, params, body, emailServic
 
 // In-app support ticket → a GitHub issue. Authenticated (reduces spam); the
 // GitHub token lives only in the injected issueService.
-async function handleSubmitTicket({ context, body, issueService }) {
+async function handleSubmitTicket({ context, body, issueService, appUrl }) {
   if (!issueService) throw createHttpError(503, 'Ticket submission is not configured for this deployment.', 'FEEDBACK_NOT_CONFIGURED');
   const payload = validateTicketBody(body || {});
   const labelByCategory = { bug: 'bug', feature: 'enhancement', question: 'question' };
   const title = '[' + payload.category + '] ' + payload.title;
-  const fullBody = payload.body + '\n\n---\n_Submitted via the Nova in-app ticket form._';
+  // Attach the VERIFIED reporter identity (from the authenticated session, not a
+  // typed field) so the maintainer can follow up. The route is authenticated, so
+  // context.user is always present. This is meant for a PRIVATE tickets repo —
+  // it intentionally includes the reporter's email.
+  const user = (context && context.user) || {};
+  const reporterName = user.displayName || user.email || 'Unknown';
+  const reporterEmail = user.email || 'unknown';
+  const verified = user.emailVerified ? 'verified' : 'unverified';
+  const base = (appUrl || '').replace(/\/+$/, '');
+  const reporter =
+    '\n\n---\n' +
+    '**Reporter** (' + verified + ' via account sign-in)\n' +
+    '- Name: ' + reporterName + '\n' +
+    '- Email: `' + reporterEmail + '`\n' +
+    '- Nova user: `' + (user.id || 'unknown') + '`\n' +
+    (base ? '- App: ' + base + '\n' : '') +
+    '\n_Submitted via the Nova in-app ticket form._';
+  const fullBody = payload.body + reporter;
   const issue = await issueService.create({ title, body: fullBody, labels: [labelByCategory[payload.category] || 'bug', 'from-app'] });
   return { ok: true, url: issue.url, number: issue.number };
 }
