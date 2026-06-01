@@ -22,10 +22,14 @@ WHERE IT INSTALLS
 -----------------
 %APPDATA%\Autodesk\Revit\Addins\2027\Nova.addin
 %APPDATA%\Autodesk\Revit\Addins\2027\Nova\Nova.RevitAddin.dll
+%LOCALAPPDATA%\Programs\Nova Connect\NovaConnect-Setup.exe
+
+The installer also creates a per-user Windows uninstall entry under HKCU so
+Nova Connect appears in Apps & features / installed app inventory.
 
 UNINSTALL
 ---------
-Run NovaConnect-Setup.exe /uninstall, or delete the two paths above, then
+Use Windows Apps & features, or run NovaConnect-Setup.exe /uninstall, then
 restart Revit.
 
 MAINTAINER NOTES
@@ -38,5 +42,12 @@ execution-policy bypasses.
 Build it from the repo root with:
   npm run build:connect-installer
 
-The output is:
+The outputs are:
   public\downloads\NovaConnect-Setup.exe
+  public\downloads\NovaConnect-Setup.exe.sha256
+
+To Authenticode-sign during packaging, install Windows SDK signtool.exe and set:
+  NOVA_CODESIGN_THUMBPRINT=<certificate thumbprint>
+
+Optional timestamp override:
+  NOVA_CODESIGN_TIMESTAMP_URL=<RFC3161 timestamp URL>

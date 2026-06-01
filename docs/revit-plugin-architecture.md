@@ -196,13 +196,22 @@ Building/refreshing the installer (maintainers):
 - Build the add-in: `dotnet build integrations/revit-addin/Nova.RevitAddin.csproj -c Debug`
 - Package it: `npm run build:connect-installer` (PowerShell; runs
   `scripts/build-connect-installer.ps1`) -> writes
-  `public/downloads/NovaConnect-Setup.exe`, which Vite copies into `dist/` on
-  `npm run build`. Commit the regenerated EXE so the download stays current.
+  `public/downloads/NovaConnect-Setup.exe` and
+  `public/downloads/NovaConnect-Setup.exe.sha256`, which Vite copies into
+  `dist/` on `npm run build`. Commit the regenerated files so the download stays
+  current.
 
 The installer is a single-file, self-contained `.exe` built from
 `installer/nova-connect/NovaConnect.Installer.csproj`. It runs as the current
 user, writes only to Revit's per-user Addins folder, does not request admin
 rights, and does not use `.bat` files or PowerShell execution-policy bypasses.
-Without a code-signing certificate, Windows SmartScreen may still show a
-publisher warning. To target another Revit release, update `RevitVersion` in the
-installer program and rebuild the add-in against that Revit's API.
+It also copies a stable uninstaller to
+`%LOCALAPPDATA%\Programs\Nova Connect\NovaConnect-Setup.exe` and registers a
+per-user Windows uninstall entry under HKCU for Apps & features / endpoint
+inventory.
+
+If `NOVA_CODESIGN_THUMBPRINT` is set, the packaging script signs the EXE with
+`signtool.exe` before writing the SHA-256 checksum. Without a code-signing
+certificate, Windows SmartScreen may still show a publisher warning. To target
+another Revit release, update `RevitVersion` in the installer program and
+rebuild the add-in against that Revit's API.
