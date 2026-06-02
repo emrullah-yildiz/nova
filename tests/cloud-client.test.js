@@ -39,6 +39,18 @@ describe('NovaCloudClient auth transport', () => {
     expect(calls[0].init.credentials).toBeUndefined();
   });
 
+  it('deleteProject uses DELETE on the project endpoint', async () => {
+    const { impl, calls } = recordingFetch();
+    const client = new NovaCloudClient({ useCookie: true, fetchImpl: impl });
+
+    await client.deleteProject('prj_1');
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('/api/projects/prj_1');
+    expect(calls[0].init.method).toBe('DELETE');
+    expect(calls[0].init.credentials).toBe('include');
+  });
+
   it('share-link + shared endpoints use the right paths/methods (cookie mode)', async () => {
     const { impl, calls } = recordingFetch();
     const client = new NovaCloudClient({ useCookie: true, fetchImpl: impl });

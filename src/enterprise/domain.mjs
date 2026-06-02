@@ -193,6 +193,75 @@ export class EnterpriseStore {
     return clone(user);
   }
 
+  updateUserPassword(userId, passwordHash) {
+    const user = this.requireUser(userId);
+    if (!passwordHash) throw createHttpError(400, 'Password hash is required.');
+    user.passwordHash = passwordHash;
+    const membership = user.memberships[0] || {};
+    this.audit({
+      organizationId: membership.organizationId || '',
+      userId: user.id,
+      type: 'account.password.changed',
+      targetId: user.id
+    });
+    return publicUser(user, membership.organizationId, membership.role);
+  }
+
+  deleteUserAccount(userId) {
+    const user = this.requireUser(userId);
+    const personalOrgIds = new Set(user.memberships
+      .map(item => item.organizationId)
+      .filter(id => {
+        const org = this.organizations.get(id);
+        return org && org.settings && org.settings.personal;
+      }));
+    const deletedProjectIds = new Set();
+    for (const [projectId, project] of this.projects.entries()) {
+      if (personalOrgIds.has(project.organizationId)) {
+        this.projects.delete(projectId);
+        deletedProjectIds.add(projectId);
+      } else if (Array.isArray(project.members)) {
+        project.members = project.members.filter(member => member.userId !== user.id);
+      }
+    }
+    for (const orgId of personalOrgIds) this.organizations.delete(orgId);
+    for (const organization of this.organizations.values()) {
+      for (const member of Array.from(organization.members || [])) {
+        if (member.userId === user.id) organization.members.splice(organization.members.indexOf(member), 1);
+      }
+    }
+    for (const [runId, run] of this.graphRuns.entries()) {
+      if (deletedProjectIds.has(run.projectId) || run.userId === user.id) this.graphRuns.delete(runId);
+    }
+    for (const [artifactId, artifact] of this.objectArtifacts.entries()) {
+      if (deletedProjectIds.has(artifact.projectId) || artifact.createdBy === user.id) this.objectArtifacts.delete(artifactId);
+    }
+    for (const [linkId, link] of this.shareLinks.entries()) {
+      if (deletedProjectIds.has(link.projectId) || link.createdBy === user.id) this.shareLinks.delete(linkId);
+    }
+    for (const [requestId, request] of this.aiRequests.entries()) {
+      if (request.userId === user.id || deletedProjectIds.has(request.projectId)) this.aiRequests.delete(requestId);
+    }
+    for (const [jobId, job] of this.backgroundJobs.entries()) {
+      if (job.userId === user.id || deletedProjectIds.has(job.projectId)) this.backgroundJobs.delete(jobId);
+    }
+    for (const [sessionId, session] of this.connectorSessions.entries()) {
+      if (session.userId === user.id || deletedProjectIds.has(session.projectId)) this.connectorSessions.delete(sessionId);
+    }
+    this.auditEvents.push({
+      id: createId('aud'),
+      organizationId: '',
+      userId: user.id,
+      type: 'account.deleted',
+      targetId: user.id,
+      metadata: { projectCount: deletedProjectIds.size },
+      createdAt: this.now()
+    });
+    this.users.delete(user.id);
+    this.persist();
+    return { ok: true, deletedProjectCount: deletedProjectIds.size };
+  }
+
   // Email-verification tokens. Stored hashed (never the raw token) in the
   // stateStore (KV) when available — so links work across Worker isolates —
   // else in an in-memory map (node/dev). Mirrors the session-token pattern.
@@ -320,6 +389,38 @@ export class EnterpriseStore {
   getProject(context, projectId) {
     const project = this.requireProjectAccess(context, projectId);
     return clone(project);
+  }
+
+  deleteProject(context, projectId) {
+    const project = this.requireProjectAccess(context, projectId);
+    this.requireProjectAdmin(context, project);
+    this.projects.delete(project.id);
+    for (const [runId, run] of this.graphRuns.entries()) {
+      if (run.projectId === project.id) this.graphRuns.delete(runId);
+    }
+    for (const [artifactId, artifact] of this.objectArtifacts.entries()) {
+      if (artifact.projectId === project.id) this.objectArtifacts.delete(artifactId);
+    }
+    for (const [linkId, link] of this.shareLinks.entries()) {
+      if (link.projectId === project.id) this.shareLinks.delete(linkId);
+    }
+    for (const [requestId, request] of this.aiRequests.entries()) {
+      if (request.projectId === project.id) this.aiRequests.delete(requestId);
+    }
+    for (const [jobId, job] of this.backgroundJobs.entries()) {
+      if (job.projectId === project.id) this.backgroundJobs.delete(jobId);
+    }
+    for (const [sessionId, session] of this.connectorSessions.entries()) {
+      if (session.projectId === project.id) this.connectorSessions.delete(sessionId);
+    }
+    this.audit({
+      organizationId: project.organizationId,
+      userId: context.userId,
+      type: 'project.deleted',
+      targetId: project.id,
+      metadata: { name: project.name }
+    });
+    return { ok: true, projectId: project.id };
   }
 
   addProjectMember(context, projectId, { userId, role }) {
@@ -1223,6 +1324,7 @@ function publicUser(user, organizationId, role) {
     email: user.email,
     displayName: user.displayName,
     emailVerified: !!user.emailVerified,
+    hasPassword: !!user.passwordHash,
     organizationId,
     role
   };

@@ -29,6 +29,21 @@ export function validateLoginBody(body = {}) {
   return body;
 }
 
+export function validateChangePasswordBody(body = {}) {
+  requirePlainObject(body, 'request body');
+  requireString(body.currentPassword, 'currentPassword', PASSWORD_MAX);
+  requireString(body.newPassword, 'newPassword', PASSWORD_MAX);
+  if (body.newPassword.length < PASSWORD_MIN) throw createHttpError(400, 'Password must be at least ' + PASSWORD_MIN + ' characters.');
+  return body;
+}
+
+export function validateDeleteAccountBody(body = {}) {
+  requirePlainObject(body, 'request body');
+  requireString(body.confirmEmail, 'confirmEmail', 320);
+  optionalString(body.password, 'password', PASSWORD_MAX);
+  return body;
+}
+
 export function validateOidcCallbackBody(body = {}) {
   requirePlainObject(body, 'request body');
   requireString(body.idToken, 'idToken', 20000);

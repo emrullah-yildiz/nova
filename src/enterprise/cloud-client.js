@@ -57,6 +57,12 @@ export class NovaCloudClient {
     return this.request('/api/projects/' + encodeURIComponent(projectId));
   }
 
+  async deleteProject(projectId) {
+    return this.request('/api/projects/' + encodeURIComponent(projectId), {
+      method: 'DELETE'
+    });
+  }
+
   // Projects shared with the signed-in user (member, different org).
   async listSharedProjects(pagination = {}) {
     return this.request(withPagination('/api/projects/shared', pagination));

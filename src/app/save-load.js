@@ -613,7 +613,43 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     }
   };
 
-  function _recentItemHtml(name, ago, cloudId) {
+  app._deleteRecentItem = function(name, cloudId) {
+    if (cloudId) {
+      if (!app.currentUser) {
+        if (app.signIn) app.signIn();
+        return;
+      }
+      if (typeof confirm === 'function' && !confirm('Delete ' + (name || 'this project') + '?')) return;
+      const client = app.getNovaCloudClient();
+      if (!client || !client.deleteProject) return;
+      client.deleteProject(cloudId)
+        .then(function() {
+          if (app._cloudProjectId === cloudId) {
+            app._cloudProjectId = '';
+            app._lastCloudSaveSerialized = null;
+          }
+          const myList = document.getElementById('my-projects-list');
+          if (myList) delete myList.dataset.cloudLoaded;
+          app.renderRecentProjects();
+        })
+        .catch(function(e) {
+          const msg = (e && e.message) || 'Could not delete project.';
+          if (app.addAIMessage) app.addAIMessage('workspace', 'Delete failed: ' + msg);
+        });
+      return;
+    }
+
+    if (!name) return;
+    if (typeof confirm === 'function' && !confirm('Delete ' + name + '?')) return;
+    try {
+      localStorage.removeItem(STORAGE_PREFIX + name);
+      const recent = _readBrowserRecents().filter(r => r && (r.cloudId || r.name !== name));
+      localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
+    } catch (e) { /* ignore */ }
+    app.renderRecentProjects();
+  };
+
+  function _recentItemHtml(name, ago, cloudId, canDelete = true) {
     // 🖥 = saved in this browser/device (opens instantly from localStorage),
     // ☁ = saved to the cloud account (opens over the network).
     const icon = cloudId ? '☁' : '🖥️';
@@ -623,11 +659,17 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     const onclick = cloudId
       ? 'app._openRecentItem(\'\',\'' + escapeJsString(cloudId) + '\')'
       : 'app._openRecentItem(\'' + escapeJsString(name) + '\',\'\')';
-    return '<button class="recent-item" onclick="' + onclick + '">' +
+    const deleteOnclick = cloudId
+      ? 'app._deleteRecentItem(\'' + escapeJsString(name) + '\',\'' + escapeJsString(cloudId) + '\')'
+      : 'app._deleteRecentItem(\'' + escapeJsString(name) + '\',\'\')';
+    return '<div class="recent-row">' +
+      '<button class="recent-item" onclick="' + onclick + '">' +
       '<span class="ri-icon">' + icon + '</span>' +
       '<span class="ri-name">' + escapeHtml(name) + '</span>' +
       badge +
-      '<span class="ri-date">' + escapeHtml(ago) + '</span></button>';
+      '<span class="ri-date">' + escapeHtml(ago) + '</span></button>' +
+      (canDelete ? '<button class="recent-delete" title="Delete project" aria-label="Delete project" onclick="' + deleteOnclick + '">x</button>' : '') +
+      '</div>';
   }
 
   // The "Local projects" list holds ONLY browser-saved projects. Cloud projects
@@ -691,11 +733,12 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
         el.innerHTML = '<div class="recent-empty" style="padding:12px;color:var(--text-muted);font-size:12px">No projects yet — save one to your account and it shows up here.</div>';
         return;
       }
-      const cloudItem = (p) => _recentItemHtml(p.name || 'Untitled', _timeAgo(p.updatedAt || p.createdAt || Date.now()), p.id);
+      const cloudItem = (p) => _recentItemHtml(p.name || 'Untitled', _timeAgo(p.updatedAt || p.createdAt || Date.now()), p.id, true);
+      const sharedItem = (p) => _recentItemHtml(p.name || 'Untitled', _timeAgo(p.updatedAt || p.createdAt || Date.now()), p.id, false);
       let html = owned.map(cloudItem).join('');
       if (shared.length) {
         html += '<div class="recent-group" style="font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--text-muted);padding:10px 4px 4px">Shared with you</div>' +
-          shared.map(cloudItem).join('');
+          shared.map(sharedItem).join('');
       }
       el.innerHTML = html;
     } catch (e) {

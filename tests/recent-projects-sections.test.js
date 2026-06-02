@@ -33,12 +33,15 @@ function makeApp(overrides = {}, client = null) {
   // Inline onclick="app._openRecentItem(...)" resolves `app` from the global
   // scope, so expose it the same way the real app does (window.app).
   globalThis.app = app;
+  if (globalThis.window) globalThis.window.app = app;
   return app;
 }
 
 describe('landing recent projects sections', () => {
   beforeEach(() => {
     globalThis.localStorage = makeStorage();
+    delete globalThis.confirm;
+    if (globalThis.window) delete globalThis.window.confirm;
     document.body.innerHTML =
       '<div id="recent-list"></div>' +
       '<div id="my-projects-section" style="display:none"><div id="my-projects-list"></div></div>';
@@ -198,6 +201,55 @@ describe('landing recent projects sections', () => {
     const app = makeApp({ currentUser: null }); // NOT signed in
     app._openRecentItem('', 'prj_xyz789');
     expect(app.signIn).toHaveBeenCalled();
+  });
+
+  it('deletes a local recent project from the landing page', () => {
+    localStorage.setItem('nodeflow_project_DeleteMe', JSON.stringify({ nodes: [], wires: [] }));
+    localStorage.setItem('nodeflow_recent_projects', JSON.stringify([{ name: 'DeleteMe', date: Date.now() }]));
+    globalThis.confirm = vi.fn(() => true);
+    if (globalThis.window) globalThis.window.confirm = globalThis.confirm;
+    const app = makeApp({ currentUser: null });
+
+    app.renderRecentProjects();
+    expect(document.querySelector('#recent-list .recent-delete').getAttribute('onclick')).toBe("app._deleteRecentItem('DeleteMe','')");
+    app._deleteRecentItem('DeleteMe', '');
+
+    expect(globalThis.confirm).toHaveBeenCalled();
+    expect(localStorage.getItem('nodeflow_project_DeleteMe')).toBeNull();
+    expect(JSON.parse(localStorage.getItem('nodeflow_recent_projects'))).toEqual([]);
+    expect(document.getElementById('recent-list').textContent).not.toContain('DeleteMe');
+  });
+
+  it('deletes an owned cloud project from Cloud Projects', async () => {
+    const deleteProject = vi.fn(async () => ({ ok: true }));
+    const app = makeApp({}, {
+      listProjects: async () => ({ projects: [{ id: 'prj_del', name: 'Cloud Delete', updatedAt: Date.now() }] }),
+      listSharedProjects: async () => ({ projects: [] }),
+      deleteProject
+    });
+    globalThis.confirm = vi.fn(() => true);
+    if (globalThis.window) globalThis.window.confirm = globalThis.confirm;
+
+    app.renderRecentProjects();
+    await new Promise(r => setTimeout(r, 0));
+    expect(document.querySelector('#my-projects-list .recent-delete').getAttribute('onclick')).toBe("app._deleteRecentItem('Cloud Delete','prj_del')");
+    app._deleteRecentItem('Cloud Delete', 'prj_del');
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(deleteProject).toHaveBeenCalledWith('prj_del');
+  });
+
+  it('does not render delete controls for shared cloud projects', async () => {
+    const app = makeApp({}, {
+      listProjects: async () => ({ projects: [] }),
+      listSharedProjects: async () => ({ projects: [{ id: 'shared_1', name: 'Shared Project', updatedAt: Date.now() }] })
+    });
+
+    app.renderRecentProjects();
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(document.querySelector('#my-projects-list .recent-delete')).toBeNull();
+    expect(document.getElementById('my-projects-list').textContent).toContain('Shared Project');
   });
 
   // ── Save → recent → open round-trip ─────────────────────────────────────
