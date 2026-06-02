@@ -27,8 +27,12 @@ that don't replace prose**, **status/step timeline**.
 
 ## Phased plan
 - **P1 (DONE)** — Stop erasing the narrative. The streamed answer persists in its
-  bubble; plan/code/approve UI renders into a separate `.chat-artifact` block
-  appended below it; the duplicate explanation was dropped from artifact headers.
+  bubble; plan/code/approve UI renders into a **separate artifact message box**
+  below it (`createArtifactBox` — its own `.chat-artifact-msg`, not a child of the
+  answer bubble), so the validate→fix loop never overwrites the answer prose or
+  the Thinking block. `finalizeAnswer` also never blanks the streamed answer (the
+  `✨ Thinking...` placeholder counts as "keep what streamed"). The duplicate
+  explanation was dropped from artifact headers.
 - **P2/P3 (DONE for the Anthropic path)** — A collapsible **Thinking** disclosure
   streams the model's real reasoning above the answer (expanded while streaming,
   auto-collapses on done). `callStream` requests Anthropic extended thinking

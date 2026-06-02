@@ -241,10 +241,11 @@ input:focus, textarea:focus { border-color: var(--accent-blue); }
 
 .chat-bubble { padding: 9px 13px; border-radius: 14px; font-size: 13px; line-height: 1.5; }
 
-/* Artifact block (code-ready / plan / approve) appended below the streamed
-   answer inside the same bubble — visually separated so the reasoning persists. */
-.chat-artifact { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-color, rgba(255,255,255,0.1)); }
-.chat-artifact:empty { display: none; }
+/* Artifact box (testing / code-ready / plan / approve) — its OWN message bubble
+   below the answer, so it never overwrites the answer prose or Thinking block. */
+.chat-artifact-msg { margin-top: 2px; }
+.chat-artifact-msg .chat-bubble.chat-artifact:empty { display: none; }
+.chat-artifact-msg .chat-bubble.chat-artifact { border-left: 2px solid var(--accent-blue, #89b4fa); }
 
 /* Collapsible "Thinking" disclosure — the model's reasoning, streamed above the
    answer. Open while streaming, auto-collapses on done. */
