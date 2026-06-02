@@ -5,6 +5,14 @@ testing. Open them in Nova the same way as any project (the file picker / open
 project flow — they use the standard `.nodeflow` serialization, schema
 `version: 2`).
 
+They are also available as one-click **landing-page template cards**
+("1000 Nodes · No Geometry" and "1000 Nodes · 10k Meshes"). The cards and these
+files share the same graph builders in
+[`src/app/stress-graphs.js`](../src/app/stress-graphs.js) (wired into the cards
+by `src/ui/node-library.js`), so the in-app templates and the on-disk files stay
+identical — the cards just build the graph in memory and load it via
+`deserializeGraph` instead of reading the file.
+
 | File | Nodes | Wires | Geometry | Stresses |
 |---|---|---|---|---|
 | `stress-1000-nodes-no-geometry.nodeflow` | 1000 | 1997 | 0 | Node + wire count, deep dependency resolution, canvas/wire rendering — **no** geometry/3D path |

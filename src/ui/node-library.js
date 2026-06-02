@@ -7,6 +7,7 @@
 // ============================================
 
 import { wrapPythonNodeCode } from '../runtime/python-port-decl.js';
+import { buildNoGeometryGraph, buildGeometryGraph } from '../app/stress-graphs.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -825,6 +826,25 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
     return created.length + ' nodes created';
   };
 
+  // ── 6. 1000 Nodes, No Geometry (node/wire/eval stress) ──
+  // Loads the same graph as stress-tests/stress-1000-nodes-no-geometry.nodeflow
+  // via the shared builder, so the card and the on-disk file stay identical.
+  app._templateStressNoGeometry = function() {
+    this.newProject();
+    var ok = this.deserializeGraph(buildNoGeometryGraph(1000));
+    if (ok) this.addAIMessage('workspace', '▦ **1000 Nodes · No Geometry** loaded — one Input feeding a 998-deep Math.Add chain (1997 wires) into an Output.Watch. A pure node/wire/eval stress with no 3D geometry. Hit **Run**; the Watch should read 999.');
+    return '1000 nodes loaded';
+  };
+
+  // ── 7. 1000 Nodes, 10k Meshes (geometry/viewer stress) ──
+  // Loads the same graph as stress-tests/stress-1000-nodes-10k-geometry.nodeflow.
+  app._templateStressGeometry = function() {
+    this.newProject();
+    var ok = this.deserializeGraph(buildGeometryGraph(1000, 2, 5));
+    if (ok) this.addAIMessage('workspace', '⬢ **1000 Nodes · 10k Meshes** loaded — 1000 Pattern.HexGrid nodes emitting 10,000 hex-tile meshes. A geometry + 3D-viewer stress. Switch to **3D** and hit **Run** (expect a heavy load).');
+    return '1000 nodes / 10,000 meshes loaded';
+  };
+
   // Landing page template cards
   var origRenderTemplates = app.renderTemplates ? app.renderTemplates.bind(app) : null;
   app.renderTemplates = function() {
@@ -835,7 +855,9 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
       { fn: '_templateCatenaryPavilion', color: 'var(--accent-peach)',  icon: '⌓', name: 'Catenary Pavilion',  desc: 'Catenary shell paneled into an 8×8 façade grid' },
       { fn: '_templateVoronoiCrater',    color: 'var(--accent-red)',    icon: '⬢', name: 'Voronoi Crater',     desc: 'Phyllotaxis seeds an extruded Voronoi mesh' },
       { fn: '_templateMobiusSculpture',  color: 'var(--accent-green)',  icon: '∞', name: 'Möbius Sculpture',   desc: 'Möbius strip warped by a Perlin-noise field' },
-      { fn: '_templateLargeMesh',        color: 'var(--accent-blue)',   icon: '⚡', name: 'Large Mesh Stress',  desc: '10 000 mesh refs — performance test for the engine' }
+      { fn: '_templateLargeMesh',        color: 'var(--accent-blue)',   icon: '⚡', name: 'Large Mesh Stress',  desc: '10 000 mesh refs — performance test for the engine' },
+      { fn: '_templateStressNoGeometry', color: 'var(--accent-yellow)', icon: '▦', name: '1000 Nodes · No Geometry', desc: '1000 value/math nodes, 1997 wires — node/wire/eval stress' },
+      { fn: '_templateStressGeometry',   color: 'var(--accent-pink)',   icon: '⬢', name: '1000 Nodes · 10k Meshes', desc: '1000 HexGrid nodes emitting 10,000 meshes — geometry stress' }
     ];
     templates.forEach(function(t) {
       var card = document.createElement('div'); card.className = 'template-card'; card.style.setProperty('--card-accent', t.color);

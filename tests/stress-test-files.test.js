@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { NODE_TYPE_MAP } from '../src/core/nodes.js';
 import { getLiveCoreRegistry } from '../src/nodes/coreNodes.js';
+import { buildNoGeometryGraph, buildGeometryGraph } from '../src/app/stress-graphs.js';
 
 // Validates the hand-generated stress-test graphs in /stress-tests against the
 // real node registry + the save/load schema (save-load.js, version 2), so a
@@ -71,6 +72,22 @@ describe('stress-test .nodeflow files', () => {
     expect(hex.length).toBe(1000);
     // rows × cols summed across all grids = total mesh primitives.
     const totalGeometry = hex.reduce((sum, n) =>
+      sum + parseInt(n.controlValues.rows, 10) * parseInt(n.controlValues.cols, 10), 0);
+    expect(totalGeometry).toBe(10000);
+  });
+
+  // The landing-page template cards (node-library.js) feed these exact builder
+  // outputs to app.deserializeGraph(), so they must be loadable too — same
+  // schema/registry invariants as the on-disk files.
+  it('shared builders produce the same loadable graphs the templates load', () => {
+    const noGeo = buildNoGeometryGraph(1000);
+    expect(noGeo.nodes.length).toBe(1000);
+    assertLoadable(noGeo);
+
+    const geo = buildGeometryGraph(1000, 2, 5);
+    expect(geo.nodes.length).toBe(1000);
+    assertLoadable(geo);
+    const totalGeometry = geo.nodes.reduce((sum, n) =>
       sum + parseInt(n.controlValues.rows, 10) * parseInt(n.controlValues.cols, 10), 0);
     expect(totalGeometry).toBe(10000);
   });
