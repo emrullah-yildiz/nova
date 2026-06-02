@@ -1257,6 +1257,15 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     }
   },
 
+  // Removes the most recent user→assistant exchange from a context's history so
+  // a Retry re-asks the same prompt fresh instead of stacking a duplicate turn.
+  dropLastTurn(context) {
+    const h = this._histories && this._histories[context];
+    if (!h || !h.length) return;
+    if (h[h.length - 1] && h[h.length - 1].role === 'assistant') h.pop();
+    if (h.length && h[h.length - 1] && h[h.length - 1].role === 'user') h.pop();
+  },
+
   parseResponse(text) {
     NFLogger.info('gpt-parse', 'Parsing GPT response', { length: text ? text.length : 0 });
     const codeBlockMatch = text.match(/```(?:python)?\s*\n([\s\S]*?)\n\s*```/);

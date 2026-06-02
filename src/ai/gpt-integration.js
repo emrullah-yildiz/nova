@@ -201,6 +201,92 @@ document.addEventListener('DOMContentLoaded', () => {
     return b;
   };
 
+  // ---- Message actions (Copy / Retry) --------------------------------------
+  var ICON_COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+  var ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+  var ICON_RETRY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>';
+
+  // Copies text to the clipboard with a graceful fallback, flashing a check on btn.
+  app._copyToClipboard = function(text, btn) {
+    var value = String(text == null ? '' : text);
+    var flash = function() {
+      if (!btn) return;
+      var prev = btn.innerHTML;
+      btn.classList.add('copied');
+      btn.innerHTML = ICON_CHECK;
+      setTimeout(function() { btn.classList.remove('copied'); btn.innerHTML = prev; }, 1400);
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(value).then(flash, function() { app._fallbackCopy(value); flash(); });
+        return;
+      }
+    } catch (e) { /* fall through */ }
+    app._fallbackCopy(value);
+    flash();
+  };
+
+  app._fallbackCopy = function(text) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = String(text == null ? '' : text);
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch (e) { /* ignore */ }
+  };
+
+  // Re-asks the same prompt: drops the last turn from history, removes the old
+  // answer (and its thinking block) from view, then streams a fresh response.
+  app._retryMessage = function(ch, prompt, msgEl, thinkId) {
+    try { if (GPTClient.dropLastTurn) GPTClient.dropLastTurn(ch); } catch (e) { /* ignore */ }
+    if (thinkId) { var t = document.getElementById(thinkId); if (t && t.parentNode) t.parentNode.removeChild(t); }
+    if (msgEl && msgEl.parentNode) msgEl.parentNode.removeChild(msgEl);
+    var hist = app.chatHistories && app.chatHistories[ch];
+    if (hist && hist.length && hist[hist.length - 1] && hist[hist.length - 1].role === 'ai') hist.pop();
+    app._gptChat(ch, prompt);
+  };
+
+  // Appends a hover-revealed action row (Copy, optional Retry) below an AI
+  // message element. opts: { getText()|text, onRetry() }.
+  app._attachMsgActions = function(msgEl, opts) {
+    if (!msgEl) return;
+    opts = opts || {};
+    var old = msgEl.querySelector('.chat-msg-actions');
+    if (old) old.remove();
+
+    var row = document.createElement('div');
+    row.className = 'chat-msg-actions';
+
+    var copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'chat-msg-action';
+    copyBtn.title = 'Copy';
+    copyBtn.setAttribute('aria-label', 'Copy');
+    copyBtn.innerHTML = ICON_COPY;
+    copyBtn.onclick = function() {
+      var text = typeof opts.getText === 'function' ? opts.getText() : (opts.text || '');
+      app._copyToClipboard(text, copyBtn);
+    };
+    row.appendChild(copyBtn);
+
+    if (typeof opts.onRetry === 'function') {
+      var retryBtn = document.createElement('button');
+      retryBtn.type = 'button';
+      retryBtn.className = 'chat-msg-action';
+      retryBtn.title = 'Retry';
+      retryBtn.setAttribute('aria-label', 'Retry');
+      retryBtn.innerHTML = ICON_RETRY;
+      retryBtn.onclick = function() { opts.onRetry(); };
+      row.appendChild(retryBtn);
+    }
+
+    msgEl.appendChild(row);
+  };
+
   app._gptChat = function(ch, txt) {
     const existingCode = document.getElementById('cv-code') ? document.getElementById('cv-code').value : '';
     const msgContainer = document.getElementById(ch === 'landing' ? 'landing-chat-messages' : 'ws-chat-messages');
@@ -235,6 +321,18 @@ document.addEventListener('DOMContentLoaded', () => {
           bubble.classList.remove('streaming');
           bubble.removeAttribute('id');
         }
+
+        // Copy / Retry affordances on the finalized answer. getText copies the
+        // prose only (artifacts are excluded); Retry re-asks the same prompt.
+        app._attachMsgActions(msgEl, {
+          getText: function() {
+            if (!bubble) return '';
+            var clone = bubble.cloneNode(true);
+            clone.querySelectorAll('.chat-artifact').forEach(function(a) { a.remove(); });
+            return clone.textContent.trim();
+          },
+          onRetry: function() { app._retryMessage(ch, txt, msgEl, streamId + '-think'); }
+        });
 
         // Auto-collapse the live "Thinking" block now that the answer has arrived.
         var _thinkEl = document.getElementById(streamId + '-think');

@@ -46,7 +46,12 @@ that don't replace prose**, **status/step timeline**.
   - **Stop (DONE)** — `callStream` runs under an `AbortController`
     (`GPTClient.stopStream()`); aborting finalizes whatever streamed as a normal
     partial reply. A "Stop" pill shows below the streaming message and is removed
-    on finalize. Remaining: Retry / Copy / tool chips.
+    on finalize.
+  - **Copy / Retry (DONE)** — hover-revealed actions below each AI message
+    (`app._attachMsgActions`). Copy grabs the prose only (artifacts excluded);
+    Retry drops the last turn (`GPTClient.dropLastTurn`), removes the old answer +
+    its thinking block, and re-streams the same prompt. Canned `addAIMessage`
+    bubbles get Copy only. Remaining: tool/action chips.
 
 ## Decisions (made)
 - Ship the **step timeline** before real thinking (free, works today); add real

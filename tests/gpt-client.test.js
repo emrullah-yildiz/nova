@@ -322,6 +322,25 @@ describe('GPTClient', () => {
       expect(GPTClient.isThinkingEnabled('anthropic', 'anthropic/claude-sonnet-4.6')).toBe(true);
     });
 
+    it('dropLastTurn removes the last user→assistant pair, keeping earlier turns', () => {
+      GPTClient._histories = GPTClient._histories || {};
+      GPTClient._histories.retryctx = [
+        { role: 'user', content: 'first' },
+        { role: 'assistant', content: 'one' },
+        { role: 'user', content: 'second' },
+        { role: 'assistant', content: 'two' }
+      ];
+      GPTClient.dropLastTurn('retryctx');
+      expect(GPTClient._histories.retryctx).toEqual([
+        { role: 'user', content: 'first' },
+        { role: 'assistant', content: 'one' }
+      ]);
+      // Safe on empty / unknown contexts.
+      GPTClient._histories.retryctx = [];
+      expect(() => GPTClient.dropLastTurn('retryctx')).not.toThrow();
+      expect(() => GPTClient.dropLastTurn('nope')).not.toThrow();
+    });
+
     it('stopStream aborts the active stream and clears it; no-op when idle', () => {
       let aborted = false;
       GPTClient._activeStream = { signal: {}, abort() { aborted = true; } };
