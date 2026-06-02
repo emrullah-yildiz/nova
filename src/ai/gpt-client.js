@@ -7,6 +7,7 @@
 import { createNovaCloudClient } from '../enterprise/cloud-client.js';
 import { getRuntimeConfig } from '../config/runtime-config.js';
 import { buildNodeCatalog } from './node-catalog.js';
+import { buildGraphContext } from './graph-context.js';
 
 const GPTClient = {
   MODEL: 'anthropic/claude-sonnet-4.6',
@@ -907,6 +908,25 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
 
     if (existingCode) {
       sys += `\n\n### Current Code on Canvas\nThe user already has this code/graph. If they ask to modify it, update this code:\n\`\`\`python\n${existingCode}\n\`\`\``;
+    }
+
+    // Live graph snapshot — the assistant's view of the actual canvas (node ids,
+    // types, versions, ports, positions, controls, wiring). Read from the global
+    // app/registry; empty on the landing screen (no project) so nothing is added
+    // there. Wrapped defensively: graph context must never break a chat turn.
+    try {
+      const app = (typeof window !== 'undefined' && window.app)
+        || (typeof globalThis !== 'undefined' && globalThis.app) || null;
+      const typeMap = (typeof window !== 'undefined' && window.NODE_TYPE_MAP)
+        || (typeof globalThis !== 'undefined' && globalThis.NODE_TYPE_MAP) || {};
+      if (app && typeof app.serializeGraph === 'function') {
+        const ctx = buildGraphContext(app.serializeGraph(), typeMap);
+        if (ctx.text) {
+          sys += `\n\n### Live Graph (the user's current canvas)\nThis is the actual graph on the canvas right now. Use it to answer questions about the current workflow ("which node does X here?", "what should I wire next to finish this?") and to propose precise edits — reference nodes by their id. Ports are shown as in[...]/out[...]; wires as from.port → to.port.\n\n${ctx.text}`;
+        }
+      }
+    } catch {
+      // Never let graph-context assembly block a chat response.
     }
     return sys;
   },
