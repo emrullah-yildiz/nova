@@ -834,6 +834,57 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     return this.askAIToFixNode(nodeId);
   };
 
+  // "Ask AI" from any node's warning panel — learn + fix the problem. Python
+  // nodes keep the replacement-code flow (askAIToFixNode); every other node type
+  // opens a normal, graph-aware chat turn describing the node and its warnings,
+  // so the assistant (which now sees the live graph + problem report) can explain
+  // the cause and give concrete fix steps. Works for ALL warnings, not just code.
+  app.askAIAboutWarning = function(nodeId) {
+    var nd = this.nodes.find(function(n) { return n.id === nodeId; });
+    if (!nd) return;
+    if ((nd.type === 'custom-python' || nd.type === 'Custom.Python') && typeof this.askAIToFixNode === 'function') {
+      return this.askAIToFixNode(nodeId);
+    }
+    var warnings = this._collectInspectorWarnings ? this._collectInspectorWarnings(nd) : [];
+    var warningText = warnings.map(function(w) { return '- ' + (w.port ? '[' + w.port + '] ' : '') + w.message; }).join('\n');
+    var errorText = nd._lastError || (this._nodeErrors && this._nodeErrors[nodeId] && this._nodeErrors[nodeId].message) || '';
+    var name = nd.def && nd.def.name ? nd.def.name : nd.type;
+
+    if (this.currentPage !== 'workspace' && this.switchPage) this.switchPage('workspace');
+    var chatPanel = document.getElementById('ws-chat-panel');
+    if (chatPanel) {
+      this.chatVisible = true;
+      chatPanel.classList.remove('chat-hidden');
+      var toggle = document.getElementById('chat-toggle-btn');
+      if (toggle) toggle.classList.add('hidden');
+    }
+    if (window.GPTClient && !window.GPTClient.canChat()) {
+      if (this._updateAssistantGate) this._updateAssistantGate();
+      return;
+    }
+
+    var prompt = 'Help me understand and fix a warning on a node in my Nova graph. Explain the likely cause in plain language, then give concrete steps to fix it (e.g. rewire a port, change a control, add or swap a node). Use the Live Graph and the Problems context, and point me at the node if useful.\n\nNode: ' + name + ' (' + nodeId + ')\n';
+    if (errorText) prompt += '\nRuntime error:\n' + errorText + '\n';
+    if (warningText) prompt += '\nWarnings:\n' + warningText + '\n';
+
+    if (typeof this.addUserMessage === 'function') this.addUserMessage('workspace', 'Explain & fix the warning on ' + name + ' (' + nodeId + ')');
+    var c = document.getElementById('ws-chat-messages');
+    if (c) {
+      var ti = document.createElement('div');
+      ti.className = 'chat-msg ai';
+      ti.id = 'node-warn-typing';
+      ti.innerHTML = '<div class="chat-avatar">✦</div><div class="chat-bubble"><div class="typing-indicator"><span></span><span></span><span></span></div></div>';
+      c.appendChild(ti);
+      c.scrollTop = c.scrollHeight;
+    }
+    var self = this;
+    setTimeout(function() {
+      var el = document.getElementById('node-warn-typing');
+      if (el) el.remove();
+      self.respond('workspace', prompt);
+    }, 250);
+  };
+
   // ══════════════════════════════════════
   // PERSISTENT ERROR LOG
   // Saves errors to localStorage so they survive sessions.
