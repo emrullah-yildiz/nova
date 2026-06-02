@@ -176,6 +176,34 @@ export function nextPythonPorts(code, current = {}) {
   };
 }
 
+// Wraps a Custom.Python cell so the generated full script feeds it exactly like
+// the live runtime does. A cell reads its inputs as bare variables and assigns
+// its outputs as bare variables — and those bare names are the node's LIVE
+// ports (`_dynInputs`/`_dynOutputs`), which track renames and `# in:`/`# out:`
+// header edits. The static def ports do NOT, so codegen that keys off the def
+// drifts out of sync with the cell's variables the moment a port is renamed.
+//
+// This binds each wired input to the cell's input variable BEFORE the cell, and
+// exports each output variable under its canonical downstream name AFTER it:
+//
+//   inputBindings:  [{ name, source }]  emits `name = source`   (source feeds in)
+//   outputBindings: [{ name, alias }]   emits `alias = name`    (alias flows out)
+//
+// An input binding with a null/undefined `source` (unwired port) is skipped so
+// the cell keeps its own default handling. Pure — returns the new code string.
+export function wrapPythonNodeCode(code, opts = {}) {
+  const body = typeof code === 'string' ? code : '';
+  const inputBindings = Array.isArray(opts.inputBindings) ? opts.inputBindings : [];
+  const outputBindings = Array.isArray(opts.outputBindings) ? opts.outputBindings : [];
+  const pre = inputBindings
+    .filter(b => b && b.name && b.source != null && b.source !== '')
+    .map(b => b.name + ' = ' + b.source);
+  const post = outputBindings
+    .filter(b => b && b.name && b.alias && b.alias !== b.name)
+    .map(b => b.alias + ' = ' + b.name);
+  return (pre.length ? pre.join('\n') + '\n' : '') + body + (post.length ? '\n' + post.join('\n') : '');
+}
+
 const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 // Sets a Custom.Python node's `# in:` header to exactly `names`, so adding /

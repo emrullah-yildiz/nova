@@ -5,6 +5,26 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-02 - Custom.Python Codegen Tracks Live Ports, Not The Static Def
+
+**Context:** A `Custom.Python` node has two port lists: the static definition
+(`nd.def.inputs/outputs` — for the type, e.g. `elements`/`options`/`result`) and
+the live ports (`nd._dynInputs/_dynOutputs`), which track renames and `# in:`/
+`# out:` header edits. The renderer, the runtime, and the rename/sync logic all
+use the live ports; the **code generator** keyed off the static def. The moment a
+port was renamed (e.g. `elements`→`Ele`) the two diverged: codegen looked for a
+wire to `elements`, never found the actual `Ele` wire, and never bound the
+upstream value to the cell's `Ele` variable. Outputs broke symmetrically.
+
+**Decision:** `generateNodeCode` (the active override in `node-library.js`)
+generates the `Custom.Python` cell from the **live** ports. A pure helper
+`wrapPythonNodeCode(code, { inputBindings, outputBindings })` in
+`python-port-decl.js` binds each wired input to the cell's input variable before
+the cell (`name = <upstreamVar>`) and exports each output under its canonical
+downstream name after it (`<canonicalVar> = name`), so the generated full script
+feeds the cell exactly like the live runtime. The static def remains the fallback
+only when a node has no live ports yet.
+
 ## 2026-06-02 - AI Code→Node Pipeline Hardened Against Silent Geometry Failures
 
 **Context:** AI-generated Python that builds geometry failed silently. Examples:
