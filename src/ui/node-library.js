@@ -6,6 +6,8 @@
 // live 3D updates, wire interaction helpers
 // ============================================
 
+import { wrapPythonNodeCode } from '../runtime/python-port-decl.js';
+
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
   if (typeof globalThis !== 'undefined' && globalThis.app) return globalThis.app;
@@ -151,6 +153,25 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
     if (!nd.def || !nd.def.codegen) return origGenNodeCode(nd);
     var cg = nd.def.codegen;
     if (!cg) return '# No codegen';
+
+    // Custom.Python: the cell reads its inputs and assigns its outputs as bare
+    // variables, and those names are the node's LIVE ports (_dynInputs /
+    // _dynOutputs) after a rename or `# in:`/`# out:` header edit — NOT the
+    // static def ports. Generating off the def would feed the cell variables it
+    // never reads. Bind each wired input to the cell's input variable, and
+    // export each output under its canonical downstream name, using the live
+    // ports so codegen stays in sync with what the node actually renders/runs.
+    if ((nd.type === 'Custom.Python' || nd.type === 'custom-python') && this.codeLang === 'python') {
+      var liveIn = (nd._dynInputs && nd._dynInputs.length) ? nd._dynInputs : nd.def.inputs.map(function(i) { return i.id; });
+      var liveOut = (nd._dynOutputs && nd._dynOutputs.length) ? nd._dynOutputs : nd.def.outputs.map(function(o) { return o.id; });
+      var inputBindings = liveIn.map(function(id) {
+        var wire = app.wires.find(function(w) { return w.toNode === nd.id && w.toPort === id; });
+        return { name: id, source: wire ? app.varName(wire.fromNode, wire.fromPort) : null };
+      });
+      var outputBindings = liveOut.map(function(id) { return { name: id, alias: app.varName(nd.id, id) }; });
+      return wrapPythonNodeCode(nd.controlValues.code || '', { inputBindings: inputBindings, outputBindings: outputBindings });
+    }
+
     var template = cg[this.codeLang] || cg.python || '';
     nd.def.outputs.forEach(function(out) { template = template.split('{{' + out.id + '}}').join(app.varName(nd.id, out.id)); });
     nd.def.inputs.forEach(function(inp) {

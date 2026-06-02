@@ -23,7 +23,8 @@ import {
   resolvePythonPorts,
   nextPythonPorts,
   renamePythonPort,
-  setInputHeader
+  setInputHeader,
+  wrapPythonNodeCode
 } from '../src/runtime/python-port-decl.js';
 
 getLiveCoreRegistry();
@@ -393,6 +394,47 @@ describe('nextPythonPorts — live port sync on code edit', () => {
     const r = nextPythonPorts('tower = Geo.loft(profiles)', { inputs: ['input0'], outputs: ['shell'] });
     expect(r.outputs).toEqual(['tower']);
     expect(r.removedOutputs).toEqual(['shell']);
+  });
+});
+
+describe('wrapPythonNodeCode — codegen binds wired inputs/outputs to the live cell variables', () => {
+  it('binds each wired input before the cell and exports each output after it', () => {
+    const out = wrapPythonNodeCode('result = elements', {
+      inputBindings: [{ name: 'elements', source: 'listcreate0_list' }],
+      outputBindings: [{ name: 'result', alias: 'custompython1_result' }]
+    });
+    expect(out).toBe('elements = listcreate0_list\nresult = elements\ncustompython1_result = result');
+  });
+
+  it('tracks renamed ports — the bare cell variables follow _dynInputs/_dynOutputs, not the static def', () => {
+    // After renaming the `elements` port to `Ele`, the cell reads `Ele`; codegen
+    // must bind the upstream value to `Ele`, not the stale def port `elements`.
+    const out = wrapPythonNodeCode('result = Ele', {
+      inputBindings: [{ name: 'Ele', source: 'listcreate0_list' }],
+      outputBindings: [{ name: 'result', alias: 'custompython1_result' }]
+    });
+    expect(out).toContain('Ele = listcreate0_list');
+    expect(out).not.toContain('elements');
+  });
+
+  it('skips unwired inputs so the cell keeps its own default handling', () => {
+    const out = wrapPythonNodeCode('result = options', {
+      inputBindings: [{ name: 'options', source: null }],
+      outputBindings: []
+    });
+    expect(out).toBe('result = options');
+  });
+
+  it('does not emit a self-assignment when the export alias equals the port name', () => {
+    const out = wrapPythonNodeCode('result = 1', {
+      outputBindings: [{ name: 'result', alias: 'result' }]
+    });
+    expect(out).toBe('result = 1');
+  });
+
+  it('returns the raw cell unchanged when there are no bindings', () => {
+    expect(wrapPythonNodeCode('x = 1')).toBe('x = 1');
+    expect(wrapPythonNodeCode('')).toBe('');
   });
 });
 
