@@ -15,6 +15,9 @@ const GPTClient = {
   MODEL: 'anthropic/claude-sonnet-4.6',
   MAX_TOKENS: 2048,
   TEMPERATURE: 0.7,
+  // Extended-thinking budget (Anthropic). Streamed into a collapsible "Thinking"
+  // block so the user can see the model's reasoning. Min allowed is 1024.
+  THINKING_BUDGET: 1024,
 
   // Free-tier shared proxy. Nova is BYOK-only: there is no server-side
   // GROQ_API_KEY, so this is OFF. When disabled, "no API key" means the
@@ -385,7 +388,7 @@ const GPTClient = {
     }, extraHeaders || {});
   },
 
-  buildChatPayload(format, model, messages, maxTokens, temperature, stream, tokenParam) {
+  buildChatPayload(format, model, messages, maxTokens, temperature, stream, tokenParam, enableThinking) {
     if (format === 'anthropic') {
       // Anthropic carries the system prompt as a top-level field, not a
       // message role, and requires max_tokens. Fold any system messages into
@@ -400,6 +403,13 @@ const GPTClient = {
       var payload = { model: model, max_tokens: maxTokens, temperature: temperature, messages: convo };
       if (system) payload.system = system;
       if (stream) payload.stream = true;
+      if (enableThinking) {
+        // Extended thinking: Anthropic requires temperature 1 and max_tokens
+        // greater than the thinking budget (which is reserved for reasoning).
+        payload.thinking = { type: 'enabled', budget_tokens: this.THINKING_BUDGET };
+        payload.temperature = 1;
+        payload.max_tokens = Math.max(maxTokens, this.THINKING_BUDGET + 2048);
+      }
       return payload;
     }
     // OpenAI-compatible. The output-token field name varies (max_tokens vs
@@ -436,6 +446,29 @@ const GPTClient = {
     }
     var delta = json && json.choices && json.choices[0] && json.choices[0].delta;
     return (delta && delta.content) || '';
+  },
+
+  // Anthropic extended-thinking SSE delta (the model's reasoning), separate from
+  // the answer text. Empty for non-thinking events / other providers.
+  extractThinkingDelta(format, json) {
+    if (format === 'anthropic' && json && json.type === 'content_block_delta'
+      && json.delta && json.delta.type === 'thinking_delta' && typeof json.delta.thinking === 'string') {
+      return json.delta.thinking;
+    }
+    return '';
+  },
+
+  // Models that support Anthropic extended thinking (Sonnet/Opus 4.x, 3.7 Sonnet).
+  isThinkingModel(model) {
+    return /(sonnet-4|opus-4|3[.-]7-sonnet|claude-4)/i.test(String(model || ''));
+  },
+
+  // Whether to request extended thinking for this turn: BYOK Anthropic, a
+  // thinking-capable model, and not turned off via localStorage 'nova:ai-thinking'.
+  isThinkingEnabled(format, model) {
+    if (format !== 'anthropic') return false;
+    try { if (typeof localStorage !== 'undefined' && localStorage.getItem('nova:ai-thinking') === 'off') return false; } catch { /* ignore */ }
+    return this.isThinkingModel(model);
   },
 
   buildRequestHeaders() {
@@ -1100,7 +1133,7 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     return reply;
   },
 
-  async callStream(userMessage, context, existingCode, onChunk, onDone, onError) {
+  async callStream(userMessage, context, existingCode, onChunk, onDone, onError, onThinking) {
     if (this.isEnterpriseAiEnabled()) {
       try {
         const reply = await this.callEnterprise(userMessage, context, existingCode);
@@ -1128,11 +1161,12 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
       { role: 'user', content: userMessage }
     ];
     const format = this.getProviderFormat();
+    const enableThinking = this.isThinkingEnabled(format, this.getEffectiveModel());
     try {
       const response = await fetch(this.getEffectiveApiUrl(), {
         method: 'POST',
         headers: this.buildRequestHeaders(),
-        body: JSON.stringify(this.buildChatPayload(format, this.getEffectiveModel(), messages, maxTokens, this.TEMPERATURE, true, this.getTokenParam()))
+        body: JSON.stringify(this.buildChatPayload(format, this.getEffectiveModel(), messages, maxTokens, this.TEMPERATURE, true, this.getTokenParam(), enableThinking))
       });
       if (!response.ok) {
         if (response.status === 503 && proxyMode) {
@@ -1161,6 +1195,7 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let fullText = '';
+      let fullThinking = '';
       let buffer = '';
       while (true) {
         const { done, value } = await reader.read();
@@ -1175,6 +1210,10 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
           if (payload === '[DONE]') continue;
           try {
             const json = JSON.parse(payload);
+            if (typeof onThinking === 'function') {
+              const tdelta = this.extractThinkingDelta(format, json);
+              if (tdelta) { fullThinking += tdelta; onThinking(tdelta, fullThinking); }
+            }
             const chunk = this.extractStreamDelta(format, json);
             if (chunk) {
               fullText += chunk;

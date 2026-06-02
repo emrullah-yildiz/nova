@@ -301,4 +301,36 @@ describe('GPTClient', () => {
       expect(GPTClient.extractStreamDelta('openai', { choices: [{ delta: {} }] })).toBe('');
     });
   });
+
+  describe('extended thinking', () => {
+    it('parses Anthropic thinking_delta separately from text', () => {
+      const tEvt = { type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: 'let me think' } };
+      expect(GPTClient.extractThinkingDelta('anthropic', tEvt)).toBe('let me think');
+      expect(GPTClient.extractStreamDelta('anthropic', tEvt)).toBe(''); // not text
+      const textEvt = { type: 'content_block_delta', delta: { type: 'text_delta', text: 'hi' } };
+      expect(GPTClient.extractThinkingDelta('anthropic', textEvt)).toBe('');
+      expect(GPTClient.extractThinkingDelta('openai', { choices: [{ delta: { content: 'x' } }] })).toBe('');
+    });
+
+    it('only enables thinking for thinking-capable Anthropic models', () => {
+      expect(GPTClient.isThinkingModel('anthropic/claude-sonnet-4.6')).toBe(true);
+      expect(GPTClient.isThinkingModel('claude-3-7-sonnet-20250219')).toBe(true);
+      expect(GPTClient.isThinkingModel('claude-3-5-haiku')).toBe(false);
+      expect(GPTClient.isThinkingModel('gpt-4o')).toBe(false);
+      expect(GPTClient.isThinkingEnabled('openai', 'anthropic/claude-sonnet-4.6')).toBe(false);
+      expect(GPTClient.isThinkingEnabled('anthropic', 'claude-3-5-haiku')).toBe(false);
+      expect(GPTClient.isThinkingEnabled('anthropic', 'anthropic/claude-sonnet-4.6')).toBe(true);
+    });
+
+    it('adds a thinking block, temperature 1, and a larger max_tokens to the Anthropic payload', () => {
+      const base = GPTClient.buildChatPayload('anthropic', 'claude-sonnet-4.6', [{ role: 'user', content: 'hi' }], 2048, 0.7, true, 'max_tokens', false);
+      expect(base.thinking).toBeUndefined();
+      expect(base.temperature).toBe(0.7);
+
+      const think = GPTClient.buildChatPayload('anthropic', 'claude-sonnet-4.6', [{ role: 'user', content: 'hi' }], 2048, 0.7, true, 'max_tokens', true);
+      expect(think.thinking).toEqual({ type: 'enabled', budget_tokens: GPTClient.THINKING_BUDGET });
+      expect(think.temperature).toBe(1);
+      expect(think.max_tokens).toBeGreaterThan(GPTClient.THINKING_BUDGET);
+    });
+  });
 });

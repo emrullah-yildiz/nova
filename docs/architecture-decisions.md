@@ -5,6 +5,23 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-02 - Streaming Reasoning Block (Anthropic Extended Thinking, P2/P3)
+
+**Context:** Users want to see "what it thought and thinks at the moment". The
+Anthropic models Nova uses (Sonnet/Opus 4.x) support extended thinking, but the
+SSE parser only read `text_delta` and the request never enabled thinking.
+
+**Decision:** `callStream` requests Anthropic extended thinking
+(`thinking: {type:'enabled', budget_tokens: THINKING_BUDGET}`, with temperature
+forced to 1 and max_tokens bumped above the budget — both required by the API) and
+parses `thinking_delta` via `extractThinkingDelta`, routed to an `onThinking`
+callback. The chat renders it into a collapsible **Thinking** block (its own
+message above the answer, open while streaming, auto-collapses on done). Gating:
+thinking-capable Anthropic models only (`isThinkingModel`), the streaming chat path
+only (utility JSON calls stay clean), and disableable via `localStorage
+'nova:ai-thinking' = 'off'`. Non-Anthropic providers (incl. the free proxy) simply
+show no block. See `docs/design/ai-chat-experience.md`.
+
 ## 2026-06-02 - Chat Turns Persist The Answer; Artifacts Append Below (P1)
 
 **Context:** The assistant rendered a turn into one mutable bubble that got
