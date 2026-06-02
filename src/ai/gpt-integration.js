@@ -107,6 +107,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  // Appends a separated "artifact" block INSIDE the streamed answer bubble (a
+  // child div, so it stacks below the prose without disturbing the chat-msg flex
+  // row). The artifact UI (code-ready / plan / approve) renders here so it never
+  // overwrites the reasoning the user watched stream. Returns the new element.
+  app._appendArtifactBubble = function(answerBubble) {
+    if (!answerBubble) return null;
+    var b = document.createElement('div');
+    b.className = 'chat-artifact';
+    answerBubble.appendChild(b);
+    return b;
+  };
+
   app._gptChat = function(ch, txt) {
     const existingCode = document.getElementById('cv-code') ? document.getElementById('cv-code').value : '';
     const msgContainer = document.getElementById(ch === 'landing' ? 'landing-chat-messages' : 'ws-chat-messages');
@@ -156,12 +168,23 @@ document.addEventListener('DOMContentLoaded', () => {
           NFLogger.info('geo-alias-rewriter', 'rewrote ' + aliasResult.rewrites.length + ' Geo.* aliases', { rewrites: aliasResult.rewrites });
         }
 
+        // Chat response architecture P1: persist the streamed answer/reasoning in
+        // its own bubble, then render artifacts (plan / code-ready / approve UI)
+        // into a SEPARATE appended block below it — so the thinking the user
+        // watched stream is never overwritten by the result.
+        const answerText = app._extractDisplayText(cleanedText);
+        const finalizeAnswer = (fallback) => {
+          if (bubble) bubble.innerHTML = app.fmt(answerText || fallback || '');
+        };
+
         // Phase 7: if the AI emitted a nova-plan, route through the
         // plan-mode pipeline (validate against registry → build graph
         // mechanically).
         const planExtract = extractPlanFromResponse(cleanedText);
         if (planExtract && ch === 'workspace' && !(app._pendingNodeFix && app._pendingNodeFix.nodeId)) {
-          app._handleNovaPlan(planExtract, cleanedText, bubble, msgContainer, ch, txt);
+          finalizeAnswer();
+          const artifact = app._appendArtifactBubble(bubble);
+          app._handleNovaPlan(planExtract, cleanedText, artifact || bubble, msgContainer, ch, txt);
           msgContainer.scrollTop = msgContainer.scrollHeight;
           return;
         }
@@ -174,7 +197,9 @@ document.addEventListener('DOMContentLoaded', () => {
             app._presentNodeFix(parsed, bubble, msgContainer, ch);
             return;
           }
-          app._validateAndPresent(parsed, bubble, msgContainer, ch, txt);
+          finalizeAnswer(parsed.explanation);
+          const artifact = app._appendArtifactBubble(bubble);
+          app._validateAndPresent(parsed, artifact || bubble, msgContainer, ch, txt);
         } else if (parsed && parsed.code && ch === 'landing') {
           const explanation = parsed.explanation || 'Here is the code.';
           if (bubble) {
@@ -411,7 +436,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   app._validateAndPresent = function(parsed, bubble, msgContainer, ch, originalPrompt) {
     const code = parsed.code;
-    const explanation = parsed.explanation || 'Generated code for your request.';
     // Catch hallucinated Geo.* method names BEFORE running. Doesn't block
     // execution — PythonRunner will fail anyway and the fix-retry kicks in
     // — but it gives the fix prompt a head start by saying exactly which
@@ -448,7 +472,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // definitely-wrong types), and the fix loop is capped, so this is safe.
     if (!testResult.error && typeCheck.ok) {
       if (bubble) {
-        bubble.innerHTML = app.fmt('✨ ' + explanation + '\n\nReview the code below. **Approve** to build the visual graph, or **Cancel**.');
+        bubble.innerHTML = app.fmt('✅ **Code ready** — review it below, then **Approve** to build the graph, or **Cancel**.');
       }
       app._pendingCode = code;
       app.showCodeViewer(code, null);
@@ -487,7 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (app._fixRetries > 2) {
       app._fixRetries = 0;
       if (bubble) {
-        bubble.innerHTML = app.fmt('⚠️ ' + explanation + '\n\n**Note:** The code may have issues — the runtime reported: *' + errorMsg + '*\n\nYou may need to edit it manually. **Approve** to try it, or **Cancel**.');
+        bubble.innerHTML = app.fmt('⚠️ **Code generated, but it may have issues** — the runtime reported: *' + errorMsg + '*\n\nYou may need to edit it manually. **Approve** to try it, or **Cancel**.');
       }
       app._pendingCode = code;
       app.showCodeViewer(code, null);

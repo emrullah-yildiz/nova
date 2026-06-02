@@ -241,6 +241,11 @@ input:focus, textarea:focus { border-color: var(--accent-blue); }
 
 .chat-bubble { padding: 9px 13px; border-radius: 14px; font-size: 13px; line-height: 1.5; }
 
+/* Artifact block (code-ready / plan / approve) appended below the streamed
+   answer inside the same bubble — visually separated so the reasoning persists. */
+.chat-artifact { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-color, rgba(255,255,255,0.1)); }
+.chat-artifact:empty { display: none; }
+
 .chat-msg.ai .chat-bubble { background: var(--bg-surface); color: var(--text-primary); border-bottom-left-radius: 4px; }
 
 .chat-msg.user .chat-bubble { background: var(--accent-blue); color: var(--bg-tertiary); border-bottom-right-radius: 4px; }
