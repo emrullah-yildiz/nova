@@ -9,6 +9,7 @@ import { buildGraphFromPlan, planToPython } from './plan-builder.js';
 import { rewriteGeoAliasesInResponse } from './geo-alias-rewriter.js';
 import { parseNovaActions } from './graph-actions.js';
 import { summarizeShowOps } from './turn-steps.js';
+import { createArtifactBox } from './artifact-box.js';
 import { isTextAttachment, attachmentNames, foldAttachments, ATTACH_MAX_BYTES } from './attachment-fold.js';
 import {
   buildDecideYourselfReply,
@@ -190,16 +191,12 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) { /* ignore */ }
   };
 
-  // Appends a separated "artifact" block INSIDE the streamed answer bubble (a
-  // child div, so it stacks below the prose without disturbing the chat-msg flex
-  // row). The artifact UI (code-ready / plan / approve) renders here so it never
-  // overwrites the reasoning the user watched stream. Returns the new element.
+  // Creates a SEPARATE artifact message box immediately below the answer (its own
+  // bubble, not a child of it). The artifact UI (testing / code-ready / plan /
+  // approve) renders + re-renders here across the validate→fix loop, so it never
+  // overwrites the answer prose or the "Thinking" block the user watched stream.
   app._appendArtifactBubble = function(answerBubble) {
-    if (!answerBubble) return null;
-    var b = document.createElement('div');
-    b.className = 'chat-artifact';
-    answerBubble.appendChild(b);
-    return b;
+    return createArtifactBox(document, answerBubble);
   };
 
   // ---- Message actions (Copy / Retry) --------------------------------------
@@ -402,8 +399,16 @@ document.addEventListener('DOMContentLoaded', () => {
         // into a SEPARATE appended block below it — so the thinking the user
         // watched stream is never overwritten by the result.
         const answerText = app._extractDisplayText(cleanedText);
+        // Finalize the answer prose WITHOUT ever blanking it: prefer the cleaned
+        // answer, else a provided fallback (e.g. the code explanation); if neither
+        // is meaningful, leave whatever already streamed in place. The '✨
+        // Thinking...' placeholder counts as "nothing meaningful" so a pure-code
+        // reply doesn't wipe the streamed text down to a placeholder.
         const finalizeAnswer = (fallback) => {
-          if (bubble) bubble.innerHTML = app.fmt(answerText || fallback || '');
+          if (!bubble) return;
+          const placeholder = '✨ Thinking...';
+          const finalText = (answerText && answerText !== placeholder) ? answerText : (fallback || '');
+          if (finalText) bubble.innerHTML = app.fmt(finalText);
         };
 
         // Phase 7: if the AI emitted a nova-plan, route through the
