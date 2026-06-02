@@ -140,29 +140,47 @@ shell = Geo.loft(pts)`;
 });
 
 describe('Custom.Python default template', () => {
-  it('starts with Revit-oriented ports and runnable Nova host helpers', () => {
+  it('starts with a concise Revit connection setup and runnable Nova host helpers', () => {
     const customPython = customNodes.find((node) => node.type === 'Custom.Python');
     expect(customPython.controls.find((control) => control.id === 'code').default).toBe(DEFAULT_CUSTOM_PYTHON_CODE);
-    expect(customPython.inputs.map((port) => port.id)).toEqual(['elements', 'parameter_name', 'value']);
+    expect(customPython.inputs.map((port) => port.id)).toEqual(['elements', 'options']);
     expect(customPython.outputs.map((port) => port.id)).toEqual(['result']);
 
     const ports = resolvePythonPorts(DEFAULT_CUSTOM_PYTHON_CODE);
-    expect(ports.inputs.map((port) => port.id)).toEqual(['elements', 'parameter_name', 'value']);
+    expect(ports.inputs.map((port) => port.id)).toEqual(['elements', 'options']);
     expect(ports.outputs.map((port) => port.id)).toEqual(['result']);
     expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('Geo: geometry constructors and operations');
     expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('RevitBridge: local Revit snapshot');
     expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('HostRegistry.get("revit")');
-    expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('elements, parameter_name, value -> result');
+    expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('elements, options -> result');
+    expect(DEFAULT_CUSTOM_PYTHON_CODE).not.toContain('Autodesk.Revit.DB');
 
     const executed = PythonRunner.execute(DEFAULT_CUSTOM_PYTHON_CODE, {
       elements: [],
-      parameter_name: 'Comments',
-      value: ''
+      options: { category: 'Walls' }
     });
     expect(executed.error).toBeNull();
     expect(executed.outputs.result.count).toBe(0);
-    expect(executed.outputs.result.parameter).toBe('Comments');
-    expect(executed.outputs.result.value).toBe('');
+    expect(executed.outputs.result.project_name).toBe('No Project');
+    expect(executed.outputs.result.options.category).toBe('Walls');
+  });
+
+  it('renames default input ports in both declarations and body references', () => {
+    const renamed = renamePythonPort({
+      direction: 'input',
+      oldId: 'elements',
+      newId: 'revit_elements',
+      code: DEFAULT_CUSTOM_PYTHON_CODE,
+      dynInputs: ['elements', 'options'],
+      dynOutputs: ['result'],
+      wires: [{ fromNode: 'source', fromPort: 'list', toNode: 'node-1', toPort: 'elements' }],
+      nodeId: 'node-1'
+    });
+    expect(renamed.ok).toBe(true);
+    expect(renamed.dynInputs).toEqual(['revit_elements', 'options']);
+    expect(renamed.code).toContain('# in: revit_elements:list, options:any');
+    expect(renamed.code).toContain('target_elements = revit_elements');
+    expect(renamed.wires[0].toPort).toBe('revit_elements');
   });
 });
 
