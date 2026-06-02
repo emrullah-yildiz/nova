@@ -151,7 +151,7 @@ describe('Custom.Python default template', () => {
     expect(ports.outputs.map((port) => port.id)).toEqual(['result']);
     expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('Geo: geometry constructors and operations');
     expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('RevitBridge: local Revit snapshot');
-    expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('HostRegistry.get("revit")');
+    expect(DEFAULT_CUSTOM_PYTHON_CODE).not.toContain('HostRegistry.get');
     expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('elements, options -> result');
     expect(DEFAULT_CUSTOM_PYTHON_CODE).not.toContain('Autodesk.Revit.DB');
 

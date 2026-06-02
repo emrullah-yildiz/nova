@@ -2934,7 +2934,7 @@ const app = {
 
           <div class="cv-actions">
 
-            <button class="cv-btn" id="cv-save-btn" style="display:none;color:var(--accent-green)" onclick="app.saveCvNodeCode()" title="Save this node's code">Save</button>
+            <button class="cv-btn" id="cv-save-btn" style="display:none;color:var(--accent-green);margin-right:28px" onclick="app.saveCvNodeCode()" title="Save this node's code">Save</button>
 
             <button class="cv-lang-btn cv-lang-active" id="cv-btn-python" onclick="app.setCodeLang('python')">Python</button>
 
