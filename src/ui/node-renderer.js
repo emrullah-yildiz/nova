@@ -772,6 +772,9 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
       // A list arriving at a scalar port is valid when the node auto-laces —
       // it maps over each item rather than erroring. Don't flag that.
       if (actual === 'list' && inp.type !== 'list' && isAutoLaceable(nd.def)) return;
+      // A single value arriving at a LIST port is valid too — it's auto-promoted
+      // to a one-item list (see resolveInputs), so don't flag "expects list".
+      if (inp.type === 'list' && actual !== 'list') return;
       if (!matches(inp.type, actual, input.value)) warnings.push({ port: inp.name || inp.id, expected: inp.type, actual: actual, message: (inp.name || inp.id) + ' expects ' + inp.type + ' but received ' + actual + '.' });
     });
     if (!hasOutputValue() && nd.def && nd.def.outputs && nd.def.outputs.length > 0) warnings.push({ port: 'Output', expected: 'value', actual: 'undefined', message: 'Node produced no output on the last Run.' });
