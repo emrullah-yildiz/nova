@@ -43,6 +43,10 @@ that don't replace prose**, **status/step timeline**.
   (received → parsing → validating → building → done) as the reasoning stand-in.
 - **P4** — Agentic affordances: tool/action chips (Reading graph, Applying fix,
   Filing ticket), Stop / Retry / Copy, status pills.
+  - **Stop (DONE)** — `callStream` runs under an `AbortController`
+    (`GPTClient.stopStream()`); aborting finalizes whatever streamed as a normal
+    partial reply. A "Stop" pill shows below the streaming message and is removed
+    on finalize. Remaining: Retry / Copy / tool chips.
 
 ## Decisions (made)
 - Ship the **step timeline** before real thinking (free, works today); add real

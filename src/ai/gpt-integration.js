@@ -107,6 +107,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  // Cancels the in-flight streaming response (the Stop button). callStream
+  // finalizes whatever streamed so far as a normal partial reply.
+  app.stopAiStream = function() {
+    if (window.GPTClient && typeof window.GPTClient.stopStream === 'function') window.GPTClient.stopStream();
+  };
+
   // Appends a separated "artifact" block INSIDE the streamed answer bubble (a
   // child div, so it stacks below the prose without disturbing the chat-msg flex
   // row). The artifact UI (code-ready / plan / approve) renders here so it never
@@ -127,6 +133,15 @@ document.addEventListener('DOMContentLoaded', () => {
     msgEl.className = 'chat-msg ai';
     msgEl.innerHTML = '<div class="chat-avatar">✦</div><div class="chat-bubble streaming" id="' + streamId + '"></div>';
     msgContainer.appendChild(msgEl);
+    // Stop control — lets the user cancel an in-flight response. Lives below the
+    // streaming message (so onChunk's bubble re-render can't wipe it) and is
+    // removed when the stream finalizes.
+    const stopRow = document.createElement('div');
+    stopRow.className = 'chat-stop-row';
+    stopRow.id = streamId + '-stop';
+    stopRow.innerHTML = '<button class="chat-stop-pill" onclick="event.preventDefault();app.stopAiStream()">■ Stop</button>';
+    msgContainer.appendChild(stopRow);
+    const _removeStop = function() { var s = document.getElementById(streamId + '-stop'); if (s) s.remove(); };
     msgContainer.scrollTop = msgContainer.scrollHeight;
     const bubble = document.getElementById(streamId);
 
@@ -139,6 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
         msgContainer.scrollTop = msgContainer.scrollHeight;
       },
       function(fullText) {
+        _removeStop();
         if (bubble) {
           bubble.classList.remove('streaming');
           bubble.removeAttribute('id');
@@ -232,6 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
         msgContainer.scrollTop = msgContainer.scrollHeight;
       },
       function(errMsg) {
+        _removeStop();
         if (errMsg && errMsg.indexOf('__RATE_LIMIT_SWITCHED__') === 0) {
           const switchedTo = errMsg.replace('__RATE_LIMIT_SWITCHED__', '');
           if (bubble) {

@@ -255,6 +255,11 @@ input:focus, textarea:focus { border-color: var(--accent-blue); }
 .chat-thinking-body { display: none; padding: 0 12px 9px; color: var(--text-secondary); font-size: 12px; line-height: 1.45; white-space: pre-wrap; max-height: 340px; overflow-y: auto; }
 .chat-thinking.open .chat-thinking-body { display: block; }
 
+/* Stop control shown below the streaming message while a response is in flight. */
+.chat-stop-row { display: flex; justify-content: center; margin: 2px 0 4px; }
+.chat-stop-pill { background: var(--bg-surface-hover, rgba(255,255,255,0.06)); border: 1px solid var(--border-color, rgba(255,255,255,0.14)); color: var(--text-secondary); border-radius: 999px; padding: 3px 12px; font-size: 11px; cursor: pointer; }
+.chat-stop-pill:hover { color: var(--text-primary); border-color: var(--accent-red, #f38ba8); }
+
 .chat-msg.ai .chat-bubble { background: var(--bg-surface); color: var(--text-primary); border-bottom-left-radius: 4px; }
 
 .chat-msg.user .chat-bubble { background: var(--accent-blue); color: var(--bg-tertiary); border-bottom-right-radius: 4px; }

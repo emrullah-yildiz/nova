@@ -322,6 +322,15 @@ describe('GPTClient', () => {
       expect(GPTClient.isThinkingEnabled('anthropic', 'anthropic/claude-sonnet-4.6')).toBe(true);
     });
 
+    it('stopStream aborts the active stream and clears it; no-op when idle', () => {
+      let aborted = false;
+      GPTClient._activeStream = { signal: {}, abort() { aborted = true; } };
+      GPTClient.stopStream();
+      expect(aborted).toBe(true);
+      expect(GPTClient._activeStream).toBeNull();
+      expect(() => GPTClient.stopStream()).not.toThrow();
+    });
+
     it('adds a thinking block, temperature 1, and a larger max_tokens to the Anthropic payload', () => {
       const base = GPTClient.buildChatPayload('anthropic', 'claude-sonnet-4.6', [{ role: 'user', content: 'hi' }], 2048, 0.7, true, 'max_tokens', false);
       expect(base.thinking).toBeUndefined();
