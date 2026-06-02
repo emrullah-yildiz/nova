@@ -140,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // plan-mode pipeline (validate against registry → build graph
         // mechanically).
         const planExtract = extractPlanFromResponse(cleanedText);
-        if (planExtract && ch === 'workspace') {
+        if (planExtract && ch === 'workspace' && !(app._pendingNodeFix && app._pendingNodeFix.nodeId)) {
           app._handleNovaPlan(planExtract, cleanedText, bubble, msgContainer, ch, txt);
           msgContainer.scrollTop = msgContainer.scrollHeight;
           return;
@@ -150,6 +150,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // parser-friendly Python is also a valid build response.
         const parsed = GPTClient.parseResponse(cleanedText);
         if (parsed && parsed.code && ch === 'workspace') {
+          if (app._pendingNodeFix && app._pendingNodeFix.nodeId) {
+            app._presentNodeFix(parsed, bubble, msgContainer, ch);
+            return;
+          }
           app._validateAndPresent(parsed, bubble, msgContainer, ch, txt);
         } else if (parsed && parsed.code && ch === 'landing') {
           const explanation = parsed.explanation || 'Here is the code.';
@@ -157,6 +161,14 @@ document.addEventListener('DOMContentLoaded', () => {
             bubble.innerHTML = app.fmt('✨ ' + explanation + '\n\nOpen a **New Project** to try it out!');
           }
         } else {
+          if (app._pendingNodeFix && app._pendingNodeFix.nodeId && ch === 'workspace') {
+            if (bubble) {
+              bubble.innerHTML = app.fmt(app._extractDisplayText(fullText) + '\n\nPlease return one fenced ```python code block so I can apply it to the selected node.');
+            }
+            app.showNodeFixButtons(false);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+            return;
+          }
           const displayText = app._extractDisplayText(fullText);
           if (bubble) {
             bubble.innerHTML = app.fmt(displayText);
@@ -302,6 +314,79 @@ document.addEventListener('DOMContentLoaded', () => {
       + '<button onclick="(window.SettingsDialog||{}).open&&SettingsDialog.open()" style="flex:1;min-width:120px;padding:8px 12px;border:none;border-radius:6px;background:var(--accent-blue,#89b4fa);color:#1e1e2e;font-weight:600;font-size:12px;cursor:pointer">Open Settings</button>'
       + '<a href="https://console.groq.com/keys" target="_blank" rel="noopener" style="flex:1;min-width:120px;padding:8px 12px;border:1px solid var(--accent-blue,#89b4fa);border-radius:6px;background:transparent;color:var(--accent-blue,#89b4fa);font-weight:600;font-size:12px;text-align:center;text-decoration:none">Get Groq key →</a>'
       + '</div></div>';
+  };
+
+  app._presentNodeFix = function(parsed, bubble, msgContainer) {
+    const pending = this._pendingNodeFix;
+    if (!pending || !pending.nodeId) return;
+    const nd = this.nodes.find(function(n) { return n.id === pending.nodeId; });
+    if (!nd) {
+      this._pendingNodeFix = null;
+      if (bubble) bubble.innerHTML = this.fmt('That node is no longer on the canvas.');
+      return;
+    }
+    pending.code = parsed.code || '';
+    pending.explanation = parsed.explanation || 'I prepared a replacement for this Python node.';
+    if (typeof this.showCodeViewer === 'function') {
+      this.showCodeViewer(nd.controlValues.code || '', nd);
+      const tab = this._cvNodeTabFor ? this._cvNodeTabFor(nd.id) : null;
+      if (tab) {
+        tab.draft = pending.code;
+        this._cvTab = tab.id;
+        if (this.renderCvTabs) this.renderCvTabs();
+        if (this.renderCvActiveTab) this.renderCvActiveTab();
+      }
+    }
+    if (bubble) {
+      bubble.innerHTML = this.fmt('Proposed a fix for **' + (nd.def && nd.def.name ? nd.def.name : 'Custom.Python') + '** (`' + nd.id + '`).\n\nReview the node code below, then apply it or cancel.');
+    }
+    this.showNodeFixButtons();
+    if (msgContainer) msgContainer.scrollTop = msgContainer.scrollHeight;
+  };
+
+  app.showNodeFixButtons = function(canApply) {
+    const sug = document.getElementById('ws-chat-suggestions');
+    if (!sug) return;
+    const apply = canApply === false ? '' : '<button class="chat-suggestion-btn" style="background:rgba(166,227,161,0.15);border-color:rgba(166,227,161,0.3);color:var(--accent-green);font-weight:600" onclick="app.applyNodeFix()">Apply to node</button>';
+    sug.innerHTML = apply +
+      '<button class="chat-suggestion-btn" style="background:rgba(243,139,168,0.1);border-color:rgba(243,139,168,0.2);color:var(--accent-red)" onclick="app.cancelNodeFix()">Cancel</button>';
+  };
+
+  app.applyNodeFix = function() {
+    const pending = this._pendingNodeFix;
+    if (!pending || !pending.nodeId) return;
+    const nd = this.nodes.find(function(n) { return n.id === pending.nodeId; });
+    if (!nd) {
+      this._pendingNodeFix = null;
+      this.addAIMessage('workspace', 'That Python node is no longer on the canvas.');
+      return;
+    }
+    const ta = document.getElementById('cv-code');
+    const code = ta ? ta.value : pending.code;
+    pending.code = code;
+    if (typeof this.pySyncPorts === 'function') this.pySyncPorts(nd.id, code);
+    else if (nd.controlValues) nd.controlValues.code = code;
+    if (this.clearNodeError) this.clearNodeError(nd.id);
+    nd._lastError = null;
+    nd._lastRunValue = undefined;
+    if (this.invalidateCompute) this.invalidateCompute();
+    if (this.renderNode) {
+      const el = document.getElementById(nd.id);
+      if (el) el.remove();
+      this.renderNode(nd);
+    }
+    if (this.renderWires) this.renderWires();
+    const sug = document.getElementById('ws-chat-suggestions');
+    if (sug) sug.innerHTML = '';
+    this._pendingNodeFix = null;
+    this.addAIMessage('workspace', 'Applied the AI fix to **' + (nd.def && nd.def.name ? nd.def.name : 'Custom.Python') + '**. Run the graph again to verify the output.');
+  };
+
+  app.cancelNodeFix = function() {
+    const sug = document.getElementById('ws-chat-suggestions');
+    if (sug) sug.innerHTML = '';
+    this._pendingNodeFix = null;
+    this.addAIMessage('workspace', 'Cancelled the node fix. The Python node was not changed.');
   };
 
   app._validateAndPresent = function(parsed, bubble, msgContainer, ch, originalPrompt) {

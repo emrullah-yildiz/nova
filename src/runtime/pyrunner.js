@@ -700,6 +700,8 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
       if (outKeys.length > 0) {
         nd._dynOutputs = outKeys;
         nd._pyResults = result.outputs;
+        nd._lastRunPortValues = result.outputs;
+        nd._lastRunValue = result.outputs[outKeys[0]];
         const el = document.getElementById(nodeId); if (el) this.enhancePythonNode(nd, el);
         this.renderWires();
       }
@@ -772,17 +774,64 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     }, 100);
   };
 
-  // Ask AI to fix a specific node error
-  app.askAIToFixError = function(nodeId) {
+  // Ask AI to fix a specific Python node. This starts a node-scoped chat turn:
+  // the next Python code block from the assistant is offered as a replacement
+  // for this node, not as a full-canvas generation.
+  app.askAIToFixNode = function(nodeId) {
     var nd = this.nodes.find(function(n) { return n.id === nodeId; });
-    if (!nd || !nd._lastError) return;
-    var prompt = 'Fix this error in my ' + nd.def.name + ' node:\n\nError: ' + nd._lastError + '\n\nCode:\n' + (nd.controlValues.code || '');
-    // Put it in the chat input and send
-    var inp = document.getElementById('ws-chat-input');
-    if (inp) {
-      inp.value = prompt;
-      this.sendChat('workspace');
+    if (!nd) return;
+    var warnings = this._collectInspectorWarnings ? this._collectInspectorWarnings(nd) : [];
+    var warningText = warnings.map(function(w) { return '- ' + w.message; }).join('\n');
+    var errorText = nd._lastError || (this._nodeErrors && this._nodeErrors[nodeId] && this._nodeErrors[nodeId].message) || '';
+    this._pendingNodeFix = {
+      nodeId: nodeId,
+      nodeName: nd.def && nd.def.name ? nd.def.name : 'Custom.Python',
+      code: '',
+      error: errorText,
+      warnings: warnings
+    };
+    if (this.currentPage !== 'workspace' && this.switchPage) this.switchPage('workspace');
+    var chatPanel = document.getElementById('ws-chat-panel');
+    if (chatPanel) {
+      this.chatVisible = true;
+      chatPanel.classList.remove('chat-hidden');
+      var toggle = document.getElementById('chat-toggle-btn');
+      if (toggle) toggle.classList.add('hidden');
     }
+    if (typeof this.showCodeViewer === 'function') this.showCodeViewer(nd.controlValues.code || '', nd);
+    if (typeof this.addAIMessage === 'function') {
+      this.addAIMessage('workspace', 'I will help fix **' + (nd.def && nd.def.name ? nd.def.name : 'Custom.Python') + '** (`' + nodeId + '`). I will propose replacement Python for this node, then you can apply it.');
+    }
+    var prompt = 'Fix only this Nova Custom.Python node. Return a replacement for this node as one fenced ```python code block. Do not create a full graph and do not use nova-plan.\n\nNode: ' + (nd.def && nd.def.name ? nd.def.name : 'Custom.Python') + ' (' + nodeId + ')\n';
+    if (errorText) prompt += '\nRuntime error:\n' + errorText + '\n';
+    if (warningText) prompt += '\nNode warnings:\n' + warningText + '\n';
+    prompt += '\nCurrent node code:\n```python\n' + (nd.controlValues.code || '') + '\n```\n\nKeep the existing `# in:` and `# out:` port headers unless they must change. If you rename ports, update the header and all variable references consistently. Make sure the output port variable is assigned.';
+    if (window.GPTClient && !window.GPTClient.canChat()) {
+      if (this._updateAssistantGate) this._updateAssistantGate();
+      return;
+    }
+    if (typeof this.addUserMessage === 'function') this.addUserMessage('workspace', 'Fix ' + (nd.def && nd.def.name ? nd.def.name : 'Custom.Python') + ' (' + nodeId + ')');
+    var sug = document.getElementById('ws-chat-suggestions');
+    if (sug) sug.innerHTML = '';
+    var c = document.getElementById('ws-chat-messages');
+    if (c) {
+      var ti = document.createElement('div');
+      ti.className = 'chat-msg ai';
+      ti.id = 'node-fix-typing';
+      ti.innerHTML = '<div class="chat-avatar">âœ¦</div><div class="chat-bubble"><div class="typing-indicator"><span></span><span></span><span></span></div></div>';
+      c.appendChild(ti);
+      c.scrollTop = c.scrollHeight;
+    }
+    var self = this;
+    setTimeout(function() {
+      var el = document.getElementById('node-fix-typing');
+      if (el) el.remove();
+      self.respond('workspace', prompt);
+    }, 250);
+  };
+
+  app.askAIToFixError = function(nodeId) {
+    return this.askAIToFixNode(nodeId);
   };
 
   // ══════════════════════════════════════

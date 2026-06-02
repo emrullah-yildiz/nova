@@ -733,6 +733,14 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
       if (expected === 'curve') return actual === 'curve' || actual === 'line';
       return false;
     }
+    function hasOutputValue() {
+      if (nd._lastRunValue !== undefined) return true;
+      if (nd._lastRunPortValues && Object.keys(nd._lastRunPortValues).some(function(k) { return nd._lastRunPortValues[k] !== undefined; })) return true;
+      if ((nd.type === 'custom-python' || nd.type === 'Custom.Python') && nd._pyResults) {
+        return Object.keys(nd._pyResults).some(function(k) { return k && k.charAt(0) !== '_' && nd._pyResults[k] !== undefined; });
+      }
+      return false;
+    }
     function inputValue(inp) {
       var wire = app.wires.find(function(w) { return w.toNode === nd.id && w.toPort === inp.id; });
       if (wire) {
@@ -754,7 +762,7 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
       if (actual === 'list' && inp.type !== 'list' && isAutoLaceable(nd.def)) return;
       if (!matches(inp.type, actual, input.value)) warnings.push({ port: inp.name || inp.id, expected: inp.type, actual: actual, message: (inp.name || inp.id) + ' expects ' + inp.type + ' but received ' + actual + '.' });
     });
-    if (nd._lastRunValue === undefined && nd.def && nd.def.outputs && nd.def.outputs.length > 0) warnings.push({ port: 'Output', expected: 'value', actual: 'undefined', message: 'Node produced no output on the last Run.' });
+    if (!hasOutputValue() && nd.def && nd.def.outputs && nd.def.outputs.length > 0) warnings.push({ port: 'Output', expected: 'value', actual: 'undefined', message: 'Node produced no output on the last Run.' });
     return warnings;
   }
 
@@ -798,9 +806,21 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
     warnings.forEach(function(warning) {
       r += '<div class="insp-warning-item"><strong>' + warning.port + '</strong><br><span>' + warning.message + '</span></div>';
     });
+    if (_canAskAiForNode(nd)) r += _askAiWarningButton(nd);
     r += '</div>';
     r += '</div></div></div>';
     return r;
+  }
+
+  function _canAskAiForNode(nd) {
+    return nd && (nd.type === 'custom-python' || nd.type === 'Custom.Python');
+  }
+
+  function _askAiWarningButton(nd) {
+    return '<button class="insp-warning-ai-btn" onclick="event.stopPropagation();app.askAIToFixNode(\'' + nd.id + '\')" '
+      + 'style="margin-top:8px;width:100%;padding:6px 8px;border:1px solid rgba(137,180,250,0.35);border-radius:6px;'
+      + 'background:rgba(137,180,250,0.12);color:var(--accent-blue,#89b4fa);font-size:11px;font-weight:700;cursor:pointer">'
+      + 'Ask AI</button>';
   }
 
   app.openNodeWarningDropdown = function(nodeId) {
