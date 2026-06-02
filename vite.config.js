@@ -25,16 +25,16 @@ function loadWranglerVars(cwd) {
   }
 }
 
-// Local dev parity with Vercel: mount api/proxy/chat.mjs as middleware so the
-// free-tier proxy works on `npm start` exactly like it does in production.
+// Local dev parity with Cloudflare Worker routes: mount the shared API modules
+// as middleware so `npm start` behaves like the deployed Worker.
 // Without this, /api/proxy/chat 404s in dev (Vite only serves static assets;
-// Vercel functions don't run unless you use `vercel dev`).
+// Wrangler dev remains available when you want to exercise workerd itself).
 //
 // To use the free tier locally, put your Groq key in .env.local:
 //   GROQ_API_KEY=gsk_...
-function vercelFunctionsDev() {
+function localApiDev() {
   return {
-    name: 'nova:vercel-functions-dev',
+    name: 'nova:local-api-dev',
     apply: 'serve',
     configureServer(server) {
       const env = loadEnv('development', process.cwd(), '');
@@ -103,7 +103,7 @@ function vercelFunctionsDev() {
           const handler = await getChatHandler();
           await handler(req, res);
         } catch (err) {
-          console.error('[nova:vercel-functions-dev] handler error:', err);
+          console.error('[nova:local-api-dev] handler error:', err);
           if (!res.headersSent) {
             res.statusCode = 500;
             res.setHeader('Content-Type', 'application/json');
@@ -196,7 +196,7 @@ function vercelFunctionsDev() {
 export default defineConfig({
   root: '.',
   base: './',
-  plugins: [vercelFunctionsDev()],
+  plugins: [localApiDev()],
   server: {
     port: 8080,
     open: false,

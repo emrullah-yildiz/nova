@@ -1,22 +1,27 @@
 # Nova Documentation
 
-This folder contains current planning and repository guidance only. Historical phase notes and completed migration plans were removed to keep the documentation set focused.
+This folder is the coordination surface for humans and AI agents working on
+Nova. Keep it small, current, and decision-oriented.
 
-## Current Documents
+## Start Here
 
-- `AGENTS.md` - repository working instructions for coding agents and contributors.
-- `backend-architecture.md` - target backend architecture for enterprise readiness.
-- `enterprise-api.env.example` - example environment for API deployment configuration.
-- `enterprise-mvp-requirements.md` - product, security, and scalability requirements for the enterprise MVP.
-- `merge-readiness-checklist.md` - checks to run before an AI agent or contributor merges a branch.
-- `public-release-checklist.md` - repository-publication checklist for source release.
+- `AGENTS.md` - repository instructions for AI agents and contributors.
+- `ai-agent-token-guide.md` - how agents should minimize token usage and avoid repeated analysis.
+- `agent-merge-checklist.md` - start-to-end task checklist for branch creation, validation, merge to `develop`, and branch cleanup.
+- `agent-handoff.md` - compact handoff log for context another agent should inherit.
+- `architecture-decisions.md` - durable architecture decisions and their consequences.
+
+## Current Product And Platform Docs
+
+- `deployment-guide.md` - Cloudflare Worker deployment, branch/domain mapping, secrets, and verification.
+- `accounts-collaboration.md` - account, sharing, and realtime collaboration architecture.
 - `revit-plugin-architecture.md` - Nova Connect and Revit integration architecture.
-- `web-enterprise-production.md` - current enterprise API/runtime baseline and production hardening notes.
+- `enterprise-api.env.example` - local/secret-manager environment variable reference.
 
 ## Documentation Policy
 
-- Keep long-lived architecture and requirement docs.
-- Remove phase notes once the phase is complete and the current state is reflected elsewhere.
-- Prefer updating `README.md` and this index over adding new roadmap fragments.
-- Keep enterprise backend planning in `backend-architecture.md` and `enterprise-mvp-requirements.md`.
-- Use `merge-readiness-checklist.md` before merging so docs and tests stay current with code.
+- Update `architecture-decisions.md` whenever a durable architecture rule changes.
+- Update `agent-handoff.md` when a completed workflow leaves context the next agent needs.
+- Update this index when adding, removing, or renaming docs.
+- Prefer updating an existing current doc over adding roadmap fragments.
+- Delete stale docs when their content is superseded by a current source of truth.

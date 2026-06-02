@@ -102,9 +102,19 @@ export function lastTopLevelAssignment(code) {
 export function resolvePythonPorts(code) {
   const decls = parsePythonPortDecls(code);
   if (decls.hasDecls) {
+    // Declared inputs (e.g. from a `# in:` header) shouldn't erase the
+    // output: if there's no `# out:` header, still infer the output port
+    // from the last top-level assignment rather than falling back to a
+    // generic output0. This keeps adding an input (which writes a `# in:`
+    // header) from silently renaming the output.
+    let outputs = decls.outputs;
+    if (outputs.length === 0) {
+      const lastVar = lastTopLevelAssignment(code);
+      outputs = [{ id: lastVar || 'output0', type: 'any' }];
+    }
     return {
       inputs: decls.inputs.length > 0 ? decls.inputs : [{ id: 'input0', type: 'any' }],
-      outputs: decls.outputs.length > 0 ? decls.outputs : [{ id: 'output0', type: 'any' }],
+      outputs,
       source: 'declared'
     };
   }
@@ -167,6 +177,48 @@ export function nextPythonPorts(code, current = {}) {
 }
 
 const IDENT_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+// Sets a Custom.Python node's `# in:` header to exactly `names`, so adding /
+// removing an input port is expressed as a code edit (the code is the source
+// of truth for ports). An input is declared as a header entry — NOT a
+// `name = None` assignment — because the runtime injects each wired input as
+// `let name = ...` before the cell runs, so an assignment would clobber the
+// wired value. Existing `name:type` annotations are preserved; an empty list
+// removes the header. Pure — returns the new code.
+export function setInputHeader(code, names) {
+  const src = typeof code === 'string' ? code : '';
+  const list = Array.isArray(names) ? names.filter(n => IDENT_RE.test(n)) : [];
+  const lines = src.split('\n');
+
+  // Locate an existing `# in:` header within the leading comment block.
+  let headerIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (!t) continue;
+    if (!t.startsWith('#')) break; // header block ends at first real statement
+    if (/^#\s*(in|inputs?)\s*:/i.test(t)) { headerIdx = i; break; }
+  }
+
+  // Preserve any existing per-name type annotations.
+  const types = {};
+  if (headerIdx >= 0) {
+    const m = lines[headerIdx].trim().match(/^#\s*(?:in|inputs?)\s*:\s*(.*)$/i);
+    (m ? m[1] : '').split(',').forEach(part => {
+      const dm = part.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][\w[\]]*)$/);
+      if (dm) types[dm[1]] = dm[2];
+    });
+  }
+
+  if (list.length === 0) {
+    if (headerIdx >= 0) { lines.splice(headerIdx, 1); return lines.join('\n'); }
+    return src;
+  }
+
+  const decl = list.map(n => (types[n] ? n + ':' + types[n] : n)).join(', ');
+  const headerLine = '# in: ' + decl;
+  if (headerIdx >= 0) { lines[headerIdx] = headerLine; return lines.join('\n'); }
+  return headerLine + '\n' + src;
+}
 
 // Renames a Custom.Python node's input or output port. Because a port id IS
 // the variable name the Python block reads (input) or assigns (output), a

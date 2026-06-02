@@ -5,8 +5,8 @@ Status: **Draft / proposal** (not yet implemented). Owner: TBD. Last updated: 20
 This document describes the planned user-profile and collaboration system for Nova,
 targeting an **all-Cloudflare** platform. It is meant to be reviewed before any code.
 
-Related: `backend-architecture.md`, `enterprise-mvp-requirements.md`,
-`web-enterprise-production.md`, `deployment-guide.md`.
+Related: `architecture-decisions.md`, `deployment-guide.md`,
+`agent-handoff.md`, `revit-plugin-architecture.md`.
 
 ---
 
@@ -48,7 +48,7 @@ persistence layers are platform-bound.
 
 | Topic | Decision |
 |---|---|
-| Platform | **All-Cloudflare** (Pages + Workers + Durable Objects) + **Neon** (kept) |
+| Platform | **Cloudflare Workers + Durable Objects** + **Neon** (kept) |
 | Auth | **Reuse existing OIDC/JWKS + Postgres user model**; add Google + SSO front-door; session in **httpOnly cookie** |
 | Accounts | **Personal + orgs from day one** — auto-create a personal workspace (hidden org) on first login |
 | Collaboration | **Spectate first, then co-edit**, on shared room infrastructure |
@@ -56,8 +56,8 @@ persistence layers are platform-bound.
 | Realtime transport | **Cloudflare Durable Objects** (PartyKit optional DX layer) |
 
 Rationale for Cloudflare: live collaboration needs persistent/stateful connections, which
-Vercel serverless cannot host but **Durable Objects** do natively. Consolidating removes the
-"API on Vercel + realtime elsewhere" split and lets the room enforce Postgres roles directly.
+**Durable Objects** host natively. Keeping the SPA, API, AI proxy, and realtime rooms in one
+Worker deployment removes split hosting and lets the room enforce Postgres roles directly.
 
 ---
 
@@ -67,10 +67,10 @@ Vercel serverless cannot host but **Durable Objects** do natively. Consolidating
 ┌────────────────────────────────────────────────────────────────┐
 │ Cloudflare                                                       │
 │                                                                  │
-│  Pages ─────────────── static Vite SPA (preview deploys)         │
+│  Worker assets ─────── static Vite SPA                           │
 │                                                                  │
 │  Worker (Hono) ─────── REST API  (reuses src/enterprise logic)   │
-│        │               + AI proxy (api/proxy/chat.mjs → Worker)  │
+│        │               + AI proxy (shared provider helpers)       │
 │        │                                                         │
 │        ├── Durable Object: ProjectRoom  (1 per live session)     │
 │        │      • holds Yjs doc in memory + DO storage             │
@@ -146,7 +146,7 @@ CREATE TABLE share_links (
 3. Worker exchanges the code, receives the OIDC **ID token**, verifies it with the JWKS
    verifier (now WebCrypto), upserts the user, ensures a personal workspace.
 4. Worker issues a Nova session token and sets it as an **httpOnly, Secure, SameSite cookie**
-   (Pages + Workers share a zone, so this is first-party).
+   (the SPA and API share the same Worker origin, so this is first-party).
 5. Subsequent API calls authenticate via the cookie; the realtime room is handed a separate
    short-lived, role-scoped token.
 
@@ -187,7 +187,7 @@ an adapter change, not a rewrite.
 
 | Phase | Deliverable |
 |---|---|
-| **0 — Platform** | Pages + Workers/Hono; crypto→WebCrypto; pg→neon-serverless/Hyperdrive; AI proxy→Worker; `wrangler.toml` bindings. App still on Vercel until cutover. |
+| **0 — Platform** | Worker/Hono + static assets; crypto→WebCrypto; pg→neon-serverless/Hyperdrive; AI proxy→Worker; `wrangler.toml` bindings. |
 | **1 — Accounts** | Google/SSO login UI, cookie session, personal workspace + org create/join, account menu/avatar, logout. |
 | **2 — Cloud profile** | `users.preferences`; settings + recent projects synced; real "My Projects" + "Shared with me". |
 | **3 — Sharing** | Members UI + share links + role management. |
@@ -218,7 +218,7 @@ Phase 0 is infra-only and the riskiest; it unlocks both the cookie session and n
 - [ ] Hono Worker entry; mount existing domain handlers; route parity with `api-server.mjs`.
 - [ ] Port `jwks-verifier.mjs` and `auth.mjs` crypto to WebCrypto; add tests.
 - [ ] Swap `postgres-persistence.mjs` to `@neondatabase/serverless` (or Hyperdrive); keep schema.
-- [ ] Port `api/proxy/chat.mjs` to a Worker; move rate limit to KV/DO.
-- [ ] Cloudflare Pages project for the Vite build; wire preview deploys.
-- [ ] CI: replace Vercel deploy with Wrangler; keep `npm run lint:all` + `vitest` gates.
+- [ ] Keep AI provider helpers shared; Worker endpoint owns deployed rate limiting via KV/DO.
+- [ ] Worker assets binding for the Vite build; wire `develop` to `nova-dev` and `main` to `nova`.
+- [ ] CI: deploy with Wrangler; keep `npm run lint:all` + `vitest` gates.
 - [ ] Staging cutover + DNS; verify auth, save/load, AI proxy end-to-end; then production.

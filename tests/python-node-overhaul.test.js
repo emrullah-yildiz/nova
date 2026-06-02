@@ -14,13 +14,16 @@
 //      catches mismatches.
 
 import { getLiveCoreRegistry } from '../src/nodes/coreNodes.js';
+import { customNodes, DEFAULT_CUSTOM_PYTHON_CODE } from '../src/nodes/categories/custom.js';
 import { CodeParser, _resetAutoGeoMapForTests } from '../src/runtime/parser.js';
+import { PythonRunner } from '../src/runtime/pyrunner.js';
 import {
   parsePythonPortDecls,
   lastTopLevelAssignment,
   resolvePythonPorts,
   nextPythonPorts,
-  renamePythonPort
+  renamePythonPort,
+  setInputHeader
 } from '../src/runtime/python-port-decl.js';
 
 getLiveCoreRegistry();
@@ -121,11 +124,45 @@ shell = Geo.loft(pts)`;
     expect(r.outputs[0].type).toBe('any');
   });
 
+  it('declared inputs keep the inferred output when there is no out header', () => {
+    const r = resolvePythonPorts('# in: a, b\nresult = a + b');
+    expect(r.source).toBe('declared');
+    expect(r.inputs.map(p => p.id)).toEqual(['a', 'b']);
+    expect(r.outputs.map(p => p.id)).toEqual(['result']); // not output0
+  });
+
   it('falls back to input0/output0 when neither strategy applies', () => {
     const r = resolvePythonPorts('print("hello")');
     expect(r.source).toBe('default');
     expect(r.inputs[0].id).toBe('input0');
     expect(r.outputs[0].id).toBe('output0');
+  });
+});
+
+describe('Custom.Python default template', () => {
+  it('starts with Revit-oriented ports and runnable Nova host helpers', () => {
+    const customPython = customNodes.find((node) => node.type === 'Custom.Python');
+    expect(customPython.controls.find((control) => control.id === 'code').default).toBe(DEFAULT_CUSTOM_PYTHON_CODE);
+    expect(customPython.inputs.map((port) => port.id)).toEqual(['elements', 'parameter_name', 'value']);
+    expect(customPython.outputs.map((port) => port.id)).toEqual(['result']);
+
+    const ports = resolvePythonPorts(DEFAULT_CUSTOM_PYTHON_CODE);
+    expect(ports.inputs.map((port) => port.id)).toEqual(['elements', 'parameter_name', 'value']);
+    expect(ports.outputs.map((port) => port.id)).toEqual(['result']);
+    expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('Geo: geometry constructors and operations');
+    expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('RevitBridge: local Revit snapshot');
+    expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('HostRegistry.get("revit")');
+    expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('elements, parameter_name, value -> result');
+
+    const executed = PythonRunner.execute(DEFAULT_CUSTOM_PYTHON_CODE, {
+      elements: [],
+      parameter_name: 'Comments',
+      value: ''
+    });
+    expect(executed.error).toBeNull();
+    expect(executed.outputs.result.count).toBe(0);
+    expect(executed.outputs.result.parameter).toBe('Comments');
+    expect(executed.outputs.result.value).toBe('');
   });
 });
 
@@ -173,6 +210,35 @@ print(result)`;
     const litNode = g.nodes.find((n) => n.id === litWire.fromNode);
     expect(litNode.type).toBe('number-input');
     expect(litNode.controls.val).toBe('5');
+  });
+});
+
+describe('setInputHeader — add/remove input ports as a code edit', () => {
+  it('creates a # in: header at the top when none exists (adding the first input)', () => {
+    expect(setInputHeader('z = 1', ['a'])).toBe('# in: a\nz = 1');
+  });
+
+  it('replaces the existing header list when adding an input', () => {
+    expect(setInputHeader('# in: a\nz = a', ['a', 'b'])).toBe('# in: a, b\nz = a');
+  });
+
+  it('removes an input from the header (and the variable stays usable)', () => {
+    expect(setInputHeader('# in: a, b\nz = a', ['a'])).toBe('# in: a\nz = a');
+  });
+
+  it('removes the header entirely when the input list is empty', () => {
+    expect(setInputHeader('# in: a\nz = 1', [])).toBe('z = 1');
+  });
+
+  it('preserves existing type annotations for surviving names', () => {
+    expect(setInputHeader('# in: a:number, b:point\nz = a', ['a', 'b', 'c']))
+      .toBe('# in: a:number, b:point, c\nz = a');
+  });
+
+  it('never emits a clobbering assignment for inputs — header only', () => {
+    const out = setInputHeader('result = 1', ['floors']);
+    expect(out).toBe('# in: floors\nresult = 1');
+    expect(out).not.toMatch(/floors\s*=/); // no `floors = ...` assignment
   });
 });
 

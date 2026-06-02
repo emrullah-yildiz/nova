@@ -4,9 +4,9 @@
 // set. On 429/5xx we move to the next provider so a single overloaded tier
 // doesn't take the whole free experience down.
 //
-// Rate limit is in-memory per IP — Vercel may run multiple instances so the
-// cap is approximate, but it deters casual hammering. Swap to Upstash/Redis
-// if abuse becomes real. See [[ai-free-tier-proxy]].
+// This module is shared by tests, local dev middleware, and the Worker proxy.
+// The deployed Worker uses KV-backed rate limiting in worker/index.mjs; this
+// in-memory bucket only applies when the Node handler is exercised directly.
 
 const PROVIDERS = [
   // Order: fastest + most generous free tier first.

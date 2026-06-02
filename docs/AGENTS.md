@@ -17,13 +17,17 @@ These instructions apply to the entire repository.
 ## Architecture
 
 - The app now boots through explicit `src/` module imports from `src/main.js`.
-- New code should live under `src/` for browser/runtime modules or under `server/` when the enterprise backend scaffold is introduced.
+- New browser/runtime code should live under `src/`.
+- Cloudflare Worker code lives under `worker/`.
+- Shared server helpers that are imported by Worker and tests may live under `api/`, but Worker routes are the deployment source of truth.
 - Keep temporary `window.*` compatibility bridges only when existing browser consumers still need them.
-- Enterprise backend and product planning lives in:
-  - `docs/backend-architecture.md`
-  - `docs/enterprise-mvp-requirements.md`
+- Current architecture and agent coordination docs:
+  - `docs/architecture-decisions.md`
+  - `docs/accounts-collaboration.md`
   - `docs/revit-plugin-architecture.md`
-- Before merging a branch, use `docs/merge-readiness-checklist.md` to verify docs, tests, validation commands, and merge blockers.
+  - `docs/deployment-guide.md`
+  - `docs/agent-handoff.md`
+- Use `docs/agent-merge-checklist.md` as the start and end checklist for every task branch.
 
 ## Coding Style
 
@@ -61,6 +65,7 @@ npx.cmd playwright install chromium
 
 ## Token Efficiency Rules
 
+- Follow `docs/ai-agent-token-guide.md`.
 - Do not load or analyze the entire repository unless explicitly requested.
 - Avoid long explanations unless requested.
 - Do not repeat unchanged code or large logs.

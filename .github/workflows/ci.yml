@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 jobs:
   lint:
@@ -117,44 +117,164 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build successful! ✅" >> $GITHUB_STEP_SUMMARY
 
-  deploy-preview:
-    name: Deploy Preview (Cloudflare Pages)
+  deploy-dev:
+    name: Deploy Dev Worker
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name == 'pull_request'
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment:
+      name: dev
+      url: https://nova-dev.ey-myacc.workers.dev
     steps:
       - uses: actions/checkout@v5
-      
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
       - uses: actions/download-artifact@v5
         with:
           name: dist
           path: dist
-      
-      - name: Deploy to Cloudflare Pages (preview)
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CF_API_TOKEN }}
-          accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=nova --branch=${{ github.head_ref }}
-        continue-on-error: true
+
+      - name: Write deployment metadata
+        shell: bash
+        run: |
+          cat > dist/nova-deployment.json <<EOF
+          {
+            "environment": "dev",
+            "branch": "${GITHUB_REF_NAME}",
+            "sha": "${GITHUB_SHA}",
+            "runId": "${GITHUB_RUN_ID}",
+            "deployedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Deploy to Cloudflare Workers (dev)
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          # Strip only whitespace (newline/CR/space/tab) a pasted secret may
+          # carry — a trailing newline makes the Authorization header invalid
+          # (wrangler: Headers.set: "..." is an invalid header value). We do NOT
+          # filter by charset: that could silently corrupt an otherwise-valid
+          # token and make Cloudflare reject it with 9106 "invalid token".
+          CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')"
+          CLOUDFLARE_ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+          echo "::add-mask::$CLOUDFLARE_API_TOKEN"
+          echo "::add-mask::$CLOUDFLARE_ACCOUNT_ID"
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning title=Deploy skipped::CF_API_TOKEN / CF_ACCOUNT_ID secrets are not set — skipping Cloudflare dev deploy. See docs/deployment-guide.md (GitHub Actions deploy credentials)."
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          npx wrangler@4.95.0 deploy --env dev
+          echo "deployed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify dev deployment
+        if: steps.deploy.outputs.deployed == 'true'
+        shell: bash
+        run: |
+          URL="https://nova-dev.ey-myacc.workers.dev/nova-deployment.json"
+          for attempt in {1..12}; do
+            BODY="$(curl -fsS "$URL" || true)"
+            if echo "$BODY" | grep -q "${GITHUB_SHA}"; then
+              echo "Dev deployment verified at $URL" >> "$GITHUB_STEP_SUMMARY"
+              echo "$BODY" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Waiting for dev deployment metadata ($attempt/12)..."
+            sleep 5
+          done
+          echo "Dev deployment did not expose commit ${GITHUB_SHA} at $URL" >&2
+          exit 1
 
   deploy-production:
-    name: Deploy Production (Cloudflare Pages)
+    name: Deploy Production Worker
     runs-on: ubuntu-latest
     needs: build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://hi-nova.work
     steps:
       - uses: actions/checkout@v5
-      
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
       - uses: actions/download-artifact@v5
         with:
           name: dist
           path: dist
-      
-      - name: Deploy to Cloudflare Pages (production)
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CF_API_TOKEN }}
-          accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=nova --branch=main
-        continue-on-error: true
+
+      - name: Write deployment metadata
+        shell: bash
+        run: |
+          cat > dist/nova-deployment.json <<EOF
+          {
+            "environment": "production",
+            "branch": "${GITHUB_REF_NAME}",
+            "sha": "${GITHUB_SHA}",
+            "runId": "${GITHUB_RUN_ID}",
+            "deployedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+      - name: Deploy to Cloudflare Workers (production)
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          # Strip only whitespace (newline/CR/space/tab) a pasted secret may
+          # carry — a trailing newline makes the Authorization header invalid
+          # (wrangler: Headers.set: "..." is an invalid header value). We do NOT
+          # filter by charset: that could silently corrupt an otherwise-valid
+          # token and make Cloudflare reject it with 9106 "invalid token".
+          CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')"
+          CLOUDFLARE_ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+          echo "::add-mask::$CLOUDFLARE_API_TOKEN"
+          echo "::add-mask::$CLOUDFLARE_ACCOUNT_ID"
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning title=Deploy skipped::CF_API_TOKEN / CF_ACCOUNT_ID secrets are not set — skipping Cloudflare production deploy. See docs/deployment-guide.md (GitHub Actions deploy credentials)."
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          npx wrangler@4.95.0 deploy --env=""
+          echo "deployed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify production deployment
+        if: steps.deploy.outputs.deployed == 'true'
+        shell: bash
+        run: |
+          URL="https://hi-nova.work/nova-deployment.json"
+          for attempt in {1..12}; do
+            BODY="$(curl -fsS "$URL" || true)"
+            if echo "$BODY" | grep -q "${GITHUB_SHA}"; then
+              echo "Production deployment verified at $URL" >> "$GITHUB_STEP_SUMMARY"
+              echo "$BODY" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Waiting for production deployment metadata ($attempt/12)..."
+            sleep 5
+          done
+          echo "Production deployment did not expose commit ${GITHUB_SHA} at $URL" >&2
+          exit 1
