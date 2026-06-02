@@ -271,6 +271,13 @@ input:focus, textarea:focus { border-color: var(--accent-blue); }
 .chat-attach-btn svg { width: 18px; height: 18px; }
 .chat-attach-btn:hover { color: var(--text-primary); background: var(--bg-surface-hover, rgba(255,255,255,0.06)); }
 
+/* Image attachments — thumbnails above the input, and inline in sent bubbles. */
+.chat-attach-thumb { position: relative; display: inline-flex; width: 46px; height: 46px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-color, rgba(255,255,255,0.14)); }
+.chat-attach-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.chat-attach-thumb .chat-attach-x { position: absolute; top: 1px; right: 1px; width: 15px; height: 15px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(0,0,0,0.6); color: #fff; font-size: 9px; line-height: 1; }
+.chat-msg-images { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.chat-msg-image { max-width: 180px; max-height: 180px; border-radius: 8px; border: 1px solid var(--border-color, rgba(255,255,255,0.14)); display: block; }
+
 /* Per-message actions (Copy / Retry) — subtle, revealed on message hover. */
 .chat-msg-actions { display: flex; gap: 2px; padding: 2px 0 0 40px; opacity: 0; transition: opacity 0.15s ease; }
 .chat-msg:hover .chat-msg-actions, .chat-msg-actions:focus-within { opacity: 1; }

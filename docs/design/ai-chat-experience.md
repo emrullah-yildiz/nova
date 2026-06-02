@@ -62,6 +62,13 @@ that don't replace prose**, **status/step timeline**.
     3 nodes"). Pure summary in `turn-steps.js` (`summarizeShowOps`), rendered by
     `app._renderStepChips`. Future: chips for plan/code builds and a live
     in-flight status.
+  - **Attachments + images (DONE)** — text/data files fold into the sent message
+    as fenced blocks (`attachment-fold.js`); images attach via paste (`onpaste`)
+    or the paperclip and are sent as real pictures to vision-capable models.
+    `GPTClient.buildUserContent` assembles per-format content blocks (Anthropic
+    base64 `image` blocks / OpenAI `image_url` data-URLs); `supportsVision()`
+    gates them (the free Groq/Llama proxy can't see images — the UI warns and
+    sends text only). History keeps the text-only turn so images aren't resent.
 
 ## Decisions (made)
 - Ship the **step timeline** before real thinking (free, works today); add real
