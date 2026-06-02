@@ -72,6 +72,24 @@ function nodeSignature(node) {
   return outType ? `${expr} → ${outType}` : expr;
 }
 
+// Maps each node-backed Geo.* method name to its auto-derived signature line
+// (e.g. createBox → "Geo.createBox(center, width, depth, height) → Mesh3").
+// The capability ledger uses this so design-facing signatures stay derived from
+// the registry (drift-proof) rather than hand-copied. First node wins on dupes.
+export function getGeoSignatureMap() {
+  const map = {};
+  for (const node of coreNodes) {
+    const expr = extractCallExpression(node.codegen && node.codegen.python);
+    if (!expr) continue;
+    const m = expr.match(/^Geo\.([A-Za-z_][A-Za-z0-9_]*)\s*\(/);
+    if (!m || map[m[1]]) continue;
+    const outputs = Array.isArray(node.outputs) ? node.outputs : [];
+    const outType = outputs.length > 0 ? readableType(outputs[0].type) : null;
+    map[m[1]] = outType ? `${expr} → ${outType}` : expr;
+  }
+  return map;
+}
+
 // Returns a string the system prompt can paste verbatim. Cached because
 // it's deterministic from the node registry; recompute on rebuild.
 let cachedCatalog = null;
