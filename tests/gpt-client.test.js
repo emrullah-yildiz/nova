@@ -302,6 +302,51 @@ describe('GPTClient', () => {
     });
   });
 
+  describe('vision (image attachments)', () => {
+    it('recognizes vision-capable models (Claude, GPT-4o family)', () => {
+      expect(GPTClient.isVisionModel('claude-opus-4-8')).toBe(true);
+      expect(GPTClient.isVisionModel('anthropic/claude-3-5-sonnet')).toBe(true);
+      expect(GPTClient.isVisionModel('gpt-4o')).toBe(true);
+      expect(GPTClient.isVisionModel('gpt-4.1-mini')).toBe(true);
+      expect(GPTClient.isVisionModel('o4-mini')).toBe(true);
+      expect(GPTClient.isVisionModel('llama-3.3-70b-versatile')).toBe(false);
+      expect(GPTClient.isVisionModel('')).toBe(false);
+      expect(GPTClient.isVisionModel(null)).toBe(false);
+    });
+
+    it('buildUserContent returns a plain string when there are no images', () => {
+      expect(GPTClient.buildUserContent('anthropic', 'hello', null)).toBe('hello');
+      expect(GPTClient.buildUserContent('openai', 'hello', [])).toBe('hello');
+    });
+
+    it('builds Anthropic base64 image blocks with the text after the images', () => {
+      const out = GPTClient.buildUserContent('anthropic', 'what is this?', [
+        { mediaType: 'image/png', data: 'AAAA' }
+      ]);
+      expect(out).toEqual([
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } },
+        { type: 'text', text: 'what is this?' }
+      ]);
+    });
+
+    it('builds OpenAI image_url data-URLs with the text first', () => {
+      const out = GPTClient.buildUserContent('openai', 'caption', [
+        { mediaType: 'image/jpeg', data: 'BBBB' }
+      ]);
+      expect(out).toEqual([
+        { type: 'text', text: 'caption' },
+        { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,BBBB' } }
+      ]);
+    });
+
+    it('omits the text block when the message is empty (image-only)', () => {
+      const a = GPTClient.buildUserContent('anthropic', '', [{ mediaType: 'image/png', data: 'X' }]);
+      expect(a).toEqual([{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'X' } }]);
+      const o = GPTClient.buildUserContent('openai', '', [{ mediaType: 'image/png', data: 'X' }]);
+      expect(o).toEqual([{ type: 'image_url', image_url: { url: 'data:image/png;base64,X' } }]);
+    });
+  });
+
   describe('extended thinking', () => {
     it('parses Anthropic thinking_delta separately from text', () => {
       const tEvt = { type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: 'let me think' } };

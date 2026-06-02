@@ -421,6 +421,40 @@ const GPTClient = {
     return openai;
   },
 
+  // Vision support. Modern Claude (3.x / 4.x, all sizes) and OpenAI multimodal
+  // models can see images; the free Groq/Llama proxy cannot.
+  isVisionModel(model) {
+    if (!model) return false;
+    var m = String(model).toLowerCase();
+    if (m.indexOf('claude') !== -1) return true;
+    if (/gpt-4o|gpt-4\.1|gpt-4-turbo|chatgpt-4o|o4|o3/.test(m)) return true;
+    return false;
+  },
+
+  supportsVision() {
+    if (this.isProxyMode && this.isProxyMode()) return false;
+    return this.isVisionModel(this.getEffectiveModel());
+  },
+
+  // Builds the user message `content`. With no images it's a plain string; with
+  // images it's a per-format content-block array (Anthropic base64 image blocks
+  // vs OpenAI image_url data-URLs). images: [{ mediaType, data(base64) }].
+  buildUserContent(format, text, images) {
+    if (!images || !images.length) return text;
+    if (format === 'anthropic') {
+      var ablocks = images.map(function(img) {
+        return { type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.data } };
+      });
+      if (text) ablocks.push({ type: 'text', text: text });
+      return ablocks;
+    }
+    var oblocks = images.map(function(img) {
+      return { type: 'image_url', image_url: { url: 'data:' + img.mediaType + ';base64,' + img.data } };
+    });
+    if (text) oblocks.unshift({ type: 'text', text: text });
+    return oblocks;
+  },
+
   extractMessageContent(format, data) {
     if (format === 'anthropic') {
       if (data && Array.isArray(data.content)) {
@@ -1133,7 +1167,7 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     return reply;
   },
 
-  async callStream(userMessage, context, existingCode, onChunk, onDone, onError, onThinking) {
+  async callStream(userMessage, context, existingCode, onChunk, onDone, onError, onThinking, images) {
     if (this.isEnterpriseAiEnabled()) {
       try {
         const reply = await this.callEnterprise(userMessage, context, existingCode);
@@ -1155,12 +1189,17 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     const systemContent = useSlim ? this.buildSlimSystemPrompt() : this.buildSystemPrompt(existingCode, { userMessage });
     const historyDepth = proxyMode ? (useSlim ? 4 : 6) : 10;
     const maxTokens = proxyMode ? this.PROXY_MAX_TOKENS : this.MAX_TOKENS;
+    const format = this.getProviderFormat();
+    // Attach images only when the active model can actually see them; otherwise
+    // send text alone (the UI warns the user separately). History keeps the
+    // text-only turn so the (large) image isn't resent on every later message.
+    const sendImages = (images && images.length && this.supportsVision()) ? images : null;
+    const userContent = this.buildUserContent(format, userMessage, sendImages);
     const messages = [
       { role: 'system', content: systemContent },
       ...history.slice(-historyDepth),
-      { role: 'user', content: userMessage }
+      { role: 'user', content: userContent }
     ];
-    const format = this.getProviderFormat();
     const enableThinking = this.isThinkingEnabled(format, this.getEffectiveModel());
     const ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     this._activeStream = ac;

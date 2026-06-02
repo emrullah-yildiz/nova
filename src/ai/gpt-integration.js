@@ -19,7 +19,12 @@ import {
 } from './option-flow.js';
 
 document.addEventListener('DOMContentLoaded', () => {
-  app.respond = function(ch, txt) {
+  app.respond = function(ch, txt, images) {
+    // Images require the streaming vision path — bypass the keyword shortcuts.
+    if (images && images.length && window.GPTClient && GPTClient.canChat()) {
+      this._gptChat(ch, txt, images);
+      return;
+    }
     const l = txt.toLowerCase();
 
     if (ch === 'landing') {
@@ -116,12 +121,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.GPTClient && typeof window.GPTClient.stopStream === 'function') window.GPTClient.stopStream();
   };
 
-  // ---- File attachments -----------------------------------------------------
-  // Lets the user attach text/data files to a chat message. Contents are folded
-  // into the message sent to the AI (as fenced blocks) while the visible bubble
-  // only shows the file names. Binary/image files are rejected for now (vision is
-  // a follow-up). Pending attachments live per channel until the message sends.
+  // ---- File & image attachments ---------------------------------------------
+  // Text/data files are folded into the message sent to the AI (as fenced blocks)
+  // while the visible bubble shows only the file names. Images are attached as
+  // real picture data (paste or paperclip) and sent to vision-capable models.
+  // Pending attachments live per channel until the message sends.
   app._chatAttachments = app._chatAttachments || { landing: [], workspace: [] };
+  app._chatImages = app._chatImages || { landing: [], workspace: [] };
+  var IMG_MAX_BYTES = 4 * 1024 * 1024; // 4 MB per image
+  var IMG_MAX_COUNT = 4;
   var _chPrefix = function(ch) { return ch === 'landing' ? 'landing' : 'ws'; };
   var _escHtml = function(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -131,7 +139,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!fileList || !fileList.length) return;
     var list = app._chatAttachments[ch] || (app._chatAttachments[ch] = []);
     Array.prototype.forEach.call(fileList, function(file) {
-      if (!isTextAttachment(file.name, file.type)) { app._toast('📎 ' + file.name + ' — only text/data files can be attached (images aren\'t supported yet).'); return; }
+      // Images go to the image store (sent as pictures to vision models)…
+      if (file.type && file.type.indexOf('image/') === 0) { app._addChatImageFromBlob(ch, file); return; }
+      // …everything else must be a text/data file.
+      if (!isTextAttachment(file.name, file.type)) { app._toast('📎 ' + file.name + ' — unsupported file type (text/data or images only).'); return; }
       if (file.size > ATTACH_MAX_BYTES) { app._toast('📎 ' + file.name + ' is too large (max 256 KB).'); return; }
       var reader = new FileReader();
       reader.onload = function() {
@@ -143,22 +154,96 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
+  // Reads an image Blob/File into the per-channel image store as base64 + a data
+  // URL (for the thumbnail). Shared by paste and the paperclip picker.
+  app._addChatImageFromBlob = function(ch, blob) {
+    if (!blob) return;
+    var imgs = app._chatImages[ch] || (app._chatImages[ch] = []);
+    if (imgs.length >= IMG_MAX_COUNT) { app._toast('🖼️ Up to ' + IMG_MAX_COUNT + ' images per message.'); return; }
+    if (blob.size > IMG_MAX_BYTES) { app._toast('🖼️ Image is too large (max 4 MB).'); return; }
+    var reader = new FileReader();
+    reader.onload = function() {
+      var dataUrl = String(reader.result || '');
+      var m = dataUrl.match(/^data:([^;]+);base64,(.*)$/);
+      if (!m) { app._toast('🖼️ Could not read the image.'); return; }
+      imgs.push({ name: blob.name || 'image', mediaType: m[1], data: m[2], dataUrl: dataUrl, size: blob.size });
+      app._renderChatAttachments(ch);
+    };
+    reader.onerror = function() { app._toast('🖼️ Could not read the image.'); };
+    reader.readAsDataURL(blob);
+  };
+
+  // Paste handler (onpaste on the textareas): pulls image(s) off the clipboard.
+  app.onChatPaste = function(e, ch) {
+    var items = e && e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    var grabbed = false;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (it && it.kind === 'file' && it.type && it.type.indexOf('image/') === 0) {
+        var blob = it.getAsFile();
+        if (blob) { app._addChatImageFromBlob(ch, blob); grabbed = true; }
+      }
+    }
+    // Only swallow the paste when it WAS an image — let normal text paste through.
+    if (grabbed && e.preventDefault) e.preventDefault();
+  };
+
   app._renderChatAttachments = function(ch) {
     var host = document.getElementById(_chPrefix(ch) + '-chat-attachments');
     if (!host) return;
-    var list = app._chatAttachments[ch] || [];
-    host.innerHTML = list.map(function(f, i) {
+    var files = app._chatAttachments[ch] || [];
+    var imgs = app._chatImages[ch] || [];
+    var fileChips = files.map(function(f, i) {
       var kb = f.size < 1024 ? (f.size + ' B') : (Math.round(f.size / 1024) + ' KB');
       return '<span class="chat-attach-chip" title="' + _escHtml(f.name) + ' · ' + kb + '">📎 <span class="chat-attach-name">' + _escHtml(f.name) +
         '</span><span class="chat-attach-x" title="Remove" onclick="app.removeChatAttachment(\'' + ch + '\',' + i + ')">✕</span></span>';
     }).join('');
-    host.style.display = list.length ? 'flex' : 'none';
+    var imgChips = imgs.map(function(img, i) {
+      return '<span class="chat-attach-thumb" title="' + _escHtml(img.name) + '"><img src="' + _escHtml(img.dataUrl) + '" alt="">' +
+        '<span class="chat-attach-x" title="Remove" onclick="app.removeChatImage(\'' + ch + '\',' + i + ')">✕</span></span>';
+    }).join('');
+    host.innerHTML = fileChips + imgChips;
+    host.style.display = (files.length || imgs.length) ? 'flex' : 'none';
   };
 
   app.removeChatAttachment = function(ch, i) {
     var list = app._chatAttachments[ch] || [];
     if (i >= 0 && i < list.length) list.splice(i, 1);
     app._renderChatAttachments(ch);
+  };
+
+  app.removeChatImage = function(ch, i) {
+    var list = app._chatImages[ch] || [];
+    if (i >= 0 && i < list.length) list.splice(i, 1);
+    app._renderChatAttachments(ch);
+  };
+
+  app._clearChatImages = function(ch) {
+    app._chatImages[ch] = [];
+    app._renderChatAttachments(ch);
+  };
+
+  // Appends image thumbnails to the most recent user bubble (so the sent images
+  // are visible in the conversation, mirroring the attachment chips).
+  app._appendUserImages = function(ch, images) {
+    if (!images || !images.length) return;
+    var container = document.getElementById(_chPrefix(ch) + '-chat-messages');
+    if (!container) return;
+    var bubbles = container.querySelectorAll('.chat-msg.user .chat-bubble');
+    var bubble = bubbles[bubbles.length - 1];
+    if (!bubble) return;
+    var row = document.createElement('div');
+    row.className = 'chat-msg-images';
+    images.forEach(function(img) {
+      var el = document.createElement('img');
+      el.className = 'chat-msg-image';
+      el.src = img.dataUrl;
+      el.alt = img.name || 'image';
+      row.appendChild(el);
+    });
+    bubble.appendChild(row);
+    container.scrollTop = container.scrollHeight;
   };
 
   // Names appended to the visible user bubble (the content itself is not shown).
@@ -308,7 +393,7 @@ document.addEventListener('DOMContentLoaded', () => {
     else msgEl.appendChild(row);
   };
 
-  app._gptChat = function(ch, txt) {
+  app._gptChat = function(ch, txt, images) {
     const existingCode = document.getElementById('cv-code') ? document.getElementById('cv-code').value : '';
     const msgContainer = document.getElementById(ch === 'landing' ? 'landing-chat-messages' : 'ws-chat-messages');
     const streamId = 'gpt-stream-' + Date.now();
@@ -536,7 +621,8 @@ document.addEventListener('DOMContentLoaded', () => {
         var tbody = thinkEl.querySelector('.chat-thinking-body');
         if (tbody) tbody.textContent = fullThinking;
         msgContainer.scrollTop = msgContainer.scrollHeight;
-      }
+      },
+      images
     );
   };
 
