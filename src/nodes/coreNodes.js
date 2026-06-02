@@ -122,6 +122,14 @@ function mergeRegistryIntoLegacyMaps(registry) {
         categoryColor: category.color
       });
       addDefToVersionMap(NODE_VERSION_MAP, NODE_TYPE_MAP[node.type]);
+      // Prior-version defs come from the source as-is and lack the category color
+      // the renderer keys off; stamp it onto every registered version.
+      const bucket = NODE_VERSION_MAP[node.type] || {};
+      Object.keys(bucket).forEach((v) => {
+        if (!bucket[v].categoryColor) {
+          bucket[v] = Object.assign({}, bucket[v], { categoryId: category.id, categoryColor: category.color });
+        }
+      });
     });
   });
 

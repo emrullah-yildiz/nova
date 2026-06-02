@@ -24,6 +24,17 @@ version) → `app.setNodeVersion`, which re-resolves the def and migrates contro
 values (`migrateControlValues`, honoring a def's optional `migrateFrom[v]`). The
 resolution/migration rules live in the pure, unit-tested `core/node-versions.js`.
 
+Modern nodes are normalized through `defineNode` and resolve `execute` by type via
+the registry, so versioning is threaded through that pipeline: `defineNode` and
+`toLegacyNodeDefinition` preserve `version`/`priorVersions`/`migrateFrom` (and
+carry `execute`), every registered version is stamped with its `categoryColor`,
+and the compute path runs a pinned **non-latest** version's own `execute` (a no-op
+for the common latest-pinned case). A node saved without a version predates
+versioning and pins to **v1** (the original behavior), not the latest. `Math.Round`
+is the reference example: v1 rounds to nearest; v2 adds a `Mode` (nearest/up/down)
+defaulting to nearest, with a `migrateFrom[1]` — so adopting v2 is behavior-
+preserving until the user changes Mode.
+
 ## 2026-06-02 - Custom.Python Codegen Tracks Live Ports, Not The Static Def
 
 **Context:** A `Custom.Python` node has two port lists: the static definition

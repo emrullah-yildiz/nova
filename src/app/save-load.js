@@ -117,9 +117,11 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       if (!latestDef) return;
 
       // Resolve the def for the version this node was saved against, so an old
-      // graph keeps its old behavior. Falls back to the latest version (with a
-      // warning) if the pinned one was since retired.
-      const resolved = resolveVersionedDef(NODE_VERSION_MAP, saved.type, saved.version, latestDef);
+      // graph keeps its old behavior. A node with no saved version predates
+      // versioning, so it pins to v1 (the original behavior) rather than silently
+      // adopting whatever the latest version later became. Falls back to the
+      // latest version (with a warning) only if the pinned one was retired.
+      const resolved = resolveVersionedDef(NODE_VERSION_MAP, saved.type, saved.version || 1, latestDef);
       const def = resolved.def;
       if (resolved.fallback && typeof NFLogger !== 'undefined') {
         NFLogger.warn('node-version', 'Node ' + saved.id + ' (' + saved.type + ') was saved at v' + saved.version + ', which is no longer available — using v' + resolved.version);

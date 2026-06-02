@@ -23,7 +23,13 @@ export function normalizeNodeDefinition(definition) {
     execute: definition.execute || null,
     codegen: definition.codegen || {},
     help: normalizeHelp(definition.help),
-    metadata: definition.metadata || {}
+    metadata: definition.metadata || {},
+    // Versioning metadata (see core/node-versions.js) — preserved verbatim so the
+    // registry node and the legacy maps can build per-version defs. `priorVersions`
+    // entries are passed through as-is (they are themselves node defs).
+    version: definition.version,
+    priorVersions: definition.priorVersions,
+    migrateFrom: definition.migrateFrom
   };
 }
 
