@@ -7,6 +7,8 @@ import {
   resolveVersionedDef,
   migrateControlValues
 } from '../src/core/node-versions.js';
+import { getLiveCoreRegistry } from '../src/nodes/coreNodes.js';
+import { NODE_VERSION_MAP, NODE_TYPE_MAP } from '../src/core/nodes.js';
 
 describe('getDefVersion', () => {
   it('defaults a def with no version to 1', () => {
@@ -80,6 +82,39 @@ describe('resolveVersionedDef', () => {
   });
   it('returns null for a wholly unknown type', () => {
     expect(resolveVersionedDef({}, 'Ghost', 1, null)).toBeNull();
+  });
+});
+
+describe('Math.Round ships two versions end-to-end (live registry)', () => {
+  getLiveCoreRegistry(); // merges modern nodes into the legacy maps
+
+  it('registers v1 and v2, with v2 as the latest', () => {
+    expect(availableVersions(NODE_VERSION_MAP, 'Math.Round')).toEqual([1, 2]);
+    expect(getDefVersion(NODE_TYPE_MAP['Math.Round'])).toBe(2);
+  });
+
+  it('every registered version carries execute and a category color (so it renders + computes)', () => {
+    const bucket = NODE_VERSION_MAP['Math.Round'];
+    [1, 2].forEach((v) => {
+      expect(typeof bucket[v].execute).toBe('function');
+      expect(bucket[v].categoryColor).toBeTruthy();
+    });
+  });
+
+  it('v1 rounds to nearest; v2 honors the Mode control (up/down)', () => {
+    const v1 = NODE_VERSION_MAP['Math.Round'][1];
+    const v2 = NODE_VERSION_MAP['Math.Round'][2];
+    expect(v1.execute({}, { a: 3.14159 }, { digits: 2 }).result).toBeCloseTo(3.14);
+    expect(v2.execute({}, { a: 3.141 }, { digits: 2, mode: 'up' }).result).toBeCloseTo(3.15);
+    expect(v2.execute({}, { a: 3.149 }, { digits: 2, mode: 'down' }).result).toBeCloseTo(3.14);
+    // v2 default mode reproduces v1 behavior
+    expect(v2.execute({}, { a: 3.14159 }, { digits: 2 }).result).toBeCloseTo(3.14);
+  });
+
+  it('migrates v1 controls to v2, seeding mode=nearest', () => {
+    const v1 = NODE_VERSION_MAP['Math.Round'][1];
+    const v2 = NODE_VERSION_MAP['Math.Round'][2];
+    expect(migrateControlValues(v1, v2, { a: '5', digits: '2' })).toEqual({ a: '5', digits: '2', mode: 'nearest' });
   });
 });
 

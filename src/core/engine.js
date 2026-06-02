@@ -29,6 +29,7 @@ import { layoutGraph } from './graph-layout.js';
 import { hostRegistry } from '../hosts/HostRegistry.js';
 import { setPreviewItemVisibility } from '../viewer/preview-sync.js';
 import { NODE_TYPE_MAP } from './nodes.js';
+import { getDefVersion } from './node-versions.js';
 import { getLiveCoreRegistry } from '../nodes/coreNodes.js';
 import { executeRegistryNodeUnlaced } from '../nodes/runtimeAdapter.js';
 
@@ -950,6 +951,15 @@ export function installEngine(targetApp = getRuntimeApp()) {
       default: {
 
         var registryNode = getLiveCoreRegistry().getNode(nd.type);
+
+        // Honor a pinned, non-latest node version: run that version's own execute
+        // (carried on nd.def) instead of the registry's latest. Latest-pinned
+        // nodes — the overwhelming majority — keep using the registry node, so
+        // this is a no-op for them. See core/node-versions.js.
+        if (nd.def && typeof nd.def.execute === 'function' && nd.version
+          && registryNode && getDefVersion(registryNode) !== nd.version) {
+          registryNode = nd.def;
+        }
 
         if (registryNode && typeof registryNode.execute === 'function') {
 

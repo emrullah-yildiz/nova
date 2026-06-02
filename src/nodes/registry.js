@@ -127,7 +127,14 @@ export function toLegacyNodeDefinition(node) {
     dynamicInputs: node.dynamicInputs,
     lacing: node.lacing ? { ...node.lacing } : undefined,
     codegen: { ...node.codegen },
-    help: node.help ? cloneHelp(node.help) : null
+    help: node.help ? cloneHelp(node.help) : null,
+    // Carry execute + versioning metadata so the legacy maps can resolve a node's
+    // pinned behavior version (see core/node-versions.js). `execute` is kept here
+    // so the compute path can run a pinned non-latest version's function.
+    execute: node.execute || undefined,
+    version: node.version,
+    priorVersions: node.priorVersions,
+    migrateFrom: node.migrateFrom
   };
 }
 

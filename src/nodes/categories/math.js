@@ -26,6 +26,100 @@ function remapValue(value, fromMin, fromMax, toMin, toMax) {
   return toMin + ((value - fromMin) / (fromMax - fromMin)) * (toMax - toMin);
 }
 
+// ── Node versioning reference example ──────────────────────────────────────
+// Math.Round v1 rounds half-to-even at N digits (the original behavior). It is
+// kept registered via the v2 def's `priorVersions`, so any graph pinned to v1
+// keeps rounding exactly as before when v2 ships. This is the worked example for
+// how to evolve a node without breaking old graphs (see core/node-versions.js).
+const mathRoundV1 = {
+  type: 'Math.Round',
+  name: 'Math.Round',
+  category: 'math',
+  subGroup: 'Math',
+  icon: '≈',
+  aliases: ['math-round'],
+  version: 1,
+  description: 'Rounds a number to the nearest value at the requested number of decimal digits. Digits = 0 rounds to integer; digits = 2 keeps two decimal places.',
+  inputs: [{ id: 'a', name: 'Value', type: 'number', description: 'Value to round' }],
+  outputs: numberResult('Rounded value'),
+  controls: [
+    { id: 'a', type: 'formula', default: '0', label: 'Value' },
+    { id: 'digits', type: 'formula', default: '0', label: 'Digits' }
+  ],
+  lacing: shortestLacing,
+  execute(context, inputs, controls) {
+    const digits = Math.max(0, Math.round(toNumber(controls.digits, 0)));
+    return { result: Number(toNumber(inputs.a, 0).toFixed(digits)) };
+  },
+  codegen: {
+    python: '{{result}} = round({{a}}, int({{digits}}))',
+    csharp: 'double {{result}} = Math.Round({{a}}, (int){{digits}});'
+  },
+  help: {
+    inputs: [{ name: 'Value', description: 'Value to round' }],
+    outputs: [{ name: 'Result', description: 'Rounded value' }],
+    example: {
+      title: 'Round π to 2 decimals → 3.14',
+      nodes: [
+        { type: 'Input.Number', x: 0, y: 0, controls: { val: 3.14159 } },
+        { type: 'Math.Round', x: 240, y: 0, controls: { digits: 2 } },
+        { type: 'Output.Watch', x: 460, y: 0 }
+      ],
+      wires: [
+        [0, 'value', 1, 'a'],
+        [1, 'result', 2, 'value']
+      ]
+    },
+    sampleCode: '{{result}} = round({{a}}, int({{digits}}))'
+  }
+};
+
+// Math.Round v2 adds a Mode — nearest / up (ceil) / down (floor). Mode defaults
+// to 'nearest', which reproduces v1 exactly, so a node adopting v2 is behavior-
+// preserving until the user changes Mode. `migrateFrom[1]` carries v1's controls
+// forward and seeds the new Mode with its v1-equivalent default.
+const mathRoundV2 = {
+  ...mathRoundV1,
+  version: 2,
+  description: 'Rounds a number at the requested number of decimal digits, with a Mode selecting nearest, up (ceil), or down (floor). Mode = nearest matches the original Math.Round.',
+  controls: [
+    { id: 'a', type: 'formula', default: '0', label: 'Value' },
+    { id: 'digits', type: 'formula', default: '0', label: 'Digits' },
+    { id: 'mode', type: 'dropdown', options: ['nearest', 'up', 'down'], default: 'nearest', label: 'Mode' }
+  ],
+  execute(context, inputs, controls) {
+    const digits = Math.max(0, Math.round(toNumber(controls.digits, 0)));
+    const factor = Math.pow(10, digits);
+    const scaled = toNumber(inputs.a, 0) * factor;
+    const mode = controls.mode || 'nearest';
+    const rounded = mode === 'up' ? Math.ceil(scaled) : mode === 'down' ? Math.floor(scaled) : Math.round(scaled);
+    return { result: rounded / factor };
+  },
+  codegen: {
+    python: '{{result}} = (math.ceil({{a}}*10**int({{digits}}))/10**int({{digits}}) if "{{ctrl.mode}}"=="up" else math.floor({{a}}*10**int({{digits}}))/10**int({{digits}}) if "{{ctrl.mode}}"=="down" else round({{a}}, int({{digits}})))',
+    csharp: 'double {{result}} = "{{ctrl.mode}}"=="up" ? Math.Ceiling({{a}}*Math.Pow(10,(int){{digits}}))/Math.Pow(10,(int){{digits}}) : ("{{ctrl.mode}}"=="down" ? Math.Floor({{a}}*Math.Pow(10,(int){{digits}}))/Math.Pow(10,(int){{digits}}) : Math.Round({{a}}, (int){{digits}}));'
+  },
+  help: {
+    ...mathRoundV1.help,
+    example: {
+      title: 'Round 3.14159 up to 2 decimals → 3.15',
+      nodes: [
+        { type: 'Input.Number', x: 0, y: 0, controls: { val: 3.14159 } },
+        { type: 'Math.Round', x: 240, y: 0, controls: { digits: 2, mode: 'up' } },
+        { type: 'Output.Watch', x: 460, y: 0 }
+      ],
+      wires: [
+        [0, 'value', 1, 'a'],
+        [1, 'result', 2, 'value']
+      ]
+    }
+  },
+  priorVersions: [mathRoundV1],
+  migrateFrom: {
+    1: (old) => ({ a: old.a, digits: old.digits, mode: 'nearest' })
+  }
+};
+
 export const mathNodes = [
   {
     type: 'Math.Absolute',
@@ -644,47 +738,7 @@ export const mathNodes = [
       sampleCode: '{{result}} = {{toMin}} + ({{value}} - {{fromMin}}) / ({{fromMax}} - {{fromMin}}) * ({{toMax}} - {{toMin}})'
     }
   },
-  {
-    type: 'Math.Round',
-    name: 'Math.Round',
-    category: 'math',
-    subGroup: 'Math',
-    icon: '≈',
-    aliases: ['math-round'],
-    description: 'Rounds a number to the nearest value at the requested number of decimal digits. Digits = 0 rounds to integer; digits = 2 keeps two decimal places.',
-    inputs: [{ id: 'a', name: 'Value', type: 'number', description: 'Value to round' }],
-    outputs: numberResult('Rounded value'),
-    controls: [
-      { id: 'a', type: 'formula', default: '0', label: 'Value' },
-      { id: 'digits', type: 'formula', default: '0', label: 'Digits' }
-    ],
-    lacing: shortestLacing,
-    execute(context, inputs, controls) {
-      const digits = Math.max(0, Math.round(toNumber(controls.digits, 0)));
-      return { result: Number(toNumber(inputs.a, 0).toFixed(digits)) };
-    },
-    codegen: {
-      python: '{{result}} = round({{a}}, int({{digits}}))',
-      csharp: 'double {{result}} = Math.Round({{a}}, (int){{digits}});'
-    },
-    help: {
-      inputs: [{ name: 'Value', description: 'Value to round' }],
-      outputs: [{ name: 'Result', description: 'Rounded value' }],
-      example: {
-        title: 'Round π to 2 decimals → 3.14',
-        nodes: [
-          { type: 'Input.Number', x: 0, y: 0, controls: { val: 3.14159 } },
-          { type: 'Math.Round', x: 240, y: 0, controls: { digits: 2 } },
-          { type: 'Output.Watch', x: 460, y: 0 }
-        ],
-        wires: [
-          [0, 'value', 1, 'a'],
-          [1, 'result', 2, 'value']
-        ]
-      },
-      sampleCode: '{{result}} = round({{a}}, int({{digits}}))'
-    }
-  },
+  mathRoundV2,
   {
     type: 'Math.Subtract',
     name: 'Math.Subtract',
