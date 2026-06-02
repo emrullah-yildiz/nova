@@ -5,6 +5,27 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-02 - Unhandled App Errors Auto-File Bug Tickets
+
+**Context:** The app should surface its own bugs without relying on users to
+report them. A consent-based feedback→GitHub pipeline and an authenticated
+`POST /api/feedback/ticket` (→ GitHub issue, `submitTicket({title,body,category})`)
+already existed; the missing piece was an automatic trigger. Product decision:
+fully automatic (toast only), triggered by unhandled app errors.
+
+**Decision:** `app/auto-bug-reporter.js` (`installAutoBugReporter`, wired in
+`installAfterAppInit`) listens for `window` `error` / `unhandledrejection` and
+auto-files a ticket via the existing `submitTicket`, then toasts. Pure helpers in
+`ai/bug-reporter.js` decide reportability, fingerprint errors (normalizing origin
++ line/col so a bug dedups across reloads), and format the issue. It is fenced so
+it cannot spam: signed-in only (the endpoint is authenticated and attaches the
+verified reporter), noise-skipped (empty / bare cross-origin "Script error."),
+deduped within the session and across reloads (localStorage fingerprints), capped
+per session, and disableable via `localStorage 'nova:auto-bug-tickets' = 'off'`.
+Failures inside the handler are always swallowed — the reporter must never throw.
+Only "unhandled app errors" trigger it; node runtime errors keep the per-node
+"Ask AI" path.
+
 ## 2026-06-02 - AI Assistant Can Show Things On The Canvas (Action Protocol, P3)
 
 **Context:** The assistant could describe the graph (P1/P2) but not act on it. The
