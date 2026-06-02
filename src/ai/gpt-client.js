@@ -8,6 +8,7 @@ import { createNovaCloudClient } from '../enterprise/cloud-client.js';
 import { getRuntimeConfig } from '../config/runtime-config.js';
 import { buildNodeCatalog } from './node-catalog.js';
 import { buildGraphContext } from './graph-context.js';
+import { buildNodeKnowledge, NOVA_PRIMER } from './knowledge-base.js';
 
 const GPTClient = {
   MODEL: 'anthropic/claude-sonnet-4.6',
@@ -537,7 +538,17 @@ Keep replies short and focused on the user's design intent.`;
     return m.indexOf('runtime error') !== -1 && m.indexOf('Original code') !== -1;
   },
 
-  buildSystemPrompt(existingCode) {
+  // Heuristic: is this turn a "learn / how-to / which-node" question (vs. a
+  // build/edit command)? Used to attach the grounded knowledge base only when
+  // it helps, keeping build-intent prompts lean.
+  isLearnIntent(message) {
+    if (!message || typeof message !== 'string') return false;
+    const l = message.toLowerCase();
+    if (/\?\s*$/.test(l.trim())) return true;
+    return /\b(how (do|does|to|can)|what (is|are|does|node|can)|which (node|nodes)|where (is|do)|explain|tell me about|help me understand|can nova|is there a node|learn|teach|guide me)\b/.test(l);
+  },
+
+  buildSystemPrompt(existingCode, opts = {}) {
     let sys = `You are the AI for Nova, a visual node-based scripting tool with a 3D viewport (Three.js). You generate node graphs that become visual nodes on a canvas.
 
 ## RESPONSE FORMAT (PREFERRED - parser-friendly Python)
@@ -910,6 +921,19 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
       sys += `\n\n### Current Code on Canvas\nThe user already has this code/graph. If they ask to modify it, update this code:\n\`\`\`python\n${existingCode}\n\`\`\``;
     }
 
+    // Grounded knowledge base — lets the assistant be one place to learn Nova:
+    // how it works (primer) and which node does what (node guide). Attached only
+    // on learn/how-to/which-node turns (it is large), so build-intent prompts
+    // stay lean. Both instruct the model to answer ONLY from them, so learning
+    // answers stay grounded in real product facts and real nodes.
+    try {
+      if (this.isLearnIntent(opts.userMessage)) {
+        sys += `\n\n${NOVA_PRIMER}\n\n${buildNodeKnowledge()}`;
+      }
+    } catch {
+      // Knowledge base must never block a chat response.
+    }
+
     // Live graph snapshot — the assistant's view of the actual canvas (node ids,
     // types, versions, ports, positions, controls, wiring). Read from the global
     // app/registry; empty on the landing screen (no project) so nothing is added
@@ -978,7 +1002,7 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     const history = this._histories[context] || [];
     const stickyFull = this.historyHasCode(history) || this.isFixPrompt(userMessage);
     const useSlim = proxyMode && !this.hasBuildIntent(userMessage) && !stickyFull;
-    const systemContent = useSlim ? this.buildSlimSystemPrompt() : this.buildSystemPrompt(existingCode);
+    const systemContent = useSlim ? this.buildSlimSystemPrompt() : this.buildSystemPrompt(existingCode, { userMessage });
     const historyDepth = proxyMode ? (useSlim ? 4 : 6) : 10;
     const maxTokens = proxyMode ? this.PROXY_MAX_TOKENS : this.MAX_TOKENS;
     const messages = [
@@ -1029,7 +1053,7 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     this._callStart = Date.now();
     const history = this._histories[context] || [];
     const messages = [
-      { role: 'system', content: this.buildSystemPrompt(existingCode) },
+      { role: 'system', content: this.buildSystemPrompt(existingCode, { userMessage }) },
       ...history.slice(-10),
       { role: 'user', content: userMessage }
     ];
@@ -1067,7 +1091,7 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     const history = this._histories[context] || [];
     const stickyFull = this.historyHasCode(history) || this.isFixPrompt(userMessage);
     const useSlim = proxyMode && !this.hasBuildIntent(userMessage) && !stickyFull;
-    const systemContent = useSlim ? this.buildSlimSystemPrompt() : this.buildSystemPrompt(existingCode);
+    const systemContent = useSlim ? this.buildSlimSystemPrompt() : this.buildSystemPrompt(existingCode, { userMessage });
     const historyDepth = proxyMode ? (useSlim ? 4 : 6) : 10;
     const maxTokens = proxyMode ? this.PROXY_MAX_TOKENS : this.MAX_TOKENS;
     const messages = [

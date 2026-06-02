@@ -5,6 +5,24 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-02 - AI Assistant Has A Grounded Knowledge Base (Learn-Intent, P1b)
+
+**Context:** The assistant should be one place to learn Nova — "how does it
+work?", "which node does X?" — without hallucinating product facts or inventing
+nodes. The prompt had a signature catalog (for codegen) but no product primer and
+no per-node descriptions, and dumping all of that on every turn blew the prompt
+size budget (a guard test caps the build-intent prompt at <20 KB).
+
+**Decision:** A pure `ai/knowledge-base.js` provides an authored `NOVA_PRIMER`
+(how Nova works / how to use it) and `buildNodeKnowledge()` (a "NodeName — what it
+does" guide built from each node's own description, cached). `GPTClient` attaches
+both **only on learn-intent turns** — gated by `isLearnIntent(userMessage)`
+(question marks + how/what/which/explain phrasing), threaded from the call sites —
+so build/edit prompts stay lean and the size budget holds. The primer instructs
+the model to answer only from the primer, node guide, and live graph, and to say
+it is not certain otherwise (mirrors the UNKNOWN METHODS PROTOCOL). Follow-up:
+trim the node guide to a question-relevant subset (retrieval) for large registries.
+
 ## 2026-06-02 - AI Assistant Sees A Live Graph Snapshot (Content-Awareness, P1)
 
 **Context:** The assistant only received the generated "code on canvas"
