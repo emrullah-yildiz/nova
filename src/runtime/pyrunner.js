@@ -306,12 +306,30 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     const btnBase = 'width:22px;height:18px;border-radius:4px;background:var(--bg-surface-hover);border:1px solid var(--border-color);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0';
     let h = '';
 
-    // Input ports — named, renamable (double-click the label).
-    nd._dynInputs.forEach(pid => {
-      h += '<div class="node-port-row input-only"><div class="node-port input port-type-any">';
-      h += '<span class="port-dot port-type-any" data-port="' + esc(pid) + '" data-dir="input" data-node="' + nd.id + '"></span>';
-      h += '<span class="port-label py-port-label" data-port="' + esc(pid) + '" data-dir="input">' + esc(pid) + '</span></div></div>';
-    });
+    // Ports — named, renamable, and paired in top rows so the output sits at
+    // the same visual level as List.Create's output.
+    const rowCount = Math.max(nd._dynInputs.length, nd._dynOutputs.length);
+    for (let i = 0; i < rowCount; i++) {
+      const inputId = nd._dynInputs[i];
+      const outputId = nd._dynOutputs[i];
+      h += '<div class="node-port-row" style="display:flex;justify-content:space-between;align-items:center;gap:10px">';
+      if (inputId) {
+        h += '<div class="node-port input port-type-any">';
+        h += '<span class="port-dot port-type-any" data-port="' + esc(inputId) + '" data-dir="input" data-node="' + nd.id + '"></span>';
+        h += '<span class="port-label py-port-label" data-port="' + esc(inputId) + '" data-dir="input">' + esc(inputId) + '</span></div>';
+      } else {
+        h += '<div></div>';
+      }
+      if (outputId) {
+        h += '<div class="node-port output port-type-any">';
+        h += '<span class="port-label py-port-label" data-port="' + esc(outputId) + '" data-dir="output">' + esc(outputId) + '</span>';
+        h += '<span class="port-dot port-type-any" data-port="' + esc(outputId) + '" data-dir="output" data-node="' + nd.id + '"></span>';
+        h += '</div>';
+      } else {
+        h += '<div></div>';
+      }
+      h += '</div>';
+    }
 
     // Add / remove input — same control layout as List.Create: a centered
     // +/− pair. Adding/removing is a code edit (writes the `# in:` header).
@@ -324,14 +342,6 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     h += '<div class="py-node-toolbar" style="padding:4px 12px;display:flex;justify-content:space-between;align-items:center">'
       + '<span class="py-node-hint" style="font-size:10px;color:var(--text-muted)">{ } double-click to edit</span>'
       + '<span class="py-node-status" id="' + nd.id + '-pystatus"></span></div>';
-
-    // Output ports — named.
-    nd._dynOutputs.forEach(pid => {
-      h += '<div class="node-port-row output-only"><div class="node-port output port-type-any">';
-      h += '<span class="port-label py-port-label" data-port="' + esc(pid) + '" data-dir="output">' + esc(pid) + '</span>';
-      h += '<span class="port-dot port-type-any" data-port="' + esc(pid) + '" data-dir="output" data-node="' + nd.id + '"></span>';
-      h += '</div></div>';
-    });
 
     body.innerHTML = h;
     el.querySelectorAll('.port-dot').forEach(d => {
