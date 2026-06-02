@@ -411,15 +411,20 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     nd._dynOutputs = res.dynOutputs;
     nd.controlValues.code = res.code;
     this.wires = res.wires;
+    if (res.ok) {
+      const tab = (typeof this._cvNodeTabFor === 'function') ? this._cvNodeTabFor(nodeId) : null;
+      if (tab) tab.draft = res.code;
+      if (this._cvNode && this._cvNode.id === nodeId) this._cvNodeDraft = res.code;
+      if (typeof this.generateFullScript === 'function') this._cvFullCode = this.generateFullScript();
+      if (this._cvTab === nodeId && typeof this.renderCvActiveTab === 'function') this.renderCvActiveTab();
+    }
     const el = document.getElementById(nodeId);
     if (el) this.enhancePythonNode(nd, el);
     if (this.renderWires) this.renderWires();
     return res.ok;
   };
 
-  // Open a Python node's code in the code terminal for editing. (The tabbed
-  // multi-node terminal arrives in a follow-up; for now this shows the node's
-  // code in the single-node code viewer.)
+  // Open a Python node's code in the code terminal for editing.
   app.pyOpenInTerminal = function(nodeId) {
     const nd = this.nodes.find(n => n.id === nodeId);
     if (!nd || typeof this.showCodeViewer !== 'function') return;
@@ -695,6 +700,8 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
       if (outKeys.length > 0) {
         nd._dynOutputs = outKeys;
         nd._pyResults = result.outputs;
+        nd._lastRunPortValues = result.outputs;
+        nd._lastRunValue = result.outputs[outKeys[0]];
         const el = document.getElementById(nodeId); if (el) this.enhancePythonNode(nd, el);
         this.renderWires();
       }
@@ -767,17 +774,119 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     }, 100);
   };
 
-  // Ask AI to fix a specific node error
-  app.askAIToFixError = function(nodeId) {
+  // Ask AI to fix a specific Python node. This starts a node-scoped chat turn:
+  // the next Python code block from the assistant is offered as a replacement
+  // for this node, not as a full-canvas generation.
+  app.askAIToFixNode = function(nodeId) {
     var nd = this.nodes.find(function(n) { return n.id === nodeId; });
-    if (!nd || !nd._lastError) return;
-    var prompt = 'Fix this error in my ' + nd.def.name + ' node:\n\nError: ' + nd._lastError + '\n\nCode:\n' + (nd.controlValues.code || '');
-    // Put it in the chat input and send
-    var inp = document.getElementById('ws-chat-input');
-    if (inp) {
-      inp.value = prompt;
-      this.sendChat('workspace');
+    if (!nd) return;
+    var warnings = this._collectInspectorWarnings ? this._collectInspectorWarnings(nd) : [];
+    var warningText = warnings.map(function(w) { return '- ' + w.message; }).join('\n');
+    var errorText = nd._lastError || (this._nodeErrors && this._nodeErrors[nodeId] && this._nodeErrors[nodeId].message) || '';
+    this._pendingNodeFix = {
+      nodeId: nodeId,
+      nodeName: nd.def && nd.def.name ? nd.def.name : 'Custom.Python',
+      code: '',
+      error: errorText,
+      warnings: warnings
+    };
+    if (this.currentPage !== 'workspace' && this.switchPage) this.switchPage('workspace');
+    var chatPanel = document.getElementById('ws-chat-panel');
+    if (chatPanel) {
+      this.chatVisible = true;
+      chatPanel.classList.remove('chat-hidden');
+      var toggle = document.getElementById('chat-toggle-btn');
+      if (toggle) toggle.classList.add('hidden');
     }
+    if (typeof this.showCodeViewer === 'function') this.showCodeViewer(nd.controlValues.code || '', nd);
+    if (typeof this.addAIMessage === 'function') {
+      this.addAIMessage('workspace', 'I will help fix **' + (nd.def && nd.def.name ? nd.def.name : 'Custom.Python') + '** (`' + nodeId + '`). I will propose replacement Python for this node, then you can apply it.');
+    }
+    var prompt = 'Fix only this Nova Custom.Python node. Return a replacement for this node as one fenced ```python code block. Do not create a full graph and do not use nova-plan.\n\nNode: ' + (nd.def && nd.def.name ? nd.def.name : 'Custom.Python') + ' (' + nodeId + ')\n';
+    if (errorText) prompt += '\nRuntime error:\n' + errorText + '\n';
+    if (warningText) prompt += '\nNode warnings:\n' + warningText + '\n';
+    prompt += '\nCurrent node code:\n```python\n' + (nd.controlValues.code || '') + '\n```\n\nKeep the existing `# in:` and `# out:` port headers unless they must change. If you rename ports, update the header and all variable references consistently. Make sure the output port variable is assigned.';
+    if (window.GPTClient && !window.GPTClient.canChat()) {
+      if (this._updateAssistantGate) this._updateAssistantGate();
+      return;
+    }
+    if (typeof this.addUserMessage === 'function') this.addUserMessage('workspace', 'Fix ' + (nd.def && nd.def.name ? nd.def.name : 'Custom.Python') + ' (' + nodeId + ')');
+    var sug = document.getElementById('ws-chat-suggestions');
+    if (sug) sug.innerHTML = '';
+    var c = document.getElementById('ws-chat-messages');
+    if (c) {
+      var ti = document.createElement('div');
+      ti.className = 'chat-msg ai';
+      ti.id = 'node-fix-typing';
+      ti.innerHTML = '<div class="chat-avatar">âœ¦</div><div class="chat-bubble"><div class="typing-indicator"><span></span><span></span><span></span></div></div>';
+      c.appendChild(ti);
+      c.scrollTop = c.scrollHeight;
+    }
+    var self = this;
+    setTimeout(function() {
+      var el = document.getElementById('node-fix-typing');
+      if (el) el.remove();
+      self.respond('workspace', prompt);
+    }, 250);
+  };
+
+  app.askAIToFixError = function(nodeId) {
+    return this.askAIToFixNode(nodeId);
+  };
+
+  // "Ask AI" from any node's warning panel — learn + fix the problem. Python
+  // nodes keep the replacement-code flow (askAIToFixNode); every other node type
+  // opens a normal, graph-aware chat turn describing the node and its warnings,
+  // so the assistant (which now sees the live graph + problem report) can explain
+  // the cause and give concrete fix steps. Works for ALL warnings, not just code.
+  app.askAIAboutWarning = function(nodeId) {
+    var nd = this.nodes.find(function(n) { return n.id === nodeId; });
+    if (!nd) return;
+    if ((nd.type === 'custom-python' || nd.type === 'Custom.Python') && typeof this.askAIToFixNode === 'function') {
+      return this.askAIToFixNode(nodeId);
+    }
+    var warnings = this._collectInspectorWarnings ? this._collectInspectorWarnings(nd) : [];
+    var warningText = warnings.map(function(w) { return '- ' + (w.port ? '[' + w.port + '] ' : '') + w.message; }).join('\n');
+    var errorText = nd._lastError || (this._nodeErrors && this._nodeErrors[nodeId] && this._nodeErrors[nodeId].message) || '';
+    var name = nd.def && nd.def.name ? nd.def.name : nd.type;
+
+    if (this.currentPage !== 'workspace' && this.switchPage) this.switchPage('workspace');
+    var chatPanel = document.getElementById('ws-chat-panel');
+    if (chatPanel) {
+      this.chatVisible = true;
+      chatPanel.classList.remove('chat-hidden');
+      var toggle = document.getElementById('chat-toggle-btn');
+      if (toggle) toggle.classList.add('hidden');
+    }
+    if (window.GPTClient && !window.GPTClient.canChat()) {
+      if (this._updateAssistantGate) this._updateAssistantGate();
+      return;
+    }
+
+    var prompt = 'Help me understand and fix a warning on a node in my Nova graph. Explain the likely cause in plain language, then give concrete steps to fix it (e.g. rewire a port, change a control, add or swap a node). Use the Live Graph and the Problems context, and point me at the node if useful.\n\nNode: ' + name + ' (' + nodeId + ')\n';
+    if (errorText) prompt += '\nRuntime error:\n' + errorText + '\n';
+    if (warningText) prompt += '\nWarnings:\n' + warningText + '\n';
+
+    if (typeof this.addUserMessage === 'function') this.addUserMessage('workspace', 'Explain & fix the warning on ' + name + ' (' + nodeId + ')');
+    var c = document.getElementById('ws-chat-messages');
+    if (c) {
+      var ti = document.createElement('div');
+      ti.className = 'chat-msg ai';
+      ti.id = 'node-warn-typing';
+      ti.innerHTML = '<div class="chat-avatar">✦</div><div class="chat-bubble"><div class="typing-indicator"><span></span><span></span><span></span></div></div>';
+      c.appendChild(ti);
+      c.scrollTop = c.scrollHeight;
+    }
+    var self = this;
+    setTimeout(function() {
+      var el = document.getElementById('node-warn-typing');
+      if (el) el.remove();
+      // Go straight to the chat engine — NOT respond(), whose keyword shortcuts
+      // ("add"/"node"/"remove") would hijack this prompt as a command and never
+      // call the AI. Fall back to respond() only if _gptChat isn't available.
+      if (typeof self._gptChat === 'function') self._gptChat('workspace', prompt);
+      else self.respond('workspace', prompt);
+    }, 250);
   };
 
   // ══════════════════════════════════════

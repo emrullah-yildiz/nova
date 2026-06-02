@@ -1,5 +1,6 @@
 import { AIEngine } from '../ai/ai-engine.js';
-import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from '../core/nodes.js';
+import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS, NODE_VERSION_MAP } from '../core/nodes.js';
+import { getDefVersion, resolveVersionedDef, migrateControlValues } from '../core/node-versions.js';
 import { describeWireTypeMismatch } from '../core/wire-type-check.js';
 import { computeFitView } from '../core/graph-layout.js';
 import { CodeParser } from '../runtime/parser.js';
@@ -989,6 +990,7 @@ const app = {
     this.nodes=[]; this.wires=[]; this.selectedNodes=[]; this._undoStack=[]; this._redoStack=[]; this._lastHistorySnapshot=null;
     this._hasRun=false; this._isRunningGraph=false; this._lastRunVersion=0;
     this._cloudProjectId='';
+    this._cvNodeTabs=[]; this._cvNode=null; this._cvNodeDraft=''; this._cvTab='full';
 
     this.nextNodeId=1; this.nodeZCounter=10; this.zoom=1; this.panX=0; this.panY=0;
 
@@ -1114,7 +1116,7 @@ const app = {
             <div class="node-subgroup-items">`;
         }
         groups[g].forEach(function(n) {
-          html += `<button class="node-lib-item" draggable="true" ondragstart="app.onLibDragStart(event,'${n.type}')" onclick="app.addNodeFromLib('${n.type}')"><span class="nli-icon" style="color:${cat.color}">${n.icon}</span>${n.name}</button>`;
+          html += `<button class="node-lib-item" data-node-type="${n.type}" draggable="true" ondragstart="app.onLibDragStart(event,'${n.type}')" onclick="app.addNodeFromLib('${n.type}')"><span class="nli-icon" style="color:${cat.color}">${n.icon}</span>${n.name}</button>`;
         });
         if (renderSubgroupHeader) {
           html += `</div></div>`;
@@ -1218,7 +1220,7 @@ const app = {
 
     this.nodeZCounter++;
 
-    const nd={id,type,x:Math.round(x),y:Math.round(y),def:{...def,inputs:(def.inputs||[]).map(function(inp){return{...inp};}),outputs:(def.outputs||[]).map(function(out){return{...out};})},controlValues:{},dataPanelOpen:false,zIndex:this.nodeZCounter};
+    const nd={id,type,version:getDefVersion(def),x:Math.round(x),y:Math.round(y),def:{...def,inputs:(def.inputs||[]).map(function(inp){return{...inp};}),outputs:(def.outputs||[]).map(function(out){return{...out};})},controlValues:{},dataPanelOpen:false,zIndex:this.nodeZCounter};
 
     def.controls.forEach(c=>{nd.controlValues[c.id]=c.default;});
 
@@ -1234,6 +1236,89 @@ const app = {
 
     return nd;
 
+  },
+
+  // Switch a node to a different behavior version. The def is re-resolved from
+  // the version registry, control values are migrated across the change, and the
+  // node re-renders (ports may differ between versions). Pinning a version is how
+  // a graph keeps old behavior when a node's newer version ships. Returns true on
+  // success, false for an unknown node/version.
+  setNodeVersion(nodeId, version){
+    const nd=this.nodes.find(n=>n.id===nodeId); if(!nd) return false;
+    const resolved=resolveVersionedDef(NODE_VERSION_MAP, nd.type, version, NODE_TYPE_MAP[nd.type]);
+    if(!resolved||!resolved.def) return false;
+    if(resolved.version===nd.version) return true;
+    nd.controlValues=migrateControlValues(nd.def, resolved.def, nd.controlValues);
+    nd.def={...resolved.def,inputs:(resolved.def.inputs||[]).map(function(inp){return{...inp};}),outputs:(resolved.def.outputs||[]).map(function(out){return{...out};})};
+    nd.version=resolved.version;
+    // Remove the existing DOM node before re-rendering — renderNode always
+    // appends a fresh element, so without this the node duplicates (same id)
+    // and the stale element breaks hit-testing/drag on the canvas.
+    const oldEl=document.getElementById(nd.id);
+    if(oldEl) oldEl.remove();
+    this.renderNode(nd);
+    if(this.updatePortDots) this.updatePortDots();
+    if(this.invalidateCompute) this.invalidateCompute();
+    if(this.renderWires) this.renderWires();
+    if(typeof Viewer3D!=='undefined') Viewer3D._needsRebuild=true;
+    return true;
+  },
+
+  // Run "show" actions the AI assistant emitted (P3). These are read-only view
+  // ops — focus/highlight a node, open its inspector, or reveal a node type in
+  // the library — so they auto-run. Each op is isolated: a bad one never breaks
+  // the others or the chat.
+  runShowActions(ops){
+    if(!Array.isArray(ops)) return;
+    for(const op of ops){
+      try{
+        if(op.op==='focusNode') this._aiFocusNode(op.id);
+        else if(op.op==='highlightNodes') (Array.isArray(op.ids)?op.ids:[]).forEach(id=>this._aiFlashNode(id));
+        else if(op.op==='openInspector') this._aiOpenInspector(op.id);
+        else if(op.op==='revealLibraryNode') this._aiRevealLibraryNode(op.type);
+      }catch{ /* one bad action must never break the rest or the chat */ }
+    }
+  },
+
+  _aiFlashNode(id){
+    const el=document.getElementById(id); if(!el) return;
+    el.classList.add('node-ai-highlight');
+    setTimeout(()=>{ const e=document.getElementById(id); if(e) e.classList.remove('node-ai-highlight'); }, 1800);
+  },
+
+  _aiFocusNode(id){
+    const nd=this.nodes.find(n=>n.id===id); if(!nd) return;
+    const area=document.getElementById('canvas-area');
+    const el=document.getElementById(id);
+    if(area && el){
+      const w=el.offsetWidth||180, h=el.offsetHeight||100;
+      const rect=area.getBoundingClientRect();
+      const z=this.zoom; // keep current zoom — centering is less jarring than auto-zoom
+      this.panX=rect.width/2-(nd.x+w/2)*z;
+      this.panY=rect.height/2-(nd.y+h/2)*z;
+      this.applyTransform();
+      const zi=document.getElementById('zoom-indicator'); if(zi) zi.textContent=Math.round(this.zoom*100)+'%';
+    }
+    if(typeof this.selectNode==='function') this.selectNode(id,false);
+    this._aiFlashNode(id);
+  },
+
+  _aiOpenInspector(id){
+    const nd=this.nodes.find(n=>n.id===id); if(!nd) return;
+    if(!nd.dataPanelOpen && typeof this.toggleDataPanel==='function') this.toggleDataPanel(id);
+    this._aiFocusNode(id);
+  },
+
+  _aiRevealLibraryNode(type){
+    if(!type) return;
+    const lib=document.getElementById('node-library');
+    if(lib && lib.style.display==='none'){ lib.style.display=''; if(this.syncWorkspaceLayout) this.syncWorkspaceLayout(); }
+    const item=document.querySelector('.node-lib-item[data-node-type="'+String(type).replace(/["\\]/g,'')+'"]');
+    if(item){
+      item.scrollIntoView({ block:'center', behavior:'smooth' });
+      item.classList.add('lib-ai-highlight');
+      setTimeout(()=>item.classList.remove('lib-ai-highlight'), 1800);
+    }
   },
 
   // Remote node.add → recreate the exact node (same id) without re-broadcasting.
@@ -2934,7 +3019,7 @@ const app = {
 
           <div class="cv-actions">
 
-            <button class="cv-btn" id="cv-save-btn" style="display:none;color:var(--accent-green)" onclick="app.saveCvNodeCode()" title="Save this node's code">Save</button>
+            <button class="cv-btn" id="cv-save-btn" style="display:none;color:var(--accent-green);margin-right:10px" onclick="app.saveCvNodeCode()" title="Save this node's code">Save</button>
 
             <button class="cv-lang-btn cv-lang-active" id="cv-btn-python" onclick="app.setCodeLang('python')">Python</button>
 
@@ -2986,7 +3071,12 @@ const app = {
         // On the node tab, edits are staged into a draft (independent of the
         // full script) until the user clicks Save. On the full tab, behave as
         // before (the full-script editor).
-        if (this._cvTab === 'node') this._cvNodeDraft = codeTA.value;
+        const tab = this._activeCvNodeTab ? this._activeCvNodeTab() : null;
+        if (tab) {
+          tab.draft = codeTA.value;
+          this._cvNode = tab.node;
+          this._cvNodeDraft = tab.draft;
+        }
         this.highlightCode();
       });
 
@@ -3006,6 +3096,9 @@ const app = {
 
           codeTA.selectionStart = codeTA.selectionEnd = s + 4;
 
+          const tab = this._activeCvNodeTab ? this._activeCvNodeTab() : null;
+          if (tab) tab.draft = codeTA.value;
+
           this.highlightCode();
 
         }
@@ -3024,10 +3117,22 @@ const app = {
     // is opened, a tab for that node. The node tab is edited independently
     // (staged in _cvNodeDraft) and committed with Save — it is NOT the full
     // script.
+    if (!Array.isArray(this._cvNodeTabs)) this._cvNodeTabs = [];
     if (singleNode) {
-      this._cvNode = singleNode;
-      this._cvNodeDraft = (singleNode.controlValues && singleNode.controlValues.code) || '';
-      this._cvTab = 'node';
+      let tab = this._cvNodeTabs.find(t => t.id === singleNode.id);
+      if (!tab) {
+        tab = {
+          id: singleNode.id,
+          node: singleNode,
+          draft: (singleNode.controlValues && singleNode.controlValues.code) || ''
+        };
+        this._cvNodeTabs.push(tab);
+      } else {
+        tab.node = singleNode;
+      }
+      this._cvNode = tab.node;
+      this._cvNodeDraft = tab.draft;
+      this._cvTab = tab.id;
       if (this._cvFullCode == null && typeof this.generateFullScript === 'function') {
         this._cvFullCode = this.generateFullScript();
       }
@@ -3042,46 +3147,90 @@ const app = {
 
   },
 
+  _cvEscape(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  },
+
+  _activeCvNodeTab() {
+    const tabs = Array.isArray(this._cvNodeTabs) ? this._cvNodeTabs : [];
+    return tabs.find(t => t && t.id === this._cvTab) || null;
+  },
+
+  _cvNodeTabFor(nodeId) {
+    const tabs = Array.isArray(this._cvNodeTabs) ? this._cvNodeTabs : [];
+    return tabs.find(t => t && t.id === nodeId) || null;
+  },
+
   // Build the tab strip: always a Full Script tab; a node tab when one is open.
   renderCvTabs() {
     const tabs = document.getElementById('cv-tabs');
     if (!tabs) return;
+    if (!Array.isArray(this._cvNodeTabs)) this._cvNodeTabs = [];
     const tabStyle = (active) => 'padding:4px 10px;font-size:11px;cursor:pointer;border:none;border-bottom:2px solid '
       + (active ? 'var(--accent-green,#94e2d5)' : 'transparent') + ';background:transparent;color:'
       + (active ? 'var(--text-primary)' : 'var(--text-muted)');
-    let h = '<button style="' + tabStyle(this._cvTab !== 'node') + '" onclick="app.setCvTab(\'full\')">Full Script</button>';
-    if (this._cvNode) {
-      const nd = this._cvNode;
-      const label = nd.def.name + ' (' + nd.id + ')';
-      h += '<button style="' + tabStyle(this._cvTab === 'node') + '" onclick="app.setCvTab(\'node\')">' + label
-        + ' <span style="opacity:.6;margin-left:4px" onclick="event.stopPropagation();app.closeCvNodeTab()" title="Close tab">✕</span></button>';
-    }
+    const activeNodeTab = this._activeCvNodeTab();
+    let h = '<button style="' + tabStyle(!activeNodeTab) + '" onclick="app.setCvTab(\'full\')">Full Script</button>';
+    this._cvNodeTabs.forEach(tab => {
+      const nd = tab.node;
+      const label = ((nd && nd.def && nd.def.name) || 'Custom.Python') + ' (' + tab.id + ')';
+      const safeId = this._cvEscape(tab.id);
+      h += '<button style="' + tabStyle(this._cvTab === tab.id) + '" onclick="app.setCvTab(\'' + safeId + '\')">' + this._cvEscape(label)
+        + ' <span style="opacity:.6;margin-left:4px" onclick="event.stopPropagation();app.closeCvNodeTab(\'' + safeId + '\')" title="Close tab">x</span></button>';
+    });
     tabs.innerHTML = h;
-    tabs.style.display = this._cvNode ? 'flex' : 'none'; // only show the strip when there's a node tab
+    tabs.style.display = this._cvNodeTabs.length ? 'flex' : 'none';
   },
 
   // Show the active tab's code in the editor and toggle the Save button.
   renderCvActiveTab() {
-    const onNode = this._cvTab === 'node' && this._cvNode;
-    const code = onNode ? (this._cvNodeDraft || '') : (this._cvFullCode || '');
-    this._codeViewerNode = onNode ? this._cvNode : null;
+    const tab = this._activeCvNodeTab();
+    const onNode = !!tab;
+    const code = onNode ? (tab.draft || '') : (this._cvFullCode || '');
+    this._cvNode = onNode ? tab.node : null;
+    this._cvNodeDraft = onNode ? tab.draft : '';
+    this._codeViewerNode = onNode ? tab.node : null;
     this.updateCodeViewer(code, this._codeViewerNode);
     const saveBtn = document.getElementById('cv-save-btn');
     if (saveBtn) saveBtn.style.display = onNode ? '' : 'none';
+    if (onNode) this.focusCodeViewerNode(tab.node);
   },
 
   setCvTab(tab) {
-    this._cvTab = (tab === 'node' && this._cvNode) ? 'node' : 'full';
+    this._cvTab = this._cvNodeTabFor(tab) ? tab : 'full';
     this.renderCvTabs();
     this.renderCvActiveTab();
   },
 
-  closeCvNodeTab() {
-    this._cvNode = null;
-    this._cvNodeDraft = '';
-    this._cvTab = 'full';
+  closeCvNodeTab(nodeId) {
+    if (!Array.isArray(this._cvNodeTabs)) this._cvNodeTabs = [];
+    const closingId = nodeId || this._cvTab;
+    const idx = this._cvNodeTabs.findIndex(t => t.id === closingId);
+    if (idx >= 0) this._cvNodeTabs.splice(idx, 1);
+    if (this._cvTab === closingId) {
+      const next = this._cvNodeTabs[idx] || this._cvNodeTabs[idx - 1];
+      this._cvTab = next ? next.id : 'full';
+    }
+    const active = this._activeCvNodeTab();
+    this._cvNode = active ? active.node : null;
+    this._cvNodeDraft = active ? active.draft : '';
     this.renderCvTabs();
     this.renderCvActiveTab();
+  },
+
+  focusCodeViewerNode(nd) {
+    if (!nd || !nd.id) return;
+    if (typeof this.selectNode === 'function') this.selectNode(nd.id, false);
+    if (typeof this.fitAll === 'function') {
+      setTimeout(() => {
+        if (this._codeViewerNode && this._codeViewerNode.id === nd.id) this.fitAll();
+      }, 0);
+    }
   },
 
   // View → Terminal: open the code terminal on the Full Script tab, showing
@@ -3096,10 +3245,12 @@ const app = {
   // re-derive ports (rename/add/remove follow the code), rewire, re-render the
   // node, and refresh the Full Script tab since the graph changed.
   saveCvNodeCode() {
-    const nd = this._cvNode;
+    const tab = this._activeCvNodeTab();
+    const nd = tab ? tab.node : this._cvNode;
     if (!nd) return;
     const ta = document.getElementById('cv-code');
-    const code = ta ? ta.value : (this._cvNodeDraft || '');
+    const code = ta ? ta.value : ((tab && tab.draft) || this._cvNodeDraft || '');
+    if (tab) tab.draft = code;
     this._cvNodeDraft = code;
     if (typeof this.pySyncPorts === 'function') {
       this.pySyncPorts(nd.id, code); // sets code + re-derives ports + rewires + re-renders node
@@ -3562,13 +3713,14 @@ const app = {
 
     this.codeLang = lang;
 
-    if (this._codeViewerNode) {
+    if (this._activeCvNodeTab && this._activeCvNodeTab()) {
 
-      this.updateCodeViewer(this.generateNodeCode(this._codeViewerNode), this._codeViewerNode);
+      this.renderCvActiveTab();
 
     } else {
 
-      this.updateCodeViewer(this.generateFullScript(), null);
+      this._cvFullCode = this.generateFullScript();
+      this.updateCodeViewer(this._cvFullCode, null);
 
     }
 

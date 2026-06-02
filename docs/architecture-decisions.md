@@ -5,6 +5,173 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-02 - Custom.Python Input Ports Are Inferred From Free Variables
+
+**Context:** Port derivation was asymmetric. A headerless Custom.Python cell's
+OUTPUT followed its last assignment, but its INPUTS were always a generic
+`input0` — the free variables the cell actually reads (`panels`, `extrude_dir`)
+never became ports, so there was nothing to wire into them. "Type code → ports
+appear" only worked for outputs.
+
+**Decision:** `inferInputPorts(code)` in `runtime/python-port-decl.js` derives
+input ports from the cell's free variables — identifiers read but never assigned,
+excluding Python keywords, the runtime built-ins, the injected bridge globals
+(`Geo`/`RevitBridge`/`HostRegistry`), loop vars, and def params. The runtime
+already injects each input by its port name, so a `panels` free var → `panels`
+port → the wired value lands in `panels`. `resolvePythonPorts`/`nextPythonPorts`
+make these inferred inputs authoritative **only when free vars are detected** (so
+code with no free vars preserves existing manual/wired inputs, and a `# in:`
+header — which the + button writes — still overrides everything). This replaces
+the earlier "without a header, preserve existing inputs" rule for the case where
+the code's free variables are knowable.
+
+## 2026-06-02 - Unhandled App Errors Auto-File Bug Tickets
+
+**Context:** The app should surface its own bugs without relying on users to
+report them. A consent-based feedback→GitHub pipeline and an authenticated
+`POST /api/feedback/ticket` (→ GitHub issue, `submitTicket({title,body,category})`)
+already existed; the missing piece was an automatic trigger. Product decision:
+fully automatic (toast only), triggered by unhandled app errors.
+
+**Decision:** `app/auto-bug-reporter.js` (`installAutoBugReporter`, wired in
+`installAfterAppInit`) listens for `window` `error` / `unhandledrejection` and
+auto-files a ticket via the existing `submitTicket`, then toasts. Pure helpers in
+`ai/bug-reporter.js` decide reportability, fingerprint errors (normalizing origin
++ line/col so a bug dedups across reloads), and format the issue. It is fenced so
+it cannot spam: signed-in only (the endpoint is authenticated and attaches the
+verified reporter), noise-skipped (empty / bare cross-origin "Script error."),
+deduped within the session and across reloads (localStorage fingerprints), capped
+per session, and disableable via `localStorage 'nova:auto-bug-tickets' = 'off'`.
+Failures inside the handler are always swallowed — the reporter must never throw.
+Only "unhandled app errors" trigger it; node runtime errors keep the per-node
+"Ask AI" path.
+
+## 2026-06-02 - AI Assistant Can Show Things On The Canvas (Action Protocol, P3)
+
+**Context:** The assistant could describe the graph (P1/P2) but not act on it. The
+first, safest step toward an interactive agent is read-only "show" actions —
+point the user at a node, open its inspector, reveal a node type in the library —
+which can auto-run because they mutate nothing.
+
+**Decision:** A fenced ` ```nova-action ` block carries `{"ops":[...]}`. A pure
+`ai/graph-actions.js` (`parseNovaActions`) extracts + validates the block against
+a `SHOW_OPS` allow-list (`focusNode`, `highlightNodes`, `openInspector`,
+`revealLibraryNode`), strips it from the reply (never shown raw), and returns the
+ops. The response handler auto-runs them via `app.runShowActions` on the workspace
+channel only; each op is isolated so a bad one can't break the chat. The protocol
+is taught in the prompt only when a graph exists (kept out of the build-intent
+size budget), and the model is told to always also explain in prose. Edit ops
+(add/remove wire, set version, add node) are deliberately NOT in the allow-list —
+they are the Apply-gated P5 phase. `node-lib-item` gained a `data-node-type`
+attribute so the library reveal has a stable selector.
+
+## 2026-06-02 - AI Assistant Gets A Local Problem Report (P2)
+
+**Context:** With the live-graph snapshot (P1) the assistant could see the graph
+but not reason reliably about what was wrong or unfinished — it would guess at
+issues. "How do I finish this workflow?" needs a concrete, locally-verified
+worklist, not the model's invention.
+
+**Decision:** A pure `ai/graph-problems.js` (`analyzeGraphProblems(graph, typeMap,
+{nodeErrors})`) computes a low-noise, actionable set: `orphan-wire` (endpoint
+references a missing node/port), `type-mismatch` (reuses `isWireTypeCompatible`
+from `core/wire-type-check.js`), `unconnected-input` (an input with no wire AND no
+control fallback), `node-error` (errored last run, from `app._nodeErrors`), and
+`no-output-sink` (graph has nodes but nothing reaches an `Output.*`). It is folded
+into the live-graph section of `buildSystemPrompt` as a `### Problems` block,
+appearing only when the graph has issues (so it costs nothing on a clean or empty
+graph), and the model is told to address them by node id and not invent problems
+beyond the list. Noise was deliberately bounded — per-node "dangling output" was
+dropped in favour of the single graph-level `no-output-sink`, and inputs with a
+control default are not flagged.
+
+## 2026-06-02 - AI Assistant Has A Grounded Knowledge Base (Learn-Intent, P1b)
+
+**Context:** The assistant should be one place to learn Nova — "how does it
+work?", "which node does X?" — without hallucinating product facts or inventing
+nodes. The prompt had a signature catalog (for codegen) but no product primer and
+no per-node descriptions, and dumping all of that on every turn blew the prompt
+size budget (a guard test caps the build-intent prompt at <20 KB).
+
+**Decision:** A pure `ai/knowledge-base.js` provides an authored `NOVA_PRIMER`
+(how Nova works / how to use it) and `buildNodeKnowledge()` (a "NodeName — what it
+does" guide built from each node's own description, cached). `GPTClient` attaches
+both **only on learn-intent turns** — gated by `isLearnIntent(userMessage)`
+(question marks + how/what/which/explain phrasing), threaded from the call sites —
+so build/edit prompts stay lean and the size budget holds. The primer instructs
+the model to answer only from the primer, node guide, and live graph, and to say
+it is not certain otherwise (mirrors the UNKNOWN METHODS PROTOCOL). Follow-up:
+trim the node guide to a question-relevant subset (retrieval) for large registries.
+
+## 2026-06-02 - AI Assistant Sees A Live Graph Snapshot (Content-Awareness, P1)
+
+**Context:** The assistant only received the generated "code on canvas"
+(`existingCode`, and only when the code terminal was populated). It had no
+structured view of the actual graph — node ids, types, versions, ports,
+positions, control values, or wiring — so it guessed structure from code and was
+blind when the terminal was empty. This blocked "what should I wire next to
+finish this?" and precise, node-id-referenced edits.
+
+**Decision:** First phase of the AI copilot. A pure `ai/graph-context.js`
+(`buildGraphContext(graph, typeMap, opts)`) turns `app.serializeGraph()` into a
+compact, token-bounded block (nodes with type/version/ports/position/controls,
+then `from.port → to.port` wires; capped with explicit "+N not shown" notes — no
+silent truncation). `GPTClient.buildSystemPrompt` injects it as a `### Live Graph`
+section, read from the global app/registry and wrapped defensively so it can
+never break a chat turn. It is naturally gated to projects with nodes (empty on
+the landing screen). Later phases build on this: a problem report (P2), an action
+protocol to show/edit the graph (P3/P5), and a grounded knowledge base (P1b).
+
+## 2026-06-02 - Node Definitions Are Versioned So New Releases Don't Break Old Graphs
+
+**Context:** A node's behavior may change in a future release. With one def per
+type, shipping that change would silently alter every existing graph that uses
+the node — there was no way to keep old behavior.
+
+**Decision:** Node defs gain an optional `version` (integer ≥ 1; absent ⇒ v1, so
+the change is additive and inert until a type ships a second version). A type can
+register multiple versions — a def carries its predecessors in
+`priorVersions: [...]`. The registry builds `NODE_VERSION_MAP` (type → {version →
+def}) alongside `NODE_TYPE_MAP` (latest). Each node instance pins `nd.version`,
+set to the latest at creation and **persisted in the saved graph**; on load the
+def is resolved for that pinned version (`resolveVersionedDef`), falling back to
+the latest with a logged warning only if the pinned version was retired. The user
+switches a node's version via a header picker (rendered only when a type has >1
+version) → `app.setNodeVersion`, which re-resolves the def and migrates control
+values (`migrateControlValues`, honoring a def's optional `migrateFrom[v]`). The
+resolution/migration rules live in the pure, unit-tested `core/node-versions.js`.
+
+Modern nodes are normalized through `defineNode` and resolve `execute` by type via
+the registry, so versioning is threaded through that pipeline: `defineNode` and
+`toLegacyNodeDefinition` preserve `version`/`priorVersions`/`migrateFrom` (and
+carry `execute`), every registered version is stamped with its `categoryColor`,
+and the compute path runs a pinned **non-latest** version's own `execute` (a no-op
+for the common latest-pinned case). A node saved without a version predates
+versioning and pins to **v1** (the original behavior), not the latest. `Math.Round`
+is the reference example: v1 rounds to nearest; v2 adds a `Mode` (nearest/up/down)
+defaulting to nearest, with a `migrateFrom[1]` — so adopting v2 is behavior-
+preserving until the user changes Mode.
+
+## 2026-06-02 - Custom.Python Codegen Tracks Live Ports, Not The Static Def
+
+**Context:** A `Custom.Python` node has two port lists: the static definition
+(`nd.def.inputs/outputs` — for the type, e.g. `elements`/`options`/`result`) and
+the live ports (`nd._dynInputs/_dynOutputs`), which track renames and `# in:`/
+`# out:` header edits. The renderer, the runtime, and the rename/sync logic all
+use the live ports; the **code generator** keyed off the static def. The moment a
+port was renamed (e.g. `elements`→`Ele`) the two diverged: codegen looked for a
+wire to `elements`, never found the actual `Ele` wire, and never bound the
+upstream value to the cell's `Ele` variable. Outputs broke symmetrically.
+
+**Decision:** `generateNodeCode` (the active override in `node-library.js`)
+generates the `Custom.Python` cell from the **live** ports. A pure helper
+`wrapPythonNodeCode(code, { inputBindings, outputBindings })` in
+`python-port-decl.js` binds each wired input to the cell's input variable before
+the cell (`name = <upstreamVar>`) and exports each output under its canonical
+downstream name after it (`<canonicalVar> = name`), so the generated full script
+feeds the cell exactly like the live runtime. The static def remains the fallback
+only when a node has no live ports yet.
+
 ## 2026-06-02 - AI Code→Node Pipeline Hardened Against Silent Geometry Failures
 
 **Context:** AI-generated Python that builds geometry failed silently. Examples:

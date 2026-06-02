@@ -7,6 +7,9 @@
 import { createNovaCloudClient } from '../enterprise/cloud-client.js';
 import { getRuntimeConfig } from '../config/runtime-config.js';
 import { buildNodeCatalog } from './node-catalog.js';
+import { buildGraphContext } from './graph-context.js';
+import { analyzeGraphProblems, formatGraphProblems } from './graph-problems.js';
+import { buildNodeKnowledge, NOVA_PRIMER } from './knowledge-base.js';
 
 const GPTClient = {
   MODEL: 'anthropic/claude-sonnet-4.6',
@@ -536,7 +539,17 @@ Keep replies short and focused on the user's design intent.`;
     return m.indexOf('runtime error') !== -1 && m.indexOf('Original code') !== -1;
   },
 
-  buildSystemPrompt(existingCode) {
+  // Heuristic: is this turn a "learn / how-to / which-node" question (vs. a
+  // build/edit command)? Used to attach the grounded knowledge base only when
+  // it helps, keeping build-intent prompts lean.
+  isLearnIntent(message) {
+    if (!message || typeof message !== 'string') return false;
+    const l = message.toLowerCase();
+    if (/\?\s*$/.test(l.trim())) return true;
+    return /\b(how (do|does|to|can)|what (is|are|does|node|can)|which (node|nodes)|where (is|do)|explain|tell me about|help me understand|can nova|is there a node|learn|teach|guide me)\b/.test(l);
+  },
+
+  buildSystemPrompt(existingCode, opts = {}) {
     let sys = `You are the AI for Nova, a visual node-based scripting tool with a 3D viewport (Three.js). You generate node graphs that become visual nodes on a canvas.
 
 ## RESPONSE FORMAT (PREFERRED - parser-friendly Python)
@@ -908,6 +921,65 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     if (existingCode) {
       sys += `\n\n### Current Code on Canvas\nThe user already has this code/graph. If they ask to modify it, update this code:\n\`\`\`python\n${existingCode}\n\`\`\``;
     }
+
+    // Grounded knowledge base — lets the assistant be one place to learn Nova:
+    // how it works (primer) and which node does what (node guide). Attached only
+    // on learn/how-to/which-node turns (it is large), so build-intent prompts
+    // stay lean. Both instruct the model to answer ONLY from them, so learning
+    // answers stay grounded in real product facts and real nodes.
+    try {
+      if (this.isLearnIntent(opts.userMessage)) {
+        sys += `\n\n${NOVA_PRIMER}\n\n${buildNodeKnowledge()}`;
+      }
+    } catch {
+      // Knowledge base must never block a chat response.
+    }
+
+    // Live graph snapshot — the assistant's view of the actual canvas (node ids,
+    // types, versions, ports, positions, controls, wiring). Read from the global
+    // app/registry; empty on the landing screen (no project) so nothing is added
+    // there. Wrapped defensively: graph context must never break a chat turn.
+    try {
+      const app = (typeof window !== 'undefined' && window.app)
+        || (typeof globalThis !== 'undefined' && globalThis.app) || null;
+      const typeMap = (typeof window !== 'undefined' && window.NODE_TYPE_MAP)
+        || (typeof globalThis !== 'undefined' && globalThis.NODE_TYPE_MAP) || {};
+      if (app && typeof app.serializeGraph === 'function') {
+        const graph = app.serializeGraph();
+        const ctx = buildGraphContext(graph, typeMap);
+        if (ctx.text) {
+          sys += `\n\n### Live Graph (the user's current canvas)\nThis is the actual graph on the canvas right now. Use it to answer questions about the current workflow ("which node does X here?", "what should I wire next to finish this?") and to propose precise edits — reference nodes by their id. Ports are shown as in[...]/out[...]; wires as from.port → to.port.\n\n${ctx.text}`;
+
+          // Problem report — what's broken or unfinished. The AUTHORITATIVE
+          // per-node warnings are the ones the engine surfaces in the inspector
+          // (e.g. "Meshes expects list but received object") — gather those first
+          // so the assistant addresses the warning the user actually sees, then
+          // add the locally-derived structural problems.
+          const nodeErrors = (app._nodeErrors && typeof app._nodeErrors === 'object') ? app._nodeErrors : {};
+          const realWarnings = [];
+          if (typeof app._collectInspectorWarnings === 'function' && Array.isArray(app.nodes)) {
+            for (const nd of app.nodes) {
+              let ws = [];
+              try { ws = app._collectInspectorWarnings(nd) || []; } catch { ws = []; }
+              for (const w of ws) {
+                realWarnings.push({ kind: 'warning', nodeId: nd.id, message: `${(nd.def && nd.def.name) || nd.type} (${nd.id})${w.port ? ' [' + w.port + ']' : ''}: ${w.message}` });
+              }
+            }
+          }
+          const problems = realWarnings.concat(analyzeGraphProblems(graph, typeMap, { nodeErrors }));
+          const problemText = formatGraphProblems(problems);
+          if (problemText) {
+            sys += `\n\n### Problems In The Current Graph\nLocally detected issues — use these to answer "how do I finish/fix this?" and to propose targeted edits. Address them by node id; do not invent problems beyond this list.\n\n${problemText}`;
+          }
+
+          // Show-action protocol (P3) — only offered when a graph exists. The
+          // block is executed and hidden, so the model must still explain in prose.
+          sys += `\n\n### Showing Things On The Canvas (optional)\nTo point the user at something, you MAY append ONE fenced block at the very end of your reply. It is executed and hidden from the user — keep your prose explanation too. Use node ids from the Live Graph above.\n\`\`\`nova-action\n{"ops":[{"op":"focusNode","id":"node-2"}]}\n\`\`\`\nAllowed ops (read-only, no graph changes): focusNode{id}, highlightNodes{ids:[...]}, openInspector{id} (focus + open its Data Inspector), revealLibraryNode{type} (reveal a node type in the library). Only emit ops for nodes/types that exist; omit the block if there's nothing useful to show.`;
+        }
+      }
+    } catch {
+      // Never let graph-context assembly block a chat response.
+    }
     return sys;
   },
 
@@ -958,7 +1030,7 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     const history = this._histories[context] || [];
     const stickyFull = this.historyHasCode(history) || this.isFixPrompt(userMessage);
     const useSlim = proxyMode && !this.hasBuildIntent(userMessage) && !stickyFull;
-    const systemContent = useSlim ? this.buildSlimSystemPrompt() : this.buildSystemPrompt(existingCode);
+    const systemContent = useSlim ? this.buildSlimSystemPrompt() : this.buildSystemPrompt(existingCode, { userMessage });
     const historyDepth = proxyMode ? (useSlim ? 4 : 6) : 10;
     const maxTokens = proxyMode ? this.PROXY_MAX_TOKENS : this.MAX_TOKENS;
     const messages = [
@@ -1009,7 +1081,7 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     this._callStart = Date.now();
     const history = this._histories[context] || [];
     const messages = [
-      { role: 'system', content: this.buildSystemPrompt(existingCode) },
+      { role: 'system', content: this.buildSystemPrompt(existingCode, { userMessage }) },
       ...history.slice(-10),
       { role: 'user', content: userMessage }
     ];
@@ -1047,7 +1119,7 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     const history = this._histories[context] || [];
     const stickyFull = this.historyHasCode(history) || this.isFixPrompt(userMessage);
     const useSlim = proxyMode && !this.hasBuildIntent(userMessage) && !stickyFull;
-    const systemContent = useSlim ? this.buildSlimSystemPrompt() : this.buildSystemPrompt(existingCode);
+    const systemContent = useSlim ? this.buildSlimSystemPrompt() : this.buildSystemPrompt(existingCode, { userMessage });
     const historyDepth = proxyMode ? (useSlim ? 4 : 6) : 10;
     const maxTokens = proxyMode ? this.PROXY_MAX_TOKENS : this.MAX_TOKENS;
     const messages = [

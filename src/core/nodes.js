@@ -5,8 +5,13 @@
 // Categories: A→Z. Nodes within each: A→Z.
 // ============================================
 
+import { addDefToVersionMap } from './node-versions.js';
+
 export const NODE_LIBRARY = { categories: [] };
 export const NODE_TYPE_MAP = {};
+// Parallel to NODE_TYPE_MAP, but keyed type → { version → def } so a node
+// instance can pin (and switch) a behavior version. See core/node-versions.js.
+export const NODE_VERSION_MAP = {};
 export const TYPE_COLORS = {
   number: '#a6e3a1', string: '#f9e2af', boolean: '#f38ba8',
   point: '#89b4fa', vector: '#94e2d5', line: '#89b4fa',
@@ -77,6 +82,7 @@ NODE_LIBRARY.categories.push({ id: 'rhino', name: 'Rhino', color: '#74c7ec', ico
 NODE_LIBRARY.categories.forEach(function(cat) {
   cat.nodes.forEach(function(node) {
     NODE_TYPE_MAP[node.type] = Object.assign({}, node, { categoryId: cat.id, categoryColor: cat.color });
+    addDefToVersionMap(NODE_VERSION_MAP, NODE_TYPE_MAP[node.type]);
   });
 });
 
@@ -85,5 +91,6 @@ console.log('[NodeFlow] Node Registry — ' + NODE_LIBRARY.categories.length + '
 if (typeof window !== 'undefined') {
   window.NODE_LIBRARY = NODE_LIBRARY;
   window.NODE_TYPE_MAP = NODE_TYPE_MAP;
+  window.NODE_VERSION_MAP = NODE_VERSION_MAP;
   window.TYPE_COLORS = TYPE_COLORS;
 }

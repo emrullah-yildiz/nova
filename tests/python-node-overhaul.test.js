@@ -23,7 +23,9 @@ import {
   resolvePythonPorts,
   nextPythonPorts,
   renamePythonPort,
-  setInputHeader
+  setInputHeader,
+  wrapPythonNodeCode,
+  inferInputPorts
 } from '../src/runtime/python-port-decl.js';
 
 getLiveCoreRegistry();
@@ -139,30 +141,81 @@ shell = Geo.loft(pts)`;
   });
 });
 
+describe('inferInputPorts — input ports from the cell\'s free variables', () => {
+  it('finds free variables read but never assigned', () => {
+    const code = `thick_list = []
+for i in range(len(panels)):
+    p = panels[i]
+    extruded = Geo.extrude(p, extrude_dir)
+    thick_list.append(extruded)`;
+    expect(inferInputPorts(code)).toEqual(['panels', 'extrude_dir']);
+  });
+
+  it('excludes assigned vars, loop vars, builtins, and bridge globals', () => {
+    expect(inferInputPorts('result = Geo.createBox(p, 1, 1, 1)')).toEqual(['p']);
+    expect(inferInputPorts('total = sum(values)\nn = len(values)')).toEqual(['values']);
+    expect(inferInputPorts('print("hello")')).toEqual([]);
+    expect(inferInputPorts('x = 1\ny = x + 2')).toEqual([]);
+  });
+
+  it('ignores attribute names, string contents, and comments', () => {
+    expect(inferInputPorts('result = mesh.subdivide()  # uses mesh')).toEqual(['mesh']);
+    expect(inferInputPorts('label = "name not_a_port"\nout = label')).toEqual([]);
+  });
+
+  it('handles def params and tuple unpacking as bound (not inputs)', () => {
+    expect(inferInputPorts('def f(a, b):\n    return a + b\nresult = f(x, 2)')).toEqual(['x']);
+    expect(inferInputPorts('a, b = pair\nresult = a + b')).toEqual(['pair']);
+  });
+
+  it('returns empty for empty / headerless-but-constant code', () => {
+    expect(inferInputPorts('')).toEqual([]);
+    expect(inferInputPorts('result = 42')).toEqual([]);
+  });
+});
+
 describe('Custom.Python default template', () => {
-  it('starts with Revit-oriented ports and runnable Nova host helpers', () => {
+  it('starts with a concise Revit connection setup and runnable Nova host helpers', () => {
     const customPython = customNodes.find((node) => node.type === 'Custom.Python');
     expect(customPython.controls.find((control) => control.id === 'code').default).toBe(DEFAULT_CUSTOM_PYTHON_CODE);
-    expect(customPython.inputs.map((port) => port.id)).toEqual(['elements', 'parameter_name', 'value']);
+    expect(customPython.inputs.map((port) => port.id)).toEqual(['elements', 'options']);
     expect(customPython.outputs.map((port) => port.id)).toEqual(['result']);
 
     const ports = resolvePythonPorts(DEFAULT_CUSTOM_PYTHON_CODE);
-    expect(ports.inputs.map((port) => port.id)).toEqual(['elements', 'parameter_name', 'value']);
+    expect(ports.inputs.map((port) => port.id)).toEqual(['elements', 'options']);
     expect(ports.outputs.map((port) => port.id)).toEqual(['result']);
     expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('Geo: geometry constructors and operations');
     expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('RevitBridge: local Revit snapshot');
-    expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('HostRegistry.get("revit")');
-    expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('elements, parameter_name, value -> result');
+    expect(DEFAULT_CUSTOM_PYTHON_CODE).not.toContain('HostRegistry.get');
+    expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('elements, options -> result');
+    expect(DEFAULT_CUSTOM_PYTHON_CODE).not.toContain('Autodesk.Revit.DB');
+    expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('result = target_elements');
 
     const executed = PythonRunner.execute(DEFAULT_CUSTOM_PYTHON_CODE, {
       elements: [],
-      parameter_name: 'Comments',
-      value: ''
+      options: { category: 'Walls' }
     });
     expect(executed.error).toBeNull();
-    expect(executed.outputs.result.count).toBe(0);
-    expect(executed.outputs.result.parameter).toBe('Comments');
-    expect(executed.outputs.result.value).toBe('');
+    expect(executed.outputs.result).toEqual([]);
+    expect(executed.outputs.target_elements).toEqual([]);
+  });
+
+  it('renames default input ports in both declarations and body references', () => {
+    const renamed = renamePythonPort({
+      direction: 'input',
+      oldId: 'elements',
+      newId: 'revit_elements',
+      code: DEFAULT_CUSTOM_PYTHON_CODE,
+      dynInputs: ['elements', 'options'],
+      dynOutputs: ['result'],
+      wires: [{ fromNode: 'source', fromPort: 'list', toNode: 'node-1', toPort: 'elements' }],
+      nodeId: 'node-1'
+    });
+    expect(renamed.ok).toBe(true);
+    expect(renamed.dynInputs).toEqual(['revit_elements', 'options']);
+    expect(renamed.code).toContain('# in: revit_elements:list, options:any');
+    expect(renamed.code).toContain('target_elements = revit_elements');
+    expect(renamed.wires[0].toPort).toBe('revit_elements');
   });
 });
 
@@ -352,14 +405,27 @@ describe('nextPythonPorts — live port sync on code edit', () => {
     expect(r.removedOutputs).toEqual(['output0']);
   });
 
-  it('without headers, preserves existing (manual/wired) inputs and only tracks the output name', () => {
-    const r = nextPythonPorts('result = Geo.createBox(p, 1, 1, 1)', { inputs: ['p', 'size'], outputs: ['output0'] });
+  it('without a header, inputs track the free variables the cell reads', () => {
+    const r = nextPythonPorts('result = Geo.createBox(p, 1, 1, 1)', { inputs: ['input0'], outputs: ['output0'] });
     expect(r.source).toBe('inferred');
-    expect(r.inputs).toEqual(['p', 'size']); // manual inputs preserved
-    expect(r.inputsChanged).toBe(false);
+    expect(r.inputs).toEqual(['p']); // free var p becomes the input
+    expect(r.inputsChanged).toBe(true);
+    expect(r.removedInputs).toEqual(['input0']);
     expect(r.outputs).toEqual(['result']);
     expect(r.outputsChanged).toBe(true);
     expect(r.removedOutputs).toEqual(['output0']);
+  });
+
+  it('drops an input the code no longer references (no header)', () => {
+    const r = nextPythonPorts('result = Geo.createBox(p, 1, 1, 1)', { inputs: ['p', 'size'], outputs: ['output0'] });
+    expect(r.inputs).toEqual(['p']); // size is unused → removed
+    expect(r.removedInputs).toEqual(['size']);
+  });
+
+  it('preserves existing inputs when the code has no detectable free vars', () => {
+    const r = nextPythonPorts('result = 42', { inputs: ['a', 'b'], outputs: ['output0'] });
+    expect(r.inputs).toEqual(['a', 'b']);
+    expect(r.inputsChanged).toBe(false);
   });
 
   it('reports no change when the resolved ports match the current ports', () => {
@@ -375,6 +441,47 @@ describe('nextPythonPorts — live port sync on code edit', () => {
     const r = nextPythonPorts('tower = Geo.loft(profiles)', { inputs: ['input0'], outputs: ['shell'] });
     expect(r.outputs).toEqual(['tower']);
     expect(r.removedOutputs).toEqual(['shell']);
+  });
+});
+
+describe('wrapPythonNodeCode — codegen binds wired inputs/outputs to the live cell variables', () => {
+  it('binds each wired input before the cell and exports each output after it', () => {
+    const out = wrapPythonNodeCode('result = elements', {
+      inputBindings: [{ name: 'elements', source: 'listcreate0_list' }],
+      outputBindings: [{ name: 'result', alias: 'custompython1_result' }]
+    });
+    expect(out).toBe('elements = listcreate0_list\nresult = elements\ncustompython1_result = result');
+  });
+
+  it('tracks renamed ports — the bare cell variables follow _dynInputs/_dynOutputs, not the static def', () => {
+    // After renaming the `elements` port to `Ele`, the cell reads `Ele`; codegen
+    // must bind the upstream value to `Ele`, not the stale def port `elements`.
+    const out = wrapPythonNodeCode('result = Ele', {
+      inputBindings: [{ name: 'Ele', source: 'listcreate0_list' }],
+      outputBindings: [{ name: 'result', alias: 'custompython1_result' }]
+    });
+    expect(out).toContain('Ele = listcreate0_list');
+    expect(out).not.toContain('elements');
+  });
+
+  it('skips unwired inputs so the cell keeps its own default handling', () => {
+    const out = wrapPythonNodeCode('result = options', {
+      inputBindings: [{ name: 'options', source: null }],
+      outputBindings: []
+    });
+    expect(out).toBe('result = options');
+  });
+
+  it('does not emit a self-assignment when the export alias equals the port name', () => {
+    const out = wrapPythonNodeCode('result = 1', {
+      outputBindings: [{ name: 'result', alias: 'result' }]
+    });
+    expect(out).toBe('result = 1');
+  });
+
+  it('returns the raw cell unchanged when there are no bindings', () => {
+    expect(wrapPythonNodeCode('x = 1')).toBe('x = 1');
+    expect(wrapPythonNodeCode('')).toBe('');
   });
 });
 

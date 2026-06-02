@@ -5,39 +5,24 @@ export const customCategory = {
   icon: '✦'
 };
 
-export const DEFAULT_CUSTOM_PYTHON_CODE = `# in: elements:list, parameter_name:string, value:any
+export const DEFAULT_CUSTOM_PYTHON_CODE = `# in: elements:list, options:any
 # out: result:any
 import math
 
 # Port names above become Python variables with the same names:
-# elements, parameter_name, value -> result
+# elements, options -> result
 #
-# Nova web runtime exposes these automatically:
+# Nova Connect / Revit setup. Use these bridge objects in the web Python node.
 # - Geo: geometry constructors and operations
-# - RevitBridge: local Revit snapshot and approved write helpers
-# - HostRegistry: host adapter access, usually HostRegistry.get("revit")
-#
-# Native Autodesk.Revit.DB imports do not run in the web Python node.
-# Use Nova Connect helpers here; copy the imports below only when moving
-# this logic into pyRevit, Dynamo Python, or RevitPythonShell:
-# import clr
-# clr.AddReference("RevitAPI")
-# clr.AddReference("RevitServices")
-# from Autodesk.Revit.DB import FilteredElementCollector, BuiltInCategory, ElementId, Transaction
-# from RevitServices.Persistence import DocumentManager
-# from RevitServices.Transactions import TransactionManager
+# - RevitBridge: local Revit snapshot helpers when Nova Connect is paired
 
-revit = HostRegistry.get("revit")
 target_elements = elements
 if not target_elements:
-    target_elements = []
-if len(target_elements) == 0:
     target_elements = RevitBridge.getSelection()
+if not target_elements:
+    target_elements = []
 
-parameter_values = []
-if revit:
-    parameter_values = revit.getParameterValues(target_elements, parameter_name)
-result = {"elements": target_elements, "parameter": parameter_name, "values": parameter_values, "value": value, "count": len(target_elements)}`;
+result = target_elements`;
 
 function safeJsFunction(body, argNames) {
   try {
@@ -237,11 +222,10 @@ export const customNodes = [
     description: 'A Python code block executed by the embedded Python runtime (Pyodide). The Python control is the source; the engine special-cases this node type to route it through PythonRunner, which exposes inputs by name and reads outputs back from the local scope.',
     inputs: [
       { id: 'elements', name: 'elements', type: 'list', description: 'Revit elements to inspect. Leave empty to use the active Revit selection when connected.' },
-      { id: 'parameter_name', name: 'parameter_name', type: 'string', description: 'Revit parameter name to read, such as Comments, Mark, Type Name, or Level.' },
-      { id: 'value', name: 'value', type: 'any', description: 'Optional value reserved for write-oriented scripts after user approval.' }
+      { id: 'options', name: 'options', type: 'any', description: 'Optional settings for Revit/Nova Connect operations.' }
     ],
     outputs: [
-      { id: 'result', name: 'result', type: 'any', description: 'Dictionary containing selected elements, parameter values, and count.' }
+      { id: 'result', name: 'result', type: 'any', description: 'Dictionary containing Revit connection context, selected elements, options, and count.' }
     ],
     controls: [
       { id: 'code', type: 'text', default: DEFAULT_CUSTOM_PYTHON_CODE, label: 'Python' }
@@ -259,19 +243,18 @@ export const customNodes = [
     help: {
       inputs: [
         { name: 'elements', description: 'Revit element list' },
-        { name: 'parameter_name', description: 'Parameter to inspect' },
-        { name: 'value', description: 'Optional write value' }
+        { name: 'options', description: 'Optional operation settings' }
       ],
       outputs: [{ name: 'result', description: 'Computed result' }],
       example: {
-        title: 'Read Revit parameter values from connected elements',
+        title: 'Set up a Revit connection context',
         nodes: [
-          { type: 'Input.Text', x: 0, y: 0, controls: { val: 'Comments' } },
+          { type: 'List.Create', x: 0, y: 0 },
           { type: 'Custom.Python', x: 260, y: 0 },
           { type: 'Output.Watch', x: 540, y: 0 }
         ],
         wires: [
-          [0, 'value', 1, 'parameter_name'],
+          [0, 'list', 1, 'elements'],
           [1, 'result', 2, 'value']
         ]
       },

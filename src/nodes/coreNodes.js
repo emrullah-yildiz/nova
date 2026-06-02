@@ -1,4 +1,5 @@
-import { NODE_LIBRARY, NODE_TYPE_MAP } from '../core/nodes.js';
+import { NODE_LIBRARY, NODE_TYPE_MAP, NODE_VERSION_MAP } from '../core/nodes.js';
+import { addDefToVersionMap } from '../core/node-versions.js';
 import { curvesCategory, curvesNodes } from './categories/curves.js';
 import { geometryCategory, geometryNodes } from './categories/geometry.js';
 import { inputCategory, inputNodes } from './categories/input.js';
@@ -119,6 +120,15 @@ function mergeRegistryIntoLegacyMaps(registry) {
       NODE_TYPE_MAP[node.type] = Object.assign({}, node, {
         categoryId: category.id,
         categoryColor: category.color
+      });
+      addDefToVersionMap(NODE_VERSION_MAP, NODE_TYPE_MAP[node.type]);
+      // Prior-version defs come from the source as-is and lack the category color
+      // the renderer keys off; stamp it onto every registered version.
+      const bucket = NODE_VERSION_MAP[node.type] || {};
+      Object.keys(bucket).forEach((v) => {
+        if (!bucket[v].categoryColor) {
+          bucket[v] = Object.assign({}, bucket[v], { categoryId: category.id, categoryColor: category.color });
+        }
       });
     });
   });
