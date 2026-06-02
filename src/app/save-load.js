@@ -94,6 +94,9 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     app.nodes = [];
     app.wires = [];
     app.selectedNodes = [];
+    // Drop the previous project's 3D preview (meshes + geometry list) so the
+    // loaded graph doesn't inherit stale geometry until its first Run.
+    if (app._clearPreview) app._clearPreview();
     app._hasRun = false;
     app._isRunningGraph = false;
     app._lastRunVersion = 0;

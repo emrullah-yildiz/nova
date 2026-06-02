@@ -983,6 +983,22 @@ const app = {
 
   goHome() { if (this.currentPage === 'workspace') this.closeProject(); },
 
+  // Clears the 3D preview — both the meshes (geometryGroup) and the geometry
+  // list panel (_sceneItems) — so a fresh, closed, or loaded project never
+  // shows the previous session's geometry. The next Run rebuilds from the
+  // current graph (_needsRebuild forces a fresh buildFromGraph). The animate()
+  // loop repaints the emptied scene on the next frame.
+  _clearPreview() {
+    if (typeof Viewer3D !== 'undefined') {
+      if (Viewer3D.clearGeometry) Viewer3D.clearGeometry();
+      if (Array.isArray(Viewer3D._sceneItems)) Viewer3D._sceneItems = [];
+      Viewer3D._selectedItem = null;
+      Viewer3D._needsRebuild = true;
+      if (Viewer3D._renderGeoList) Viewer3D._renderGeoList();
+    }
+    this._sceneItems = [];
+  },
+
   closeProject() {
 
     if(this._stopCollab) this._stopCollab();
@@ -999,6 +1015,8 @@ const app = {
     const svg=document.getElementById('wire-svg'); if(svg) svg.innerHTML='';
 
     this.chatHistories.workspace=[];
+
+    this._clearPreview();
 
     this.switchPage('landing');
 
@@ -1017,6 +1035,8 @@ const app = {
     const svg=document.getElementById('wire-svg'); if(svg) svg.innerHTML='';
 
     this.chatHistories.workspace=[];
+
+    this._clearPreview();
 
     this.switchPage('workspace');
 

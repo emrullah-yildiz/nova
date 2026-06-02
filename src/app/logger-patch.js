@@ -54,9 +54,13 @@ export function installLoggerPatch(targetApp = getRuntimeApp()) {
 
   // ── Patch respond ──
   var _origRespond = app.respond.bind(app);
-  app.respond = function(ch, txt) {
-    NFLogger.info('app', 'respond called', { channel: ch, prompt: txt });
-    return _origRespond(ch, txt);
+  app.respond = function(ch, txt, images) {
+    NFLogger.info('app', 'respond called', {
+      channel: ch,
+      prompt: txt,
+      images: images && images.length ? images.length : 0
+    });
+    return _origRespond.apply(app, arguments);
   };
 
   // ── Patch approveCode ──
