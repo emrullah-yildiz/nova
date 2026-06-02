@@ -2399,13 +2399,21 @@ const app = {
 
     const inp=document.getElementById(ch==='landing'?'landing-chat-input':'ws-chat-input');
 
-    const txt=inp.value.trim();if(!txt)return;
+    const txt=inp.value.trim();
+    const hasAttach=this._chatAttachments&&this._chatAttachments[ch]&&this._chatAttachments[ch].length;
+    if(!txt&&!hasAttach)return;
 
     // BYOK gate: the assistant is inactive until a key is connected. Surface the
     // Settings CTA instead of sending (covers programmatic callers too).
     if(window.GPTClient&&!window.GPTClient.canChat()){if(this._updateAssistantGate)this._updateAssistantGate();return;}
 
-    inp.value='';this.addUserMessage(ch,txt);
+    // Fold any attached files into the SENT message (full content) while the
+    // visible bubble shows only the file names. Capture + clear before sending.
+    const displayText=txt+(this._attachmentChipText?this._attachmentChipText(ch):'');
+    const sentText=this._foldAttachments?this._foldAttachments(ch,txt):txt;
+    if(this._clearChatAttachments)this._clearChatAttachments(ch);
+
+    inp.value='';this.addUserMessage(ch,displayText||'📎 (attached file)');
 
     document.getElementById(ch==='landing'?'landing-chat-suggestions':'ws-chat-suggestions').innerHTML='';
 
@@ -2417,7 +2425,7 @@ const app = {
 
     c.appendChild(ti);c.scrollTop=c.scrollHeight;
 
-    setTimeout(()=>{const el=document.getElementById(ch+'-typing');if(el)el.remove();this.respond(ch,txt);},600+Math.random()*500);
+    setTimeout(()=>{const el=document.getElementById(ch+'-typing');if(el)el.remove();this.respond(ch,sentText);},600+Math.random()*500);
 
   },
 

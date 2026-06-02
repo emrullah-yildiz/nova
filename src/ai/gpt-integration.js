@@ -8,6 +8,7 @@ import { validatePlanAgainstRegistry } from './plan-validator.js';
 import { buildGraphFromPlan, planToPython } from './plan-builder.js';
 import { rewriteGeoAliasesInResponse } from './geo-alias-rewriter.js';
 import { parseNovaActions } from './graph-actions.js';
+import { isTextAttachment, attachmentNames, foldAttachments, ATTACH_MAX_BYTES } from './attachment-fold.js';
 import {
   buildDecideYourselfReply,
   buildOptionReply,
@@ -111,6 +112,81 @@ document.addEventListener('DOMContentLoaded', () => {
   // finalizes whatever streamed so far as a normal partial reply.
   app.stopAiStream = function() {
     if (window.GPTClient && typeof window.GPTClient.stopStream === 'function') window.GPTClient.stopStream();
+  };
+
+  // ---- File attachments -----------------------------------------------------
+  // Lets the user attach text/data files to a chat message. Contents are folded
+  // into the message sent to the AI (as fenced blocks) while the visible bubble
+  // only shows the file names. Binary/image files are rejected for now (vision is
+  // a follow-up). Pending attachments live per channel until the message sends.
+  app._chatAttachments = app._chatAttachments || { landing: [], workspace: [] };
+  var _chPrefix = function(ch) { return ch === 'landing' ? 'landing' : 'ws'; };
+  var _escHtml = function(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  };
+
+  app.onChatFiles = function(ch, fileList) {
+    if (!fileList || !fileList.length) return;
+    var list = app._chatAttachments[ch] || (app._chatAttachments[ch] = []);
+    Array.prototype.forEach.call(fileList, function(file) {
+      if (!isTextAttachment(file.name, file.type)) { app._toast('📎 ' + file.name + ' — only text/data files can be attached (images aren\'t supported yet).'); return; }
+      if (file.size > ATTACH_MAX_BYTES) { app._toast('📎 ' + file.name + ' is too large (max 256 KB).'); return; }
+      var reader = new FileReader();
+      reader.onload = function() {
+        list.push({ name: file.name, text: String(reader.result || ''), size: file.size });
+        app._renderChatAttachments(ch);
+      };
+      reader.onerror = function() { app._toast('📎 Could not read ' + file.name + '.'); };
+      reader.readAsText(file);
+    });
+  };
+
+  app._renderChatAttachments = function(ch) {
+    var host = document.getElementById(_chPrefix(ch) + '-chat-attachments');
+    if (!host) return;
+    var list = app._chatAttachments[ch] || [];
+    host.innerHTML = list.map(function(f, i) {
+      var kb = f.size < 1024 ? (f.size + ' B') : (Math.round(f.size / 1024) + ' KB');
+      return '<span class="chat-attach-chip" title="' + _escHtml(f.name) + ' · ' + kb + '">📎 <span class="chat-attach-name">' + _escHtml(f.name) +
+        '</span><span class="chat-attach-x" title="Remove" onclick="app.removeChatAttachment(\'' + ch + '\',' + i + ')">✕</span></span>';
+    }).join('');
+    host.style.display = list.length ? 'flex' : 'none';
+  };
+
+  app.removeChatAttachment = function(ch, i) {
+    var list = app._chatAttachments[ch] || [];
+    if (i >= 0 && i < list.length) list.splice(i, 1);
+    app._renderChatAttachments(ch);
+  };
+
+  // Names appended to the visible user bubble (the content itself is not shown).
+  app._attachmentChipText = function(ch) {
+    var names = attachmentNames(app._chatAttachments[ch]);
+    return names ? '\n📎 ' + names : '';
+  };
+
+  // Full content folded into the message actually sent to the AI.
+  app._foldAttachments = function(ch, userText) {
+    return foldAttachments(app._chatAttachments[ch], userText);
+  };
+
+  app._clearChatAttachments = function(ch) {
+    app._chatAttachments[ch] = [];
+    app._renderChatAttachments(ch);
+  };
+
+  // Lightweight transient toast (reuses the #nova-toast-host / .nova-toast styles).
+  app._toast = app._toast || function(msg) {
+    try {
+      var host = document.getElementById('nova-toast-host');
+      if (!host) { host = document.createElement('div'); host.id = 'nova-toast-host'; document.body.appendChild(host); }
+      var t = document.createElement('div');
+      t.className = 'nova-toast';
+      t.textContent = msg;
+      host.appendChild(t);
+      setTimeout(function() { t.classList.add('nova-toast-out'); }, 3200);
+      setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 3700);
+    } catch (e) { /* ignore */ }
   };
 
   // Appends a separated "artifact" block INSIDE the streamed answer bubble (a
