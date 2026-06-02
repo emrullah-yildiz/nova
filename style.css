@@ -260,6 +260,16 @@ input:focus, textarea:focus { border-color: var(--accent-blue); }
 .chat-stop-pill { background: var(--bg-surface-hover, rgba(255,255,255,0.06)); border: 1px solid var(--border-color, rgba(255,255,255,0.14)); color: var(--text-secondary); border-radius: 999px; padding: 3px 12px; font-size: 11px; cursor: pointer; }
 .chat-stop-pill:hover { color: var(--text-primary); border-color: var(--accent-red, #f38ba8); }
 
+/* File attachments — chips above the input + the paperclip button inside it. */
+.chat-attachments { display: none; flex-wrap: wrap; gap: 6px; padding: 6px 10px 0; }
+.chat-attach-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; background: var(--bg-surface-hover, rgba(255,255,255,0.06)); border: 1px solid var(--border-color, rgba(255,255,255,0.14)); color: var(--text-secondary); border-radius: 6px; padding: 3px 8px; font-size: 11px; }
+.chat-attach-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+.chat-attach-x { cursor: pointer; opacity: 0.7; padding: 0 2px; }
+.chat-attach-x:hover { opacity: 1; color: var(--accent-red, #f38ba8); }
+.chat-attach-btn { background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 6px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; }
+.chat-attach-btn svg { width: 18px; height: 18px; }
+.chat-attach-btn:hover { color: var(--text-primary); background: var(--bg-surface-hover, rgba(255,255,255,0.06)); }
+
 .chat-msg.ai .chat-bubble { background: var(--bg-surface); color: var(--text-primary); border-bottom-left-radius: 4px; }
 
 .chat-msg.user .chat-bubble { background: var(--accent-blue); color: var(--bg-tertiary); border-bottom-right-radius: 4px; }
