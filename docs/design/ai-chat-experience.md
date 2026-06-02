@@ -29,13 +29,18 @@ that don't replace prose**, **status/step timeline**.
 - **P1 (DONE)** — Stop erasing the narrative. The streamed answer persists in its
   bubble; plan/code/approve UI renders into a separate `.chat-artifact` block
   appended below it; the duplicate explanation was dropped from artifact headers.
-- **P2** — Structured `turn` model + incremental (non-wiping) renderer + a
-  collapsible **Thinking** disclosure (expanded while streaming, auto-collapse on
-  done).
-- **P3** — Real chain-of-thought via Anthropic extended thinking: enable `thinking`
-  in the proxy request and parse `thinking_delta` (today only `text_delta` is
-  read) into the Thinking block. Fallback: a derived **step timeline** from Nova's
-  pipeline (received → parsing → validating → building → done).
+- **P2/P3 (DONE for the Anthropic path)** — A collapsible **Thinking** disclosure
+  streams the model's real reasoning above the answer (expanded while streaming,
+  auto-collapses on done). `callStream` requests Anthropic extended thinking
+  (`thinking: {type:'enabled', budget_tokens}`, temperature forced to 1, larger
+  max_tokens) and parses `thinking_delta` into the block. Gated to thinking-capable
+  Anthropic models (Sonnet/Opus 4.x, 3.7 Sonnet) and the streaming chat only (not
+  utility JSON calls); disable via `localStorage 'nova:ai-thinking' = 'off'`. The
+  shared free-tier proxy (OpenAI-format) has no reasoning, so the block simply
+  doesn't appear there.
+- **P2 remaining** — Generalize to a structured `turn` model + incremental
+  (non-wiping) renderer; for non-Anthropic providers, a derived **step timeline**
+  (received → parsing → validating → building → done) as the reasoning stand-in.
 - **P4** — Agentic affordances: tool/action chips (Reading graph, Applying fix,
   Filing ticket), Stop / Retry / Copy, status pills.
 

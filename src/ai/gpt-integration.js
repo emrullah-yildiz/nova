@@ -144,6 +144,15 @@ document.addEventListener('DOMContentLoaded', () => {
           bubble.removeAttribute('id');
         }
 
+        // Auto-collapse the live "Thinking" block now that the answer has arrived.
+        var _thinkEl = document.getElementById(streamId + '-think');
+        if (_thinkEl) {
+          var _tbox = _thinkEl.querySelector('.chat-thinking');
+          var _thead = _thinkEl.querySelector('.chat-thinking-head');
+          if (_tbox) _tbox.classList.remove('open');
+          if (_thead) _thead.innerHTML = '<span class="chat-thinking-caret">▸</span> Thought process';
+        }
+
         // P3: extract any "show" actions the AI emitted, strip the block from the
         // text (so it's never shown raw), and auto-run the read-only view ops on
         // the canvas. Defensive — action handling must never break the response.
@@ -280,6 +289,26 @@ document.addEventListener('DOMContentLoaded', () => {
           bubble.innerHTML = app.fmt('❌ **API Error:** ' + errMsg + '\n\nCheck your API key and provider in Settings → Preferences.')
             + app._byokCardHtml();
         }
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+      },
+      // Extended-thinking stream → a collapsible "Thinking" block above the answer,
+      // so the user sees the model's reasoning as it happens (auto-collapses on done).
+      function(thinkingChunk, fullThinking) {
+        if (!bubble) return;
+        var thinkId = streamId + '-think';
+        var thinkEl = document.getElementById(thinkId);
+        if (!thinkEl) {
+          var msgEl = bubble.parentNode;
+          thinkEl = document.createElement('div');
+          thinkEl.className = 'chat-msg ai chat-thinking-msg';
+          thinkEl.id = thinkId;
+          thinkEl.innerHTML = '<div class="chat-avatar">✦</div><div class="chat-thinking open">'
+            + '<div class="chat-thinking-head" onclick="this.parentNode.classList.toggle(\'open\')"><span class="chat-thinking-caret">▾</span> Thinking…</div>'
+            + '<div class="chat-thinking-body"></div></div>';
+          if (msgEl && msgEl.parentNode) msgEl.parentNode.insertBefore(thinkEl, msgEl);
+        }
+        var tbody = thinkEl.querySelector('.chat-thinking-body');
+        if (tbody) tbody.textContent = fullThinking;
         msgContainer.scrollTop = msgContainer.scrollHeight;
       }
     );
