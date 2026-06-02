@@ -19,6 +19,14 @@ function portsOf(node, typeMap, dir) {
   return (def[dir] || []).map((p) => ({ id: p.id, type: p.type || 'any' }));
 }
 
+// A node whose live ports can't be trusted from a serialized graph: Custom.Python
+// and any dynamic-input node. Its static def ports don't reflect the real ones,
+// so "unconnected input" checks against them would be false alarms.
+function isDynamicPortNode(node, def) {
+  return node.type === 'custom-python' || node.type === 'Custom.Python'
+    || (def && def.dynamicInputs) || Array.isArray(node._dynInputs) || Array.isArray(node._dynOutputs);
+}
+
 export function analyzeGraphProblems(graph, typeMap = {}, opts = {}) {
   const nodes = Array.isArray(graph && graph.nodes) ? graph.nodes : [];
   const wires = Array.isArray(graph && graph.wires) ? graph.wires : [];
@@ -34,7 +42,13 @@ export function analyzeGraphProblems(graph, typeMap = {}, opts = {}) {
     if (byId.has(w.fromNode)) usedOutputs.add(w.fromNode + ':' + w.fromPort);
   }
 
-  // Wires: missing endpoints + type mismatches.
+  // Wires: only a MISSING NODE is a reliable orphan here. A port-name mismatch
+  // is NOT detectable from a serialized graph once dynamic ports (Custom.Python)
+  // are involved — its static def ports (elements/options/result) don't reflect
+  // the real ports (panels/extrude_dir/thick_list), so resolving against them
+  // would flag every such wire as a phantom orphan. The engine flags genuine
+  // orphan wires itself; we never invent one. Type mismatches are reported only
+  // when BOTH endpoints resolve to a known typed port.
   for (const w of wires) {
     if (!w) continue;
     const from = byId.get(w.fromNode);
@@ -45,11 +59,7 @@ export function analyzeGraphProblems(graph, typeMap = {}, opts = {}) {
     }
     const outPort = portsOf(from, typeMap, 'outputs').find((p) => p.id === w.fromPort);
     const inPort = portsOf(to, typeMap, 'inputs').find((p) => p.id === w.toPort);
-    if (!outPort || !inPort) {
-      problems.push({ kind: 'orphan-wire', nodeId: outPort ? to.id : from.id, message: `Wire ${w.fromNode}.${w.fromPort} → ${w.toNode}.${w.toPort} references a port that no longer exists.` });
-      continue;
-    }
-    if (!isWireTypeCompatible(outPort.type, inPort.type)) {
+    if (outPort && inPort && !isWireTypeCompatible(outPort.type, inPort.type)) {
       problems.push({ kind: 'type-mismatch', nodeId: to.id, port: inPort.id, message: `Type mismatch: ${from.type}.${outPort.id} (${outPort.type}) → ${to.type}.${inPort.id} (${inPort.type}). Wire a compatible source or insert a converter.` });
     }
   }
@@ -57,11 +67,15 @@ export function analyzeGraphProblems(graph, typeMap = {}, opts = {}) {
   // Per-node: unconnected required inputs and runtime errors.
   for (const n of nodes) {
     const def = typeMap[n.type] || {};
-    const controlIds = new Set((def.controls || []).map((c) => c.id));
-    for (const p of portsOf(n, typeMap, 'inputs')) {
-      if (fedInputs.has(n.id + ':' + p.id)) continue;
-      if (controlIds.has(p.id)) continue; // has an inline control default → not "missing"
-      problems.push({ kind: 'unconnected-input', nodeId: n.id, port: p.id, message: `${n.type} (${n.id}) input "${p.id}" has no incoming wire and no control default — it will read empty.` });
+    // Only check inputs whose port list we can trust (skip dynamic-port nodes —
+    // their static def ports are fiction once the live ports diverge).
+    if (!isDynamicPortNode(n, def)) {
+      const controlIds = new Set((def.controls || []).map((c) => c.id));
+      for (const p of portsOf(n, typeMap, 'inputs')) {
+        if (fedInputs.has(n.id + ':' + p.id)) continue;
+        if (controlIds.has(p.id)) continue; // has an inline control default → not "missing"
+        problems.push({ kind: 'unconnected-input', nodeId: n.id, port: p.id, message: `${n.type} (${n.id}) input "${p.id}" has no incoming wire and no control default — it will read empty.` });
+      }
     }
     const err = nodeErrors[n.id];
     if (err && (err.message || typeof err === 'string')) {

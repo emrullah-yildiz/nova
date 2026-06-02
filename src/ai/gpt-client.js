@@ -950,10 +950,23 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
         if (ctx.text) {
           sys += `\n\n### Live Graph (the user's current canvas)\nThis is the actual graph on the canvas right now. Use it to answer questions about the current workflow ("which node does X here?", "what should I wire next to finish this?") and to propose precise edits — reference nodes by their id. Ports are shown as in[...]/out[...]; wires as from.port → to.port.\n\n${ctx.text}`;
 
-          // Problem report — what's broken or unfinished, computed locally. Gives
-          // the assistant a concrete worklist for "how do I finish this?" / fixes.
+          // Problem report — what's broken or unfinished. The AUTHORITATIVE
+          // per-node warnings are the ones the engine surfaces in the inspector
+          // (e.g. "Meshes expects list but received object") — gather those first
+          // so the assistant addresses the warning the user actually sees, then
+          // add the locally-derived structural problems.
           const nodeErrors = (app._nodeErrors && typeof app._nodeErrors === 'object') ? app._nodeErrors : {};
-          const problems = analyzeGraphProblems(graph, typeMap, { nodeErrors });
+          const realWarnings = [];
+          if (typeof app._collectInspectorWarnings === 'function' && Array.isArray(app.nodes)) {
+            for (const nd of app.nodes) {
+              let ws = [];
+              try { ws = app._collectInspectorWarnings(nd) || []; } catch { ws = []; }
+              for (const w of ws) {
+                realWarnings.push({ kind: 'warning', nodeId: nd.id, message: `${(nd.def && nd.def.name) || nd.type} (${nd.id})${w.port ? ' [' + w.port + ']' : ''}: ${w.message}` });
+              }
+            }
+          }
+          const problems = realWarnings.concat(analyzeGraphProblems(graph, typeMap, { nodeErrors }));
           const problemText = formatGraphProblems(problems);
           if (problemText) {
             sys += `\n\n### Problems In The Current Graph\nLocally detected issues — use these to answer "how do I finish/fix this?" and to propose targeted edits. Address them by node id; do not invent problems beyond this list.\n\n${problemText}`;

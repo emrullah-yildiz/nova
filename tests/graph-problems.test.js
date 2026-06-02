@@ -38,15 +38,36 @@ describe('analyzeGraphProblems', () => {
     expect(kinds(problems)).toContain('unconnected-input');
   });
 
-  it('flags an orphan wire to a missing node or port', () => {
+  it('flags an orphan wire only when a NODE is missing — never on a port-name mismatch', () => {
     const graph = {
       nodes: [{ id: 'r', type: 'Math.Round' }, { id: 'o', type: 'Output.Watch' }],
       wires: [
-        { fromNode: 'ghost', fromPort: 'x', toNode: 'r', toPort: 'a' },
-        { fromNode: 'r', fromPort: 'nope', toNode: 'o', toPort: 'value' }
+        { fromNode: 'ghost', fromPort: 'x', toNode: 'r', toPort: 'a' }, // missing node → orphan
+        { fromNode: 'r', fromPort: 'nope', toNode: 'o', toPort: 'value' } // bad port name → NOT flagged (unreliable)
       ]
     };
-    expect(kinds(analyzeGraphProblems(graph, TYPE_MAP)).filter((k) => k === 'orphan-wire').length).toBe(2);
+    expect(kinds(analyzeGraphProblems(graph, TYPE_MAP)).filter((k) => k === 'orphan-wire').length).toBe(1);
+  });
+
+  it('does NOT invent problems for a Custom.Python node with dynamic ports (regression)', () => {
+    // Real-world: Custom.Python exposes panels/extrude_dir/thick_list, none of
+    // which are in its static def (elements/options/result). Resolving against the
+    // def previously produced phantom orphan-wires + unconnected-inputs.
+    const graph = {
+      nodes: [
+        { id: 'p', type: 'custom-python' },
+        { id: 'c', type: 'Solid.CombineAll' },
+        { id: 'o', type: 'Output.Watch' }
+      ],
+      wires: [
+        { fromNode: 'p', fromPort: 'thick_list', toNode: 'c', toPort: 'meshes' },
+        { fromNode: 'c', fromPort: 'result', toNode: 'o', toPort: 'value' }
+      ]
+    };
+    const tm = { ...TYPE_MAP, 'custom-python': { inputs: [{ id: 'elements' }, { id: 'options' }], outputs: [{ id: 'result' }] }, 'Solid.CombineAll': { inputs: [{ id: 'meshes', type: 'list' }], outputs: [{ id: 'result', type: 'mesh' }] } };
+    const problems = analyzeGraphProblems(graph, tm);
+    expect(kinds(problems)).not.toContain('orphan-wire');
+    expect(kinds(problems)).not.toContain('unconnected-input');
   });
 
   it('does not flag an unconnected input that has a control fallback', () => {
