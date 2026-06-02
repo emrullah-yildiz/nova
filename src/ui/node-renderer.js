@@ -715,7 +715,10 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
 
   // ── Universal Inspector Builder ──
   function _collectInspectorWarnings(nd) {
-    if (!nd || !app._hasRun) return [];
+    // No warnings until the graph has run, and only for nodes that were part of
+    // the latest run — a freshly placed node hasn't run yet, so it must not show
+    // "produced no output" or input-type warnings until the next Run includes it.
+    if (!nd || !app._hasRun || nd._ranAtVersion !== app._lastRunVersion) return [];
     var warnings = [];
     var controlIds = nd.def && nd.def.controls ? nd.def.controls.map(function(c) { return c.id; }) : [];
     function typeOfValue(value) {
