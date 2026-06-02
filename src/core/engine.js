@@ -145,7 +145,12 @@ export function installEngine(targetApp = getRuntimeApp()) {
   app._commitRunSnapshot = function() {
     this._hasRun = true;
     this._lastRunVersion = (this._lastRunVersion || 0) + 1;
+    var runVersion = this._lastRunVersion;
     this.nodes.forEach(function(nd) {
+      // Mark which run this node participated in, so warnings (e.g. "produced no
+      // output") only apply to nodes that were actually part of the latest Run —
+      // a node placed AFTER a run hasn't run yet and shouldn't be flagged.
+      nd._ranAtVersion = runVersion;
       nd._lastRunValue = nd._lastComputedValue;
       if (nd._portValues) {
         nd._lastRunPortValues = Object.assign({}, nd._portValues);

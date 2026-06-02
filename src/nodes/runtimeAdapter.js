@@ -83,6 +83,14 @@ export function resolveInputs(nodeDefinition, nodeInstance, getInput, getVal, co
     if (value === undefined && typeof getVal === 'function' && input.defaultValue !== undefined) {
       value = getVal(input.id, input.defaultValue);
     }
+    // Auto-promote a single value to a one-item list for list-typed inputs, so a
+    // node that consumes a list (Solid.ByLoft, List.*, Math.Sum, …) works when
+    // wired a single item instead of erroring on a non-array. Matches the
+    // "single → list of one" behavior of Grasshopper/Dynamo. Null/undefined are
+    // left as-is so empty/default handling still applies.
+    if (input.type === 'list' && value !== undefined && value !== null && !Array.isArray(value)) {
+      value = [value];
+    }
     inputs[input.id] = value;
   });
 
