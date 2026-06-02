@@ -2348,7 +2348,12 @@ const app = {
 
     m.innerHTML=`<div class="chat-avatar">✦</div><div class="chat-bubble">${this.fmt(txt)}</div>`;
 
-    c.appendChild(m);c.scrollTop=c.scrollHeight;
+    c.appendChild(m);
+
+    // Copy affordance (no Retry — these are system/canned messages, not a prompt).
+    if(this._attachMsgActions)this._attachMsgActions(m,{text:txt});
+
+    c.scrollTop=c.scrollHeight;
 
   },
 
