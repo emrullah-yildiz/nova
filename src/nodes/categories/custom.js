@@ -5,6 +5,40 @@ export const customCategory = {
   icon: '✦'
 };
 
+export const DEFAULT_CUSTOM_PYTHON_CODE = `# in: elements:list, parameter_name:string, value:any
+# out: result:any
+import math
+
+# Port names above become Python variables with the same names:
+# elements, parameter_name, value -> result
+#
+# Nova web runtime exposes these automatically:
+# - Geo: geometry constructors and operations
+# - RevitBridge: local Revit snapshot and approved write helpers
+# - HostRegistry: host adapter access, usually HostRegistry.get("revit")
+#
+# Native Autodesk.Revit.DB imports do not run in the web Python node.
+# Use Nova Connect helpers here; copy the imports below only when moving
+# this logic into pyRevit, Dynamo Python, or RevitPythonShell:
+# import clr
+# clr.AddReference("RevitAPI")
+# clr.AddReference("RevitServices")
+# from Autodesk.Revit.DB import FilteredElementCollector, BuiltInCategory, ElementId, Transaction
+# from RevitServices.Persistence import DocumentManager
+# from RevitServices.Transactions import TransactionManager
+
+revit = HostRegistry.get("revit")
+target_elements = elements
+if not target_elements:
+    target_elements = []
+if len(target_elements) == 0:
+    target_elements = RevitBridge.getSelection()
+
+parameter_values = []
+if revit:
+    parameter_values = revit.getParameterValues(target_elements, parameter_name)
+result = {"elements": target_elements, "parameter": parameter_name, "values": parameter_values, "value": value, "count": len(target_elements)}`;
+
 function safeJsFunction(body, argNames) {
   try {
     return new Function(...argNames, body);
@@ -202,13 +236,15 @@ export const customNodes = [
     aliases: ['custom-python'],
     description: 'A Python code block executed by the embedded Python runtime (Pyodide). The Python control is the source; the engine special-cases this node type to route it through PythonRunner, which exposes inputs by name and reads outputs back from the local scope.',
     inputs: [
-      { id: 'input0', name: 'input', type: 'any', description: 'Single input value available inside the Python block as input0' }
+      { id: 'elements', name: 'elements', type: 'list', description: 'Revit elements to inspect. Leave empty to use the active Revit selection when connected.' },
+      { id: 'parameter_name', name: 'parameter_name', type: 'string', description: 'Revit parameter name to read, such as Comments, Mark, Type Name, or Level.' },
+      { id: 'value', name: 'value', type: 'any', description: 'Optional value reserved for write-oriented scripts after user approval.' }
     ],
     outputs: [
-      { id: 'output0', name: 'output', type: 'any', description: 'Value assigned to output0 inside the Python block' }
+      { id: 'result', name: 'result', type: 'any', description: 'Dictionary containing selected elements, parameter values, and count.' }
     ],
     controls: [
-      { id: 'code', type: 'text', default: 'output = input', label: 'Python' }
+      { id: 'code', type: 'text', default: DEFAULT_CUSTOM_PYTHON_CODE, label: 'Python' }
     ],
     metadata: {
       skipSampleExecution: true
@@ -221,21 +257,25 @@ export const customNodes = [
       csharp: '/* Python block — not directly portable */'
     },
     help: {
-      inputs: [{ name: 'input', description: 'Single input' }],
-      outputs: [{ name: 'output', description: 'Computed output' }],
+      inputs: [
+        { name: 'elements', description: 'Revit element list' },
+        { name: 'parameter_name', description: 'Parameter to inspect' },
+        { name: 'value', description: 'Optional write value' }
+      ],
+      outputs: [{ name: 'result', description: 'Computed result' }],
       example: {
-        title: 'Pass 5 through default Python (output = input) → 5',
+        title: 'Read Revit parameter values from connected elements',
         nodes: [
-          { type: 'Input.Number', x: 0, y: 0, controls: { val: 5 } },
-          { type: 'Custom.Python', x: 240, y: 0 },
-          { type: 'Output.Watch', x: 480, y: 0 }
+          { type: 'Input.Text', x: 0, y: 0, controls: { val: 'Comments' } },
+          { type: 'Custom.Python', x: 260, y: 0 },
+          { type: 'Output.Watch', x: 540, y: 0 }
         ],
         wires: [
-          [0, 'value', 1, 'input0'],
-          [1, 'output0', 2, 'value']
+          [0, 'value', 1, 'parameter_name'],
+          [1, 'result', 2, 'value']
         ]
       },
-      sampleCode: '# Python block\n{{ctrl.code}}'
+      sampleCode: DEFAULT_CUSTOM_PYTHON_CODE
     }
   }
 ];

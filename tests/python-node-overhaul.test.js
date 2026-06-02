@@ -14,7 +14,9 @@
 //      catches mismatches.
 
 import { getLiveCoreRegistry } from '../src/nodes/coreNodes.js';
+import { customNodes, DEFAULT_CUSTOM_PYTHON_CODE } from '../src/nodes/categories/custom.js';
 import { CodeParser, _resetAutoGeoMapForTests } from '../src/runtime/parser.js';
+import { PythonRunner } from '../src/runtime/pyrunner.js';
 import {
   parsePythonPortDecls,
   lastTopLevelAssignment,
@@ -134,6 +136,33 @@ shell = Geo.loft(pts)`;
     expect(r.source).toBe('default');
     expect(r.inputs[0].id).toBe('input0');
     expect(r.outputs[0].id).toBe('output0');
+  });
+});
+
+describe('Custom.Python default template', () => {
+  it('starts with Revit-oriented ports and runnable Nova host helpers', () => {
+    const customPython = customNodes.find((node) => node.type === 'Custom.Python');
+    expect(customPython.controls.find((control) => control.id === 'code').default).toBe(DEFAULT_CUSTOM_PYTHON_CODE);
+    expect(customPython.inputs.map((port) => port.id)).toEqual(['elements', 'parameter_name', 'value']);
+    expect(customPython.outputs.map((port) => port.id)).toEqual(['result']);
+
+    const ports = resolvePythonPorts(DEFAULT_CUSTOM_PYTHON_CODE);
+    expect(ports.inputs.map((port) => port.id)).toEqual(['elements', 'parameter_name', 'value']);
+    expect(ports.outputs.map((port) => port.id)).toEqual(['result']);
+    expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('Geo: geometry constructors and operations');
+    expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('RevitBridge: local Revit snapshot');
+    expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('HostRegistry.get("revit")');
+    expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('elements, parameter_name, value -> result');
+
+    const executed = PythonRunner.execute(DEFAULT_CUSTOM_PYTHON_CODE, {
+      elements: [],
+      parameter_name: 'Comments',
+      value: ''
+    });
+    expect(executed.error).toBeNull();
+    expect(executed.outputs.result.count).toBe(0);
+    expect(executed.outputs.result.parameter).toBe('Comments');
+    expect(executed.outputs.result.value).toBe('');
   });
 });
 
