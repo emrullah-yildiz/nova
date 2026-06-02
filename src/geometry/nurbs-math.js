@@ -385,9 +385,37 @@ import { Geo } from './geometry-lib.js';
 
   // Simple 2D Voronoi (brute-force nearest neighbor)
   // Returns cells as arrays of boundary points
+  // Derive a Voronoi sampling region from the sites' OWN footprint (+ a small
+  // margin) so that when the sites are clustered in a small area the perimeter
+  // cells don't sprawl out to a fixed ±20 box — the cause of the "giant flat
+  // panels radiating across the ground" bug.
+  G._voronoiBounds = function(sites) {
+    var fallback = { minX: -20, maxX: 20, minY: -20, maxY: 20 };
+    if (!sites || !sites.length) return fallback;
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (var i = 0; i < sites.length; i++) {
+      var s = sites[i];
+      if (!s) continue;
+      var x = s.x || 0, y = s.y || 0;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    if (!isFinite(minX)) return fallback;
+    var span = Math.max(maxX - minX, maxY - minY, 1);
+    var m = span * 0.15;
+    return { minX: minX - m, maxX: maxX + m, minY: minY - m, maxY: maxY + m };
+  };
+
   G.voronoi2D = function(sites, bounds, resolution) {
-    bounds = bounds || { minX: -20, maxX: 20, minY: -20, maxY: 20 };
-    resolution = resolution || 1.0;
+    bounds = bounds || G._voronoiBounds(sites);
+    if (!resolution) {
+      // ~60 grid samples across the longer axis — fine enough for clean cells,
+      // bounded so a large footprint can't blow up the sample count.
+      var rng = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY);
+      resolution = Math.max(0.05, rng / 60);
+    }
     var cells = {};
     for (var i = 0; i < sites.length; i++) cells[i] = [];
 
@@ -455,7 +483,8 @@ import { Geo } from './geometry-lib.js';
   G.voronoiMesh = function(sites, bounds, height, gap, resolution) {
     height = height || 3;
     gap = gap || 0.1;
-    resolution = resolution || 1.0;
+    // Leave resolution undefined when not supplied so voronoi2D derives it from
+    // the (site-fitted) bounds instead of a fixed 1.0 step.
     var outlines = G.voronoiOutlines(sites, bounds, resolution);
     var meshes = [];
     for (var i = 0; i < outlines.length; i++) {
