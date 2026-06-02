@@ -1251,7 +1251,13 @@ const app = {
     nd.controlValues=migrateControlValues(nd.def, resolved.def, nd.controlValues);
     nd.def={...resolved.def,inputs:(resolved.def.inputs||[]).map(function(inp){return{...inp};}),outputs:(resolved.def.outputs||[]).map(function(out){return{...out};})};
     nd.version=resolved.version;
+    // Remove the existing DOM node before re-rendering — renderNode always
+    // appends a fresh element, so without this the node duplicates (same id)
+    // and the stale element breaks hit-testing/drag on the canvas.
+    const oldEl=document.getElementById(nd.id);
+    if(oldEl) oldEl.remove();
     this.renderNode(nd);
+    if(this.updatePortDots) this.updatePortDots();
     if(this.invalidateCompute) this.invalidateCompute();
     if(this.renderWires) this.renderWires();
     if(typeof Viewer3D!=='undefined') Viewer3D._needsRebuild=true;
