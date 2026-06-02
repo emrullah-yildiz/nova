@@ -8,6 +8,7 @@ import { validatePlanAgainstRegistry } from './plan-validator.js';
 import { buildGraphFromPlan, planToPython } from './plan-builder.js';
 import { rewriteGeoAliasesInResponse } from './geo-alias-rewriter.js';
 import { parseNovaActions } from './graph-actions.js';
+import { summarizeShowOps } from './turn-steps.js';
 import { isTextAttachment, attachmentNames, foldAttachments, ATTACH_MAX_BYTES } from './attachment-fold.js';
 import {
   buildDecideYourselfReply,
@@ -287,6 +288,29 @@ document.addEventListener('DOMContentLoaded', () => {
     msgEl.appendChild(row);
   };
 
+  // Renders read-only "tool" chips (the canvas show-actions the AI ran) below the
+  // answer, above the Copy/Retry row. steps: [{ icon, label }].
+  app._renderStepChips = function(msgEl, steps) {
+    if (!msgEl || !steps || !steps.length) return;
+    var old = msgEl.querySelector('.chat-steps');
+    if (old) old.remove();
+    var row = document.createElement('div');
+    row.className = 'chat-steps';
+    steps.forEach(function(s) {
+      var chip = document.createElement('span');
+      chip.className = 'chat-step-chip';
+      var ic = document.createElement('span');
+      ic.className = 'chat-step-ic';
+      ic.textContent = s.icon || '•';
+      chip.appendChild(ic);
+      chip.appendChild(document.createTextNode(s.label || ''));
+      row.appendChild(chip);
+    });
+    var actions = msgEl.querySelector('.chat-msg-actions');
+    if (actions) msgEl.insertBefore(row, actions);
+    else msgEl.appendChild(row);
+  };
+
   app._gptChat = function(ch, txt) {
     const existingCode = document.getElementById('cv-code') ? document.getElementById('cv-code').value : '';
     const msgContainer = document.getElementById(ch === 'landing' ? 'landing-chat-messages' : 'ws-chat-messages');
@@ -351,6 +375,12 @@ document.addEventListener('DOMContentLoaded', () => {
           fullText = act.cleanedText;
           if (act.ops.length && ch === 'workspace' && typeof app.runShowActions === 'function') {
             app.runShowActions(act.ops);
+            // Surface what the AI just did on the canvas as read-only "tool" chips.
+            var steps = summarizeShowOps(act.ops, function(id) {
+              var n = app.nodes && app.nodes.find(function(x) { return x.id === id; });
+              return n && n.def && n.def.name ? n.def.name : null;
+            });
+            app._renderStepChips(msgEl, steps);
           }
         } catch { /* ignore malformed action blocks */ }
 
