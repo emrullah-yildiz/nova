@@ -58,7 +58,14 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    if (l.includes('add') && (l.includes('node') || l.includes('number') || l.includes('point') || l.includes('watch'))) {
+    // Keyword shortcuts fire ONLY for short, imperative commands — never for
+    // questions ("how do I add a node…?") or long prompts (e.g. a warning-fix
+    // request), which must go to the AI. Otherwise these would silently hijack
+    // legitimate chat into adding/removing nodes.
+    const isShortCommand = txt.trim().split(/\s+/).length <= 6 && !/[?]/.test(l)
+      && !/\b(how|what|why|explain|should|can you|could)\b/.test(l);
+
+    if (isShortCommand && l.includes('add') && (l.includes('node') || l.includes('number') || l.includes('point') || l.includes('watch'))) {
       let t = 'number-input';
       if (l.includes('point')) t = 'geo-point';
       else if (l.includes('watch')) t = 'output-watch';
@@ -68,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (nd) this.addAIMessage('workspace', '✅ Added **' + nd.def.name + '** to canvas!');
       return;
     }
-    if (l.includes('delete') || l.includes('remove')) {
+    if (isShortCommand && (l.includes('delete') || l.includes('remove'))) {
       if (this.selectedNodes.length > 0) {
         const c = this.selectedNodes.length;
         this.selectedNodes.forEach(id => this.removeNode(id));
