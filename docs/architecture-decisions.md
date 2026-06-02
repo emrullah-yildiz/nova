@@ -5,6 +5,40 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-02 - Streaming Reasoning Block (Anthropic Extended Thinking, P2/P3)
+
+**Context:** Users want to see "what it thought and thinks at the moment". The
+Anthropic models Nova uses (Sonnet/Opus 4.x) support extended thinking, but the
+SSE parser only read `text_delta` and the request never enabled thinking.
+
+**Decision:** `callStream` requests Anthropic extended thinking
+(`thinking: {type:'enabled', budget_tokens: THINKING_BUDGET}`, with temperature
+forced to 1 and max_tokens bumped above the budget — both required by the API) and
+parses `thinking_delta` via `extractThinkingDelta`, routed to an `onThinking`
+callback. The chat renders it into a collapsible **Thinking** block (its own
+message above the answer, open while streaming, auto-collapses on done). Gating:
+thinking-capable Anthropic models only (`isThinkingModel`), the streaming chat path
+only (utility JSON calls stay clean), and disableable via `localStorage
+'nova:ai-thinking' = 'off'`. Non-Anthropic providers (incl. the free proxy) simply
+show no block. See `docs/design/ai-chat-experience.md`.
+
+## 2026-06-02 - Chat Turns Persist The Answer; Artifacts Append Below (P1)
+
+**Context:** The assistant rendered a turn into one mutable bubble that got
+overwritten — streaming collapsed to "Thinking…" once code appeared, and a
+plan/code reply replaced the bubble with an artifact card, discarding the reasoning
+the user watched stream ("loses track of thinking").
+
+**Decision:** First phase of the chat response architecture (see
+`docs/design/ai-chat-experience.md`). The streamed answer/reasoning is finalized
+into its own bubble and persists; plan/code/approve UI now renders into a separate
+`.chat-artifact` block appended *inside* that bubble (a child div, so it stacks
+below the prose without disturbing the chat-msg flex row) via
+`app._appendArtifactBubble`. The duplicate explanation was dropped from the
+artifact headers since the prose now lives in the persistent answer. Later phases
+add a collapsible Thinking disclosure (P2), real Anthropic extended-thinking
+streaming or a derived step timeline (P3), and agentic affordances (P4).
+
 ## 2026-06-02 - A Single Value Wired To A List Input Is A One-Item List
 
 **Context:** List-consuming nodes (Solid.ByLoft, List.*, Math.Sum) failed when

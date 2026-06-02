@@ -8,10 +8,11 @@ import { validatePlanAgainstRegistry } from './plan-validator.js';
 import { buildGraphFromPlan, planToPython } from './plan-builder.js';
 import { rewriteGeoAliasesInResponse } from './geo-alias-rewriter.js';
 import { parseNovaActions } from './graph-actions.js';
+import { isTextAttachment, attachmentNames, foldAttachments, ATTACH_MAX_BYTES } from './attachment-fold.js';
 import {
   buildDecideYourselfReply,
   buildOptionReply,
-  buildOtherReply,
+  buildCustomReply,
   firstOptionGroup
 } from './option-flow.js';
 
@@ -107,6 +108,99 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  // Cancels the in-flight streaming response (the Stop button). callStream
+  // finalizes whatever streamed so far as a normal partial reply.
+  app.stopAiStream = function() {
+    if (window.GPTClient && typeof window.GPTClient.stopStream === 'function') window.GPTClient.stopStream();
+  };
+
+  // ---- File attachments -----------------------------------------------------
+  // Lets the user attach text/data files to a chat message. Contents are folded
+  // into the message sent to the AI (as fenced blocks) while the visible bubble
+  // only shows the file names. Binary/image files are rejected for now (vision is
+  // a follow-up). Pending attachments live per channel until the message sends.
+  app._chatAttachments = app._chatAttachments || { landing: [], workspace: [] };
+  var _chPrefix = function(ch) { return ch === 'landing' ? 'landing' : 'ws'; };
+  var _escHtml = function(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  };
+
+  app.onChatFiles = function(ch, fileList) {
+    if (!fileList || !fileList.length) return;
+    var list = app._chatAttachments[ch] || (app._chatAttachments[ch] = []);
+    Array.prototype.forEach.call(fileList, function(file) {
+      if (!isTextAttachment(file.name, file.type)) { app._toast('📎 ' + file.name + ' — only text/data files can be attached (images aren\'t supported yet).'); return; }
+      if (file.size > ATTACH_MAX_BYTES) { app._toast('📎 ' + file.name + ' is too large (max 256 KB).'); return; }
+      var reader = new FileReader();
+      reader.onload = function() {
+        list.push({ name: file.name, text: String(reader.result || ''), size: file.size });
+        app._renderChatAttachments(ch);
+      };
+      reader.onerror = function() { app._toast('📎 Could not read ' + file.name + '.'); };
+      reader.readAsText(file);
+    });
+  };
+
+  app._renderChatAttachments = function(ch) {
+    var host = document.getElementById(_chPrefix(ch) + '-chat-attachments');
+    if (!host) return;
+    var list = app._chatAttachments[ch] || [];
+    host.innerHTML = list.map(function(f, i) {
+      var kb = f.size < 1024 ? (f.size + ' B') : (Math.round(f.size / 1024) + ' KB');
+      return '<span class="chat-attach-chip" title="' + _escHtml(f.name) + ' · ' + kb + '">📎 <span class="chat-attach-name">' + _escHtml(f.name) +
+        '</span><span class="chat-attach-x" title="Remove" onclick="app.removeChatAttachment(\'' + ch + '\',' + i + ')">✕</span></span>';
+    }).join('');
+    host.style.display = list.length ? 'flex' : 'none';
+  };
+
+  app.removeChatAttachment = function(ch, i) {
+    var list = app._chatAttachments[ch] || [];
+    if (i >= 0 && i < list.length) list.splice(i, 1);
+    app._renderChatAttachments(ch);
+  };
+
+  // Names appended to the visible user bubble (the content itself is not shown).
+  app._attachmentChipText = function(ch) {
+    var names = attachmentNames(app._chatAttachments[ch]);
+    return names ? '\n📎 ' + names : '';
+  };
+
+  // Full content folded into the message actually sent to the AI.
+  app._foldAttachments = function(ch, userText) {
+    return foldAttachments(app._chatAttachments[ch], userText);
+  };
+
+  app._clearChatAttachments = function(ch) {
+    app._chatAttachments[ch] = [];
+    app._renderChatAttachments(ch);
+  };
+
+  // Lightweight transient toast (reuses the #nova-toast-host / .nova-toast styles).
+  app._toast = app._toast || function(msg) {
+    try {
+      var host = document.getElementById('nova-toast-host');
+      if (!host) { host = document.createElement('div'); host.id = 'nova-toast-host'; document.body.appendChild(host); }
+      var t = document.createElement('div');
+      t.className = 'nova-toast';
+      t.textContent = msg;
+      host.appendChild(t);
+      setTimeout(function() { t.classList.add('nova-toast-out'); }, 3200);
+      setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 3700);
+    } catch (e) { /* ignore */ }
+  };
+
+  // Appends a separated "artifact" block INSIDE the streamed answer bubble (a
+  // child div, so it stacks below the prose without disturbing the chat-msg flex
+  // row). The artifact UI (code-ready / plan / approve) renders here so it never
+  // overwrites the reasoning the user watched stream. Returns the new element.
+  app._appendArtifactBubble = function(answerBubble) {
+    if (!answerBubble) return null;
+    var b = document.createElement('div');
+    b.className = 'chat-artifact';
+    answerBubble.appendChild(b);
+    return b;
+  };
+
   app._gptChat = function(ch, txt) {
     const existingCode = document.getElementById('cv-code') ? document.getElementById('cv-code').value : '';
     const msgContainer = document.getElementById(ch === 'landing' ? 'landing-chat-messages' : 'ws-chat-messages');
@@ -115,6 +209,15 @@ document.addEventListener('DOMContentLoaded', () => {
     msgEl.className = 'chat-msg ai';
     msgEl.innerHTML = '<div class="chat-avatar">✦</div><div class="chat-bubble streaming" id="' + streamId + '"></div>';
     msgContainer.appendChild(msgEl);
+    // Stop control — lets the user cancel an in-flight response. Lives below the
+    // streaming message (so onChunk's bubble re-render can't wipe it) and is
+    // removed when the stream finalizes.
+    const stopRow = document.createElement('div');
+    stopRow.className = 'chat-stop-row';
+    stopRow.id = streamId + '-stop';
+    stopRow.innerHTML = '<button class="chat-stop-pill" onclick="event.preventDefault();app.stopAiStream()">■ Stop</button>';
+    msgContainer.appendChild(stopRow);
+    const _removeStop = function() { var s = document.getElementById(streamId + '-stop'); if (s) s.remove(); };
     msgContainer.scrollTop = msgContainer.scrollHeight;
     const bubble = document.getElementById(streamId);
 
@@ -127,9 +230,19 @@ document.addEventListener('DOMContentLoaded', () => {
         msgContainer.scrollTop = msgContainer.scrollHeight;
       },
       function(fullText) {
+        _removeStop();
         if (bubble) {
           bubble.classList.remove('streaming');
           bubble.removeAttribute('id');
+        }
+
+        // Auto-collapse the live "Thinking" block now that the answer has arrived.
+        var _thinkEl = document.getElementById(streamId + '-think');
+        if (_thinkEl) {
+          var _tbox = _thinkEl.querySelector('.chat-thinking');
+          var _thead = _thinkEl.querySelector('.chat-thinking-head');
+          if (_tbox) _tbox.classList.remove('open');
+          if (_thead) _thead.innerHTML = '<span class="chat-thinking-caret">▸</span> Thought process';
         }
 
         // P3: extract any "show" actions the AI emitted, strip the block from the
@@ -156,12 +269,23 @@ document.addEventListener('DOMContentLoaded', () => {
           NFLogger.info('geo-alias-rewriter', 'rewrote ' + aliasResult.rewrites.length + ' Geo.* aliases', { rewrites: aliasResult.rewrites });
         }
 
+        // Chat response architecture P1: persist the streamed answer/reasoning in
+        // its own bubble, then render artifacts (plan / code-ready / approve UI)
+        // into a SEPARATE appended block below it — so the thinking the user
+        // watched stream is never overwritten by the result.
+        const answerText = app._extractDisplayText(cleanedText);
+        const finalizeAnswer = (fallback) => {
+          if (bubble) bubble.innerHTML = app.fmt(answerText || fallback || '');
+        };
+
         // Phase 7: if the AI emitted a nova-plan, route through the
         // plan-mode pipeline (validate against registry → build graph
         // mechanically).
         const planExtract = extractPlanFromResponse(cleanedText);
         if (planExtract && ch === 'workspace' && !(app._pendingNodeFix && app._pendingNodeFix.nodeId)) {
-          app._handleNovaPlan(planExtract, cleanedText, bubble, msgContainer, ch, txt);
+          finalizeAnswer();
+          const artifact = app._appendArtifactBubble(bubble);
+          app._handleNovaPlan(planExtract, cleanedText, artifact || bubble, msgContainer, ch, txt);
           msgContainer.scrollTop = msgContainer.scrollHeight;
           return;
         }
@@ -174,7 +298,9 @@ document.addEventListener('DOMContentLoaded', () => {
             app._presentNodeFix(parsed, bubble, msgContainer, ch);
             return;
           }
-          app._validateAndPresent(parsed, bubble, msgContainer, ch, txt);
+          finalizeAnswer(parsed.explanation);
+          const artifact = app._appendArtifactBubble(bubble);
+          app._validateAndPresent(parsed, artifact || bubble, msgContainer, ch, txt);
         } else if (parsed && parsed.code && ch === 'landing') {
           const explanation = parsed.explanation || 'Here is the code.';
           if (bubble) {
@@ -198,6 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
         msgContainer.scrollTop = msgContainer.scrollHeight;
       },
       function(errMsg) {
+        _removeStop();
         if (errMsg && errMsg.indexOf('__RATE_LIMIT_SWITCHED__') === 0) {
           const switchedTo = errMsg.replace('__RATE_LIMIT_SWITCHED__', '');
           if (bubble) {
@@ -255,6 +382,26 @@ document.addEventListener('DOMContentLoaded', () => {
           bubble.innerHTML = app.fmt('❌ **API Error:** ' + errMsg + '\n\nCheck your API key and provider in Settings → Preferences.')
             + app._byokCardHtml();
         }
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+      },
+      // Extended-thinking stream → a collapsible "Thinking" block above the answer,
+      // so the user sees the model's reasoning as it happens (auto-collapses on done).
+      function(thinkingChunk, fullThinking) {
+        if (!bubble) return;
+        var thinkId = streamId + '-think';
+        var thinkEl = document.getElementById(thinkId);
+        if (!thinkEl) {
+          var msgEl = bubble.parentNode;
+          thinkEl = document.createElement('div');
+          thinkEl.className = 'chat-msg ai chat-thinking-msg';
+          thinkEl.id = thinkId;
+          thinkEl.innerHTML = '<div class="chat-avatar">✦</div><div class="chat-thinking open">'
+            + '<div class="chat-thinking-head" onclick="this.parentNode.classList.toggle(\'open\')"><span class="chat-thinking-caret">▾</span> Thinking…</div>'
+            + '<div class="chat-thinking-body"></div></div>';
+          if (msgEl && msgEl.parentNode) msgEl.parentNode.insertBefore(thinkEl, msgEl);
+        }
+        var tbody = thinkEl.querySelector('.chat-thinking-body');
+        if (tbody) tbody.textContent = fullThinking;
         msgContainer.scrollTop = msgContainer.scrollHeight;
       }
     );
@@ -411,7 +558,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   app._validateAndPresent = function(parsed, bubble, msgContainer, ch, originalPrompt) {
     const code = parsed.code;
-    const explanation = parsed.explanation || 'Generated code for your request.';
     // Catch hallucinated Geo.* method names BEFORE running. Doesn't block
     // execution — PythonRunner will fail anyway and the fix-retry kicks in
     // — but it gives the fix prompt a head start by saying exactly which
@@ -448,7 +594,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // definitely-wrong types), and the fix loop is capped, so this is safe.
     if (!testResult.error && typeCheck.ok) {
       if (bubble) {
-        bubble.innerHTML = app.fmt('✨ ' + explanation + '\n\nReview the code below. **Approve** to build the visual graph, or **Cancel**.');
+        bubble.innerHTML = app.fmt('✅ **Code ready** — review it below, then **Approve** to build the graph, or **Cancel**.');
       }
       app._pendingCode = code;
       app.showCodeViewer(code, null);
@@ -487,7 +633,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (app._fixRetries > 2) {
       app._fixRetries = 0;
       if (bubble) {
-        bubble.innerHTML = app.fmt('⚠️ ' + explanation + '\n\n**Note:** The code may have issues — the runtime reported: *' + errorMsg + '*\n\nYou may need to edit it manually. **Approve** to try it, or **Cancel**.');
+        bubble.innerHTML = app.fmt('⚠️ **Code generated, but it may have issues** — the runtime reported: *' + errorMsg + '*\n\nYou may need to edit it manually. **Approve** to try it, or **Cancel**.');
       }
       app._pendingCode = code;
       app.showCodeViewer(code, null);
@@ -691,10 +837,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return label.indexOf('decide yourself') !== -1 || label === 'other';
     });
     if (!hasBuiltInAction) {
+      // "Other" is the LAST option — an inline composer the user types into and
+      // submits directly (not a hand-off that makes the AI re-interrogate them).
+      bubble.appendChild(app._createOtherOptionCard(ch, group.title));
+
       var actionRow = document.createElement('div');
       actionRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px 10px;border-top:1px solid var(--border-color)';
       actionRow.appendChild(app._createOptionAction(ch, buildDecideYourselfReply(group.title), 'Decide yourself'));
-      actionRow.appendChild(app._createOptionAction(ch, buildOtherReply(group.title), 'Other'));
       bubble.appendChild(actionRow);
     }
 
@@ -740,6 +889,73 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.textContent = label;
     btn.onclick = function() { app._selectOption(ch, reply); };
     return btn;
+  };
+
+  // The "Other" choice rendered as the final option card. Clicking it swaps the
+  // card for an inline text box; the user types a custom answer and submits it
+  // directly as their reply to the question.
+  app._createOtherOptionCard = function(ch, groupTitle) {
+    var row = document.createElement('div');
+    row.className = 'nf-option-other-row';
+    row.style.cssText = 'padding:2px 0';
+
+    var btn = document.createElement('button');
+    btn.className = 'nf-option-card';
+    btn.style.cssText = 'display:flex;align-items:flex-start;gap:8px;width:100%;padding:7px 12px;border:none;background:transparent;cursor:pointer;text-align:left;border-radius:0;transition:background 0.15s';
+    btn.onmouseover = function() { btn.style.background = 'rgba(137,180,250,0.08)'; };
+    btn.onmouseout = function() { btn.style.background = 'transparent'; };
+
+    var badge = document.createElement('span');
+    badge.style.cssText = 'min-width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:6px;background:rgba(137,180,250,0.12);color:var(--accent-blue);font-size:12px;font-weight:700';
+    badge.textContent = '✎'; // ✎
+    btn.appendChild(badge);
+
+    var copy = document.createElement('div');
+    copy.style.cssText = 'flex:1;min-width:0';
+    var labelEl = document.createElement('div');
+    labelEl.style.cssText = 'font-size:12px;font-weight:600;color:var(--text-primary)';
+    labelEl.textContent = 'Other';
+    copy.appendChild(labelEl);
+    var descEl = document.createElement('div');
+    descEl.style.cssText = 'font-size:11px;color:var(--text-muted);margin-top:1px';
+    descEl.textContent = 'Type your own answer';
+    copy.appendChild(descEl);
+    btn.appendChild(copy);
+
+    btn.onclick = function() { app._expandOtherComposer(ch, groupTitle, row); };
+    row.appendChild(btn);
+    return row;
+  };
+
+  // Replaces the "Other" card with an inline input + Send, focused and ready.
+  app._expandOtherComposer = function(ch, groupTitle, row) {
+    var box = document.createElement('div');
+    box.style.cssText = 'display:flex;gap:6px;align-items:center;padding:6px 12px';
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Type your answer…';
+    input.className = 'nf-option-other-input';
+    input.style.cssText = 'flex:1;min-width:0;padding:7px 10px;border:1px solid rgba(137,180,250,0.35);background:var(--bg-input, rgba(0,0,0,0.25));color:var(--text-primary);border-radius:6px;font-size:12px;outline:none';
+
+    var send = document.createElement('button');
+    send.className = 'nf-option-card nf-option-action';
+    send.textContent = 'Send';
+    send.style.cssText = 'padding:7px 14px;border:1px solid rgba(137,180,250,0.24);background:rgba(137,180,250,0.12);color:var(--accent-blue);border-radius:6px;font-size:11px;font-weight:700;cursor:pointer';
+
+    var submit = function() {
+      var v = input.value.trim();
+      if (!v) { input.focus(); return; }
+      app._selectOption(ch, buildCustomReply(groupTitle, v));
+    };
+    send.onclick = submit;
+    input.onkeydown = function(e) { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
+
+    box.appendChild(input);
+    box.appendChild(send);
+    row.innerHTML = '';
+    row.appendChild(box);
+    input.focus();
   };
 
   app._showOptionButtons = function(fullText, ch) {
