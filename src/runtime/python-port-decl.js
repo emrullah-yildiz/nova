@@ -95,10 +95,65 @@ export function lastTopLevelAssignment(code) {
   return last;
 }
 
+// Identifiers that are NOT input ports even when read free: Python keywords,
+// built-ins the runtime provides, and the injected bridge globals.
+const PY_KEYWORDS = new Set(['for', 'in', 'if', 'elif', 'else', 'while', 'def', 'return', 'and', 'or', 'not', 'is', 'None', 'True', 'False', 'import', 'from', 'as', 'with', 'try', 'except', 'finally', 'lambda', 'pass', 'break', 'continue', 'class', 'global', 'nonlocal', 'yield', 'raise', 'assert', 'del']);
+const PY_BUILTINS = new Set(['len', 'range', 'print', 'abs', 'min', 'max', 'round', 'int', 'float', 'list', 'sum', 'sorted', 'reversed', 'enumerate', 'str', 'dict', 'set', 'tuple', 'bool', 'map', 'filter', 'zip', 'isinstance', 'type', 'math']);
+const BRIDGE_GLOBALS = new Set(['Geo', 'RevitBridge', 'HostRegistry']);
+const IDENT_SCAN_RE = /(\.?)\b([A-Za-z_][A-Za-z0-9_]*)\b/g;
+
+// Infers a Custom.Python cell's INPUT ports from the free variables it reads —
+// identifiers used but never assigned (and not a keyword / built-in / bridge /
+// loop var / def). This makes "type code → input ports appear" work the same way
+// the output already follows the last assignment. Intended for the no-`# in:`
+// case only; a header is authoritative and overrides this. Returns the free
+// variable names in order of first appearance. Pure.
+export function inferInputPorts(code) {
+  if (typeof code !== 'string' || !code) return [];
+
+  const bound = new Set();   // names assigned / bound somewhere (not inputs)
+  const reads = [];          // names read, in first-appearance order
+  const readSet = new Set();
+
+  for (const raw of code.split('\n')) {
+    const t = raw.trim();
+    if (!t || t.startsWith('#') || t.startsWith('import ') || t.startsWith('from ')) continue;
+
+    // Strip string literals and inline comments so their contents aren't scanned.
+    let line = raw.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""');
+    const hash = line.indexOf('#');
+    if (hash >= 0) line = line.slice(0, hash);
+
+    // Bound by assignment LHS (incl. augmented +=, and simple tuple unpacking).
+    const assign = line.match(/^\s*([A-Za-z_][A-Za-z0-9_,\s]*?)\s*(?:[-+*/%]?=)(?!=)/);
+    if (assign) {
+      assign[1].split(',').forEach((n) => { const id = n.trim(); if (/^[A-Za-z_]\w*$/.test(id)) bound.add(id); });
+    }
+    // Bound by `for X[, Y] in ...`.
+    const forM = line.match(/^\s*for\s+([A-Za-z_][A-Za-z0-9_,\s]*?)\s+in\s+/);
+    if (forM) forM[1].split(',').forEach((n) => { const id = n.trim(); if (/^[A-Za-z_]\w*$/.test(id)) bound.add(id); });
+    // Bound by `def name(params):` — name and params are local.
+    const defM = line.match(/^\s*def\s+([A-Za-z_]\w*)\s*\(([^)]*)\)/);
+    if (defM) { bound.add(defM[1]); defM[2].split(',').forEach((n) => { const id = n.trim().replace(/[=:].*$/, '').trim(); if (/^[A-Za-z_]\w*$/.test(id)) bound.add(id); }); }
+
+    // Collect read identifiers (skip attribute names after a dot).
+    let m;
+    IDENT_SCAN_RE.lastIndex = 0;
+    while ((m = IDENT_SCAN_RE.exec(line)) !== null) {
+      if (m[1] === '.') continue;
+      const id = m[2];
+      if (!readSet.has(id)) { readSet.add(id); reads.push(id); }
+    }
+  }
+
+  return reads.filter((id) =>
+    !bound.has(id) && !PY_KEYWORDS.has(id) && !PY_BUILTINS.has(id) && !BRIDGE_GLOBALS.has(id) && !id.startsWith('_'));
+}
+
 // Helper that combines the two strategies for downstream consumers:
 // declared ports first; otherwise infer the output name from the last
-// assignment and leave inputs as generic input0. The pyrunner uses this
-// to render the node consistently regardless of which strategy applies.
+// assignment and the inputs from the cell's free variables. The pyrunner uses
+// this to render the node consistently regardless of which strategy applies.
 export function resolvePythonPorts(code) {
   const decls = parsePythonPortDecls(code);
   if (decls.hasDecls) {
@@ -119,10 +174,12 @@ export function resolvePythonPorts(code) {
     };
   }
   const lastVar = lastTopLevelAssignment(code);
+  const freeVars = inferInputPorts(code);
   return {
-    inputs: [{ id: 'input0', type: 'any' }],
+    inputs: freeVars.length ? freeVars.map((id) => ({ id, type: 'any' })) : [{ id: 'input0', type: 'any' }],
     outputs: [{ id: lastVar || 'output0', type: 'any' }],
-    source: lastVar ? 'inferred' : 'default'
+    source: (freeVars.length || lastVar) ? 'inferred' : 'default',
+    inferredInputs: freeVars.length > 0
   };
 }
 
@@ -151,9 +208,16 @@ export function nextPythonPorts(code, current = {}) {
     inputs = resolved.inputs.map(p => p.id);
     inputTypes = {};
     resolved.inputs.forEach(p => { inputTypes[p.id] = p.type || 'any'; });
+  } else if (resolved.inferredInputs) {
+    // No header, but the cell reads free variables — those ARE its inputs, so
+    // track them live (add/remove input ports as the code changes). Manual port
+    // management is done by writing a `# in:` header (the + button does this),
+    // which switches to the authoritative declared branch above.
+    inputs = resolved.inputs.map(p => p.id);
+    inputTypes = null;
   } else {
-    // No headers → keep whatever inputs the node already has (manual / wired);
-    // fall back to the resolved generic input only when there are none yet.
+    // No header and no detectable free vars → keep whatever inputs the node
+    // already has (manual / wired); fall back to a generic input only if none.
     inputs = curIn.length ? curIn.slice() : resolved.inputs.map(p => p.id);
     inputTypes = null;
   }
