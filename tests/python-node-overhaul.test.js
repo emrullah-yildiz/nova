@@ -154,15 +154,15 @@ describe('Custom.Python default template', () => {
     expect(DEFAULT_CUSTOM_PYTHON_CODE).not.toContain('HostRegistry.get');
     expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('elements, options -> result');
     expect(DEFAULT_CUSTOM_PYTHON_CODE).not.toContain('Autodesk.Revit.DB');
+    expect(DEFAULT_CUSTOM_PYTHON_CODE).toContain('result = target_elements');
 
     const executed = PythonRunner.execute(DEFAULT_CUSTOM_PYTHON_CODE, {
       elements: [],
       options: { category: 'Walls' }
     });
     expect(executed.error).toBeNull();
-    expect(executed.outputs.result.count).toBe(0);
-    expect(executed.outputs.result.project_name).toBe('No Project');
-    expect(executed.outputs.result.options.category).toBe('Walls');
+    expect(executed.outputs.result).toEqual([]);
+    expect(executed.outputs.target_elements).toEqual([]);
   });
 
   it('renames default input ports in both declarations and body references', () => {

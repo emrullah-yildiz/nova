@@ -411,10 +411,12 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     nd._dynOutputs = res.dynOutputs;
     nd.controlValues.code = res.code;
     this.wires = res.wires;
-    if (res.ok && this._cvNode && this._cvNode.id === nodeId) {
-      this._cvNodeDraft = res.code;
+    if (res.ok) {
+      const tab = (typeof this._cvNodeTabFor === 'function') ? this._cvNodeTabFor(nodeId) : null;
+      if (tab) tab.draft = res.code;
+      if (this._cvNode && this._cvNode.id === nodeId) this._cvNodeDraft = res.code;
       if (typeof this.generateFullScript === 'function') this._cvFullCode = this.generateFullScript();
-      if (this._cvTab === 'node' && typeof this.renderCvActiveTab === 'function') this.renderCvActiveTab();
+      if (this._cvTab === nodeId && typeof this.renderCvActiveTab === 'function') this.renderCvActiveTab();
     }
     const el = document.getElementById(nodeId);
     if (el) this.enhancePythonNode(nd, el);
@@ -422,9 +424,7 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     return res.ok;
   };
 
-  // Open a Python node's code in the code terminal for editing. (The tabbed
-  // multi-node terminal arrives in a follow-up; for now this shows the node's
-  // code in the single-node code viewer.)
+  // Open a Python node's code in the code terminal for editing.
   app.pyOpenInTerminal = function(nodeId) {
     const nd = this.nodes.find(n => n.id === nodeId);
     if (!nd || typeof this.showCodeViewer !== 'function') return;

@@ -12,19 +12,17 @@ import math
 # Port names above become Python variables with the same names:
 # elements, options -> result
 #
-# Nova Connect / Revit setup. Use RevitBridge in the web Python node.
+# Nova Connect / Revit setup. Use these bridge objects in the web Python node.
 # - Geo: geometry constructors and operations
 # - RevitBridge: local Revit snapshot helpers when Nova Connect is paired
 
-options = options or {}
 target_elements = elements
 if not target_elements:
     target_elements = RevitBridge.getSelection()
+if not target_elements:
+    target_elements = []
 
-active_view = RevitBridge.getActiveView()
-project_name = RevitBridge.getProjectName()
-connected = project_name != "No Project"
-result = {"connected": connected, "elements": target_elements, "active_view": active_view, "project_name": project_name, "options": options, "count": len(target_elements)}`;
+result = target_elements`;
 
 function safeJsFunction(body, argNames) {
   try {
