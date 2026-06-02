@@ -5,6 +5,25 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-02 - AI Assistant Can Show Things On The Canvas (Action Protocol, P3)
+
+**Context:** The assistant could describe the graph (P1/P2) but not act on it. The
+first, safest step toward an interactive agent is read-only "show" actions —
+point the user at a node, open its inspector, reveal a node type in the library —
+which can auto-run because they mutate nothing.
+
+**Decision:** A fenced ` ```nova-action ` block carries `{"ops":[...]}`. A pure
+`ai/graph-actions.js` (`parseNovaActions`) extracts + validates the block against
+a `SHOW_OPS` allow-list (`focusNode`, `highlightNodes`, `openInspector`,
+`revealLibraryNode`), strips it from the reply (never shown raw), and returns the
+ops. The response handler auto-runs them via `app.runShowActions` on the workspace
+channel only; each op is isolated so a bad one can't break the chat. The protocol
+is taught in the prompt only when a graph exists (kept out of the build-intent
+size budget), and the model is told to always also explain in prose. Edit ops
+(add/remove wire, set version, add node) are deliberately NOT in the allow-list —
+they are the Apply-gated P5 phase. `node-lib-item` gained a `data-node-type`
+attribute so the library reveal has a stable selector.
+
 ## 2026-06-02 - AI Assistant Gets A Local Problem Report (P2)
 
 **Context:** With the live-graph snapshot (P1) the assistant could see the graph

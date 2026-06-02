@@ -1116,7 +1116,7 @@ const app = {
             <div class="node-subgroup-items">`;
         }
         groups[g].forEach(function(n) {
-          html += `<button class="node-lib-item" draggable="true" ondragstart="app.onLibDragStart(event,'${n.type}')" onclick="app.addNodeFromLib('${n.type}')"><span class="nli-icon" style="color:${cat.color}">${n.icon}</span>${n.name}</button>`;
+          html += `<button class="node-lib-item" data-node-type="${n.type}" draggable="true" ondragstart="app.onLibDragStart(event,'${n.type}')" onclick="app.addNodeFromLib('${n.type}')"><span class="nli-icon" style="color:${cat.color}">${n.icon}</span>${n.name}</button>`;
         });
         if (renderSubgroupHeader) {
           html += `</div></div>`;
@@ -1262,6 +1262,63 @@ const app = {
     if(this.renderWires) this.renderWires();
     if(typeof Viewer3D!=='undefined') Viewer3D._needsRebuild=true;
     return true;
+  },
+
+  // Run "show" actions the AI assistant emitted (P3). These are read-only view
+  // ops — focus/highlight a node, open its inspector, or reveal a node type in
+  // the library — so they auto-run. Each op is isolated: a bad one never breaks
+  // the others or the chat.
+  runShowActions(ops){
+    if(!Array.isArray(ops)) return;
+    for(const op of ops){
+      try{
+        if(op.op==='focusNode') this._aiFocusNode(op.id);
+        else if(op.op==='highlightNodes') (Array.isArray(op.ids)?op.ids:[]).forEach(id=>this._aiFlashNode(id));
+        else if(op.op==='openInspector') this._aiOpenInspector(op.id);
+        else if(op.op==='revealLibraryNode') this._aiRevealLibraryNode(op.type);
+      }catch{ /* one bad action must never break the rest or the chat */ }
+    }
+  },
+
+  _aiFlashNode(id){
+    const el=document.getElementById(id); if(!el) return;
+    el.classList.add('node-ai-highlight');
+    setTimeout(()=>{ const e=document.getElementById(id); if(e) e.classList.remove('node-ai-highlight'); }, 1800);
+  },
+
+  _aiFocusNode(id){
+    const nd=this.nodes.find(n=>n.id===id); if(!nd) return;
+    const area=document.getElementById('canvas-area');
+    const el=document.getElementById(id);
+    if(area && el){
+      const w=el.offsetWidth||180, h=el.offsetHeight||100;
+      const rect=area.getBoundingClientRect();
+      const z=this.zoom; // keep current zoom — centering is less jarring than auto-zoom
+      this.panX=rect.width/2-(nd.x+w/2)*z;
+      this.panY=rect.height/2-(nd.y+h/2)*z;
+      this.applyTransform();
+      const zi=document.getElementById('zoom-indicator'); if(zi) zi.textContent=Math.round(this.zoom*100)+'%';
+    }
+    if(typeof this.selectNode==='function') this.selectNode(id,false);
+    this._aiFlashNode(id);
+  },
+
+  _aiOpenInspector(id){
+    const nd=this.nodes.find(n=>n.id===id); if(!nd) return;
+    if(!nd.dataPanelOpen && typeof this.toggleDataPanel==='function') this.toggleDataPanel(id);
+    this._aiFocusNode(id);
+  },
+
+  _aiRevealLibraryNode(type){
+    if(!type) return;
+    const lib=document.getElementById('node-library');
+    if(lib && lib.style.display==='none'){ lib.style.display=''; if(this.syncWorkspaceLayout) this.syncWorkspaceLayout(); }
+    const item=document.querySelector('.node-lib-item[data-node-type="'+String(type).replace(/["\\]/g,'')+'"]');
+    if(item){
+      item.scrollIntoView({ block:'center', behavior:'smooth' });
+      item.classList.add('lib-ai-highlight');
+      setTimeout(()=>item.classList.remove('lib-ai-highlight'), 1800);
+    }
   },
 
   // Remote node.add → recreate the exact node (same id) without re-broadcasting.
