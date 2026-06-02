@@ -411,6 +411,11 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     nd._dynOutputs = res.dynOutputs;
     nd.controlValues.code = res.code;
     this.wires = res.wires;
+    if (res.ok && this._cvNode && this._cvNode.id === nodeId) {
+      this._cvNodeDraft = res.code;
+      if (typeof this.generateFullScript === 'function') this._cvFullCode = this.generateFullScript();
+      if (this._cvTab === 'node' && typeof this.renderCvActiveTab === 'function') this.renderCvActiveTab();
+    }
     const el = document.getElementById(nodeId);
     if (el) this.enhancePythonNode(nd, el);
     if (this.renderWires) this.renderWires();
