@@ -1267,6 +1267,24 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     // text-only turn so the (large) image isn't resent on every later message.
     const sendImages = (images && images.length && this.supportsVision()) ? images : null;
     const userContent = this.buildUserContent(format, userMessage, sendImages);
+    // Diagnostic (only when images are attached): records exactly what happened
+    // to the picture so a session log pinpoints any drop — threading, vision
+    // gating, or wire format. Cheap and only fires on image turns.
+    if (images && images.length) {
+      NFLogger.info('ai-vision', 'image attach decision', {
+        imagesIn: images.length,
+        supportsVision: this.supportsVision(),
+        hasApiKey: this.hasApiKey(),
+        enterprise: this.isEnterpriseAiEnabled(),
+        proxyMode: proxyMode,
+        format: format,
+        model: this.getEffectiveModel(),
+        attached: sendImages ? sendImages.length : 0,
+        contentIsArray: Array.isArray(userContent),
+        firstMediaType: images[0] && images[0].mediaType,
+        firstDataLen: images[0] && images[0].data ? images[0].data.length : 0
+      });
+    }
     const messages = [
       { role: 'system', content: systemContent },
       ...history.slice(-historyDepth),

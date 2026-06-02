@@ -345,6 +345,49 @@ describe('GPTClient', () => {
       const o = GPTClient.buildUserContent('openai', '', [{ mediaType: 'image/png', data: 'X' }]);
       expect(o).toEqual([{ type: 'image_url', image_url: { url: 'data:image/png;base64,X' } }]);
     });
+
+    // End-to-end: a BYOK Claude turn must actually put the image block on the
+    // wire. This is the exact path the workspace chat uses (callStream with an
+    // images arg) and proves the picture isn't dropped between the UI and fetch.
+    it('callStream sends the image block to a BYOK Claude model', async () => {
+      installLocalStorage();
+      GPTClient.setProvider('anthropic');
+      GPTClient.setApiKey('sk-ant-test-key-1234567890');
+      GPTClient.setModel('claude-sonnet-4-6');
+      GPTClient._histories = {};
+
+      const prevFetch = globalThis.fetch;
+      const prevLogger = globalThis.NFLogger;
+      globalThis.NFLogger = { aiRequest() {}, aiResponse() {}, aiError() {}, info() {}, warn() {}, error() {} };
+      let captured = null;
+      globalThis.fetch = (url, opts) => {
+        captured = JSON.parse(opts.body);
+        const sse = 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"I see it"}}\n\n';
+        const bytes = new TextEncoder().encode(sse);
+        let sent = false;
+        return Promise.resolve({
+          ok: true,
+          body: { getReader() { return { read() { return sent ? Promise.resolve({ done: true }) : (sent = true, Promise.resolve({ done: false, value: bytes })); } }; } }
+        });
+      };
+
+      try {
+        let done = '';
+        await GPTClient.callStream(
+          'what is this?', 'workspace', '',
+          () => {}, (full) => { done = full; }, () => {}, null,
+          [{ mediaType: 'image/png', data: 'AAAA' }]
+        );
+        expect(done).toBe('I see it');
+        expect(GPTClient.getProviderFormat()).toBe('anthropic');
+        const last = captured.messages[captured.messages.length - 1];
+        expect(Array.isArray(last.content)).toBe(true);
+        expect(last.content).toContainEqual({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } });
+      } finally {
+        globalThis.fetch = prevFetch;
+        globalThis.NFLogger = prevLogger;
+      }
+    });
   });
 
   describe('extended thinking', () => {
