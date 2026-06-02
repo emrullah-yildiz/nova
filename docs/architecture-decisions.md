@@ -5,6 +5,26 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-02 - AI Assistant Gets A Local Problem Report (P2)
+
+**Context:** With the live-graph snapshot (P1) the assistant could see the graph
+but not reason reliably about what was wrong or unfinished — it would guess at
+issues. "How do I finish this workflow?" needs a concrete, locally-verified
+worklist, not the model's invention.
+
+**Decision:** A pure `ai/graph-problems.js` (`analyzeGraphProblems(graph, typeMap,
+{nodeErrors})`) computes a low-noise, actionable set: `orphan-wire` (endpoint
+references a missing node/port), `type-mismatch` (reuses `isWireTypeCompatible`
+from `core/wire-type-check.js`), `unconnected-input` (an input with no wire AND no
+control fallback), `node-error` (errored last run, from `app._nodeErrors`), and
+`no-output-sink` (graph has nodes but nothing reaches an `Output.*`). It is folded
+into the live-graph section of `buildSystemPrompt` as a `### Problems` block,
+appearing only when the graph has issues (so it costs nothing on a clean or empty
+graph), and the model is told to address them by node id and not invent problems
+beyond the list. Noise was deliberately bounded — per-node "dangling output" was
+dropped in favour of the single graph-level `no-output-sink`, and inputs with a
+control default are not flagged.
+
 ## 2026-06-02 - AI Assistant Has A Grounded Knowledge Base (Learn-Intent, P1b)
 
 **Context:** The assistant should be one place to learn Nova — "how does it
