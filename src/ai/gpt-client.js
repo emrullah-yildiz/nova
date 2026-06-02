@@ -1234,7 +1234,13 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
   },
 
   async callStream(userMessage, context, existingCode, onChunk, onDone, onError, onThinking, images) {
-    if (this.isEnterpriseAiEnabled()) {
+    // A vision request from a BYOK, vision-capable user must go DIRECT to their
+    // provider: the enterprise / Nova-Cloud path (callEnterprise) sends the user
+    // message as a plain string and never carries images, so routing there would
+    // silently drop the picture (the "image didn't come through" bug). Only image
+    // turns bypass enterprise; everything else keeps the existing priority.
+    const visionDirect = !!(images && images.length && this.hasApiKey() && this.supportsVision());
+    if (this.isEnterpriseAiEnabled() && !visionDirect) {
       try {
         const reply = await this.callEnterprise(userMessage, context, existingCode);
         onChunk(reply, reply);
