@@ -2,9 +2,23 @@ import {
   buildDecideYourselfReply,
   buildOptionReply,
   buildOtherReply,
+  buildCustomReply,
   firstOptionGroup,
   parseOptionGroups
 } from '../src/ai/option-flow.js';
+
+describe('buildCustomReply (inline "Other" answer)', () => {
+  it('prefixes the question and submits the user text directly', () => {
+    expect(buildCustomReply('What overall form should the building take?', '  a spiraling cone '))
+      .toBe('What overall form should the building take?: a spiraling cone');
+  });
+
+  it('omits the prefix for the generic "Options" title and tolerates empty/nullish text', () => {
+    expect(buildCustomReply('Options', 'freeform')).toBe('freeform');
+    expect(buildCustomReply('', 'freeform')).toBe('freeform');
+    expect(buildCustomReply('Style', null)).toBe('Style: ');
+  });
+});
 
 describe('option-flow parser', () => {
   it('splits multiple headed option groups and exposes only the first active group', () => {

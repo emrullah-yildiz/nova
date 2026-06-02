@@ -72,3 +72,12 @@ export function buildOtherReply(groupTitle) {
   const suffix = groupTitle && groupTitle !== 'Options' ? ' for "' + groupTitle + '"' : '';
   return 'Other: I want to specify a different answer' + suffix + '. Ask me for the required parameters one question at a time.';
 }
+
+// The user typed their own answer into the inline "Other" box. Send it as a
+// direct answer to the question (prefixed by the question so the AI knows which
+// one it answers) rather than asking the AI to re-interrogate them.
+export function buildCustomReply(groupTitle, text) {
+  const t = (text == null ? '' : String(text)).trim();
+  const prefix = groupTitle && groupTitle !== 'Options' ? groupTitle + ': ' : '';
+  return prefix + t;
+}
