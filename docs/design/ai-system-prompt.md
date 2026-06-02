@@ -57,8 +57,19 @@ contract, COOKBOOK, live graph context, problems, show-action protocol) and:
 The full build-intent prompt is now ~33KB / ~8k tokens (trivial for 200k-context
 models). The slim proxy prompt is unchanged for cheap conversational turns.
 
+## Phase 2 — Golden examples (`src/ai/golden-examples.js`)
+A curated library of 12 expert, runnable reference designs (twisted tower,
+organic pavilion, catenary shell, hypar roof, gyroid lattice, NURBS shell,
+attractor facade, Voronoi skin, noise blob, seashell, helix structure, diagrid).
+Two jobs:
+- **Quality pin** — `golden-examples.test.js` runs every example through the
+  Python runner and asserts it yields geometry, so a kernel/method regression is
+  caught instead of silently teaching the AI broken code.
+- **Prompt grounding** — `buildGoldenGallery()` injects a compact palette (title
+  + intent + key methods) into the prompt (placeholder `__NOVA_GALLERY__`) so the
+  model knows the range of forms it can produce and which Geo.* calls realize them.
+
 ## Not yet done (later phases, each gated)
-- **Phase 2** — full golden worked-example library + regression tests.
 - **Phase 3** — library hardening: real boolean CSG, surface-conforming
   paneling + mullions, better Voronoi.
 - **Phase 4** — architectural validation in the fix loop (semantic + vision).

@@ -8,6 +8,7 @@ import { createNovaCloudClient } from '../enterprise/cloud-client.js';
 import { getRuntimeConfig } from '../config/runtime-config.js';
 import { buildNodeCatalog } from './node-catalog.js';
 import { buildCapabilityLedger } from './capability-ledger.js';
+import { buildGoldenGallery } from './golden-examples.js';
 import { buildGraphContext } from './graph-context.js';
 import { analyzeGraphProblems, formatGraphProblems } from './graph-problems.js';
 import { buildNodeKnowledge, NOVA_PRIMER } from './knowledge-base.js';
@@ -844,6 +845,8 @@ __NOVA_NODE_CATALOG__
 **Attractors:** Geo.pointAttractor(pt,attractorPos,radius,falloff) → 0..1 | Geo.multiAttractor(pt,attractors[],r,falloff)
 **Revit (browser only):** RevitBridge.getElements("Walls") | .getSheets() | .getLevels() | .getParam(el,"Mark") — NEVER use FilteredElementCollector/\\_\\_currentdoc\\_\\_ in browser code
 
+__NOVA_GALLERY__
+
 ## FEW-SHOT EXAMPLES
 
 ### Example 1: "Create a parametric pavilion"
@@ -1045,7 +1048,8 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     // the surrounding backtick-escaping.
     sys = sys
       .replace('__NOVA_NODE_CATALOG__', buildNodeCatalog())
-      .replace('__NOVA_CAPABILITY_LEDGER__', buildCapabilityLedger());
+      .replace('__NOVA_CAPABILITY_LEDGER__', buildCapabilityLedger())
+      .replace('__NOVA_GALLERY__', buildGoldenGallery());
 
     if (existingCode) {
       sys += `\n\n### Current Code on Canvas\nThe user already has this code/graph. If they ask to modify it, update this code:\n\`\`\`python\n${existingCode}\n\`\`\``;
