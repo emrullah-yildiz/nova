@@ -873,7 +873,7 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
       return;
     }
 
-    var prompt = 'Help me understand and fix a warning on a node in my Nova graph. Explain the likely cause in plain language, then give concrete steps to fix it (e.g. rewire a port, change a control, add or swap a node). Use the Live Graph and the Problems context, and point me at the node if useful.\n\nNode: ' + name + ' (' + nodeId + ')\n';
+    var prompt = 'Help me understand and fix a warning on a node in my Nova graph. Explain the likely cause in plain language, then give the smallest concrete graph edit. Prefer direct source-node fixes over workaround chains: if a number port receives a string from Input.Text or a text/string literal node, tell me to replace that upstream source with Input.Number when it is numeric; if it is an expression, tell me which Math nodes compute it. Do not say the graph was changed unless you returned apply-able code or a nova-plan. Use the Live Graph and the Problems context, and point me at the node if useful.\n\nNode: ' + name + ' (' + nodeId + ')\n';
     if (errorText) prompt += '\nRuntime error:\n' + errorText + '\n';
     if (warningText) prompt += '\nWarnings:\n' + warningText + '\n';
 

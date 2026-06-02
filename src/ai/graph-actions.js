@@ -11,6 +11,7 @@
 
 // Read-only ops that are safe to auto-run.
 export const SHOW_OPS = new Set(['focusNode', 'highlightNodes', 'openInspector', 'revealLibraryNode']);
+export const MAX_HIGHLIGHT_NODES = 5;
 
 const FENCE_RE = /```nova-action\s*([\s\S]*?)```/i;
 
@@ -29,7 +30,12 @@ export function parseNovaActions(text) {
 
   const rawOps = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.ops) ? parsed.ops : []);
   for (const o of rawOps) {
-    if (o && typeof o.op === 'string' && SHOW_OPS.has(o.op)) result.ops.push(o);
+    if (!o || typeof o.op !== 'string' || !SHOW_OPS.has(o.op)) continue;
+    if (o.op === 'highlightNodes' && Array.isArray(o.ids)) {
+      result.ops.push({ ...o, ids: o.ids.slice(0, MAX_HIGHLIGHT_NODES), totalIds: o.ids.length });
+      continue;
+    }
+    result.ops.push(o);
   }
 
   result.cleanedText = (text.slice(0, m.index) + text.slice(m.index + m[0].length))

@@ -18,7 +18,9 @@ export function describeShowOp(op, resolveName) {
       return { icon: '◳', label: 'Opened ' + name(op.id) };
     case 'highlightNodes': {
       const ids = Array.isArray(op.ids) ? op.ids : [];
+      const total = typeof op.totalIds === 'number' ? op.totalIds : ids.length;
       if (ids.length === 1) return { icon: '⦿', label: 'Highlighted ' + name(ids[0]) };
+      if (total > ids.length) return { icon: '⦿', label: 'Highlighted ' + ids.length + ' of ' + total + ' nodes' };
       return { icon: '⦿', label: 'Highlighted ' + ids.length + ' nodes' };
     }
     case 'revealLibraryNode':

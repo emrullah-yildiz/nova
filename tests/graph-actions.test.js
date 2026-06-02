@@ -21,6 +21,12 @@ describe('parseNovaActions', () => {
     expect(SHOW_OPS.has('addWire')).toBe(false);
   });
 
+  it('caps highlight ops so the assistant cannot flood the UI', () => {
+    const ids = Array.from({ length: 32 }, (_, i) => 'node-' + (i + 1));
+    const r = parseNovaActions('```nova-action\n' + JSON.stringify({ ops: [{ op: 'highlightNodes', ids }] }) + '\n```');
+    expect(r.ops).toEqual([{ op: 'highlightNodes', ids: ids.slice(0, 5), totalIds: 32 }]);
+  });
+
   it('returns no ops and the original text when there is no block', () => {
     const r = parseNovaActions('Just a normal explanation.');
     expect(r.ops).toEqual([]);

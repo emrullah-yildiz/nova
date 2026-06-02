@@ -10,6 +10,7 @@ describe('turn-steps (tool/action chips)', () => {
     expect(describeShowOp({ op: 'openInspector', id: 'n2' }, resolve)).toEqual({ icon: '◳', label: 'Opened Loft' });
     expect(describeShowOp({ op: 'highlightNodes', ids: ['n1'] }, resolve)).toEqual({ icon: '⦿', label: 'Highlighted Tower' });
     expect(describeShowOp({ op: 'highlightNodes', ids: ['n1', 'n2', 'x'] }, resolve)).toEqual({ icon: '⦿', label: 'Highlighted 3 nodes' });
+    expect(describeShowOp({ op: 'highlightNodes', ids: ['n1', 'n2', 'x', 'y', 'z'], totalIds: 32 }, resolve)).toEqual({ icon: '⦿', label: 'Highlighted 5 of 32 nodes' });
     expect(describeShowOp({ op: 'revealLibraryNode', type: 'Solid.ByLoft' }, resolve)).toEqual({ icon: '⌕', label: 'Revealed Solid.ByLoft in library' });
   });
 
