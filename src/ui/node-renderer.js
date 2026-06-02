@@ -825,11 +825,13 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
   }
 
   function _canAskAiForNode(nd) {
-    return nd && (nd.type === 'custom-python' || nd.type === 'Custom.Python');
+    // Every warning gets an "Ask AI" affordance. The warning panel only renders
+    // when there are warnings, so any node reaching here qualifies.
+    return !!nd;
   }
 
   function _askAiWarningButton(nd) {
-    return '<button class="insp-warning-ai-btn" onclick="event.stopPropagation();app.askAIToFixNode(\'' + nd.id + '\')" '
+    return '<button class="insp-warning-ai-btn" onclick="event.stopPropagation();app.askAIAboutWarning(\'' + nd.id + '\')" '
       + 'style="margin-top:8px;width:100%;padding:6px 8px;border:1px solid rgba(137,180,250,0.35);border-radius:6px;'
       + 'background:rgba(137,180,250,0.12);color:var(--accent-blue,#89b4fa);font-size:11px;font-weight:700;cursor:pointer">'
       + 'Ask AI</button>';
