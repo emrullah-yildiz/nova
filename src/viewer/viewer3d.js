@@ -165,9 +165,19 @@ export const Viewer3D = {
   },
 
   addPoints(points, color, size) {
-    if (!this.scene || !points.length) return;
+    if (!this.scene || !points || !points.length) return;
     color = color || 0x89b4fa;
     size = size || 0.12;
+    // Normalize to finite [x,y,z] number tuples; drop anything else (objects,
+    // rings, NaN) so a mis-shaped value can never inject NaN geometry that
+    // blacks out the viewport.
+    points = points.map(p => {
+      const x = Number(Array.isArray(p) ? p[0] : (p && p.x));
+      const y = Number(Array.isArray(p) ? p[1] : (p && p.y));
+      const z = Number(Array.isArray(p) ? p[2] : (p && p.z));
+      return [x, y, z];
+    }).filter(p => isFinite(p[0]) && isFinite(p[1]) && isFinite(p[2]));
+    if (!points.length) return;
     if (points.length > 1000) {
       const geo = new THREE.SphereGeometry(size, 10, 8);
       const mat = new THREE.MeshBasicMaterial({ color });
@@ -359,7 +369,10 @@ export const Viewer3D = {
           }
         }
         if (val !== undefined && val !== null) {
-          if (Array.isArray(val) && val.length > 0 && Array.isArray(val[0]) && val[0].length >= 2) {
+          // Only a flat list of NUMERIC coordinate tuples renders as points —
+          // a nested point list (point[][]) would otherwise feed rings to
+          // addPoints as NaN and black out the viewport.
+          if (Array.isArray(val) && val.length > 0 && Array.isArray(val[0]) && val[0].length >= 2 && typeof val[0][0] === 'number') {
             this.addPoints(val, 0x94e2d5, 0.25);
             if (val.length >= 2 && val.length <= 5000) {
               const segs = [];

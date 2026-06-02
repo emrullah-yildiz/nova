@@ -171,16 +171,24 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
           return;
         }
 
-        // ── Legacy: tuple arrays as points ──
-        if (Array.isArray(val) && val.length > 0 && Array.isArray(val[0]) && val[0].length >= 2) {
+        // ── Legacy: flat numeric coordinate tuples [[x,y,z], …] as points ──
+        // Require the tuples to be NUMERIC. A nested point list (point[][], e.g.
+        // the profile rings from Pattern.TwistedEllipsePlates) also passes
+        // Array.isArray(val[0]) && length>=2, but each "point" is a ring of Point3
+        // objects — feeding those to position.set produced NaN positions that
+        // blacked out the whole viewport. Such lists are consumed downstream
+        // (Solid.ByLoft), so skip them here rather than mis-rendering.
+        if (Array.isArray(val) && val.length > 0 && Array.isArray(val[0]) && val[0].length >= 2 && typeof val[0][0] === 'number') {
           var group = new THREE.Group();
           group.userData = { nodeId: nd.id, varName: '', label: nd.def.name, isGeoItem: true };
           // Points
           var geo = new THREE.SphereGeometry(0.15, 8, 8);
           var mat = new THREE.MeshPhongMaterial({ color: 0x94e2d5, emissive: 0x94e2d5, emissiveIntensity: 0.3 });
           val.forEach(function(p) {
+            var px = Number(p[0]), py = Number(p[1]), pz = Number(p[2] || 0);
+            if (!isFinite(px) || !isFinite(py) || !isFinite(pz)) return;
             var m = new THREE.Mesh(geo, mat);
-            m.position.set(p[0]||0, p[2]||0, p[1]||0);
+            m.position.set(px, pz, py);
             group.add(m);
           });
           if (group.children.length > 0) {
