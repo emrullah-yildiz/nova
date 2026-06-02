@@ -5,6 +5,21 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-02 - A Single Value Wired To A List Input Is A One-Item List
+
+**Context:** List-consuming nodes (Solid.ByLoft, List.*, Math.Sum) failed when
+wired a single object instead of an array — their execute did `.map`/`.length` on
+a non-array — and the inspector flagged "expects list but received object".
+
+**Decision:** `resolveInputs` (nodes/runtimeAdapter.js) auto-promotes a single
+non-null value to a one-item list for any `type: 'list'` input (arrays and
+null/undefined are left as-is), matching Grasshopper/Dynamo "single → list of one"
+behavior. The inspector type-check no longer warns when a non-list value arrives
+at a list port. Note on lacing: nodes with a `list` input are intentionally NOT
+auto-laceable (isAutoLaceable returns false) and show no lacing dropdown — lacing
+("map over the incoming list per item") only applies to scalar-input nodes; a
+list-consuming node takes the whole list and has nothing to fan out.
+
 ## 2026-06-02 - Custom.Python Input Ports Are Inferred From Free Variables
 
 **Context:** Port derivation was asymmetric. A headerless Custom.Python cell's
