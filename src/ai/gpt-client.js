@@ -958,6 +958,10 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
           if (problemText) {
             sys += `\n\n### Problems In The Current Graph\nLocally detected issues — use these to answer "how do I finish/fix this?" and to propose targeted edits. Address them by node id; do not invent problems beyond this list.\n\n${problemText}`;
           }
+
+          // Show-action protocol (P3) — only offered when a graph exists. The
+          // block is executed and hidden, so the model must still explain in prose.
+          sys += `\n\n### Showing Things On The Canvas (optional)\nTo point the user at something, you MAY append ONE fenced block at the very end of your reply. It is executed and hidden from the user — keep your prose explanation too. Use node ids from the Live Graph above.\n\`\`\`nova-action\n{"ops":[{"op":"focusNode","id":"node-2"}]}\n\`\`\`\nAllowed ops (read-only, no graph changes): focusNode{id}, highlightNodes{ids:[...]}, openInspector{id} (focus + open its Data Inspector), revealLibraryNode{type} (reveal a node type in the library). Only emit ops for nodes/types that exist; omit the block if there's nothing useful to show.`;
         }
       }
     } catch {

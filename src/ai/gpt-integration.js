@@ -7,6 +7,7 @@ import { validatePlanShape } from './plan-schema.js';
 import { validatePlanAgainstRegistry } from './plan-validator.js';
 import { buildGraphFromPlan, planToPython } from './plan-builder.js';
 import { rewriteGeoAliasesInResponse } from './geo-alias-rewriter.js';
+import { parseNovaActions } from './graph-actions.js';
 import {
   buildDecideYourselfReply,
   buildOptionReply,
@@ -123,6 +124,18 @@ document.addEventListener('DOMContentLoaded', () => {
           bubble.classList.remove('streaming');
           bubble.removeAttribute('id');
         }
+
+        // P3: extract any "show" actions the AI emitted, strip the block from the
+        // text (so it's never shown raw), and auto-run the read-only view ops on
+        // the canvas. Defensive — action handling must never break the response.
+        try {
+          const act = parseNovaActions(fullText);
+          fullText = act.cleanedText;
+          if (act.ops.length && ch === 'workspace' && typeof app.runShowActions === 'function') {
+            app.runShowActions(act.ops);
+          }
+        } catch { /* ignore malformed action blocks */ }
+
         app.chatHistories[ch].push({ role: 'ai', text: fullText });
 
         // Phase 11 safety net: pre-rewrite the AI's response, swapping
