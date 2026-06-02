@@ -5,6 +5,26 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-02 - Custom.Python Input Ports Are Inferred From Free Variables
+
+**Context:** Port derivation was asymmetric. A headerless Custom.Python cell's
+OUTPUT followed its last assignment, but its INPUTS were always a generic
+`input0` — the free variables the cell actually reads (`panels`, `extrude_dir`)
+never became ports, so there was nothing to wire into them. "Type code → ports
+appear" only worked for outputs.
+
+**Decision:** `inferInputPorts(code)` in `runtime/python-port-decl.js` derives
+input ports from the cell's free variables — identifiers read but never assigned,
+excluding Python keywords, the runtime built-ins, the injected bridge globals
+(`Geo`/`RevitBridge`/`HostRegistry`), loop vars, and def params. The runtime
+already injects each input by its port name, so a `panels` free var → `panels`
+port → the wired value lands in `panels`. `resolvePythonPorts`/`nextPythonPorts`
+make these inferred inputs authoritative **only when free vars are detected** (so
+code with no free vars preserves existing manual/wired inputs, and a `# in:`
+header — which the + button writes — still overrides everything). This replaces
+the earlier "without a header, preserve existing inputs" rule for the case where
+the code's free variables are knowable.
+
 ## 2026-06-02 - Unhandled App Errors Auto-File Bug Tickets
 
 **Context:** The app should surface its own bugs without relying on users to

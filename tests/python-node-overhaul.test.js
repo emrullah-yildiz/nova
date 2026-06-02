@@ -24,7 +24,8 @@ import {
   nextPythonPorts,
   renamePythonPort,
   setInputHeader,
-  wrapPythonNodeCode
+  wrapPythonNodeCode,
+  inferInputPorts
 } from '../src/runtime/python-port-decl.js';
 
 getLiveCoreRegistry();
@@ -137,6 +138,39 @@ shell = Geo.loft(pts)`;
     expect(r.source).toBe('default');
     expect(r.inputs[0].id).toBe('input0');
     expect(r.outputs[0].id).toBe('output0');
+  });
+});
+
+describe('inferInputPorts — input ports from the cell\'s free variables', () => {
+  it('finds free variables read but never assigned', () => {
+    const code = `thick_list = []
+for i in range(len(panels)):
+    p = panels[i]
+    extruded = Geo.extrude(p, extrude_dir)
+    thick_list.append(extruded)`;
+    expect(inferInputPorts(code)).toEqual(['panels', 'extrude_dir']);
+  });
+
+  it('excludes assigned vars, loop vars, builtins, and bridge globals', () => {
+    expect(inferInputPorts('result = Geo.createBox(p, 1, 1, 1)')).toEqual(['p']);
+    expect(inferInputPorts('total = sum(values)\nn = len(values)')).toEqual(['values']);
+    expect(inferInputPorts('print("hello")')).toEqual([]);
+    expect(inferInputPorts('x = 1\ny = x + 2')).toEqual([]);
+  });
+
+  it('ignores attribute names, string contents, and comments', () => {
+    expect(inferInputPorts('result = mesh.subdivide()  # uses mesh')).toEqual(['mesh']);
+    expect(inferInputPorts('label = "name not_a_port"\nout = label')).toEqual([]);
+  });
+
+  it('handles def params and tuple unpacking as bound (not inputs)', () => {
+    expect(inferInputPorts('def f(a, b):\n    return a + b\nresult = f(x, 2)')).toEqual(['x']);
+    expect(inferInputPorts('a, b = pair\nresult = a + b')).toEqual(['pair']);
+  });
+
+  it('returns empty for empty / headerless-but-constant code', () => {
+    expect(inferInputPorts('')).toEqual([]);
+    expect(inferInputPorts('result = 42')).toEqual([]);
   });
 });
 
@@ -371,14 +405,27 @@ describe('nextPythonPorts — live port sync on code edit', () => {
     expect(r.removedOutputs).toEqual(['output0']);
   });
 
-  it('without headers, preserves existing (manual/wired) inputs and only tracks the output name', () => {
-    const r = nextPythonPorts('result = Geo.createBox(p, 1, 1, 1)', { inputs: ['p', 'size'], outputs: ['output0'] });
+  it('without a header, inputs track the free variables the cell reads', () => {
+    const r = nextPythonPorts('result = Geo.createBox(p, 1, 1, 1)', { inputs: ['input0'], outputs: ['output0'] });
     expect(r.source).toBe('inferred');
-    expect(r.inputs).toEqual(['p', 'size']); // manual inputs preserved
-    expect(r.inputsChanged).toBe(false);
+    expect(r.inputs).toEqual(['p']); // free var p becomes the input
+    expect(r.inputsChanged).toBe(true);
+    expect(r.removedInputs).toEqual(['input0']);
     expect(r.outputs).toEqual(['result']);
     expect(r.outputsChanged).toBe(true);
     expect(r.removedOutputs).toEqual(['output0']);
+  });
+
+  it('drops an input the code no longer references (no header)', () => {
+    const r = nextPythonPorts('result = Geo.createBox(p, 1, 1, 1)', { inputs: ['p', 'size'], outputs: ['output0'] });
+    expect(r.inputs).toEqual(['p']); // size is unused → removed
+    expect(r.removedInputs).toEqual(['size']);
+  });
+
+  it('preserves existing inputs when the code has no detectable free vars', () => {
+    const r = nextPythonPorts('result = 42', { inputs: ['a', 'b'], outputs: ['output0'] });
+    expect(r.inputs).toEqual(['a', 'b']);
+    expect(r.inputsChanged).toBe(false);
   });
 
   it('reports no change when the resolved ports match the current ports', () => {
