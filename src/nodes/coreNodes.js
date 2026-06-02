@@ -1,4 +1,5 @@
-import { NODE_LIBRARY, NODE_TYPE_MAP } from '../core/nodes.js';
+import { NODE_LIBRARY, NODE_TYPE_MAP, NODE_VERSION_MAP } from '../core/nodes.js';
+import { addDefToVersionMap } from '../core/node-versions.js';
 import { curvesCategory, curvesNodes } from './categories/curves.js';
 import { geometryCategory, geometryNodes } from './categories/geometry.js';
 import { inputCategory, inputNodes } from './categories/input.js';
@@ -120,6 +121,7 @@ function mergeRegistryIntoLegacyMaps(registry) {
         categoryId: category.id,
         categoryColor: category.color
       });
+      addDefToVersionMap(NODE_VERSION_MAP, NODE_TYPE_MAP[node.type]);
     });
   });
 

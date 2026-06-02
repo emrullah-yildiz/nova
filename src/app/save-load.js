@@ -1,4 +1,5 @@
-import { NODE_TYPE_MAP } from '../core/nodes.js';
+import { NODE_TYPE_MAP, NODE_VERSION_MAP } from '../core/nodes.js';
+import { resolveVersionedDef } from '../core/node-versions.js';
 import { getRuntimeConfig } from '../config/runtime-config.js';
 import { buildInviteStatus } from './invite-status.js';
 import { CollaboClient } from './collab.js';
@@ -66,7 +67,7 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
       zoom: app.zoom, panX: app.panX, panY: app.panY,
       nextNodeId: app.nextNodeId,
       nodes: app.nodes.map(nd => ({
-        id: nd.id, type: nd.type,
+        id: nd.id, type: nd.type, version: nd.version || 1,
         x: nd.x, y: nd.y, zIndex: nd.zIndex,
         controlValues: { ...nd.controlValues },
         dataPanelOpen: nd.dataPanelOpen || false,
@@ -112,13 +113,23 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
 
     // Rebuild nodes
     data.nodes.forEach(saved => {
-      const def = NODE_TYPE_MAP[saved.type];
-      if (!def) return;
+      const latestDef = NODE_TYPE_MAP[saved.type];
+      if (!latestDef) return;
+
+      // Resolve the def for the version this node was saved against, so an old
+      // graph keeps its old behavior. Falls back to the latest version (with a
+      // warning) if the pinned one was since retired.
+      const resolved = resolveVersionedDef(NODE_VERSION_MAP, saved.type, saved.version, latestDef);
+      const def = resolved.def;
+      if (resolved.fallback && typeof NFLogger !== 'undefined') {
+        NFLogger.warn('node-version', 'Node ' + saved.id + ' (' + saved.type + ') was saved at v' + saved.version + ', which is no longer available — using v' + resolved.version);
+      }
 
       app.nodeZCounter++;
       const nd = {
         id: saved.id,
         type: saved.type,
+        version: resolved.version,
         x: saved.x, y: saved.y,
         def: { ...def },
         controlValues: {},
