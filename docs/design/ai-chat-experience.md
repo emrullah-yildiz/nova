@@ -51,7 +51,13 @@ that don't replace prose**, **status/step timeline**.
     (`app._attachMsgActions`). Copy grabs the prose only (artifacts excluded);
     Retry drops the last turn (`GPTClient.dropLastTurn`), removes the old answer +
     its thinking block, and re-streams the same prompt. Canned `addAIMessage`
-    bubbles get Copy only. Remaining: tool/action chips.
+    bubbles get Copy only.
+  - **Tool/action chips (DONE)** — when the assistant runs read-only canvas
+    show-actions (focus / highlight / open inspector / reveal in library), a row
+    of chips below the answer reports what it did ("Focused Tower", "Highlighted
+    3 nodes"). Pure summary in `turn-steps.js` (`summarizeShowOps`), rendered by
+    `app._renderStepChips`. Future: chips for plan/code builds and a live
+    in-flight status.
 
 ## Decisions (made)
 - Ship the **step timeline** before real thinking (free, works today); add real
