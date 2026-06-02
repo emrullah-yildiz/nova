@@ -225,15 +225,25 @@ const PythonRunner = {
 
           ${jsCode}
 
-          // Collect all variables as outputs — use typeof check to avoid TDZ errors
+          // Collect output variables. Declared/inferred Custom.Python ports are
+          // authoritative; assignment scanning is a compatibility fallback for
+          // older cells that returned every assigned local.
           var __out__ = {};
           ${(function() {
             var builtins = ['__inputs__','__out__','__range__','__len__','__print__','__reversed__','__sorted__','__sum__','__round__','__dist__','__factorial__','__radians__','__degrees__','__int__','__float__','__list__','Geo','RevitBridge','HostRegistry','_Geo','i','j','k','_','s','v','r','m','d','n','a','b','c'];
+            var portNames = [];
+            try {
+              portNames = resolvePythonPorts(code).outputs
+                .map(function(p) { return p && p.id; })
+                .filter(function(v) { return v && builtins.indexOf(v) < 0; });
+            } catch (_e) {
+              portNames = [];
+            }
             var varNames = (jsCode.match(/(?:^|[;\n{} ])([a-zA-Z_][a-zA-Z0-9_]*)\s*=/gm) || [])
               .map(function(m) { return m.replace(/^[;\n{} ]+/, '').replace(/\s*=$/, '').trim(); })
               .filter(function(v) { return v && builtins.indexOf(v) < 0; });
             var unique = [];
-            varNames.forEach(function(v) { if (unique.indexOf(v) < 0) unique.push(v); });
+            portNames.concat(varNames).forEach(function(v) { if (unique.indexOf(v) < 0) unique.push(v); });
             return unique.map(function(v) { return 'try { if (typeof ' + v + ' !== "undefined") __out__["' + v + '"] = ' + v + '; } catch(_e) {}'; }).join('\n');
           })()}
           return __out__;
