@@ -24,6 +24,12 @@ describe('expert system prompt (Phase 1)', () => {
     expect(prompt).toContain('FACADE / PANELIZATION PLAYBOOK');
     expect(prompt).toContain('BEFORE YOU EMIT CODE');
   });
+
+  it('injects the golden gallery palette (Phase 2) with no leftover tokens', () => {
+    expect(prompt).toContain('EXPERT GALLERY');
+    expect(prompt).toContain('Twisted tapered tower');
+    expect(prompt).not.toContain('__NOVA_');
+  });
 });
 
 describe('the new worked examples actually run', () => {
