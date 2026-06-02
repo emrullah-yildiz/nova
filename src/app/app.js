@@ -1,5 +1,6 @@
 import { AIEngine } from '../ai/ai-engine.js';
-import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS } from '../core/nodes.js';
+import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS, NODE_VERSION_MAP } from '../core/nodes.js';
+import { getDefVersion, resolveVersionedDef, migrateControlValues } from '../core/node-versions.js';
 import { describeWireTypeMismatch } from '../core/wire-type-check.js';
 import { computeFitView } from '../core/graph-layout.js';
 import { CodeParser } from '../runtime/parser.js';
@@ -1219,7 +1220,7 @@ const app = {
 
     this.nodeZCounter++;
 
-    const nd={id,type,x:Math.round(x),y:Math.round(y),def:{...def,inputs:(def.inputs||[]).map(function(inp){return{...inp};}),outputs:(def.outputs||[]).map(function(out){return{...out};})},controlValues:{},dataPanelOpen:false,zIndex:this.nodeZCounter};
+    const nd={id,type,version:getDefVersion(def),x:Math.round(x),y:Math.round(y),def:{...def,inputs:(def.inputs||[]).map(function(inp){return{...inp};}),outputs:(def.outputs||[]).map(function(out){return{...out};})},controlValues:{},dataPanelOpen:false,zIndex:this.nodeZCounter};
 
     def.controls.forEach(c=>{nd.controlValues[c.id]=c.default;});
 
@@ -1235,6 +1236,26 @@ const app = {
 
     return nd;
 
+  },
+
+  // Switch a node to a different behavior version. The def is re-resolved from
+  // the version registry, control values are migrated across the change, and the
+  // node re-renders (ports may differ between versions). Pinning a version is how
+  // a graph keeps old behavior when a node's newer version ships. Returns true on
+  // success, false for an unknown node/version.
+  setNodeVersion(nodeId, version){
+    const nd=this.nodes.find(n=>n.id===nodeId); if(!nd) return false;
+    const resolved=resolveVersionedDef(NODE_VERSION_MAP, nd.type, version, NODE_TYPE_MAP[nd.type]);
+    if(!resolved||!resolved.def) return false;
+    if(resolved.version===nd.version) return true;
+    nd.controlValues=migrateControlValues(nd.def, resolved.def, nd.controlValues);
+    nd.def={...resolved.def,inputs:(resolved.def.inputs||[]).map(function(inp){return{...inp};}),outputs:(resolved.def.outputs||[]).map(function(out){return{...out};})};
+    nd.version=resolved.version;
+    this.renderNode(nd);
+    if(this.invalidateCompute) this.invalidateCompute();
+    if(this.renderWires) this.renderWires();
+    if(typeof Viewer3D!=='undefined') Viewer3D._needsRebuild=true;
+    return true;
   },
 
   // Remote node.add → recreate the exact node (same id) without re-broadcasting.

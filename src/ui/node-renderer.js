@@ -16,6 +16,8 @@
 
 import { getWiredControlDisplay, removeControlInputWires } from './property-wire-controls.js';
 import { isAutoLaceable } from '../core/lacing.js';
+import { NODE_VERSION_MAP } from '../core/nodes.js';
+import { availableVersions, getDefVersion } from '../core/node-versions.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -152,6 +154,16 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
     h += '<span class="node-header-icon" style="color:' + cc + ';background:' + cc + '20">' + def.icon + '</span>';
 
     h += '<span class="node-header-title">' + def.name + '</span>';
+
+    // Version picker — only rendered when the type has shipped more than one
+    // behavior version, so it stays invisible for every single-version node.
+    var versions = availableVersions(NODE_VERSION_MAP, nd.type);
+    if (versions.length > 1) {
+      var curV = nd.version || getDefVersion(def);
+      h += '<select class="node-header-version" title="Node version — changing it preserves old graphs" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onchange="event.stopPropagation();app.setNodeVersion(\'' + nd.id + '\', parseInt(this.value,10))">';
+      versions.forEach(function(v) { h += '<option value="' + v + '"' + (v === curV ? ' selected' : '') + '>v' + v + '</option>'; });
+      h += '</select>';
+    }
 
     h += '<button class="node-header-menu" onclick="event.stopPropagation();app.showNodeMenu(\'' + nd.id + '\')">⋮</button>';
 

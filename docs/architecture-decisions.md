@@ -5,6 +5,25 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-02 - Node Definitions Are Versioned So New Releases Don't Break Old Graphs
+
+**Context:** A node's behavior may change in a future release. With one def per
+type, shipping that change would silently alter every existing graph that uses
+the node — there was no way to keep old behavior.
+
+**Decision:** Node defs gain an optional `version` (integer ≥ 1; absent ⇒ v1, so
+the change is additive and inert until a type ships a second version). A type can
+register multiple versions — a def carries its predecessors in
+`priorVersions: [...]`. The registry builds `NODE_VERSION_MAP` (type → {version →
+def}) alongside `NODE_TYPE_MAP` (latest). Each node instance pins `nd.version`,
+set to the latest at creation and **persisted in the saved graph**; on load the
+def is resolved for that pinned version (`resolveVersionedDef`), falling back to
+the latest with a logged warning only if the pinned version was retired. The user
+switches a node's version via a header picker (rendered only when a type has >1
+version) → `app.setNodeVersion`, which re-resolves the def and migrates control
+values (`migrateControlValues`, honoring a def's optional `migrateFrom[v]`). The
+resolution/migration rules live in the pure, unit-tested `core/node-versions.js`.
+
 ## 2026-06-02 - Custom.Python Codegen Tracks Live Ports, Not The Static Def
 
 **Context:** A `Custom.Python` node has two port lists: the static definition
