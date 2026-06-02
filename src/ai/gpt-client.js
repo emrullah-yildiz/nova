@@ -8,6 +8,7 @@ import { createNovaCloudClient } from '../enterprise/cloud-client.js';
 import { getRuntimeConfig } from '../config/runtime-config.js';
 import { buildNodeCatalog } from './node-catalog.js';
 import { buildGraphContext } from './graph-context.js';
+import { analyzeGraphProblems, formatGraphProblems } from './graph-problems.js';
 import { buildNodeKnowledge, NOVA_PRIMER } from './knowledge-base.js';
 
 const GPTClient = {
@@ -944,9 +945,19 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
       const typeMap = (typeof window !== 'undefined' && window.NODE_TYPE_MAP)
         || (typeof globalThis !== 'undefined' && globalThis.NODE_TYPE_MAP) || {};
       if (app && typeof app.serializeGraph === 'function') {
-        const ctx = buildGraphContext(app.serializeGraph(), typeMap);
+        const graph = app.serializeGraph();
+        const ctx = buildGraphContext(graph, typeMap);
         if (ctx.text) {
           sys += `\n\n### Live Graph (the user's current canvas)\nThis is the actual graph on the canvas right now. Use it to answer questions about the current workflow ("which node does X here?", "what should I wire next to finish this?") and to propose precise edits — reference nodes by their id. Ports are shown as in[...]/out[...]; wires as from.port → to.port.\n\n${ctx.text}`;
+
+          // Problem report — what's broken or unfinished, computed locally. Gives
+          // the assistant a concrete worklist for "how do I finish this?" / fixes.
+          const nodeErrors = (app._nodeErrors && typeof app._nodeErrors === 'object') ? app._nodeErrors : {};
+          const problems = analyzeGraphProblems(graph, typeMap, { nodeErrors });
+          const problemText = formatGraphProblems(problems);
+          if (problemText) {
+            sys += `\n\n### Problems In The Current Graph\nLocally detected issues — use these to answer "how do I finish/fix this?" and to propose targeted edits. Address them by node id; do not invent problems beyond this list.\n\n${problemText}`;
+          }
         }
       }
     } catch {
