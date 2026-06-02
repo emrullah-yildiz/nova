@@ -881,7 +881,11 @@ if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded
     setTimeout(function() {
       var el = document.getElementById('node-warn-typing');
       if (el) el.remove();
-      self.respond('workspace', prompt);
+      // Go straight to the chat engine — NOT respond(), whose keyword shortcuts
+      // ("add"/"node"/"remove") would hijack this prompt as a command and never
+      // call the AI. Fall back to respond() only if _gptChat isn't available.
+      if (typeof self._gptChat === 'function') self._gptChat('workspace', prompt);
+      else self.respond('workspace', prompt);
     }, 250);
   };
 
