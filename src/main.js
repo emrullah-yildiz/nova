@@ -25,6 +25,7 @@ import { getLiveCoreRegistry } from './nodes/coreNodes.js';
 import app, { initializeApp } from './app/app.js';
 import { installLoggerPatch } from './app/logger-patch.js';
 import { installSaveLoad } from './app/save-load.js';
+import { installAutoBugReporter } from './app/auto-bug-reporter.js';
 import './ai/gpt-integration.js';
 import { PythonRunner } from './runtime/pyrunner.js';
 import { createComputeContext, computeNodeValue } from './core/compute-engine.js';
@@ -91,6 +92,7 @@ const NodeFlow = {
   initializeApp,
   installEngine,
   installSaveLoad,
+  installAutoBugReporter,
   installLoggerPatch,
   createComputeContext,
   computeNodeValue,
@@ -189,6 +191,7 @@ function installBeforeAppInit() {
 
 function installAfterAppInit() {
   installSaveLoad(app);
+  installAutoBugReporter(app);
   installUiEnhancements(app);
   installPortHandler(app);
   installNodeHelp(app);
