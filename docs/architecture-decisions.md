@@ -5,6 +5,25 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-02 - AI Assistant Sees A Live Graph Snapshot (Content-Awareness, P1)
+
+**Context:** The assistant only received the generated "code on canvas"
+(`existingCode`, and only when the code terminal was populated). It had no
+structured view of the actual graph — node ids, types, versions, ports,
+positions, control values, or wiring — so it guessed structure from code and was
+blind when the terminal was empty. This blocked "what should I wire next to
+finish this?" and precise, node-id-referenced edits.
+
+**Decision:** First phase of the AI copilot. A pure `ai/graph-context.js`
+(`buildGraphContext(graph, typeMap, opts)`) turns `app.serializeGraph()` into a
+compact, token-bounded block (nodes with type/version/ports/position/controls,
+then `from.port → to.port` wires; capped with explicit "+N not shown" notes — no
+silent truncation). `GPTClient.buildSystemPrompt` injects it as a `### Live Graph`
+section, read from the global app/registry and wrapped defensively so it can
+never break a chat turn. It is naturally gated to projects with nodes (empty on
+the landing screen). Later phases build on this: a problem report (P2), an action
+protocol to show/edit the graph (P3/P5), and a grounded knowledge base (P1b).
+
 ## 2026-06-02 - Node Definitions Are Versioned So New Releases Don't Break Old Graphs
 
 **Context:** A node's behavior may change in a future release. With one def per
