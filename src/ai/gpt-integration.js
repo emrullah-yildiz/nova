@@ -12,7 +12,7 @@ import { isTextAttachment, attachmentNames, foldAttachments, ATTACH_MAX_BYTES } 
 import {
   buildDecideYourselfReply,
   buildOptionReply,
-  buildOtherReply,
+  buildCustomReply,
   firstOptionGroup
 } from './option-flow.js';
 
@@ -837,10 +837,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return label.indexOf('decide yourself') !== -1 || label === 'other';
     });
     if (!hasBuiltInAction) {
+      // "Other" is the LAST option — an inline composer the user types into and
+      // submits directly (not a hand-off that makes the AI re-interrogate them).
+      bubble.appendChild(app._createOtherOptionCard(ch, group.title));
+
       var actionRow = document.createElement('div');
       actionRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px 10px;border-top:1px solid var(--border-color)';
       actionRow.appendChild(app._createOptionAction(ch, buildDecideYourselfReply(group.title), 'Decide yourself'));
-      actionRow.appendChild(app._createOptionAction(ch, buildOtherReply(group.title), 'Other'));
       bubble.appendChild(actionRow);
     }
 
@@ -886,6 +889,73 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.textContent = label;
     btn.onclick = function() { app._selectOption(ch, reply); };
     return btn;
+  };
+
+  // The "Other" choice rendered as the final option card. Clicking it swaps the
+  // card for an inline text box; the user types a custom answer and submits it
+  // directly as their reply to the question.
+  app._createOtherOptionCard = function(ch, groupTitle) {
+    var row = document.createElement('div');
+    row.className = 'nf-option-other-row';
+    row.style.cssText = 'padding:2px 0';
+
+    var btn = document.createElement('button');
+    btn.className = 'nf-option-card';
+    btn.style.cssText = 'display:flex;align-items:flex-start;gap:8px;width:100%;padding:7px 12px;border:none;background:transparent;cursor:pointer;text-align:left;border-radius:0;transition:background 0.15s';
+    btn.onmouseover = function() { btn.style.background = 'rgba(137,180,250,0.08)'; };
+    btn.onmouseout = function() { btn.style.background = 'transparent'; };
+
+    var badge = document.createElement('span');
+    badge.style.cssText = 'min-width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:6px;background:rgba(137,180,250,0.12);color:var(--accent-blue);font-size:12px;font-weight:700';
+    badge.textContent = '✎'; // ✎
+    btn.appendChild(badge);
+
+    var copy = document.createElement('div');
+    copy.style.cssText = 'flex:1;min-width:0';
+    var labelEl = document.createElement('div');
+    labelEl.style.cssText = 'font-size:12px;font-weight:600;color:var(--text-primary)';
+    labelEl.textContent = 'Other';
+    copy.appendChild(labelEl);
+    var descEl = document.createElement('div');
+    descEl.style.cssText = 'font-size:11px;color:var(--text-muted);margin-top:1px';
+    descEl.textContent = 'Type your own answer';
+    copy.appendChild(descEl);
+    btn.appendChild(copy);
+
+    btn.onclick = function() { app._expandOtherComposer(ch, groupTitle, row); };
+    row.appendChild(btn);
+    return row;
+  };
+
+  // Replaces the "Other" card with an inline input + Send, focused and ready.
+  app._expandOtherComposer = function(ch, groupTitle, row) {
+    var box = document.createElement('div');
+    box.style.cssText = 'display:flex;gap:6px;align-items:center;padding:6px 12px';
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Type your answer…';
+    input.className = 'nf-option-other-input';
+    input.style.cssText = 'flex:1;min-width:0;padding:7px 10px;border:1px solid rgba(137,180,250,0.35);background:var(--bg-input, rgba(0,0,0,0.25));color:var(--text-primary);border-radius:6px;font-size:12px;outline:none';
+
+    var send = document.createElement('button');
+    send.className = 'nf-option-card nf-option-action';
+    send.textContent = 'Send';
+    send.style.cssText = 'padding:7px 14px;border:1px solid rgba(137,180,250,0.24);background:rgba(137,180,250,0.12);color:var(--accent-blue);border-radius:6px;font-size:11px;font-weight:700;cursor:pointer';
+
+    var submit = function() {
+      var v = input.value.trim();
+      if (!v) { input.focus(); return; }
+      app._selectOption(ch, buildCustomReply(groupTitle, v));
+    };
+    send.onclick = submit;
+    input.onkeydown = function(e) { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
+
+    box.appendChild(input);
+    box.appendChild(send);
+    row.innerHTML = '';
+    row.appendChild(box);
+    input.focus();
   };
 
   app._showOptionButtons = function(fullText, ch) {
