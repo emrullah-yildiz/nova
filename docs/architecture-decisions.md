@@ -5,6 +5,23 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-02 - Chat Turns Persist The Answer; Artifacts Append Below (P1)
+
+**Context:** The assistant rendered a turn into one mutable bubble that got
+overwritten — streaming collapsed to "Thinking…" once code appeared, and a
+plan/code reply replaced the bubble with an artifact card, discarding the reasoning
+the user watched stream ("loses track of thinking").
+
+**Decision:** First phase of the chat response architecture (see
+`docs/design/ai-chat-experience.md`). The streamed answer/reasoning is finalized
+into its own bubble and persists; plan/code/approve UI now renders into a separate
+`.chat-artifact` block appended *inside* that bubble (a child div, so it stacks
+below the prose without disturbing the chat-msg flex row) via
+`app._appendArtifactBubble`. The duplicate explanation was dropped from the
+artifact headers since the prose now lives in the persistent answer. Later phases
+add a collapsible Thinking disclosure (P2), real Anthropic extended-thinking
+streaming or a derived step timeline (P3), and agentic affordances (P4).
+
 ## 2026-06-02 - A Single Value Wired To A List Input Is A One-Item List
 
 **Context:** List-consuming nodes (Solid.ByLoft, List.*, Math.Sum) failed when
