@@ -1162,11 +1162,16 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     ];
     const format = this.getProviderFormat();
     const enableThinking = this.isThinkingEnabled(format, this.getEffectiveModel());
+    const ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    this._activeStream = ac;
+    let fullText = '';
+    let fullThinking = '';
     try {
       const response = await fetch(this.getEffectiveApiUrl(), {
         method: 'POST',
         headers: this.buildRequestHeaders(),
-        body: JSON.stringify(this.buildChatPayload(format, this.getEffectiveModel(), messages, maxTokens, this.TEMPERATURE, true, this.getTokenParam(), enableThinking))
+        body: JSON.stringify(this.buildChatPayload(format, this.getEffectiveModel(), messages, maxTokens, this.TEMPERATURE, true, this.getTokenParam(), enableThinking)),
+        signal: ac ? ac.signal : undefined
       });
       if (!response.ok) {
         if (response.status === 503 && proxyMode) {
@@ -1194,8 +1199,6 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
       }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let fullText = '';
-      let fullThinking = '';
       let buffer = '';
       while (true) {
         const { done, value } = await reader.read();
@@ -1228,8 +1231,29 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
       NFLogger.aiResponse(fullText, Date.now() - _streamStart);
       onDone(fullText);
     } catch (e) {
+      if (ac && ac.signal && ac.signal.aborted) {
+        // User stopped the stream — keep whatever streamed so far and finalize
+        // normally (the partial answer persists) rather than surfacing an error.
+        history.push({ role: 'user', content: userMessage });
+        history.push({ role: 'assistant', content: fullText });
+        this._histories[context] = history;
+        NFLogger.aiResponse(fullText + ' [stopped]', Date.now() - _streamStart);
+        onDone(fullText);
+        return;
+      }
       NFLogger.aiError(e.message || 'Network error', providerLabel);
       onError(e.message || 'Network error');
+    } finally {
+      if (this._activeStream === ac) this._activeStream = null;
+    }
+  },
+
+  // Abort the in-flight streaming response (the Stop button). The reader rejects
+  // with an AbortError, which callStream finalizes as a normal partial reply.
+  stopStream() {
+    if (this._activeStream) {
+      try { this._activeStream.abort(); } catch (e) { /* ignore */ }
+      this._activeStream = null;
     }
   },
 
