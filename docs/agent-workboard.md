@@ -25,7 +25,7 @@ root `README.md` · `docs/NOVA.md` · `.github/workflows/ci.yml`
 
 | Branch | Agent | Task | Owned paths (globs) | Hot locks | Started | Status |
 |---|---|---|---|---|---|---|
-| _(none — board is clear)_ | | | | | | |
+| feat/nodes-transform | geometry-engineer | T2 Transform & Frame node category | `src/nodes/categories/transform.js`, `src/nodes/coreNodes.js`, `tests/transform.test.js` | _none — the registry wire lives in `src/nodes/coreNodes.js`, which is inside my owned `src/nodes/**` and is **not** a hot file. The hot-files list names `src/core/node-library.js`, which does not exist in this repo._ | 2026-06-04 | active |
 
 <!--
 Example row (copy, fill in, remove this comment block's example when claiming):

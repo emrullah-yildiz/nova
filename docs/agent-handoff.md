@@ -13,6 +13,65 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-04 - T2: Transform & Frame node category
+
+**Agent/branch:** `feat/nodes-transform` (off `develop` @ 8f38965)
+
+**Goal:** Expose the T1 kernel backbone (`src/geometry/frames.js`, `transforms.js`) as
+modern Nova nodes in a new category.
+
+**Claimed/changed files:** NEW `src/nodes/categories/transform.js` (owned), NEW
+`tests/transform.test.js` (owned), EDITED `src/nodes/coreNodes.js` (one import + two
+list pushes — the registry wire; inside owned `src/nodes/**`, not a hot file). No edits
+to `src/geometry/**` (READ-only) or any other category file.
+
+**Registry wire (for the integrator/reviewer):** the task referenced
+`src/core/node-library.js`, which does not exist. The real category registration is
+`src/nodes/coreNodes.js`, exactly mirroring how `plane`/`vector` are wired:
+`import { transformCategory, transformNodes } from './categories/transform.js';`, add
+`transformCategory` to `modernCategories` and `...transformNodes` to `coreNodes`. Done
+on this branch.
+
+**Nodes shipped (all four wired to T1 `transforms.*` / `frames.*` module exports, NOT
+the legacy `Geo.array*` globals):**
+- `Plane.ByOriginXAxisYAxis` (subGroup Plane) — `origin:point, xAxis:vector,
+  yAxis:vector → plane` — `frames.planeFromOriginXY`.
+- `Geometry.Orient` (keystone) — `geometry:any, fromPlane:plane, toPlane:plane →
+  result:any` — `transforms.orient`. Verified World-XY → tilted-plane end to end.
+- `Geometry.ArrayLinear` — `geometry:any, direction:vector, count:number → result:list`
+  — `transforms.arrayLinear` (count + per-step vector convention).
+- `Geometry.ArrayPolar` — `geometry:any, center:point, axis:vector, count:number,
+  angle:number(deg, default 360) → result:list` — `transforms.arrayPolar` (count +
+  total-angle, deg→rad).
+
+**Decision / deviation (needs reviewer awareness):** the task also listed
+`Geometry.Rotate` and `Geometry.Mirror`. Both **already exist** as canonical node types
+in `src/nodes/categories/geometry.js`, and the node registry throws on duplicate `type`
+(global key, `registry.js` `registerNode`). I do **not** own that file and must not edit
+it, so I did not register colliding duplicates. The existing `Geometry.Rotate` already
+takes degrees and calls `Geo.rotate`, and `Geometry.Mirror` calls `Geo.mirror` — the
+exact helpers `transforms.rotate`/`transforms.mirror` compose, so T1's rotate/mirror
+behavior is already exposed. Open follow-up if the desired convergence is to make
+`geometry.js` delegate to `transforms.*` and/or convert its `LinearArray`/`PolarArray`
+to the T1 count-based convention (that edit belongs to the geometry-category owner).
+
+**Codegen note:** Python codegen uses `Geo.orient`, `Geo.planeFromOriginXY`,
+`Geo.arrayLinear`, `Geo.arrayPolar`. These names are how the registry-driven parser
+(`src/runtime/parser.js`) maps a call back to its node, and how `code-validator.js`
+derives its known-method allow-list — both are derived from `codegen.python`, so they
+stay in sync automatically (no `capability-ledger`/golden-example file exists in this
+repo; node-catalog is built live from the registry and its byte-budget test still
+passes).
+
+**Validation:** `npm.cmd run lint:all` → exit 0 (clean). `npm.cmd test` (full vitest)
+→ 1369 passed, 1 skipped (116 files). `npm.cmd run build` (vite) → built OK. No
+`test:geometry` script exists; full suite covers it.
+
+**Known gaps:** Rotate/Mirror convergence above; live 3D viewport rendering of the new
+nodes' list outputs was not exercised headlessly (executes verified in JS).
+
+**Merge status:** Open branch `feat/nodes-transform` — committed, not merged.
+
 ## 2026-06-04 - T1: Frame & Transform kernel backbone
 
 **Agent/branch:** `feat/geo-frames-orient`
