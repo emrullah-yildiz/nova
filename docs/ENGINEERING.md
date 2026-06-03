@@ -86,6 +86,12 @@ bytes**, if you follow these rules. The live state lives in
 cost grows with headcount; 3–4 *active* agents is the efficient sweet spot. Roles
 are defined as custom subagents in `.claude/agents/*.md`.
 
+**Start with the `tech-lead` agent.** You state the goal; it decomposes the work
+into disjoint, module-aligned tasks, sequences dependencies, updates the work
+board, and emits a ready-to-paste prompt per lane — so you don't have to do the
+partitioning by hand. It plans and distributes; it does not write feature code.
+The `integrator` agent (or you) then lands the finished branches.
+
 **The rules:**
 
 1. **Partition by module ownership.** Each agent owns a *disjoint* set of path
