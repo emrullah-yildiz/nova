@@ -1,5 +1,5 @@
 # Cloudflare Workers config for the Nova API + static SPA.
-# Phase 0 of the all-Cloudflare migration (see docs/accounts-collaboration.md).
+# Phase 0 of the all-Cloudflare migration (see docs/architecture/accounts-collaboration.md).
 # The Worker is the single deployment target for both the SPA and API.
 
 name = "nova"

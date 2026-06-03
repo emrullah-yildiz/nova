@@ -1,27 +1,49 @@
 # Nova Documentation
 
-This folder is the coordination surface for humans and AI agents working on
-Nova. Keep it small, current, and decision-oriented.
+This folder is the coordination surface for humans and AI agents. Keep it small,
+current, and decision-oriented.
 
-## Start Here
+## Start here (Tier 1)
 
-- `AGENTS.md` - repository instructions for AI agents and contributors.
-- `ai-agent-token-guide.md` - how agents should minimize token usage and avoid repeated analysis.
-- `agent-merge-checklist.md` - start-to-end task checklist for branch creation, validation, merge to `develop`, and branch cleanup.
-- `agent-handoff.md` - compact handoff log for context another agent should inherit.
-- `architecture-decisions.md` - durable architecture decisions and their consequences.
+- **[`NOVA.md`](NOVA.md)** — the living **source of truth**: what Nova is, how it's
+  built, the design patterns, current status, and the roadmap. Read it before any
+  architectural decision. Always kept current.
+- **[`ENGINEERING.md`](ENGINEERING.md)** — **how we work**: operating principles,
+  branch-per-task, the multi-agent model, the testing ladder, and the
+  start→merge checklist. A junior dev can run a whole task from this one file.
 
-## Current Product And Platform Docs
+## Detailed specs (Tier 2)
 
-- `deployment-guide.md` - Cloudflare Worker deployment, branch/domain mapping, secrets, and verification.
-- `accounts-collaboration.md` - account, sharing, and realtime collaboration architecture.
-- `revit-plugin-architecture.md` - Nova Connect and Revit integration architecture.
-- `enterprise-api.env.example` - local/secret-manager environment variable reference.
+```
+docs/
+  NOVA.md                 ← source of truth (start here)
+  ENGINEERING.md          ← coding + multi-agent rules
+  README.md               ← this index
+  agent-workboard.md      ← live concurrency claims (who owns what now)
+  agent-handoff.md        ← short-lived task handoffs between agents
+  enterprise-api.env.example  ← env-var reference
+  architecture/
+    decisions.md          ← durable decision log (append-only, newest first)
+    deployment.md         ← Cloudflare Worker deploy, domains, secrets
+    accounts-collaboration.md ← accounts + realtime collab design
+    revit-connect.md      ← Nova Connect + Revit architecture
+  design/
+    ai-chat-experience.md ← AI chat UX architecture
+    ai-system-prompt.md   ← AI expert-design prompt
+```
 
-## Documentation Policy
+Every Tier-2 doc links back up to `NOVA.md`.
 
-- Update `architecture-decisions.md` whenever a durable architecture rule changes.
-- Update `agent-handoff.md` when a completed workflow leaves context the next agent needs.
+## Documentation policy
+
+- Update [`NOVA.md`](NOVA.md) in the same branch as any change to architecture,
+  design patterns, the module map, current status, or the roadmap.
+- Append durable decisions to [`architecture/decisions.md`](architecture/decisions.md)
+  (newest first); mark superseded entries instead of deleting them.
+- Add an [`agent-handoff.md`](agent-handoff.md) entry when a task leaves context the
+  next agent needs.
+- Claim/release your owned paths on [`agent-workboard.md`](agent-workboard.md) as
+  you start/finish.
+- Prefer updating an existing doc over adding new fragments; delete stale docs when
+  superseded.
 - Update this index when adding, removing, or renaming docs.
-- Prefer updating an existing current doc over adding roadmap fragments.
-- Delete stale docs when their content is superseded by a current source of truth.

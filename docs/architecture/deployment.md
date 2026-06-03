@@ -1,5 +1,7 @@
 # Nova Deployment Guide
 
+> ↑ Big picture: [`../NOVA.md`](../NOVA.md) — detailed spec for deployment.
+
 Nova deploys only to Cloudflare Workers. The Worker serves both the Vite SPA
 from `dist/` and the `/api/*` backend from `worker/index.mjs`.
 
