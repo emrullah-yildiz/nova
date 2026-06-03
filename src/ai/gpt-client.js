@@ -7,6 +7,8 @@
 import { createNovaCloudClient } from '../enterprise/cloud-client.js';
 import { getRuntimeConfig } from '../config/runtime-config.js';
 import { buildNodeCatalog } from './node-catalog.js';
+import { buildCapabilityLedger } from './capability-ledger.js';
+import { buildGoldenGallery } from './golden-examples.js';
 import { buildGraphContext } from './graph-context.js';
 import { analyzeGraphProblems, formatGraphProblems } from './graph-problems.js';
 import { buildNodeKnowledge, NOVA_PRIMER } from './knowledge-base.js';
@@ -421,6 +423,40 @@ const GPTClient = {
     return openai;
   },
 
+  // Vision support. Modern Claude (3.x / 4.x, all sizes) and OpenAI multimodal
+  // models can see images; the free Groq/Llama proxy cannot.
+  isVisionModel(model) {
+    if (!model) return false;
+    var m = String(model).toLowerCase();
+    if (m.indexOf('claude') !== -1) return true;
+    if (/gpt-4o|gpt-4\.1|gpt-4-turbo|chatgpt-4o|o4|o3/.test(m)) return true;
+    return false;
+  },
+
+  supportsVision() {
+    if (this.isProxyMode && this.isProxyMode()) return false;
+    return this.isVisionModel(this.getEffectiveModel());
+  },
+
+  // Builds the user message `content`. With no images it's a plain string; with
+  // images it's a per-format content-block array (Anthropic base64 image blocks
+  // vs OpenAI image_url data-URLs). images: [{ mediaType, data(base64) }].
+  buildUserContent(format, text, images) {
+    if (!images || !images.length) return text;
+    if (format === 'anthropic') {
+      var ablocks = images.map(function(img) {
+        return { type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.data } };
+      });
+      if (text) ablocks.push({ type: 'text', text: text });
+      return ablocks;
+    }
+    var oblocks = images.map(function(img) {
+      return { type: 'image_url', image_url: { url: 'data:' + img.mediaType + ';base64,' + img.data } };
+    });
+    if (text) oblocks.unshift({ type: 'text', text: text });
+    return oblocks;
+  },
+
   extractMessageContent(format, data) {
     if (format === 'anthropic') {
       if (data && Array.isArray(data.content)) {
@@ -583,7 +619,7 @@ Keep replies short and focused on the user's design intent.`;
   },
 
   buildSystemPrompt(existingCode, opts = {}) {
-    let sys = `You are the AI for Nova, a visual node-based scripting tool with a 3D viewport (Three.js). You generate node graphs that become visual nodes on a canvas.
+    let sys = `You are Nova's computational-design expert — you think in NURBS, form-finding, and parametric architecture (Zaha Hadid, Foster+Partners, Marc Fornes, Achim Menges). Nova is a visual node-based tool with a 3D viewport (Three.js); the code you write becomes visual nodes on a canvas. Your bar is academically-defensible geometry — name the mathematics, justify the form, expose the right parameters. Never a toy box when the brief asks for architecture.
 
 ## RESPONSE FORMAT (PREFERRED - parser-friendly Python)
 For build/create requests, emit a brief 1-2 sentence explanation then a \`\`\`python fenced block. Write canonical Nova Python that the parser can transform into visual nodes. Use one assignment per operation, prefer real Geo.* calls from the catalog, and keep unsupported logic isolated in small declared Python blocks.
@@ -789,7 +825,7 @@ Example pattern for clean lofted tower:
 5. If you MUST use a Python block, add a comment: # Python block: <reason>
 6. The MORE single-line assignments you use, the MORE visual nodes appear on the canvas
 
-\` + buildNodeCatalog() + \`
+__NOVA_NODE_CATALOG__
 
 ## CRITICAL Geo SIGNATURES (exact argument types — getting these wrong renders nothing, with NO error)
 - \`Geo.pipe(curve, radius)\` — takes ONE curve + a number radius. It does NOT take two points. To make a pipe/tube between two points: \`seg = Geo.Line3(p1, p2)\` then \`tube = Geo.pipe(seg, 0.18)\`. NEVER \`Geo.pipe(p1, p2, radius)\`.
@@ -808,6 +844,8 @@ Example pattern for clean lofted tower:
 **Noise:** Geo.perlin2(x,y) | Geo.perlin3(x,y,z) | Geo.fbm(x,y,z,octaves) → float -1..1
 **Attractors:** Geo.pointAttractor(pt,attractorPos,radius,falloff) → 0..1 | Geo.multiAttractor(pt,attractors[],r,falloff)
 **Revit (browser only):** RevitBridge.getElements("Walls") | .getSheets() | .getLevels() | .getParam(el,"Mark") — NEVER use FilteredElementCollector/\\_\\_currentdoc\\_\\_ in browser code
+
+__NOVA_GALLERY__
 
 ## FEW-SHOT EXAMPLES
 
@@ -881,8 +919,60 @@ result = Geo.booleanSubtract(box, sphere)
 print(result)
 \`\`\`
 
-## DESIGN PHILOSOPHY
-Think like a parametric architect (Zaha Hadid, BIG, Foster). Every form driven by parameters — never hardcode numbers inline. Use NURBS degree 3+ for smooth forms, Perlin noise for organic variation, attractors for responsive facades. Combine large gestures (lofted shells) with fine detail (panels, pipes). Always use Geo.smooth() to soften angular lofts.
+### Example 4: "A minimal-surface pavilion" (name the math)
+An inverted catenary shell — a pure-compression form in the spirit of Gaudí and Frei Otto — thickened into a buildable roof. One analytic surface call, then a shell.
+\`\`\`python
+span = 24
+height = 10
+segments = 60
+shell = Geo.createCatenaryShell(span, height, segments)
+roof = Geo.thicken(shell, 0.4)
+print(roof)
+\`\`\`
+
+### Example 5: "A responsive facade" (a field drives the variation)
+Phyllotactic facade studs whose radius grows near a hot-spot — the skin RESPONDS to context instead of being uniform. This is the expert move: a large field + a per-element parameter derived from an attractor.
+\`\`\`python
+count = 240
+field = Geo.phyllotaxis(count, 14, 0.6)
+hot = Geo.Point3(6, 6, 0)
+studs = []
+for i in range(count):
+    p = field[i]
+    influence = Geo.pointAttractor(p, hot, 20, 2)
+    r = 0.15 + 0.5 * influence
+    studs.append(Geo.createSphere(p, r))
+facade = Geo.combineAll(studs)
+print(facade)
+\`\`\`
+
+## DESIGN CAPABILITIES & METHOD
+__NOVA_CAPABILITY_LEDGER__
+
+## FORM VOCABULARY (choose terms deliberately)
+- Ruled vs developable vs minimal surface; NURBS degree 3 = C² (smooth), degree 1 = faceted.
+- Loft topology: every profile ring CLOSED, SAME point count, ordered base→top.
+- Attractor falloff: 1 = hard edge, 2 = soft bloom, higher = tighter hot-spot.
+- Noise: octaves = detail layers, lacunarity = frequency step, gain = roughness.
+
+## PARAMETRIC METHOD (how an expert chooses parameters)
+1. EXPOSE a few intent parameters with sane ranges — e.g. floors (12–40), twist (30–90°), taper (0–0.3), base_width/depth, panel_density.
+2. DERIVE everything else from the normalized height t = i / (n-1): radius, angle, inset. Never write the same number twice.
+3. Stay in architectural bands: floor height 3–5 m; a perceptible twist is ≥ 30°; a pavilion reads at 5–15 profiles, a tower at 20–40.
+4. Pair a LARGE gesture (lofted / NURBS / analytic shell) with FINE detail (panels, diagrid, pipes) driven by a field.
+
+## FACADE / PANELIZATION PLAYBOOK
+- A facade is hosted ON a surface — build the form first, then panel it. Never leave panels floating in space.
+- Hex grid → uniform, space-frame friendly. Diagrid → structural + expressive. Voronoi → organic/cellular [approx].
+- VARY the panels: feed an attractor or fbm into panel scale, inset, or extrusion depth so the skin responds to a point / edge / context.
+
+## BEFORE YOU EMIT CODE — self-check
+1. State the MATH and a PRECEDENT in one line ("inverted catenary shell, à la Gaudí").
+2. List the exposed PARAMETERS and their ranges.
+3. Profiles closed & equal-length? Angular loft followed by Geo.smooth()?
+4. Panels hosted on a surface, not floating? Variation driven by a field, not random?
+5. Every number a parameter or derived from t — no repeated magic constants.
+6. If you reached for an [approx]/[stub] op for something it can't really do, compose around it instead.
 
 ## DESIGN CONVERSATION PROTOCOL — CRITICAL
 You are a design consultant, NOT a code generator. Your job is to UNDERSTAND what the user wants through conversation BEFORE writing any code.
@@ -951,6 +1041,16 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
 2. If the method is not listed, tell the user: "I don't see [method] in the available API. Here are similar alternatives: [list]. Which would you prefer?"
 3. NEVER invent Geo methods that don't exist in the API reference`;
 
+    // Splice in the dynamic blocks. They were originally authored with ESCAPED
+    // backticks inside the template literal, so they never actually broke out —
+    // the node catalog never reached the model (a latent bug that starved the AI
+    // of its inventory). Inject via placeholder tokens instead so it's robust to
+    // the surrounding backtick-escaping.
+    sys = sys
+      .replace('__NOVA_NODE_CATALOG__', buildNodeCatalog())
+      .replace('__NOVA_CAPABILITY_LEDGER__', buildCapabilityLedger())
+      .replace('__NOVA_GALLERY__', buildGoldenGallery());
+
     if (existingCode) {
       sys += `\n\n### Current Code on Canvas\nThe user already has this code/graph. If they ask to modify it, update this code:\n\`\`\`python\n${existingCode}\n\`\`\``;
     }
@@ -1007,7 +1107,7 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
 
           // Show-action protocol (P3) — only offered when a graph exists. The
           // block is executed and hidden, so the model must still explain in prose.
-          sys += `\n\n### Showing Things On The Canvas (optional)\nTo point the user at something, you MAY append ONE fenced block at the very end of your reply. It is executed and hidden from the user — keep your prose explanation too. Use node ids from the Live Graph above.\n\`\`\`nova-action\n{"ops":[{"op":"focusNode","id":"node-2"}]}\n\`\`\`\nAllowed ops (read-only, no graph changes): focusNode{id}, highlightNodes{ids:[...]}, openInspector{id} (focus + open its Data Inspector), revealLibraryNode{type} (reveal a node type in the library). Only emit ops for nodes/types that exist; omit the block if there's nothing useful to show.`;
+          sys += `\n\n### Showing Things On The Canvas (optional)\nTo point the user at something, you MAY append ONE fenced block at the very end of your reply. It is executed and hidden from the user — keep your prose explanation too. Use node ids from the Live Graph above.\n\`\`\`nova-action\n{"ops":[{"op":"focusNode","id":"node-2"}]}\n\`\`\`\nAllowed ops (read-only, no graph changes): focusNode{id}, highlightNodes{ids:[...]}, openInspector{id} (focus + open its Data Inspector), revealLibraryNode{type} (reveal a node type in the library). Prefer focusNode/openInspector for warnings. Never include more than 5 ids in highlightNodes; highlight only the target node and immediate source nodes. Only emit ops for nodes/types that exist; omit the block if there's nothing useful to show.`;
         }
       }
     } catch {
@@ -1133,8 +1233,14 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     return reply;
   },
 
-  async callStream(userMessage, context, existingCode, onChunk, onDone, onError, onThinking) {
-    if (this.isEnterpriseAiEnabled()) {
+  async callStream(userMessage, context, existingCode, onChunk, onDone, onError, onThinking, images) {
+    // A vision request from a BYOK, vision-capable user must go DIRECT to their
+    // provider: the enterprise / Nova-Cloud path (callEnterprise) sends the user
+    // message as a plain string and never carries images, so routing there would
+    // silently drop the picture (the "image didn't come through" bug). Only image
+    // turns bypass enterprise; everything else keeps the existing priority.
+    const visionDirect = !!(images && images.length && this.hasApiKey() && this.supportsVision());
+    if (this.isEnterpriseAiEnabled() && !visionDirect) {
       try {
         const reply = await this.callEnterprise(userMessage, context, existingCode);
         onChunk(reply, reply);
@@ -1155,12 +1261,35 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     const systemContent = useSlim ? this.buildSlimSystemPrompt() : this.buildSystemPrompt(existingCode, { userMessage });
     const historyDepth = proxyMode ? (useSlim ? 4 : 6) : 10;
     const maxTokens = proxyMode ? this.PROXY_MAX_TOKENS : this.MAX_TOKENS;
+    const format = this.getProviderFormat();
+    // Attach images only when the active model can actually see them; otherwise
+    // send text alone (the UI warns the user separately). History keeps the
+    // text-only turn so the (large) image isn't resent on every later message.
+    const sendImages = (images && images.length && this.supportsVision()) ? images : null;
+    const userContent = this.buildUserContent(format, userMessage, sendImages);
+    // Diagnostic (only when images are attached): records exactly what happened
+    // to the picture so a session log pinpoints any drop — threading, vision
+    // gating, or wire format. Cheap and only fires on image turns.
+    if (images && images.length) {
+      NFLogger.info('ai-vision', 'image attach decision', {
+        imagesIn: images.length,
+        supportsVision: this.supportsVision(),
+        hasApiKey: this.hasApiKey(),
+        enterprise: this.isEnterpriseAiEnabled(),
+        proxyMode: proxyMode,
+        format: format,
+        model: this.getEffectiveModel(),
+        attached: sendImages ? sendImages.length : 0,
+        contentIsArray: Array.isArray(userContent),
+        firstMediaType: images[0] && images[0].mediaType,
+        firstDataLen: images[0] && images[0].data ? images[0].data.length : 0
+      });
+    }
     const messages = [
       { role: 'system', content: systemContent },
       ...history.slice(-historyDepth),
-      { role: 'user', content: userMessage }
+      { role: 'user', content: userContent }
     ];
-    const format = this.getProviderFormat();
     const enableThinking = this.isThinkingEnabled(format, this.getEffectiveModel());
     const ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     this._activeStream = ac;
@@ -1255,6 +1384,15 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
       try { this._activeStream.abort(); } catch (e) { /* ignore */ }
       this._activeStream = null;
     }
+  },
+
+  // Removes the most recent user→assistant exchange from a context's history so
+  // a Retry re-asks the same prompt fresh instead of stacking a duplicate turn.
+  dropLastTurn(context) {
+    const h = this._histories && this._histories[context];
+    if (!h || !h.length) return;
+    if (h[h.length - 1] && h[h.length - 1].role === 'assistant') h.pop();
+    if (h.length && h[h.length - 1] && h[h.length - 1].role === 'user') h.pop();
   },
 
   parseResponse(text) {

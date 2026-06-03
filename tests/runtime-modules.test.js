@@ -33,6 +33,18 @@ describe('Runtime parser and Python runner modules', () => {
     expect(result.outputs.angle).toBe(180);
   });
 
+  it('returns declared output ports even when the value is only mutated', () => {
+    const result = PythonRunner.execute([
+      '# in: cylinders:list',
+      '# out: cylinders:list',
+      'cylinders.append(1)',
+      'cylinders.append(2)'
+    ].join('\n'), { cylinders: [] });
+
+    expect(result.error).toBeNull();
+    expect(result.outputs.cylinders).toEqual([1, 2]);
+  });
+
   it('uses the compatibility Geo global when code creates geometry', () => {
     const previousWindow = globalThis.window;
     globalThis.window = globalThis;

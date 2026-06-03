@@ -72,10 +72,13 @@ describe('composition cookbook in the system prompt', () => {
     expect(sys).toContain('Pattern.ArrayLinear');
   });
 
-  it('stays under a reasonable size budget (~16 KB / 4k tokens before catalog)', () => {
-    // Catalog adds ~6KB on top. Total system prompt for build-intent
-    // turns lands around ~22KB / ~5.5k tokens — comfortable for any
-    // modern chat model.
-    expect(sys.length).toBeLessThan(20000);
+  it('stays under a reasonable size budget for the build-intent prompt', () => {
+    // This is the FULL build-intent prompt: static guidance + the now-actually-
+    // injected node catalog + the intent-grouped capability ledger + worked
+    // examples. It lands around ~33KB / ~8k tokens — trivial against modern
+    // 200k-context models, and the slim proxy prompt (buildSlimSystemPrompt) is
+    // used for cheap conversational turns. (Until the catalog-injection fix the
+    // catalog never reached the model, so this prompt was ~16KB by accident.)
+    expect(sys.length).toBeLessThan(45000);
   });
 });

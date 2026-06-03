@@ -27,8 +27,12 @@ that don't replace prose**, **status/step timeline**.
 
 ## Phased plan
 - **P1 (DONE)** — Stop erasing the narrative. The streamed answer persists in its
-  bubble; plan/code/approve UI renders into a separate `.chat-artifact` block
-  appended below it; the duplicate explanation was dropped from artifact headers.
+  bubble; plan/code/approve UI renders into a **separate artifact message box**
+  below it (`createArtifactBox` — its own `.chat-artifact-msg`, not a child of the
+  answer bubble), so the validate→fix loop never overwrites the answer prose or
+  the Thinking block. `finalizeAnswer` also never blanks the streamed answer (the
+  `✨ Thinking...` placeholder counts as "keep what streamed"). The duplicate
+  explanation was dropped from artifact headers.
 - **P2/P3 (DONE for the Anthropic path)** — A collapsible **Thinking** disclosure
   streams the model's real reasoning above the answer (expanded while streaming,
   auto-collapses on done). `callStream` requests Anthropic extended thinking
@@ -46,7 +50,25 @@ that don't replace prose**, **status/step timeline**.
   - **Stop (DONE)** — `callStream` runs under an `AbortController`
     (`GPTClient.stopStream()`); aborting finalizes whatever streamed as a normal
     partial reply. A "Stop" pill shows below the streaming message and is removed
-    on finalize. Remaining: Retry / Copy / tool chips.
+    on finalize.
+  - **Copy / Retry (DONE)** — hover-revealed actions below each AI message
+    (`app._attachMsgActions`). Copy grabs the prose only (artifacts excluded);
+    Retry drops the last turn (`GPTClient.dropLastTurn`), removes the old answer +
+    its thinking block, and re-streams the same prompt. Canned `addAIMessage`
+    bubbles get Copy only.
+  - **Tool/action chips (DONE)** — when the assistant runs read-only canvas
+    show-actions (focus / highlight / open inspector / reveal in library), a row
+    of chips below the answer reports what it did ("Focused Tower", "Highlighted
+    3 nodes"). Pure summary in `turn-steps.js` (`summarizeShowOps`), rendered by
+    `app._renderStepChips`. Future: chips for plan/code builds and a live
+    in-flight status.
+  - **Attachments + images (DONE)** — text/data files fold into the sent message
+    as fenced blocks (`attachment-fold.js`); images attach via paste (`onpaste`)
+    or the paperclip and are sent as real pictures to vision-capable models.
+    `GPTClient.buildUserContent` assembles per-format content blocks (Anthropic
+    base64 `image` blocks / OpenAI `image_url` data-URLs); `supportsVision()`
+    gates them (the free Groq/Llama proxy can't see images — the UI warns and
+    sends text only). History keeps the text-only turn so images aren't resent.
 
 ## Decisions (made)
 - Ship the **step timeline** before real thinking (free, works today); add real

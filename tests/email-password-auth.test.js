@@ -160,4 +160,52 @@ describe('email+password accounts (signup / login)', () => {
     expect(unknown.body.ok).toBe(true);
     expect(sent.length).toBe(2);
   });
+
+  it('lets a signed-in password account change password', async () => {
+    const { sent, service } = captureEmails();
+    const { dispatch } = setup({ emailService: service, appUrl: 'https://nova.test' });
+    await dispatch({ method: 'POST', path: '/api/auth/signup', body: { email: 'settings@example.com', password: 'old-pass-123' } });
+    await dispatch({ method: 'POST', path: '/api/auth/verify', body: { token: tokenFrom(sent[0]) } });
+    const login = await dispatch({ method: 'POST', path: '/api/auth/login', body: { email: 'settings@example.com', password: 'old-pass-123' } });
+    const auth = 'Bearer ' + login.body.token;
+
+    const changed = await dispatch({
+      method: 'PUT',
+      path: '/api/me/password',
+      authorization: auth,
+      body: { currentPassword: 'old-pass-123', newPassword: 'new-pass-123' }
+    });
+    expect(changed.status).toBe(200);
+    expect(changed.body.user.hasPassword).toBe(true);
+
+    await expect(
+      dispatch({ method: 'POST', path: '/api/auth/login', body: { email: 'settings@example.com', password: 'old-pass-123' } })
+    ).rejects.toMatchObject({ status: 401 });
+    const relogin = await dispatch({ method: 'POST', path: '/api/auth/login', body: { email: 'settings@example.com', password: 'new-pass-123' } });
+    expect(relogin.status).toBe(200);
+  });
+
+  it('deletes the signed-in account after password and email confirmation', async () => {
+    const { sent, service } = captureEmails();
+    const { dispatch, store } = setup({ emailService: service, appUrl: 'https://nova.test' });
+    await dispatch({ method: 'POST', path: '/api/auth/signup', body: { email: 'delete-me@example.com', password: 'delete-pass-123' } });
+    await dispatch({ method: 'POST', path: '/api/auth/verify', body: { token: tokenFrom(sent[0]) } });
+    const login = await dispatch({ method: 'POST', path: '/api/auth/login', body: { email: 'delete-me@example.com', password: 'delete-pass-123' } });
+    const auth = 'Bearer ' + login.body.token;
+    await dispatch({ method: 'POST', path: '/api/projects', authorization: auth, body: { name: 'Personal file' } });
+
+    await expect(
+      dispatch({ method: 'DELETE', path: '/api/me', authorization: auth, body: { password: 'wrong-pass', confirmEmail: 'delete-me@example.com' } })
+    ).rejects.toMatchObject({ status: 401 });
+
+    const deleted = await dispatch({
+      method: 'DELETE',
+      path: '/api/me',
+      authorization: auth,
+      body: { password: 'delete-pass-123', confirmEmail: 'delete-me@example.com' }
+    });
+    expect(deleted.body.ok).toBe(true);
+    expect(store.findUserByEmail('delete-me@example.com')).toBeNull();
+    await expect(dispatch({ method: 'GET', path: '/api/me', authorization: auth })).rejects.toMatchObject({ status: 404 });
+  });
 });

@@ -49,6 +49,23 @@ describe('API dispatcher + WebCrypto auth (Worker request path)', () => {
     expect(list.body.projects.some((p) => p.id === created.body.id)).toBe(true);
   });
 
+  it('deletes a project through the dispatcher with a WebCrypto token', async () => {
+    const { dispatch } = setup();
+    const login = await dispatch({ method: 'POST', path: '/api/auth/dev-login', body: { email: 'owner@demo.nova' } });
+    const auth = 'Bearer ' + login.body.token;
+
+    const created = await dispatch({ method: 'POST', path: '/api/projects', authorization: auth, body: { name: 'Delete Me' } });
+    expect(created.status).toBe(201);
+
+    const deleted = await dispatch({ method: 'DELETE', path: '/api/projects/' + created.body.id, authorization: auth });
+    expect(deleted.status).toBe(200);
+    expect(deleted.body).toMatchObject({ ok: true, projectId: created.body.id });
+
+    const list = await dispatch({ method: 'GET', path: '/api/projects', authorization: auth });
+    expect(list.body.projects.some((p) => p.id === created.body.id)).toBe(false);
+    await expect(dispatch({ method: 'GET', path: '/api/projects/' + created.body.id, authorization: auth })).rejects.toMatchObject({ status: 404 });
+  });
+
   it('rejects a protected route without a token (401) and unknown routes (404)', async () => {
     const { dispatch } = setup();
     await expect(dispatch({ method: 'GET', path: '/api/me' })).rejects.toMatchObject({ status: 401 });

@@ -12,10 +12,12 @@ import {
   validateAiChatBody,
   validateAiSettingsBody,
   validateBackgroundJobBody,
+  validateChangePasswordBody,
   validateCompleteBackgroundJobBody,
   validateConnectorPairBody,
   validateConnectorSessionBody,
   validateCreateProjectBody,
+  validateDeleteAccountBody,
   validateDevLoginBody,
   validateGraphRunBody,
   validateHostOperationBody,
@@ -53,6 +55,8 @@ export function matchRoute(method, path, options = {}) {
     ['POST', /^\/api\/auth\/verify$/, true, 200, handleVerifyEmail],
     ['POST', /^\/api\/auth\/resend-verification$/, true, 200, handleResendVerification],
     ['GET', /^\/api\/me$/, false, 200, ({ context }) => ({ user: context.user })],
+    ['DELETE', /^\/api\/me$/, false, 200, handleDeleteAccount],
+    ['PUT', /^\/api\/me\/password$/, false, 200, handleChangePassword],
     ['GET', /^\/api\/me\/ai-settings$/, false, 200, handleGetAiSettings],
     ['PUT', /^\/api\/me\/ai-settings$/, false, 200, handlePutAiSettings],
     ['GET', /^\/api\/projects$/, false, 200, ({ store, context, url }) => {
@@ -74,6 +78,7 @@ export function matchRoute(method, path, options = {}) {
     ['PATCH', /^\/api\/projects\/([^/]+)\/share-links\/([^/]+)$/, false, 200, ({ store, context, params, body }) => store.updateShareLinkRole(context, params[0], params[1], validateShareLinkBody(body || {}).role)],
     ['POST', /^\/api\/projects\/([^/]+)\/share-links\/([^/]+)\/revoke$/, false, 200, ({ store, context, params }) => store.revokeShareLink(context, params[0], params[1])],
     ['GET', /^\/api\/projects\/([^/]+)$/, false, 200, ({ store, context, params }) => store.getProject(context, params[0])],
+    ['DELETE', /^\/api\/projects\/([^/]+)$/, false, 200, ({ store, context, params }) => store.deleteProject(context, params[0])],
     ['POST', /^\/api\/projects\/([^/]+)\/members$/, false, 200, ({ store, context, params, body }) => store.addProjectMember(context, params[0], validateProjectMemberBody(body || {}))],
     ['PUT', /^\/api\/projects\/([^/]+)\/graph$/, false, 200, ({ store, context, params, body }) => store.updateProjectGraph(context, params[0], validateSaveGraphBody(body || {}))],
     ['GET', /^\/api\/projects\/([^/]+)\/versions$/, false, 200, ({ store, context, params, url }) => {
@@ -302,6 +307,29 @@ async function handlePutAiSettings({ store, context, body, secretsService }) {
   user.aiSettingsEncrypted = await secretsService.encrypt(JSON.stringify(settings));
   if (store.persist) store.persist();
   return { ok: true };
+}
+
+async function handleChangePassword({ store, context, body, authService }) {
+  const payload = validateChangePasswordBody(body || {});
+  const user = store.requireUser(context.userId);
+  if (!user.passwordHash) throw createHttpError(400, 'This account does not have a Nova password. Use your identity provider to manage its password.', 'PASSWORD_NOT_AVAILABLE');
+  const ok = await authService.verifyPasswordAsync(payload.currentPassword, user.passwordHash);
+  if (!ok) throw createHttpError(401, 'Current password is incorrect.');
+  const passwordHash = await authService.hashPasswordAsync(payload.newPassword);
+  return { ok: true, user: store.updateUserPassword(user.id, passwordHash) };
+}
+
+async function handleDeleteAccount({ store, context, body, authService }) {
+  const payload = validateDeleteAccountBody(body || {});
+  const user = store.requireUser(context.userId);
+  if (String(payload.confirmEmail || '').trim().toLowerCase() !== String(user.email || '').trim().toLowerCase()) {
+    throw createHttpError(400, 'Type your account email to confirm deletion.');
+  }
+  if (user.passwordHash) {
+    const ok = payload.password && await authService.verifyPasswordAsync(payload.password, user.passwordHash);
+    if (!ok) throw createHttpError(401, 'Current password is incorrect.');
+  }
+  return store.deleteUserAccount(user.id);
 }
 
 // Invite someone to a project by email: creates a role-scoped, email-tagged

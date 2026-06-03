@@ -231,6 +231,20 @@ export async function handleEnterpriseApi(request, env, ctx) {
       cookies.push(serializeActivePointer(slot, cookieMaxAge));
       if (parseCookie(cookieHeader)) cookies.push(clearSessionCookie()); // migrate legacy → slotted
     }
+    if (status < 400 && url.pathname === '/api/me' && request.method === 'DELETE') {
+      const map = await resolveSlots(store, cookieHeader);
+      const active = parseActiveSlot(cookieHeader);
+      if (active !== null) {
+        cookies.push(clearSlotCookie(active));
+        delete map[active];
+      }
+      const next = Object.keys(map).map(Number).sort((a, b) => a - b)[0];
+      if (next !== undefined) cookies.push(serializeActivePointer(next));
+      else {
+        cookies.push(clearActivePointer());
+        cookies.push(clearSessionCookie());
+      }
+    }
     return Response.json(payload, { status, headers: headersWith(env, cookies) });
   } catch (error) {
     return Response.json(

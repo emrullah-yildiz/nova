@@ -937,7 +937,11 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
             var outKeys = Object.keys(result.outputs).filter(function(k) { return !k.startsWith('_') && k !== 'i' && k !== 'j' && k !== 'k'; });
 
-            if (outKeys.length > 0) nd._dynOutputs = outKeys;
+            if (outKeys.length > 0) {
+              nd._dynOutputs = outKeys;
+              nd._lastRunPortValues = result.outputs;
+              nd._lastRunValue = result.outputs[outKeys[0]];
+            }
 
             if (outKeys.length === 1) return result.outputs[outKeys[0]];
 

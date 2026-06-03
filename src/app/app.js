@@ -426,6 +426,8 @@ const app = {
           '<div class="account-switch-list" id="account-switch-list"><div class="account-menu-email">' + this.escapeHtml(u.email || '') + '</div></div>' +
           '<button class="account-menu-item" onclick="app.signIn()">+ Add account</button>' +
           '<div class="account-menu-sep"></div>' +
+          '<button class="account-menu-item" onclick="app.openAccountSettings()">Account settings</button>' +
+          '<div class="account-menu-sep"></div>' +
           '<button class="account-menu-item" onclick="app.logout(\'current\')">Sign out</button>' +
           '<button class="account-menu-item account-menu-muted" onclick="app.logout(\'all\')">Sign out of all</button>' +
         '</div>';
@@ -895,6 +897,156 @@ const app = {
 
   // ── MENU STATE ──
 
+  openAccountSettings() {
+    if (!this.currentUser) { this.signIn(); return; }
+    const existing = document.getElementById('account-settings-overlay');
+    if (existing) existing.remove();
+    const menu = document.getElementById('account-menu');
+    if (menu) menu.classList.remove('visible');
+    const u = this.currentUser || {};
+    const hasPassword = u.hasPassword !== false;
+    const overlay = document.createElement('div');
+    overlay.id = 'account-settings-overlay';
+    overlay.onclick = (e) => { if (e.target === overlay) this.closeAccountSettings(); };
+    overlay.innerHTML =
+      '<div class="account-settings-panel" role="dialog" aria-modal="true" aria-label="Account settings">' +
+        '<button class="account-settings-close" aria-label="Close" onclick="app.closeAccountSettings()">&times;</button>' +
+        '<div class="account-settings-title">Account settings</div>' +
+        '<div class="account-settings-sub">' + this.escapeHtml(u.email || '') + '</div>' +
+        '<section class="account-settings-section">' +
+          '<h3>Change password</h3>' +
+          (hasPassword
+            ? '<form id="account-password-form" class="account-settings-form">' +
+                '<label>Current password<input id="account-current-password" type="password" autocomplete="current-password" required></label>' +
+                '<label>New password<input id="account-new-password" type="password" autocomplete="new-password" minlength="8" required></label>' +
+                '<button id="account-password-submit" type="submit">Update password</button>' +
+              '</form>'
+            : '<p class="account-settings-note">This account signs in with Google or SSO. Manage its password with that provider.</p>') +
+          '<div class="account-settings-message" id="account-password-message"></div>' +
+        '</section>' +
+        '<section class="account-settings-section danger">' +
+          '<h3>Delete account</h3>' +
+          '<p class="account-settings-note">This removes your personal workspace and signs this account out of this browser.</p>' +
+          '<form id="account-delete-form" class="account-settings-form">' +
+            (hasPassword ? '<label>Current password<input id="account-delete-password" type="password" autocomplete="current-password" required></label>' : '') +
+            '<label>Type your email to confirm<input id="account-delete-confirm" type="email" autocomplete="off" required placeholder="' + this.escapeHtml(u.email || '') + '"></label>' +
+            '<button id="account-delete-submit" class="danger" type="submit">Delete account</button>' +
+          '</form>' +
+          '<div class="account-settings-message" id="account-delete-message"></div>' +
+        '</section>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    const passwordForm = document.getElementById('account-password-form');
+    if (passwordForm) passwordForm.addEventListener('submit', (e) => this._submitPasswordChange(e));
+    const deleteForm = document.getElementById('account-delete-form');
+    if (deleteForm) deleteForm.addEventListener('submit', (e) => this._submitAccountDelete(e));
+    this._escAccountSettings = (e) => { if (e.key === 'Escape') this.closeAccountSettings(); };
+    document.addEventListener('keydown', this._escAccountSettings);
+  },
+
+  closeAccountSettings() {
+    const overlay = document.getElementById('account-settings-overlay');
+    if (overlay) overlay.remove();
+    if (this._escAccountSettings) {
+      document.removeEventListener('keydown', this._escAccountSettings);
+      this._escAccountSettings = null;
+    }
+  },
+
+  _setAccountSettingsMessage(id, msg, ok = false) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = msg || '';
+    el.classList.toggle('ok', !!ok);
+    el.style.display = msg ? 'block' : 'none';
+  },
+
+  async _submitPasswordChange(event) {
+    if (event) event.preventDefault();
+    const currentPassword = (document.getElementById('account-current-password') || {}).value || '';
+    const newPassword = (document.getElementById('account-new-password') || {}).value || '';
+    if (newPassword.length < 8) {
+      this._setAccountSettingsMessage('account-password-message', 'Password must be at least 8 characters.');
+      return false;
+    }
+    const submit = document.getElementById('account-password-submit');
+    const original = submit ? submit.textContent : '';
+    if (submit) { submit.disabled = true; submit.textContent = 'Updating...'; }
+    try {
+      const r = await fetch('/api/me/password', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        this._setAccountSettingsMessage('account-password-message', (data.error && data.error.message) || 'Could not update password.');
+        return false;
+      }
+      if (data.user) {
+        this.currentUser = data.user;
+        this.renderAccount();
+      }
+      const form = document.getElementById('account-password-form');
+      if (form) form.reset();
+      this._setAccountSettingsMessage('account-password-message', 'Password updated.', true);
+    } catch {
+      this._setAccountSettingsMessage('account-password-message', 'Network error. Please try again.');
+    } finally {
+      if (submit) { submit.disabled = false; submit.textContent = original; }
+    }
+    return false;
+  },
+
+  async _submitAccountDelete(event) {
+    if (event) event.preventDefault();
+    const passwordEl = document.getElementById('account-delete-password');
+    const confirmEl = document.getElementById('account-delete-confirm');
+    const password = passwordEl ? passwordEl.value : '';
+    const confirmEmail = confirmEl ? confirmEl.value.trim() : '';
+    const expected = ((this.currentUser && this.currentUser.email) || '').trim().toLowerCase();
+    if (confirmEmail.toLowerCase() !== expected) {
+      this._setAccountSettingsMessage('account-delete-message', 'Type your account email to confirm deletion.');
+      return false;
+    }
+    const submit = document.getElementById('account-delete-submit');
+    const original = submit ? submit.textContent : '';
+    if (submit) { submit.disabled = true; submit.textContent = 'Deleting...'; }
+    try {
+      const r = await fetch('/api/me', {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, confirmEmail })
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        this._setAccountSettingsMessage('account-delete-message', (data.error && data.error.message) || 'Could not delete account.');
+        return false;
+      }
+      this.closeAccountSettings();
+      this.currentUser = null;
+      this._setRememberedAuth(false);
+      this._cloudProjectId = '';
+      this._lastCloudSaveSerialized = null;
+      if (this._stopCollab) this._stopCollab();
+      if (window.GPTClient) window.GPTClient._useAnonymousPrefs();
+      this.renderAccount();
+      if (this._updateChatStatus) this._updateChatStatus();
+      if (this.currentPage === 'landing' && this.renderRecentProjects) {
+        const myList = document.getElementById('my-projects-list');
+        if (myList) delete myList.dataset.cloudLoaded;
+        this.renderRecentProjects();
+      }
+    } catch {
+      this._setAccountSettingsMessage('account-delete-message', 'Network error. Please try again.');
+    } finally {
+      if (submit) { submit.disabled = false; submit.textContent = original; }
+    }
+    return false;
+  },
+
   updateMenuState() {
 
     const ws = this.currentPage === 'workspace';
@@ -983,6 +1135,22 @@ const app = {
 
   goHome() { if (this.currentPage === 'workspace') this.closeProject(); },
 
+  // Clears the 3D preview — both the meshes (geometryGroup) and the geometry
+  // list panel (_sceneItems) — so a fresh, closed, or loaded project never
+  // shows the previous session's geometry. The next Run rebuilds from the
+  // current graph (_needsRebuild forces a fresh buildFromGraph). The animate()
+  // loop repaints the emptied scene on the next frame.
+  _clearPreview() {
+    if (typeof Viewer3D !== 'undefined') {
+      if (Viewer3D.clearGeometry) Viewer3D.clearGeometry();
+      if (Array.isArray(Viewer3D._sceneItems)) Viewer3D._sceneItems = [];
+      Viewer3D._selectedItem = null;
+      Viewer3D._needsRebuild = true;
+      if (Viewer3D._renderGeoList) Viewer3D._renderGeoList();
+    }
+    this._sceneItems = [];
+  },
+
   closeProject() {
 
     if(this._stopCollab) this._stopCollab();
@@ -999,6 +1167,8 @@ const app = {
     const svg=document.getElementById('wire-svg'); if(svg) svg.innerHTML='';
 
     this.chatHistories.workspace=[];
+
+    this._clearPreview();
 
     this.switchPage('landing');
 
@@ -1017,6 +1187,8 @@ const app = {
     const svg=document.getElementById('wire-svg'); if(svg) svg.innerHTML='';
 
     this.chatHistories.workspace=[];
+
+    this._clearPreview();
 
     this.switchPage('workspace');
 
@@ -2348,7 +2520,12 @@ const app = {
 
     m.innerHTML=`<div class="chat-avatar">✦</div><div class="chat-bubble">${this.fmt(txt)}</div>`;
 
-    c.appendChild(m);c.scrollTop=c.scrollHeight;
+    c.appendChild(m);
+
+    // Copy affordance (no Retry — these are system/canned messages, not a prompt).
+    if(this._attachMsgActions)this._attachMsgActions(m,{text:txt});
+
+    c.scrollTop=c.scrollHeight;
 
   },
 
@@ -2401,19 +2578,27 @@ const app = {
 
     const txt=inp.value.trim();
     const hasAttach=this._chatAttachments&&this._chatAttachments[ch]&&this._chatAttachments[ch].length;
-    if(!txt&&!hasAttach)return;
+    const images=(this._chatImages&&this._chatImages[ch])?this._chatImages[ch].slice():[];
+    if(!txt&&!hasAttach&&!images.length)return;
 
     // BYOK gate: the assistant is inactive until a key is connected. Surface the
     // Settings CTA instead of sending (covers programmatic callers too).
     if(window.GPTClient&&!window.GPTClient.canChat()){if(this._updateAssistantGate)this._updateAssistantGate();return;}
+
+    // Warn (once) if images are attached but the active model can't see them.
+    if(images.length&&window.GPTClient&&GPTClient.supportsVision&&!GPTClient.supportsVision()&&this._toast){
+      this._toast('🖼️ The current model can\'t see images — switch to Claude or GPT‑4o in Settings. Sending your text only.');
+    }
 
     // Fold any attached files into the SENT message (full content) while the
     // visible bubble shows only the file names. Capture + clear before sending.
     const displayText=txt+(this._attachmentChipText?this._attachmentChipText(ch):'');
     const sentText=this._foldAttachments?this._foldAttachments(ch,txt):txt;
     if(this._clearChatAttachments)this._clearChatAttachments(ch);
+    if(this._clearChatImages)this._clearChatImages(ch);
 
-    inp.value='';this.addUserMessage(ch,displayText||'📎 (attached file)');
+    inp.value='';this.addUserMessage(ch,displayText||(images.length?'🖼️ Image':'📎 (attached file)'));
+    if(images.length&&this._appendUserImages)this._appendUserImages(ch,images);
 
     document.getElementById(ch==='landing'?'landing-chat-suggestions':'ws-chat-suggestions').innerHTML='';
 
@@ -2425,7 +2610,7 @@ const app = {
 
     c.appendChild(ti);c.scrollTop=c.scrollHeight;
 
-    setTimeout(()=>{const el=document.getElementById(ch+'-typing');if(el)el.remove();this.respond(ch,sentText);},600+Math.random()*500);
+    setTimeout(()=>{const el=document.getElementById(ch+'-typing');if(el)el.remove();this.respond(ch,sentText,images);},600+Math.random()*500);
 
   },
 

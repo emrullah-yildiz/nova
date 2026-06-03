@@ -302,6 +302,94 @@ describe('GPTClient', () => {
     });
   });
 
+  describe('vision (image attachments)', () => {
+    it('recognizes vision-capable models (Claude, GPT-4o family)', () => {
+      expect(GPTClient.isVisionModel('claude-opus-4-8')).toBe(true);
+      expect(GPTClient.isVisionModel('anthropic/claude-3-5-sonnet')).toBe(true);
+      expect(GPTClient.isVisionModel('gpt-4o')).toBe(true);
+      expect(GPTClient.isVisionModel('gpt-4.1-mini')).toBe(true);
+      expect(GPTClient.isVisionModel('o4-mini')).toBe(true);
+      expect(GPTClient.isVisionModel('llama-3.3-70b-versatile')).toBe(false);
+      expect(GPTClient.isVisionModel('')).toBe(false);
+      expect(GPTClient.isVisionModel(null)).toBe(false);
+    });
+
+    it('buildUserContent returns a plain string when there are no images', () => {
+      expect(GPTClient.buildUserContent('anthropic', 'hello', null)).toBe('hello');
+      expect(GPTClient.buildUserContent('openai', 'hello', [])).toBe('hello');
+    });
+
+    it('builds Anthropic base64 image blocks with the text after the images', () => {
+      const out = GPTClient.buildUserContent('anthropic', 'what is this?', [
+        { mediaType: 'image/png', data: 'AAAA' }
+      ]);
+      expect(out).toEqual([
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } },
+        { type: 'text', text: 'what is this?' }
+      ]);
+    });
+
+    it('builds OpenAI image_url data-URLs with the text first', () => {
+      const out = GPTClient.buildUserContent('openai', 'caption', [
+        { mediaType: 'image/jpeg', data: 'BBBB' }
+      ]);
+      expect(out).toEqual([
+        { type: 'text', text: 'caption' },
+        { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,BBBB' } }
+      ]);
+    });
+
+    it('omits the text block when the message is empty (image-only)', () => {
+      const a = GPTClient.buildUserContent('anthropic', '', [{ mediaType: 'image/png', data: 'X' }]);
+      expect(a).toEqual([{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'X' } }]);
+      const o = GPTClient.buildUserContent('openai', '', [{ mediaType: 'image/png', data: 'X' }]);
+      expect(o).toEqual([{ type: 'image_url', image_url: { url: 'data:image/png;base64,X' } }]);
+    });
+
+    // End-to-end: a BYOK Claude turn must actually put the image block on the
+    // wire. This is the exact path the workspace chat uses (callStream with an
+    // images arg) and proves the picture isn't dropped between the UI and fetch.
+    it('callStream sends the image block to a BYOK Claude model', async () => {
+      installLocalStorage();
+      GPTClient.setProvider('anthropic');
+      GPTClient.setApiKey('sk-ant-test-key-1234567890');
+      GPTClient.setModel('claude-sonnet-4-6');
+      GPTClient._histories = {};
+
+      const prevFetch = globalThis.fetch;
+      const prevLogger = globalThis.NFLogger;
+      globalThis.NFLogger = { aiRequest() {}, aiResponse() {}, aiError() {}, info() {}, warn() {}, error() {} };
+      let captured = null;
+      globalThis.fetch = (url, opts) => {
+        captured = JSON.parse(opts.body);
+        const sse = 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"I see it"}}\n\n';
+        const bytes = new TextEncoder().encode(sse);
+        let sent = false;
+        return Promise.resolve({
+          ok: true,
+          body: { getReader() { return { read() { return sent ? Promise.resolve({ done: true }) : (sent = true, Promise.resolve({ done: false, value: bytes })); } }; } }
+        });
+      };
+
+      try {
+        let done = '';
+        await GPTClient.callStream(
+          'what is this?', 'workspace', '',
+          () => {}, (full) => { done = full; }, () => {}, null,
+          [{ mediaType: 'image/png', data: 'AAAA' }]
+        );
+        expect(done).toBe('I see it');
+        expect(GPTClient.getProviderFormat()).toBe('anthropic');
+        const last = captured.messages[captured.messages.length - 1];
+        expect(Array.isArray(last.content)).toBe(true);
+        expect(last.content).toContainEqual({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } });
+      } finally {
+        globalThis.fetch = prevFetch;
+        globalThis.NFLogger = prevLogger;
+      }
+    });
+  });
+
   describe('extended thinking', () => {
     it('parses Anthropic thinking_delta separately from text', () => {
       const tEvt = { type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: 'let me think' } };
@@ -320,6 +408,25 @@ describe('GPTClient', () => {
       expect(GPTClient.isThinkingEnabled('openai', 'anthropic/claude-sonnet-4.6')).toBe(false);
       expect(GPTClient.isThinkingEnabled('anthropic', 'claude-3-5-haiku')).toBe(false);
       expect(GPTClient.isThinkingEnabled('anthropic', 'anthropic/claude-sonnet-4.6')).toBe(true);
+    });
+
+    it('dropLastTurn removes the last user→assistant pair, keeping earlier turns', () => {
+      GPTClient._histories = GPTClient._histories || {};
+      GPTClient._histories.retryctx = [
+        { role: 'user', content: 'first' },
+        { role: 'assistant', content: 'one' },
+        { role: 'user', content: 'second' },
+        { role: 'assistant', content: 'two' }
+      ];
+      GPTClient.dropLastTurn('retryctx');
+      expect(GPTClient._histories.retryctx).toEqual([
+        { role: 'user', content: 'first' },
+        { role: 'assistant', content: 'one' }
+      ]);
+      // Safe on empty / unknown contexts.
+      GPTClient._histories.retryctx = [];
+      expect(() => GPTClient.dropLastTurn('retryctx')).not.toThrow();
+      expect(() => GPTClient.dropLastTurn('nope')).not.toThrow();
     });
 
     it('stopStream aborts the active stream and clears it; no-op when idle', () => {
