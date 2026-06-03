@@ -13,6 +13,31 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-04 - T1: Frame & Transform kernel backbone
+
+**Agent/branch:** `feat/geo-frames-orient`
+
+**Goal:** Add pure kernel frame/orient/transform functions (Milestone M1), no nodes/UI.
+
+**Claimed files (NEW, owned):** `src/geometry/frames.js`, `src/geometry/transforms.js`,
+`tests/geometry/frames.test.js`, `tests/geometry/transforms.test.js`. READ-only on
+`geometry-lib.js`, `geo-advanced.js`, `index.js`. No edits outside owned globs.
+
+**Decisions made:** Stock `Geo.Plane` derives `xAxis()/yAxis()` from its normal and
+cannot carry an arbitrary frame; existing consumers call those as *methods*
+(`src/nodes/categories/plane.js`). To keep a full orthonormal frame on a Plane
+without shadowing the methods, `frames.js` attaches explicit `plane.xaxis`/`plane.yaxis`
+(lowercase) own-properties; `orient()` reads those when present and falls back to the
+derived axes otherwise. New module exports (`orient`, `rotate`, `mirror`, `arrayLinear`,
+`arrayPolar`) carry the T1-contract signatures and compose the existing `Geo.rotate`/
+`Geo.mirror` global helpers rather than reimplementing or mutating them.
+
+**Validation:** see Merge status.
+
+**Known gaps:** Node/UI wiring is T2's job.
+
+**Merge status:** merged to `develop` (T1/M1).
+
 ## 2026-06-03 - Documentation Restructure + Multi-Agent Operating Model
 
 **Agent/branch:** `docs/restructure-source-of-truth`
