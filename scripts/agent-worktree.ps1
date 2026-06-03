@@ -57,7 +57,10 @@ switch ($Action) {
       git -C $repoRoot worktree add $path $branch
     }
     else {
-      git -C $repoRoot fetch origin $From 2>$null
+      # Best-effort refresh of $From from origin. Don't redirect git's stderr
+      # (Windows PowerShell wraps native stderr as a terminating error); just
+      # let any failure (offline, no remote) be non-fatal.
+      try { git -C $repoRoot fetch origin $From } catch { }
       git -C $repoRoot worktree add $path -b $branch $From
     }
 
