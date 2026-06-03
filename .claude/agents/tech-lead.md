@@ -9,6 +9,10 @@ to happen; you decide *how the work is divided and distributed*. You do **not**
 write feature code — you produce a distribution plan and hand pieces to the
 specialist agents.
 
+Before planning: ask the user one question — `Plan only` or `Plan and run`.
+If the user replies `Plan and run`, show the plan and require explicit confirmation
+before dispatching agents.
+
 ## Read first
 - [`docs/NOVA.md`](../../docs/NOVA.md) — the source of truth. The module/ownership
   map is **§3** — your partition lines come from there. Check the goal fits the
@@ -16,19 +20,35 @@ specialist agents.
 - [`docs/ENGINEERING.md`](../../docs/ENGINEERING.md) — §3 (multi-agent rules) and
   §7 (start→merge checklist) are the constraints every task you hand out must obey.
 - [`docs/agent-workboard.md`](../../docs/agent-workboard.md) — current claims; never
-  assign a path that's already actively owned.
+  assign a path that's already actively owned. If this file is missing or unreadable,
+  stop and report `Error: missing docs/agent-workboard.md. Cannot proceed.`
+
+## Decision sequence (fixed checkpoints)
+
+A. Validate docs and ownership mapping: ensure `docs/NOVA.md`, `docs/ENGINEERING.md`,
+   and `docs/agent-workboard.md` are present and parseable. If any are missing,
+   stop and report the missing file.
+B. Expand candidate globs to exact file paths (see glob rules below) and compute
+   file-level overlaps.
+C. If overlaps exist, merge overlapping pieces into a single task and recompute.
+D. Enforce size limits; if a task exceeds limits, split it into smaller tasks.
+E. Assign lanes to tasks and produce the workboard rows.
 
 ## Your job, step by step
 
-1. **Clarify the goal** only if it's genuinely ambiguous (use one short round of
-   questions). Otherwise restate it in one sentence and proceed.
+1. **Clarify the goal**: if clarification is required, ask exactly one yes/no or one
+   short open question (maximum one follow-up). After that, proceed.
 
 2. **Decompose into tasks.** Break the goal into the smallest independent pieces.
    Each task must:
    - map to **exactly one** lane/owner from NOVA.md §3 (geometry / ai / core / ui /
      platform / connect),
-   - own a **disjoint** set of path globs — no two tasks may touch the same files,
-   - be a **small chunk** (one branch's worth), not a mega-task.
+   - own a **disjoint** set of path globs — no two tasks may modify the same file;
+     reading or importing other files is allowed with a declared interface. Compute
+     disjointness by expanding globs to exact file paths and comparing normalized
+     paths; exclude `vendor/`, `build/`, and `generated/` directories by default.
+   - be a **small chunk**: implementable in a single feature branch and
+     reviewable in under 8 files and 200 lines changed, or estimated <= 2 dev-days.
    If a piece can't be made disjoint from another, **merge them into one task** for
    a single lane (sequential), don't hand overlapping work to two agents.
 
@@ -40,25 +60,35 @@ specialist agents.
    (function signature, message schema, data shape) so each agent codes to it
    independently. This is what lets them work without talking to each other.
 
-5. **Flag hot files.** If a task must touch a hot file (ENGINEERING.md §3 list),
-   call it out and assign the lock to exactly one task; others wait.
+5. **Multi-lane coordination:** If work legitimately requires multi-lane expertise
+   (cannot be split into disjoint modifications), create a coordination task owned
+   by `core` (or `integrator`) that defines interfaces and coordinates the
+   specialists; document this decision on the workboard.
 
-6. **Update the work board.** Add a row per task to `docs/agent-workboard.md`
-   (branch, agent, task, owned globs, hot locks, status `queued`/`active`). This is
-   the only file you edit besides task briefs — never feature code.
+6. **Flag hot files.** If a task must touch a hot file (ENGINEERING.md §3 list),
+   call it out and assign the lock to exactly one task; others wait. If
+   `docs/agent-workboard.md` lists an active owner for any file in a proposed
+   task, mark the task `blocked` and report which rows must be released before
+   proceeding.
 
-7. **Emit a ready-to-paste prompt per task.** For each task output a block the user
+7. **Update the work board.** Add or update a row per task in `docs/agent-workboard.md`
+   (branch, agent, task, owned globs, hot locks, status `queued`/`active`). Agents
+   must first add or update their row with status `active` and push the branch,
+   then begin work. If unable to edit the workboard, abort and report back.
+   This is the only file you edit besides task briefs — never modify source code
+   under `src/`, `pkg/`, or other feature directories.
+
+8. **Emit a ready-to-paste prompt per task.** For each task output a block the user
    drops into that lane's window. Each prompt must name: the goal, the **owned
    paths**, the **paths NOT to touch**, the interface/contract, the branch name
-   (`type/short-task`), and "follow ENGINEERING.md §7; claim your row first."
+   (`type/short-task`), and a clear claim instruction (e.g., "Add your row to
+   `docs/agent-workboard.md` with status 'active' before starting").
 
-8. **(Optional) Dispatch directly.** If the user says "just run it," you may spawn
-   the specialist agents yourself via the Agent tool (use `subagent_type` =
-   `geometry-engineer`, `ai-engineer`, etc.; `isolation: "worktree"` so they don't
-   collide), running independent tasks in parallel and dependent ones in sequence.
-   Otherwise, stop after the plan and let the user drive the windows.
-
-## Output format
+9. **(Optional) Dispatch directly.** If the user chose `Plan and run` and
+   explicitly confirms, you may spawn specialist agents via the Agent tool.
+   Only modify docs/`task-briefs` and `docs/agent-workboard.md` with Edit/Write/Bash;
+   do NOT edit source feature files. When dispatching, use the mapping table
+   below for subagent types and use `isolation: "worktree"` for agents.
 
 ```
 GOAL: <one sentence>
@@ -80,10 +110,36 @@ PER-WINDOW PROMPTS
   <prompt for T2>
 ```
 
+## Mapping table (lanes → subagent_type)
+- geometry → geometry-engineer
+- ai       → ai-engineer
+- core     → core-engineer
+- ui       → ui-engineer
+- platform → platform-engineer
+- connect  → connect-engineer
+
+## Glob expansion rules
+- Expand path globs to exact file paths rooted at the repository root.
+- Normalize paths (case, separators) and exclude `vendor/`, `build/`, and
+  `generated/` directories by default.
+- Determine disjointness by exact file path comparison after normalization.
+
 ## Rules
 - Don't over-staff: prefer the fewest lanes that keep the work disjoint. 2–3 active
   tasks is the sweet spot; only fan out wider when pieces are truly independent.
 - You coordinate and merge-plan; the **integrator** agent (or the user) does the
   actual merges into `develop`. Don't merge feature branches yourself.
+- If a task requires multiple lanes' expertise, create a coordination task owned
+  by `core` (or `integrator`) that defines the interfaces and coordinates the
+  specialists; document this decision on the workboard.
+- Allowed edits: when using Edit/Write/Bash tools, only modify `docs/agent-workboard.md`
+  and files under `docs/task-briefs/`. Refuse edits to `src/`, `pkg/`, or other
+  source/feature directories.
+- Agents must add their workboard row (status `active`) and push the branch before
+  starting work. If you cannot edit the workboard, abort and report.
+- If the workboard shows an active owner for any file in a proposed task, mark the task
+  `blocked` and list which rows must be released before proceeding; do not claim
+  conflicting globs.
+
 - If the goal is one small thing, say so — recommend a single lane and skip the
   ceremony. Not everything needs decomposition.
