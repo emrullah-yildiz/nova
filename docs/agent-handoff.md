@@ -7,6 +7,31 @@ Add a new entry at the top when a task leaves context the next agent needs.
 Keep entries compact and delete or archive stale entries when they are no
 longer useful.
 
+## 2026-06-04 - T1: Frame & Transform kernel backbone (in progress)
+
+**Agent/branch:** `feat/geo-frames-orient`
+
+**Goal:** Add pure kernel frame/orient/transform functions (Milestone M1), no nodes/UI.
+
+**Claimed files (NEW, owned):** `src/geometry/frames.js`, `src/geometry/transforms.js`,
+`tests/geometry/frames.test.js`, `tests/geometry/transforms.test.js`. READ-only on
+`geometry-lib.js`, `geo-advanced.js`, `index.js`. No edits outside owned globs.
+
+**Decisions made:** Stock `Geo.Plane` derives `xAxis()/yAxis()` from its normal and
+cannot carry an arbitrary frame; existing consumers call those as *methods*
+(`src/nodes/categories/plane.js`). To keep a full orthonormal frame on a Plane
+without shadowing the methods, `frames.js` attaches explicit `plane.xaxis`/`plane.yaxis`
+(lowercase) own-properties; `orient()` reads those when present and falls back to the
+derived axes otherwise. New module exports (`orient`, `rotate`, `mirror`, `arrayLinear`,
+`arrayPolar`) carry the T1-contract signatures and compose the existing `Geo.rotate`/
+`Geo.mirror` global helpers rather than reimplementing or mutating them.
+
+**Validation:** see Merge status.
+
+**Known gaps:** Node/UI wiring is T2's job.
+
+**Merge status:** Open branch (do not merge per task).
+
 ## 2026-06-02 - Python Node Redesign, AI Codegen Fixes, 3D Preview, CI Deploy
 
 **Agent/branch:** many one-task branches off `develop`, all merged `--no-ff` and
