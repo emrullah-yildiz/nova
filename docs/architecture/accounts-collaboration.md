@@ -1,12 +1,14 @@
 # Accounts & Real-Time Collaboration — Design
 
-Status: **Draft / proposal** (not yet implemented). Owner: TBD. Last updated: 2026-05-30.
+Status: **Draft / proposal** (not yet implemented). Owner: TBD. Last updated: 2026-06-03.
+
+> ↑ Big picture: [`../NOVA.md`](../NOVA.md) — this is the detailed spec for the accounts/collaboration subsystem.
 
 This document describes the planned user-profile and collaboration system for Nova,
 targeting an **all-Cloudflare** platform. It is meant to be reviewed before any code.
 
-Related: `architecture-decisions.md`, `deployment-guide.md`,
-`agent-handoff.md`, `revit-plugin-architecture.md`.
+Related: [`decisions.md`](decisions.md), [`deployment.md`](deployment.md),
+[`../agent-handoff.md`](../agent-handoff.md), [`revit-connect.md`](revit-connect.md).
 
 ---
 

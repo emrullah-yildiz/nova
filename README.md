@@ -74,16 +74,17 @@ npm run test:e2e
 
 ## Documentation
 
-Start with `docs/README.md`. The most important current docs are:
+Two files are the entry points:
 
-- `docs/AGENTS.md` - repository instructions for AI agents and contributors.
-- `docs/ai-agent-token-guide.md` - token-efficient working rules for agents.
-- `docs/agent-merge-checklist.md` - checklist before merging task branches to `develop`.
-- `docs/agent-handoff.md` - short task handoffs for multi-agent collaboration.
-- `docs/architecture-decisions.md` - durable architecture decision log.
-- `docs/deployment-guide.md` - Cloudflare Worker deployment and branch/domain mapping.
-- `docs/accounts-collaboration.md` - accounts, sharing, and realtime collaboration architecture.
-- `docs/revit-plugin-architecture.md` - Nova Connect and Revit integration architecture.
+- **`docs/NOVA.md`** - the living **source of truth**: what Nova is, how it's
+  built, design patterns, current status, and roadmap. Read it before any
+  architectural decision.
+- **`docs/ENGINEERING.md`** - **how we work**: operating principles, branch-per-task,
+  the multi-agent model, the testing ladder, and the start→merge checklist.
 
-Before merging a task branch, use `docs/agent-merge-checklist.md` and record
-durable decisions in `docs/architecture-decisions.md`.
+See `docs/README.md` for the full doc map. Detailed specs live under
+`docs/architecture/` (decisions, deployment, accounts-collaboration, revit-connect)
+and `docs/design/` (AI chat + prompt).
+
+Before merging a task branch, run the checklist in `docs/ENGINEERING.md` and record
+durable decisions in `docs/architecture/decisions.md`.

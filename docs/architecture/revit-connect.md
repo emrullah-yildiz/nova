@@ -1,5 +1,7 @@
 # Nova Connect And Revit Architecture
 
+> ↑ Big picture: [`../NOVA.md`](../NOVA.md) — detailed spec for the Connect/Revit subsystem.
+
 ## Purpose
 
 Define the architecture for connecting Nova to local desktop design tools, starting with Revit. This document replaces the older pre-implementation plugin plan and reflects the current repository direction: Nova already has browser-side Connect modules, a local WebSocket hub prototype, and a Revit add-in folder.

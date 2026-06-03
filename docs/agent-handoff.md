@@ -1,11 +1,58 @@
 # Agent Handoff Log
 
+> ↑ Big picture: [`NOVA.md`](NOVA.md). Live ownership: [`agent-workboard.md`](agent-workboard.md).
+
 Use this file for short-lived task handoffs between agents. Permanent
-architecture choices belong in `docs/architecture-decisions.md`.
+architecture choices belong in `docs/architecture/decisions.md`.
 
 Add a new entry at the top when a task leaves context the next agent needs.
 Keep entries compact and delete or archive stale entries when they are no
 longer useful.
+
+> Note: entries dated before 2026-06-03 reference the old doc paths
+> (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
+> now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
+
+## 2026-06-03 - Documentation Restructure + Multi-Agent Operating Model
+
+**Agent/branch:** `docs/restructure-source-of-truth`
+
+**Goal:** Make one living source of truth + one coding-rules file, de-duplicate the
+docs, and stand up a multi-agent (worktree + ownership) operating model.
+
+**Changed files:** NEW `docs/NOVA.md`, `docs/ENGINEERING.md`, `docs/agent-workboard.md`,
+`scripts/agent-worktree.ps1`, `.claude/agents/*.md` (8 roles); MOVED
+`architecture-decisions.md`→`architecture/decisions.md`, `deployment-guide.md`→
+`architecture/deployment.md`, `accounts-collaboration.md`→`architecture/`,
+`revit-plugin-architecture.md`→`architecture/revit-connect.md`; DELETED `AGENTS.md`,
+`ai-agent-token-guide.md`, `agent-merge-checklist.md` (folded into ENGINEERING.md);
+EDITED `docs/README.md`, root `README.md`, `.github/workflows/ci.yml`,
+`wrangler.toml` (doc-path refs); `git rm --cached` of tracked
+`integrations/revit-addin/{obj,bin}` build artifacts.
+
+**Decisions made:** See `2026-06-03 - Two-Tier, Source-Of-Truth Documentation +
+Multi-Agent Operating Model` in `docs/architecture/decisions.md` (supersedes the
+2026-06-01 documentation decision).
+
+**Content review:** Verified every moved doc against the code — deployment
+table/bindings vs `wrangler.toml` + `ci.yml`, `migrate:neon -- up` arg form,
+accounts-collab file refs, Revit 2027, and the decision/design code paths all still
+exist and match. No stale content found beyond doc-name cross-links (fixed).
+
+**Validation:** stale-reference `rg` sweep, `git diff --check`, `npm.cmd run lint:all`.
+Docs + one CI/wrangler string + artifact untracking only — no runtime code changed.
+
+**Known gaps / heads-up:**
+- A **stray uncommitted revert** of `docs/accounts-collaboration.md` (back to
+  Vercel/Pages language + deleted doc names) was found in the working tree and
+  discarded — it contradicted the committed Worker-only decision. Flag if it
+  reappears.
+- `.claude/scheduled_tasks.lock` is tracked in git — likely shouldn't be; left as-is
+  (out of scope).
+- Starter worktrees (`../nova-ai`, `../nova-geometry`, `../nova-platform`) are
+  created after this branch merges, off the updated `develop`.
+
+**Merge status:** merged to `develop`.
 
 ## 2026-06-02 - Python Node Redesign, AI Codegen Fixes, 3D Preview, CI Deploy
 
@@ -83,7 +130,7 @@ need automated handoff discovery.
 
 **Changed files:** `path`, `path`
 
-**Decisions made:** Link to `docs/architecture-decisions.md` entries or summarize.
+**Decisions made:** Link to `docs/architecture/decisions.md` entries or summarize.
 
 **Validation:** Commands run and result.
 
