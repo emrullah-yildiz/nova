@@ -25,6 +25,73 @@ function getRuntimeApp() {
   return null;
 }
 
+// ── Pure inspector type-warning helpers ──
+// Data-driven so adding a kernel type is a one-line table edit. Pure (no app
+// state) so they're unit-testable in isolation. See _collectInspectorWarnings.
+
+// Kernel `_type` -> inferred inspector port-type. Keys are lower-cased _type
+// names; matched by substring against the lower-cased value._type. Order
+// matters: more specific names ('compressedmesh', 'nurbssurface') first so they
+// win before broader substrings ('mesh', 'surface').
+var KERNEL_TYPE_MAP = [
+  ['point3', 'point'],
+  ['vector3', 'vector'],
+  ['polyline3', 'curve'],
+  ['line3', 'line'],
+  ['arc3', 'curve'],
+  ['circle3', 'circle'],
+  ['ellipse3', 'curve'],
+  ['nurbscurve', 'curve'],
+  ['curve3', 'curve'],
+  ['nurbssurface', 'surface'],
+  ['surface', 'surface'],
+  ['compressedmesh', 'mesh'],
+  ['mesh3', 'mesh'],
+  ['plane', 'plane'],
+  ['datatree', 'datatree']
+];
+
+// Compatibility families: a port whose type is in `ports` accepts any actual
+// inferred type in `actuals`. Bidirectional within the curve family because a
+// 'circle' port can take a 'curve' value and vice-versa.
+var TYPE_FAMILIES = [
+  { ports: ['curve', 'line', 'circle', 'arc', 'ellipse'], actuals: ['line', 'curve', 'circle', 'arc', 'ellipse'] },
+  { ports: ['mesh', 'surface', 'solid'], actuals: ['mesh', 'surface', 'solid', 'geometry'] }
+];
+
+// Infer the inspector port-type of a runtime value. Reads only the value (and
+// its `type`/`_type` tags) — never app state.
+export function inferValueType(value) {
+  if (value === undefined) return 'missing';
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'list';
+  if (typeof value === 'number') return 'number';
+  if (typeof value === 'boolean') return 'boolean';
+  if (typeof value === 'string') return 'string';
+  if (value && value.type === 'GeometryRef') return 'geometry';
+  if (value && value.type === 'ElementRef') return 'element';
+  if (value && value._type) {
+    var t = String(value._type).toLowerCase();
+    for (var i = 0; i < KERNEL_TYPE_MAP.length; i++) {
+      if (t.indexOf(KERNEL_TYPE_MAP[i][0]) >= 0) return KERNEL_TYPE_MAP[i][1];
+    }
+  }
+  return typeof value === 'object' ? 'object' : typeof value;
+}
+
+// Does a port declared as `expected` accept a value whose inferred type is
+// `actual`? `value` is the raw value, used only for the numeric-string case.
+export function portAcceptsType(expected, actual, value) {
+  if (!expected || expected === 'any' || actual === 'missing' || actual === 'null') return true;
+  if (expected === actual) return true;
+  if (expected === 'number' && actual === 'string' && value !== '' && !isNaN(Number(value))) return true;
+  for (var i = 0; i < TYPE_FAMILIES.length; i++) {
+    var fam = TYPE_FAMILIES[i];
+    if (fam.ports.indexOf(expected) >= 0 && fam.actuals.indexOf(actual) >= 0) return true;
+  }
+  return false;
+}
+
 export function installNodeRenderer(targetApp = getRuntimeApp()) {
   if (!targetApp) return false;
   if (targetApp.__nodeRendererInstalled) return true;
@@ -721,33 +788,8 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
     if (!nd || !app._hasRun || nd._ranAtVersion !== app._lastRunVersion) return [];
     var warnings = [];
     var controlIds = nd.def && nd.def.controls ? nd.def.controls.map(function(c) { return c.id; }) : [];
-    function typeOfValue(value) {
-      if (value === undefined) return 'missing';
-      if (value === null) return 'null';
-      if (Array.isArray(value)) return 'list';
-      if (typeof value === 'number') return 'number';
-      if (typeof value === 'boolean') return 'boolean';
-      if (typeof value === 'string') return 'string';
-      if (value && value.type === 'GeometryRef') return 'geometry';
-      if (value && value.type === 'ElementRef') return 'element';
-      if (value && value._type) {
-        var t = String(value._type).toLowerCase();
-        if (t.indexOf('point') >= 0) return 'point';
-        if (t.indexOf('vector') >= 0) return 'vector';
-        if (t.indexOf('mesh') >= 0 || t.indexOf('solid') >= 0 || t.indexOf('surface') >= 0) return 'mesh';
-        if (t.indexOf('line') >= 0) return 'line';
-        if (t.indexOf('curve') >= 0 || t.indexOf('circle') >= 0 || t.indexOf('arc') >= 0 || t.indexOf('ellipse') >= 0) return 'curve';
-      }
-      return typeof value === 'object' ? 'object' : typeof value;
-    }
-    function matches(expected, actual, value) {
-      if (!expected || expected === 'any' || actual === 'missing' || actual === 'null') return true;
-      if (expected === actual) return true;
-      if (expected === 'number' && actual === 'string' && value !== '' && !isNaN(Number(value))) return true;
-      if (expected === 'mesh' || expected === 'surface' || expected === 'solid') return actual === 'mesh' || actual === 'geometry';
-      if (expected === 'curve') return actual === 'curve' || actual === 'line';
-      return false;
-    }
+    var typeOfValue = inferValueType;
+    var matches = portAcceptsType;
     function hasOutputValue() {
       if (nd._lastRunValue !== undefined) return true;
       if (nd._lastRunPortValues && Object.keys(nd._lastRunPortValues).some(function(k) { return nd._lastRunPortValues[k] !== undefined; })) return true;
