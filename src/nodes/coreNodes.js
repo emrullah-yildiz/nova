@@ -14,6 +14,7 @@ import { pointCategory, pointNodes } from './categories/point.js';
 import { solidsCategory, solidsNodes } from './categories/solids.js';
 import { surfacesCategory, surfacesNodes } from './categories/surfaces.js';
 import { testingCategory, testingNodes } from './categories/testing.js';
+import { transformCategory, transformNodes } from './categories/transform.js';
 import { vectorCategory, vectorNodes } from './categories/vector.js';
 import { legacyCoreCategories, legacyCoreNodes } from './legacyCoreNodes.js';
 import { createNodeRegistry, toLegacyNodeDefinition } from './registry.js';
@@ -33,6 +34,7 @@ const modernCategories = [
   solidsCategory,
   surfacesCategory,
   testingCategory,
+  transformCategory,
   vectorCategory
 ];
 
@@ -58,6 +60,7 @@ export const coreNodes = [
   ...solidsNodes,
   ...surfacesNodes,
   ...testingNodes,
+  ...transformNodes,
   ...vectorNodes,
   ...legacyCoreNodes
 ];
