@@ -13,6 +13,47 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-04 - FIX: Transform-node codegen now resolves on the global Geo (BLOCKING)
+
+**Agent/branch:** Geometry/Kernel Engineer — `feat/nodes-transform` (fix in place).
+
+**Bug (reviewer-verified):** The four T2 transform nodes execute() against the T1
+ES-module kernel, but their `codegen.python`/`codegen.csharp` emitted
+`Geo.orient` / `Geo.planeFromOriginXY` (which did **not** exist on the global
+`Geo`) and `Geo.arrayLinear` / `Geo.arrayPolar` (which exist on global `Geo` but
+as the LEGACY spacing/full-turn implementations with different semantics). The
+code-validator allow-list is derived from `codegen.python`, so static validation
+falsely passed; generated Python/C# would throw or silently produce different
+geometry than the preview.
+
+**Fix:**
+- `src/geometry/index.js` (the global-Geo assembly point): import frames.js /
+  transforms.js and attach `Geo.orient = transforms.orient`,
+  `Geo.planeFromOriginXY = frames.planeFromOriginXY`,
+  `Geo.arrayLinearByVector = transforms.arrayLinear` (count + per-step vector),
+  `Geo.arrayPolarByAngle = transforms.arrayPolar` (count + total-angle, radians).
+  The legacy `Geo.arrayLinear`/`Geo.arrayPolar` globals are left untouched so the
+  legacy `Geometry.LinearArray`/`Geometry.PolarArray` nodes keep working.
+- `src/nodes/categories/transform.js` codegen (python + csharp + help.sampleCode):
+  `Geometry.ArrayLinear` → `Geo.arrayLinearByVector({{geometry}}, {{direction}},
+  {{count}})`; `Geometry.ArrayPolar` → `Geo.arrayPolarByAngle({{geometry}},
+  {{center}}, {{axis}}, {{count}}, math.radians({{angle}}))` (csharp uses
+  `{{angle}} * Math.PI / 180`). `Plane.ByOriginXAxisYAxis` and `Geometry.Orient`
+  codegen were already `Geo.planeFromOriginXY` / `Geo.orient`, now resolving.
+- NEW `tests/transform-codegen.test.js`: per-node guard asserting every
+  `Geo.<name>` token in codegen.python AND codegen.csharp resolves to a function
+  on the assembled global `Geo`, plus a check that the new globals match each
+  node's execute() output. Scoped to the transform category on purpose.
+- `docs/architecture/decisions.md`: recorded the two-convention coexistence.
+
+**Library-wide scan (no fixes applied, follow-up only):** A full scan of every
+node's `codegen.python` against the assembled global `Geo` found **zero**
+unresolved `Geo.<name>` tokens — no pre-existing offenders elsewhere in the
+library.
+
+**Validation:** see "Validation" line in the entry below — re-run after this fix:
+`npm.cmd run lint:all`, `npm.cmd test`, `npm.cmd run build` (results in PR/commit).
+
 ## 2026-06-04 - T2: Transform & Frame node category
 
 **Agent/branch:** `feat/nodes-transform` (off `develop` @ 8f38965)

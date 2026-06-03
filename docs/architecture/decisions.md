@@ -8,6 +8,57 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-04 - T1 Count-Based Arrays Coexist With Legacy Arrays On The Global Geo
+
+**Status:** Accepted
+
+**Context:** The modern Transform nodes (`src/nodes/categories/transform.js`)
+execute() against the T1 ES-module kernel (`src/geometry/frames.js`,
+`src/geometry/transforms.js`), but their `codegen.python`/`codegen.csharp` emit
+`Geo.<name>(...)` calls that run against the assembled **global** `Geo` object at
+runtime (pyrunner builds its `Geo` from `window.Geo`). Two problems shipped: (1)
+`Geo.orient`/`Geo.planeFromOriginXY` were never attached to the global `Geo`
+(frames.js/transforms.js are not part of the global-Geo assembly), so generated
+code threw "undefined"; (2) `Geo.arrayLinear`/`Geo.arrayPolar` *do* exist on the
+global `Geo` but as the **legacy** implementations in `geo-advanced.js` with
+different semantics — legacy `arrayLinear(geometry, direction, count, spacing)`
+is spacing-based and legacy `arrayPolar(geometry, center, axis, count)` is
+full-turn-only (no angle arg). The T1 versions the nodes use are
+count + per-step-vector and count + total-angle, so generated code silently
+produced different geometry than the live preview. The static code-validator
+allow-list is derived from `codegen.python`, so validation falsely passed.
+
+**Decision:** The T1 frame/transform helpers are attached to the shared global
+`Geo` in `src/geometry/index.js` (the global-Geo assembly point, alongside the
+`geo-advanced.js` side-effect import and `window.Geo`). The orient/plane helpers
+keep their names — `Geo.orient` = `transforms.orient`, `Geo.planeFromOriginXY` =
+`frames.planeFromOriginXY`. The T1 array helpers, whose names are already taken
+on the global `Geo` by the legacy implementations that the legacy
+`Geometry.LinearArray`/`Geometry.PolarArray` nodes depend on, are exposed under
+**new, non-colliding** names: `Geo.arrayLinearByVector` = `transforms.arrayLinear`
+(count + per-step vector) and `Geo.arrayPolarByAngle` = `transforms.arrayPolar`
+(count + total-angle in radians). The four transform-category nodes' codegen now
+calls these resolving globals with argument order/semantics that exactly match
+each node's execute() (the polar node converts degrees → radians in the emitted
+call, mirroring execute()). The legacy globals are left untouched so existing
+legacy nodes keep their behavior. A guard test (`tests/transform-codegen.test.js`)
+asserts every `Geo.<name>` token emitted by each transform node's
+codegen.python/csharp resolves to a function on the assembled global `Geo`.
+
+**Rationale:** Generated code must produce the same geometry as the in-app
+preview. Renaming or overwriting the legacy `arrayLinear`/`arrayPolar` globals
+would break the legacy array nodes; introducing distinct names lets both the
+spacing/full-turn convention and the count+vector/count+angle convention coexist
+without ambiguity.
+
+**Consequences:** Two array conventions now live on the global `Geo`. Future
+work may converge them (e.g. retire the legacy spacing/full-turn globals once the
+legacy `Geometry.LinearArray`/`Geometry.PolarArray` nodes migrate to the count
+convention), at which point the `*ByVector`/`*ByAngle` names could become the
+canonical `arrayLinear`/`arrayPolar`. Until then, any new node that emits a
+`Geo.array*` call must pick the global whose semantics match its execute(), and
+the transform-codegen guard test must stay green.
+
 ## 2026-06-03 - Two-Tier, Source-Of-Truth Documentation + Multi-Agent Operating Model
 
 **Status:** Accepted

@@ -194,8 +194,8 @@ export const transformNodes = [
       };
     },
     codegen: {
-      python: '{{result}} = Geo.arrayLinear({{geometry}}, {{direction}}, {{count}})',
-      csharp: 'var {{result}} = Geo.arrayLinear({{geometry}}, {{direction}}, (int){{count}});'
+      python: '{{result}} = Geo.arrayLinearByVector({{geometry}}, {{direction}}, {{count}})',
+      csharp: 'var {{result}} = Geo.arrayLinearByVector({{geometry}}, {{direction}}, (int){{count}});'
     },
     help: {
       inputs: [
@@ -226,7 +226,7 @@ export const transformNodes = [
           [6, 'count', 7, 'value']
         ]
       },
-      sampleCode: '{{result}} = Geo.arrayLinear({{geometry}}, {{direction}}, {{count}})'
+      sampleCode: '{{result}} = Geo.arrayLinearByVector({{geometry}}, {{direction}}, {{count}})'
     }
   },
   {
@@ -261,8 +261,8 @@ export const transformNodes = [
       };
     },
     codegen: {
-      python: '{{result}} = Geo.arrayPolar({{geometry}}, {{center}}, {{axis}}, {{count}}, math.radians({{angle}}))',
-      csharp: 'var {{result}} = Geo.arrayPolar({{geometry}}, {{center}}, {{axis}}, (int){{count}}, {{angle}} * Math.PI / 180);'
+      python: '{{result}} = Geo.arrayPolarByAngle({{geometry}}, {{center}}, {{axis}}, {{count}}, math.radians({{angle}}))',
+      csharp: 'var {{result}} = Geo.arrayPolarByAngle({{geometry}}, {{center}}, {{axis}}, (int){{count}}, {{angle}} * Math.PI / 180);'
     },
     help: {
       inputs: [
@@ -297,7 +297,7 @@ export const transformNodes = [
           [7, 'count', 8, 'value']
         ]
       },
-      sampleCode: '{{result}} = Geo.arrayPolar({{geometry}}, {{center}}, {{axis}}, {{count}}, math.radians({{angle}}))'
+      sampleCode: '{{result}} = Geo.arrayPolarByAngle({{geometry}}, {{center}}, {{axis}}, {{count}}, math.radians({{angle}}))'
     }
   }
 ];
