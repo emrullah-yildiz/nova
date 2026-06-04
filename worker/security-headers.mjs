@@ -23,6 +23,20 @@ const AI_CONNECT_ORIGINS = [
   'https://openrouter.ai'
 ];
 
+// Nova Connect / Revit hub WebSocket origins. The browser SPA opens a WebSocket
+// directly to the hub from src/integrations/connect/client.js (new WebSocket(url)),
+// where the URL defaults to ws://127.0.0.1:8765 (src/config/runtime-config.js) and
+// is user-configurable in the Connect panel. Without these in connect-src the new
+// CSP would block the live Revit integration. We allow the local hub on any port
+// (ws://127.0.0.1:* / ws://localhost:*) and remote hubs over TLS (wss:).
+// Note: the same-origin collab WebSocket (wss://<host>/api/.../room) is already
+// covered by connect-src 'self' — these are purely additive.
+const CONNECT_HUB_WS_ORIGINS = [
+  'ws://127.0.0.1:*',
+  'ws://localhost:*',
+  'wss:'
+];
+
 // Third-party SCRIPT origins index.html legitimately loads (three.js + addons).
 // Kept tight: only these CDNs, never a blanket https:.
 const SCRIPT_CDN_ORIGINS = [
@@ -53,8 +67,9 @@ export function contentSecurityPolicy() {
     'font-src \'self\' https://fonts.gstatic.com',
     // data:/blob: cover chat image thumbnails and viewer textures.
     "img-src 'self' data: blob:",
-    // Same-origin /api + the BYOK AI providers (direct browser calls).
-    `connect-src 'self' ${AI_CONNECT_ORIGINS.join(' ')}`,
+    // Same-origin /api + the BYOK AI providers (direct browser calls) + the
+    // Nova Connect / Revit hub WebSocket (local default + TLS remote hubs).
+    `connect-src 'self' ${AI_CONNECT_ORIGINS.join(' ')} ${CONNECT_HUB_WS_ORIGINS.join(' ')}`,
     // Hard locks.
     "object-src 'none'",
     "base-uri 'self'",

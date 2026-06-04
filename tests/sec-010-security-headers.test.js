@@ -48,6 +48,20 @@ describe('SEC-010 security headers', () => {
     expect(connect).toContain("'self'");
   });
 
+  it('allows the Nova Connect / Revit hub WebSocket in connect-src (live integration must keep working)', () => {
+    const csp = contentSecurityPolicy();
+    const connect = csp.split(';').map((d) => d.trim()).find((d) => d.startsWith('connect-src'));
+    expect(connect).toBeTruthy();
+    // Default hub is ws://127.0.0.1:8765 (runtime-config.js), user-configurable to
+    // localhost; remote hubs use wss:. All three must be allowed or the browser
+    // blocks new WebSocket(url) in src/integrations/connect/client.js.
+    expect(connect).toContain('ws://127.0.0.1:*');
+    expect(connect).toContain('ws://localhost:*');
+    expect(connect).toContain('wss:');
+    // The same-origin collab WebSocket stays covered by 'self' (not regressed).
+    expect(connect).toContain("'self'");
+  });
+
   it("allows the app's own assets, fonts, and the three.js CDNs (does not block itself)", () => {
     const csp = contentSecurityPolicy();
     expect(csp).toContain('https://fonts.googleapis.com'); // Google Fonts CSS
