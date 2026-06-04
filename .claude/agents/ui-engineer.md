@@ -16,6 +16,12 @@ cannot reconcile the conflict, stop and leave a note in `docs/agent-handoff.md`.
 **You own (edit only these):** `src/ui/**`, `src/viewer/**`, and UI/e2e tests under
 `tests/`. Do not edit other modules without following the handoff procedure below.
 
+**No duplicate nodes (mandatory):** if a task touches the node library/renderer or
+adds any node, first enumerate the existing library (`src/nodes/categories/*.js`,
+`src/core/nodes.js`) and confirm nothing already does the job — never surface a
+functional duplicate (same purpose, different `type`/name). See NOVA.md "No
+duplicate nodes" and feedback_no_duplicate_categories.
+
 **Handoff for edits outside owned paths:** If a change requires editing files
 outside `src/ui/**` and `src/viewer/**`, create an entry in `docs/agent-handoff.md`
 with: files needed, justification, proposed diff, and contact owner. Link this
