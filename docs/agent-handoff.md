@@ -13,6 +13,23 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-04 - M4-T1: Connect protocol/contract for the Revit round-trip
+
+**Agent/branch:** Connect/Revit Engineer — `feat/m4-connect-protocol` (off `develop` @ f9fae48)
+
+**Goal:** Extend `src/integrations/connect/protocol.js` envelope schemas + payload
+validators for the M4 round-trip message classes — `selection.query`,
+`selection.result`, `geometry.place`, `parameter.set`, `parameter.get`. THIS IS THE
+CONTRACT for M4-T2 (C# add-in), M4-T3 (browser bridge), M4-T4 (node defs), M4-T5
+(picker UI).
+
+**Claimed files (owned):** EDIT `src/integrations/connect/protocol.js`, NEW
+`tests/m4-connect-protocol.test.js`. READ-only on `client.js`, `connect-panel.js`,
+`revit-nodes.js`, `connect-hub.cjs`. NOT touching `src/core/nodes.js`,
+`integrations/revit-addin/**` (later M4 tasks own those).
+
+**Merge status:** Open branch `feat/m4-connect-protocol` — IN PROGRESS, do not merge.
+
 ## 2026-06-04 - T4 (M2): Curve/Surface frame-evaluation kernel
 
 **Agent/branch:** Geometry/Kernel Engineer — `feat/geo-curve-surface-eval` (off `develop` @ 3ee59cc)
