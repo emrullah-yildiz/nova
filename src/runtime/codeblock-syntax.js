@@ -138,11 +138,24 @@ function mapCodeSpans(code, fn) {
       out += code.slice(i, j);
       i = j;
     } else {
-      // consume up to the next quote
+      // consume up to the next quote OR a comment-start `#`. A `#` immediately
+      // preceded by `..` is the series count marker (e.g. 0..10..#5), NOT a comment,
+      // so we keep scanning through it; any other `#` begins a Python comment and the
+      // rest of the line is copied verbatim (never desugared).
       let j = i;
-      while (j < n && code[j] !== '"' && code[j] !== "'") j++;
+      while (j < n && code[j] !== '"' && code[j] !== "'") {
+        if (code[j] === '#' && !(code[j - 1] === '.' && code[j - 2] === '.')) break;
+        j++;
+      }
       out += fn(code.slice(i, j));
-      i = j;
+      if (j < n && code[j] === '#') {
+        let k = j;
+        while (k < n && code[k] !== '\n') k++;
+        out += code.slice(j, k); // comment text, verbatim
+        i = k;
+      } else {
+        i = j;
+      }
     }
   }
   return out;

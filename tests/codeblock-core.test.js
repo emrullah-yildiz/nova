@@ -278,3 +278,33 @@ describe('registry integrity (no duplicate-type collision)', () => {
     expect(cb.help.example.wires.length).toBe(2);
   });
 });
+
+describe('F-001: metadata flows into the legacy NODE_TYPE_MAP def', () => {
+  it('toLegacyNodeDefinition carries metadata so live defs expose it', () => {
+    const cb = NODE_TYPE_MAP['Custom.CodeBlock'];
+    expect(cb).toBeTruthy();
+    expect(cb.metadata).toBeTruthy();
+    expect(cb.metadata.language).toBe('python');
+  });
+
+  it('isDeprecatedType works against the LIVE Custom.Formula def (not just the registry)', () => {
+    const formula = NODE_TYPE_MAP['Custom.Formula'];
+    expect(formula).toBeTruthy();
+    expect(isDeprecatedType(formula)).toBe(true);
+    // migration helper resolves a real plan from the live def (was null when metadata was dropped)
+    const plan = migrateNodeType(formula, { controlValues: { formula: 'x + y' } });
+    expect(plan).toBeTruthy();
+  });
+});
+
+describe('F-002: desugarSeries leaves Python comments untouched', () => {
+  it('does NOT rewrite a series-like pattern inside a # comment', () => {
+    expect(desugarSeries('# range 0..10\nx = 1')).toBe('# range 0..10\nx = 1');
+    expect(desugarSeries('nums = 0..3  # makes 0..3')).toBe('nums = [0, 1, 2, 3]  # makes 0..3');
+  });
+
+  it('still desugars the `..#count` series marker (the # there is NOT a comment)', () => {
+    expect(desugarSeries('0..10..#5')).toBe('[0, 2.5, 5, 7.5, 10]');
+    expect(desugarSeries('0..#5..2')).toBe('[0, 2, 4, 6, 8]');
+  });
+});
