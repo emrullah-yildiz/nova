@@ -13,6 +13,81 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-04 - FM-M0: Forma bridge skeleton (feat/fm-m0-forma-bridge-skeleton)
+
+**Agent/branch:** Trinity (connect-engineer) — `feat/fm-m0-forma-bridge-skeleton` (off `develop`; do not merge/push)
+
+**Goal:** Build the FM-M0 skeleton for the Forma track (Option B, per
+`docs/architecture/revit-forma-node-plan.md` §7 DECISION): a `NovaFormaBridge`
+client interface mirroring `revit-bridge`'s async-handle shape, with inert
+method STUBS (no live SDK, no live relay); the Option B design doc; the Forma
+extension scaffold; and a platform handoff for the Durable Object pairing room.
+NO `forma`-category nodes (that is FM-M1).
+
+**Claimed files (owned, EDIT/NEW only these):**
+- NEW `src/integrations/forma/forma-bridge.js` (NovaFormaBridge stubs + protocol message types)
+- NEW `docs/architecture/forma-connect.md` (Option B design doc)
+- NEW `integrations/forma-extension/README.md` (extension scaffold)
+- NEW `integrations/forma-extension/manifest.json` (stub manifest)
+- NEW `integrations/forma-extension/index.html` + `src/main.js` (stub entry, no live SDK)
+- NEW `tests/forma-bridge.test.js` (interface + unpaired-reject test)
+- EDIT `docs/agent-handoff.md` (this entry + the Link platform DO handoff below)
+
+**Decisions referenced:** `revit-forma-node-plan.md` §7 DECISION (Option B, cloud
+relay not localhost, no Forma write-approval gate). No new `decisions.md` entry —
+the decision was already recorded on develop (commit 254b383).
+
+**Known gaps (FM-M1 owners):** stubs reject with `FORMA_NOT_PAIRED` /
+`NOT_IMPLEMENTED_FM1`; no live Forma SDK calls, no live relay, no nodes. The
+Durable Object pairing room is a handoff to Link (see entry below).
+
+**Merge status:** Open branch (committed, not pushed/merged).
+
+---
+
+## 2026-06-04 - PLATFORM HANDOFF → Link: Forma DO pairing room (FM-M1)
+
+**From:** Trinity (connect-engineer), branch `feat/fm-m0-forma-bridge-skeleton`.
+**To:** Link (platform-engineer), to implement in **FM-M1**. **Do not build here.**
+
+**Goal:** A Cloudflare **Durable Object pairing room** that relays JSON envelopes
+between the Nova Forma extension iframe (`forma-extension` peer) and the standalone
+Nova app (`nova-app` peer), joined by a **pairing code**. This is the Forma transport
+(cloud relay), the analogue of Revit's localhost hub — see
+[`architecture/forma-connect.md`](architecture/forma-connect.md). Reuse the existing
+ProjectRoom DO infra/patterns ([`architecture/accounts-collaboration.md`](architecture/accounts-collaboration.md)).
+
+**Interface (proposed — refine in FM-M1):**
+- **Room key = pairing code.** One DO instance per pairing code (idFromName).
+- **Join:** `GET /forma-room/:code` → WebSocket upgrade. Peer announces role in a
+  `hello` frame (`source: 'nova-app' | 'forma-extension'`). Room accepts at most one
+  peer per role; a third/duplicate join is rejected.
+- **Relay:** the room forwards a request envelope from one peer to the other and the
+  reply back, keyed by envelope `id` (mirror NovaConnectClient's pending-by-id model).
+  Run `validateFormaMessage` (from `src/integrations/forma/forma-bridge.js`) **before
+  routing**; reject + audit on validation failure (do not relay).
+- **Presence:** emit `peer.connected` / `peer.disconnected`; the Nova bridge flips
+  `isPaired()` on both-peers-present.
+- **Lifecycle:** room is created on first join; torn down when the pairing code expires
+  or is revoked, or after both peers disconnect + an idle timeout.
+
+**Pairing code (backend, authoritative — Link owns):** ≥128 bits entropy; default 24h
+expiry; **one-time join** (a stale/used code is rejected); **revocable** via an admin
+path. Carries no Forma credentials and no Nova enterprise secrets.
+
+**Security:** no provider API keys / enterprise secrets transit the room; Forma writes
+need NO approval gate (owner decision) but are pairing-scoped + auditable at the room
+(emit per-operation audit events keyed by pairing room/code).
+
+**Owned files (Link, FM-M1):** `worker/` (the DO + route), backend pairing-code issuance
+in `src/enterprise/` + worker routes. Trinity owns the Nova-side relay client wiring into
+`NovaFormaBridge` (injected `options.relay`) and the extension relay loop
+(`integrations/forma-extension/`).
+
+**Not in FM-M0:** the room itself, the relay client, the pairing-code backend.
+
+---
+
 ## 2026-06-04 - Revit add-in ribbon: two-button On/Off + Open Nova (feat/revit-connect-ribbon)
 
 **Agent/branch:** Connect/Revit Engineer — `feat/revit-connect-ribbon` (off `develop`; do not merge/push)
