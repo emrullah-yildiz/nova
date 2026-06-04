@@ -329,15 +329,14 @@ End-user flow:
 
 Run `NovaConnect-Setup.exe /uninstall` to remove it.
 
-Building/refreshing the installer (maintainers):
-
-- Build the add-in: `dotnet build integrations/revit-addin/Nova.RevitAddin.csproj -c Debug`
-- Package it: `npm run build:connect-installer` (PowerShell; runs
-  `scripts/build-connect-installer.ps1`) -> writes
-  `public/downloads/NovaConnect-Setup.exe` and
-  `public/downloads/NovaConnect-Setup.exe.sha256`, which Vite copies into
-  `dist/` on `npm run build`. Commit the regenerated files so the download stays
-  current.
+Building/refreshing the installer (maintainers): see the full runbook in
+[`../revit-addin-build.md`](../revit-addin-build.md). In short, `npm run
+build:connect-installer` (PowerShell; runs `scripts/build-connect-installer.ps1`)
+builds the add-in in **Release** first — so the installer always embeds a
+**fresh** `Payload.Nova.RevitAddin.dll`, not a stale copy — then publishes the
+single-file installer and writes `public/downloads/NovaConnect-Setup.exe` +
+`.exe.sha256`, which Vite copies into `dist/` on `npm run build`. Commit the
+regenerated files so the download stays current.
 
 The installer is a single-file, self-contained `.exe` built from
 `installer/nova-connect/NovaConnect.Installer.csproj`. It runs as the current
@@ -348,8 +347,15 @@ It also copies a stable uninstaller to
 per-user Windows uninstall entry under HKCU for Apps & features / endpoint
 inventory.
 
-If `NOVA_CODESIGN_THUMBPRINT` is set, the packaging script signs the EXE with
-`signtool.exe` before writing the SHA-256 checksum. Without a code-signing
-certificate, Windows SmartScreen may still show a publisher warning. To target
-another Revit release, update `RevitVersion` in the installer program and
+Code signing is parameterized and **opt-in** (a clean no-op for unsigned dev
+builds). Set `NOVA_SIGN_METHOD=trusted-signing|pfx` (plus the matching env vars)
+to sign **both** `Nova.RevitAddin.dll` and the installer EXE via the shared
+MSBuild target (`integrations/revit-addin/NovaSigning.targets`) +
+`scripts/sign-revit-addin.ps1`. Azure Trusted Signing is preferred (builds Smart
+App Control / SmartScreen reputation); a PFX + `signtool.exe` fallback is
+supported. No certs/secrets are committed — all inputs come from the
+environment. Full details, env-var table, and the Smart App Control note are in
+[`../revit-addin-build.md`](../revit-addin-build.md). Without a signing cert,
+Windows SmartScreen / Smart App Control may warn or block the unsigned EXE. To
+target another Revit release, update `RevitVersion` in the installer program and
 rebuild the add-in against that Revit's API.

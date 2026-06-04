@@ -13,6 +13,42 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-05 - Revit add-in rebuild + repackage + code-signing scaffold (feat/revit-addin-repackage)
+
+**Agent/branch:** Trinity (connect-engineer) — `feat/revit-addin-repackage` (off `develop`; committed, NOT merged/pushed)
+
+**Goal:** Bring the Revit add-in build up to date and add a parameterized
+code-signing scaffold. Scope = rebuild/repackage + signing only.
+
+**Shipped (owned files):**
+- Rebuilt `Nova.RevitAddin.dll` (Release, Revit 2027 API; 0 errors, expected
+  MSB3277 warnings). Confirmed the new 2-button ribbon is in the DLL
+  (`NovaConnectApp` / `ConnectionToggleCommand` / `OpenNovaCommand`, button ids,
+  `hi-nova.work`).
+- EDIT `installer/nova-connect/NovaConnect.Installer.csproj` — embeds the
+  **Release** add-in DLL/deps/template (was hard-coded to the `Debug` path);
+  added `AddinConfiguration` (default Release) + an `EnsureAddinPayload` target
+  that fails fast if the add-in DLL is missing. Verified the embedded
+  `Payload.Nova.RevitAddin.dll` is byte-identical (sha256) to the fresh Release DLL.
+- EDIT `scripts/build-connect-installer.ps1` — now builds the add-in in Release
+  first and forwards signing flags; replaced the old `NOVA_CODESIGN_THUMBPRINT`
+  block with the new scaffold.
+- Refreshed served artifact `public/downloads/NovaConnect-Setup.exe` (+ .sha256)
+  — the only binary committed (matches the existing committed-installer pattern).
+- NEW `scripts/sign-revit-addin.ps1` + `integrations/revit-addin/NovaSigning.targets`
+  — parameterized signing. No-op (log+skip) without creds; opt-in via
+  `/p:Sign=true` or `NOVA_SIGN_METHOD`. Supports Azure **Trusted Signing**
+  (`dotnet sign`) and a **PFX + signtool** fallback; all secrets from env (none
+  committed). Dry-run (`/p:SignDryRun=true`) echoes the exact command — verified
+  both branches reachable + the no-op path green.
+- NEW `docs/revit-addin-build.md` — rebuild/sign/install runbook + Smart App
+  Control note.
+
+**Still NOT done (remains queued):** the RV-M1/RV-M2 C# **read handlers**
+(project snapshot, element query, selected-element metadata) are out of scope and
+remain handoffs. The hub-bundling follow-up (self-contained hub for clean
+end-user installs) is also still open (see revit-connect.md).
+
 ## 2026-06-05 - FM-M1: Forma pairing-room Durable Object + pairing codes (feat/forma-pairing-room)
 
 **Agent/branch:** Link (platform-engineer) — `feat/forma-pairing-room` (off `develop`; do not merge/push)
