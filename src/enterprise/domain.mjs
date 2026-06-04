@@ -28,6 +28,12 @@ export class EnterpriseStore {
     this.projects = new Map();
     this.graphRuns = new Map();
     this.connectorSessions = new Map();
+    // SEC-013: server-issued, single-use Revit/Connect write-approval tokens.
+    // Keyed by hashToken(rawToken). The raw token is returned to the caller
+    // once at issuance and never stored. A token is the authoritative proof
+    // that a write was approved server-side; the write path consumes (and
+    // thereby burns) it. Map<hashedToken, approvalRecord>.
+    this.hostWriteApprovals = new Map();
     this.aiRequests = new Map();
     this.backgroundJobs = new Map();
     this.objectArtifacts = new Map();
@@ -998,6 +1004,150 @@ export class EnterpriseStore {
       targetId: projectId,
       metadata: { host, operation, ok, ...metadata }
     });
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // SEC-013: authoritative Revit/Connect write-approval gate.
+  //
+  // The browser may *request* a write, but it cannot mint its own approval.
+  // The server (this method) is the single place that, after verifying the
+  // caller has project-write access, issues a single-use approval token bound
+  // to {operation, projectId, graphVersion}. The actual write path must then
+  // consume that token (consumeHostWriteApproval), which is where the write is
+  // audited as a precondition. A write attempted with no/forged/expired/reused
+  // token is rejected at this boundary and audited as a denial.
+  // ──────────────────────────────────────────────────────────────────────
+
+  // Default token lifetime: short — a single user-initiated write should be
+  // executed within seconds of approval, not minutes.
+  static get HOST_WRITE_APPROVAL_TTL_MS() { return 2 * 60 * 1000; }
+
+  /**
+   * Issue a single-use server-side write-approval token. Requires project
+   * write access (when a projectId is supplied). Records a
+   * `host.write.approved` audit event so the approval itself is accountable.
+   * Returns { token, approvalId, operation, projectId, graphVersion, expiresAt }.
+   * The raw token is returned ONCE and is never persisted in cleartext.
+   */
+  issueHostWriteApproval(context, { projectId = '', host = 'revit', operation = '', graphVersion = '', ttlMs = null, metadata = {} } = {}) {
+    this.requireContext(context);
+    if (!operation || typeof operation !== 'string') {
+      throw createHttpError(400, 'A write operation type is required to issue an approval.');
+    }
+    // Project-write authorization is the real gate. When a projectId is
+    // supplied the caller must hold write access; without one the operation is
+    // a project-less local write (still bound to the authenticated user).
+    if (projectId) this.requireProjectWrite(context, this.requireProjectAccess(context, projectId));
+
+    const rawToken = crypto.randomBytes(32).toString('hex'); // 256 bits of entropy
+    const approvalId = createId('hwa');
+    const expiresAt = this.now() + (Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : EnterpriseStore.HOST_WRITE_APPROVAL_TTL_MS);
+    const record = {
+      approvalId,
+      organizationId: context.organizationId,
+      userId: context.userId,
+      projectId,
+      host,
+      operation,
+      graphVersion: String(graphVersion || ''),
+      issuedAt: this.now(),
+      expiresAt,
+      consumed: false
+    };
+    this.hostWriteApprovals.set(hashToken(rawToken), record);
+
+    this.audit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      type: 'host.write.approved',
+      targetId: projectId,
+      metadata: { host, operation, approvalId, graphVersion: record.graphVersion, ...metadata }
+    });
+
+    return { token: rawToken, approvalId, operation, projectId, host, graphVersion: record.graphVersion, expiresAt };
+  }
+
+  /**
+   * Consume a server-issued write-approval token at the moment of the write.
+   * This is the authoritative boundary: the write is only "accepted" if a
+   * valid, unexpired, single-use, scope-matching token is presented. Every
+   * call audits — an accepted write as `host.operation` (ok), a rejected one
+   * as `host.write.denied`. Returns the recorded audit event on success;
+   * throws an HTTP 403 (with a denial audit already written) on failure.
+   */
+  consumeHostWriteApproval(context, rawToken, { projectId = '', host = 'revit', operation = '', graphVersion = '', ok = true, metadata = {} } = {}) {
+    this.requireContext(context);
+
+    const recordDenial = (reason) => {
+      this.audit({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        type: 'host.write.denied',
+        targetId: projectId,
+        metadata: { host, operation, reason, graphVersion: String(graphVersion || ''), ...metadata }
+      });
+    };
+
+    if (!rawToken || typeof rawToken !== 'string') {
+      recordDenial('missing_token');
+      throw createHttpError(403, 'A server-issued write-approval token is required.', 'WRITE_APPROVAL_REQUIRED');
+    }
+
+    const key = hashToken(rawToken);
+    const record = this.hostWriteApprovals.get(key);
+
+    if (!record) {
+      // Unknown / forged / already-burned token.
+      recordDenial('invalid_token');
+      throw createHttpError(403, 'Write-approval token is invalid.', 'WRITE_APPROVAL_INVALID');
+    }
+    if (record.organizationId !== context.organizationId || record.userId !== context.userId) {
+      recordDenial('token_owner_mismatch');
+      throw createHttpError(403, 'Write-approval token does not belong to this caller.', 'WRITE_APPROVAL_INVALID');
+    }
+    if (record.consumed) {
+      // Single-use enforcement (defends against replay).
+      this.hostWriteApprovals.delete(key);
+      recordDenial('token_replayed');
+      throw createHttpError(403, 'Write-approval token has already been used.', 'WRITE_APPROVAL_INVALID');
+    }
+    if (record.expiresAt < this.now()) {
+      this.hostWriteApprovals.delete(key);
+      recordDenial('token_expired');
+      throw createHttpError(403, 'Write-approval token has expired.', 'WRITE_APPROVAL_EXPIRED');
+    }
+    if (record.operation !== operation || record.projectId !== projectId || record.graphVersion !== String(graphVersion || '')) {
+      // Scope mismatch: the token was minted for a different op/project/version.
+      recordDenial('token_scope_mismatch');
+      throw createHttpError(403, 'Write-approval token does not match this operation.', 'WRITE_APPROVAL_INVALID');
+    }
+
+    // Burn the token (single-use) BEFORE recording the accepted write so a
+    // concurrent replay can never slip through.
+    this.hostWriteApprovals.delete(key);
+
+    // Re-verify project write access at consume time (authorization may have
+    // been revoked between issuance and the write).
+    if (projectId) this.requireProjectWrite(context, this.requireProjectAccess(context, projectId));
+
+    return this.audit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      type: 'host.operation',
+      targetId: projectId,
+      metadata: { host, operation, ok, approvalId: record.approvalId, graphVersion: record.graphVersion, ...metadata }
+    });
+  }
+
+  /**
+   * Drop expired, unconsumed approval tokens. Best-effort hygiene; consume
+   * already rejects expired tokens, so this only bounds memory growth.
+   */
+  pruneExpiredHostWriteApprovals() {
+    const now = this.now();
+    for (const [key, record] of this.hostWriteApprovals) {
+      if (record.expiresAt < now) this.hostWriteApprovals.delete(key);
+    }
   }
 
   createAiRequest(context, {

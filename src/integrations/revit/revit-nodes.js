@@ -102,6 +102,58 @@ function geometryEnvelopeToGeo(envelope) {
 }
 
 // ═══════════════════════════════════════
+// SEC-013: write-approval acquisition
+//
+// A Revit write must present a server-issued, single-use approval token. This
+// helper runs the user-facing consent step (window.__revitWriteApproval) and
+// then asks the server to mint the authoritative token (issueHostWriteApproval,
+// exposed to the browser as window.__revitWriteApproval.issueWriteToken). The
+// returned token — not a client boolean — is what travels to the hub/add-in.
+// If the consent step is denied, or the server declines to issue a token, the
+// write is refused here; the client cannot forge approval.
+// ═══════════════════════════════════════
+async function acquireWriteApproval(win, request) {
+  var approvalMod = win && win.__revitWriteApproval;
+  // 1) User-facing consent (UX gate). Absent in headless/dev — that is fine;
+  //    the server token below remains the authoritative gate.
+  if (approvalMod && typeof approvalMod.requestWriteApproval === 'function') {
+    var consent = await approvalMod.requestWriteApproval({
+      host: request.host,
+      operation: request.operation,
+      description: request.description,
+      elementCount: request.elementCount || 0,
+      elementIds: request.elementIds || [],
+      parameterName: request.parameterName || '',
+      value: request.value
+    });
+    if (!consent || !consent.approved) {
+      return { approved: false, code: 'USER_DENIED', message: (consent && consent.message) || 'User denied the write operation' };
+    }
+  }
+  // 2) Authoritative server-issued token. Without an issuer wired (e.g. local
+  //    dev with no backend), the write cannot prove approval and is refused.
+  if (!approvalMod || typeof approvalMod.issueWriteToken !== 'function') {
+    return { approved: false, code: 'WRITE_APPROVAL_REQUIRED', message: 'No server-issued approval available; write blocked.' };
+  }
+  try {
+    var issued = await approvalMod.issueWriteToken({
+      host: request.host,
+      operation: request.operation,
+      projectId: request.projectId || '',
+      graphVersion: request.graphVersion || '',
+      elementCount: request.elementCount || 0,
+      parameterName: request.parameterName || ''
+    });
+    if (!issued || !issued.token) {
+      return { approved: false, code: 'WRITE_APPROVAL_REQUIRED', message: (issued && issued.message) || 'Server declined to issue an approval token.' };
+    }
+    return { approved: true, token: issued.token, approvalId: issued.approvalId || '', graphVersion: issued.graphVersion || request.graphVersion || '' };
+  } catch (err) {
+    return { approved: false, code: 'WRITE_APPROVAL_REQUIRED', message: 'Failed to obtain server approval token: ' + (err && err.message ? err.message : String(err)) };
+  }
+}
+
+// ═══════════════════════════════════════
 // RevitBridge — data access layer
 // ═══════════════════════════════════════
 
@@ -296,46 +348,35 @@ RevitBridge = {
     if (ids.length === 0) return [];
     var values = Array.isArray(value) ? value : ids.map(function() { return value; });
 
-    // Enforce user approval before Revit write operations
-    var approvalMod = window.__revitWriteApproval;
-    if (approvalMod && typeof approvalMod.requestWriteApproval === 'function') {
-      var approvalResult = await approvalMod.requestWriteApproval({
-        host: 'revit',
-        operation: 'parameter.set',
-        description: 'Set ' + paramName + ' on ' + ids.length + ' Revit elements',
-        elementCount: ids.length,
-        elementIds: ids,
-        parameterName: paramName,
-        value: Array.isArray(values) ? values[0] : values
+    // SEC-013: a Revit write must carry a SERVER-ISSUED, single-use approval
+    // token — never a client-fabricated { approved: true } boolean. The client
+    // UI confirmation (requestWriteApproval) is only the UX consent step; the
+    // authoritative gate is the server, which mints the token bound to
+    // {operation, projectId, graphVersion} and burns it when the write lands.
+    var gate = await acquireWriteApproval(window, {
+      host: 'revit',
+      operation: 'parameter.set',
+      description: 'Set ' + paramName + ' on ' + ids.length + ' Revit elements',
+      elementCount: ids.length,
+      elementIds: ids,
+      parameterName: paramName,
+      value: Array.isArray(values) ? values[0] : values,
+      projectId: (options && options.projectId) || '',
+      graphVersion: (options && options.graphVersion) || ''
+    });
+    if (!gate.approved || !gate.token) {
+      return elements.map(function(element) {
+        return {
+          elementId: RevitBridge.getElementIdentity(element),
+          parameterName: paramName,
+          ok: false,
+          code: gate.code || 'WRITE_APPROVAL_REQUIRED',
+          message: 'Write rejected: ' + (gate.message || 'No server-issued approval token')
+        };
       });
-      if (!approvalResult.approved) {
-        return elements.map(function(element) {
-          return {
-            elementId: RevitBridge.getElementIdentity(element),
-            parameterName: paramName,
-            ok: false,
-            message: 'Write rejected: ' + (approvalResult.message || 'User denied the write operation')
-          };
-        });
-      }
-      // Audit: record the approved host operation
-      try {
-        if (approvalMod.recordHostAuditEvent) {
-          approvalMod.recordHostAuditEvent(approvalResult, {
-            host: 'revit',
-            operation: 'parameter.set',
-            elementCount: ids.length,
-            elementIds: ids,
-            parameterName: paramName,
-            description: 'Set ' + paramName + ' on ' + ids.length + ' elements'
-          }).catch(function() {});
-        }
-      } catch (auditErr) {
-        // Audit recording is best-effort; failures here must not block the write.
-      }
     }
 
-    var results = await client.setParameterValues(ids, paramName, values, { ...(options || {}), approval: { approved: true, approvedBy: 'nova-user', scope: 'single-operation', message: 'Approved via Connect panel' } });
+    var results = await client.setParameterValues(ids, paramName, values, { ...(options || {}), approval: { token: gate.token, approvalId: gate.approvalId, operation: 'parameter.set', graphVersion: gate.graphVersion || '' } });
     results.forEach(function(result, index) {
       if (!result || !result.ok) return;
       var element = elements[index];
@@ -585,8 +626,29 @@ RevitBridge = {
         message: 'Connect to a local Revit host before sending geometry.'
       };
     }
-    var envelope = createGeometryEnvelope(geometry, identity || { source: SOURCES.REVIT_LOCAL }, options || {});
-    return client.sendGeometry(envelope, envelope.identity, options || {});
+    // SEC-013: creating geometry in Revit is a write — gate it behind a
+    // server-issued approval token, same as parameter writes.
+    var opts = options || {};
+    var gate = await acquireWriteApproval(window, {
+      host: 'revit',
+      operation: 'geometry.create',
+      description: 'Create geometry in the live Revit model',
+      elementCount: 1,
+      projectId: opts.projectId || '',
+      graphVersion: opts.graphVersion || ''
+    });
+    if (!gate.approved || !gate.token) {
+      return {
+        ok: false,
+        code: gate.code || 'WRITE_APPROVAL_REQUIRED',
+        message: 'Write rejected: ' + (gate.message || 'No server-issued approval token')
+      };
+    }
+    var envelope = createGeometryEnvelope(geometry, identity || { source: SOURCES.REVIT_LOCAL }, opts);
+    return client.sendGeometry(envelope, envelope.identity, {
+      ...opts,
+      approval: { token: gate.token, approvalId: gate.approvalId, operation: 'geometry.create', graphVersion: gate.graphVersion || '' }
+    });
   }
 };
 window.RevitBridge = RevitBridge;

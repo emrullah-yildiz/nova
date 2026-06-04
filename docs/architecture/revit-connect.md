@@ -80,8 +80,10 @@ Required for enterprise MVP:
 - Browser origin validation.
 - Backend-issued pairing challenge.
 - Message schema validation before routing.
-- Revit write operations require explicit user approval.
-- Revit write operations generate backend audit events.
+- Revit write operations require explicit user approval AND a single-use,
+  server-issued approval token (see "Server-issued write-approval tokens").
+- Revit write operations generate backend audit events (the audit row is a
+  precondition/side-effect of the write, including a denial row when refused).
 - No provider API keys or enterprise secrets pass through the local hub.
 - Local hub binds to `127.0.0.1` by default.
 
@@ -99,6 +101,55 @@ MVP write operations:
 
 - Create DirectShape geometry from Nova geometry envelopes.
 - Set parameter values on selected/queried elements.
+
+### Server-issued write-approval tokens (authoritative gate, SEC-013)
+
+Write approval is **enforced server-side**, not client-asserted. The browser may
+*request* a write, but it cannot mint its own approval; the only thing that lets a
+write reach Revit is a **single-use, server-issued approval token**.
+
+Flow:
+
+1. **Consent (UX).** The browser shows the operation (type, affected element
+   count / geometry summary) and the user approves it in the Connect panel.
+   This is a usability gate only — approving here does not by itself authorize
+   the write.
+2. **Issue (authoritative).** The browser asks the backend
+   (`EnterpriseStore.issueHostWriteApproval`) to issue a token. The server first
+   verifies the caller holds **project-write access**, then mints a token with
+   ≥256 bits of entropy (`crypto.randomBytes(32)`), bound to the
+   `{operation, projectId, graphVersion}` scope and given a short TTL (default
+   2 minutes). Issuance is itself audited as `host.write.approved` (carrying the
+   `approvalId`). The raw token is returned **once** and never persisted in
+   cleartext — only its hash (`hashToken`) is stored.
+3. **Carry.** `RevitBridge` forwards the token to the hub/add-in inside
+   `payload.approval = { token, approvalId, operation, graphVersion }`. There is
+   no `{ approved: true }` boolean anywhere on the wire.
+4. **Consume (authoritative).** When the write lands, the authoritative side
+   calls `EnterpriseStore.consumeHostWriteApproval(context, token, scope)`. The
+   token must be **present, known, owned by the same caller, unconsumed,
+   unexpired, and scope-matching**. The token is **burned (single-use) before**
+   the write is recorded, defeating replay. Project-write access is re-checked at
+   consume time (authorization may have been revoked since issuance).
+5. **Audit as a precondition.** `consumeHostWriteApproval` *always* writes an
+   audit row: an accepted write as `host.operation` (with `ok` + `approvalId`), a
+   rejected one as `host.write.denied` (with a structured `reason`:
+   `missing_token`, `invalid_token`, `token_owner_mismatch`, `token_replayed`,
+   `token_expired`, or `token_scope_mismatch`). The audit record is therefore a
+   side-effect of the write path, not an optional client call.
+
+**Token format & verification.** The raw token is a 64-character hex string
+(256 bits). The server stores only `hashToken(token)` keyed to an approval record
+`{ approvalId, organizationId, userId, projectId, host, operation, graphVersion,
+issuedAt, expiresAt, consumed }`. Verification is exact-match on the hash plus the
+checks in step 4.
+
+**Add-in (defense in depth).** The C# add-in (`NovaHostClient`) trusts the hub —
+the hub/backend is the authoritative gate that minted and verified the token — but
+the add-in still **refuses any write whose `payload.approval.token` is missing or
+empty** (`HasWriteApprovalToken`). This removes the old, trivially-forgeable
+`{ approved: true }` boolean as a path to a write; it does not (and cannot)
+cryptographically re-verify the token.
 
 ## Data And Geometry Rules
 

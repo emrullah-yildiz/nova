@@ -142,7 +142,12 @@ like the code around it. (Each links to the decision that owns the detail.)
   truth for its ports (inferred free vars in, last assignment out); codegen tracks
   *live* ports, not the static def.
 - **Server is the authority.** Realtime roles (viewer RO / editor RW) and Connect
-  write approvals are enforced server-side; clients are never trusted.
+  write approvals are enforced server-side; clients are never trusted. A Connect/
+  Revit write must present a **single-use, server-issued approval token** (minted by
+  `EnterpriseStore.issueHostWriteApproval` after a project-write check, burned by
+  `consumeHostWriteApproval`, which audits every accepted write and every denial) —
+  not a client-set `{ approved: true }` boolean. See
+  [`architecture/revit-connect.md`](architecture/revit-connect.md) (SEC-013).
 
 ---
 
