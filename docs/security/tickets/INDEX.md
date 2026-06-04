@@ -16,7 +16,7 @@ Maintained by the `security-auditor` agent. One row per ticket; see each
 | SEC-009 | Define breach-notification, backup/recovery, and dependency-vulnerability processes | medium | breach-resilience | open | process |
 | SEC-010 | Harden against XSS — add a Content-Security-Policy and audit innerHTML sinks | medium | untrusted-input | open | code |
 | SEC-011 | Bound uploaded spreadsheet/CSV size and dimensions before parsing | medium | untrusted-input | open | code |
-| SEC-012 | Separate dev and production KV namespaces (shared SESSION_KV/RATE_KV id) | medium | secrets | open | config |
+| SEC-012 | Separate dev and production KV namespaces (shared SESSION_KV/RATE_KV id) | medium | secrets | in-progress | config |
 | SEC-013 | Enforce Revit/Connect write approval and audit server-side, not client-only | medium | approvals-governance | open | code |
 | SEC-014 | Enforce data-retention limits and project/version quotas (setting is unenforced) | low | data-protection | open | mixed |
 | SEC-015 | Add HSTS and security response headers on the production Worker | low | encryption | open | code |

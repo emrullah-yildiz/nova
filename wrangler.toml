@@ -49,26 +49,37 @@ GOOGLE_CLIENT_ID = "766511449312-a3f505pvirs8f5gjol9ntmu09rue37jl.apps.googleuse
 NOVA_PUBLIC_URL = "https://nova-dev.ey-myacc.workers.dev"
 NOVA_EMAIL_FROM = "Nova Dev <noreply@hi-nova.work>"
 
-# Replace these IDs with dev-only namespaces when they are available. Keeping
-# the bindings explicit prevents dev deploys from silently losing sessions,
-# verification tokens, or rate limiting.
+# SEC-012: dev MUST bind its OWN KV namespaces, distinct from production, so a
+# nova-dev deploy can never read/write/forge production session, email-verify,
+# or rate-limit state. The ids below are PLACEHOLDERS — real dev-only namespaces
+# must be created once from a Cloudflare-authed shell (you cannot create them in
+# CI / this repo). Run, then paste the returned ids over the placeholders:
+#   npx wrangler kv namespace create SESSION_KV --env dev
+#   npx wrangler kv namespace create RATE_KV --env dev
+# See docs/architecture/deployment.md > "Dev KV namespaces (SEC-012)".
+# Until these are replaced, `wrangler deploy --env dev` will fail fast (unknown
+# namespace id) instead of silently sharing prod KV — which is the intended
+# fail-safe.
 [[env.dev.kv_namespaces]]
 binding = "SESSION_KV"
-id = "2959d0665b324e53b58c2d1d5b752ffe"
+id = "REPLACE_WITH_DEV_SESSION_KV_ID"
 
 [[env.dev.kv_namespaces]]
 binding = "RATE_KV"
-id = "2959d0665b324e53b58c2d1d5b752ffe"
+id = "REPLACE_WITH_DEV_RATE_KV_ID"
 
 [[env.dev.durable_objects.bindings]]
 name = "PROJECT_ROOM"
 class_name = "ProjectRoom"
 
-# KV: shared session state (sessions + email-verification tokens) and AI-proxy
-# per-IP rate limiting. Both bindings point at the same "nova-sessions"
-# namespace — their keys are prefixed differently (session:/emailverify:/rate:
-# vs rl:) so they don't collide. Defining them here (not just in the dashboard)
-# keeps the bindings from being dropped on `wrangler deploy`.
+# PRODUCTION KV (top-level = the `nova` Worker from main). Session state
+# (sessions + email-verification tokens) and AI-proxy per-IP rate limiting.
+# Both bindings point at the same prod "nova-sessions" namespace — their keys
+# are prefixed differently (session:/emailverify:/rate: vs rl:) so they don't
+# collide. These ids are PRODUCTION-ONLY; dev binds its own ids above (SEC-012),
+# so dev and prod no longer share session/verify/rate state.
+# (Future hardening, optional: give RATE_KV its own prod namespace too, so a
+#  rate-bucket flush can't touch session keys. Needs a new prod namespace id.)
 [[kv_namespaces]]
 binding = "SESSION_KV"
 id = "2959d0665b324e53b58c2d1d5b752ffe"
