@@ -770,6 +770,154 @@ export const patternsNodes = [
     }
   },
 
+  {
+    type: 'Pattern.PanelFrames',
+    name: 'Pattern.PanelFrames',
+    category: 'patterns',
+    subGroup: 'Panels',
+    icon: '⌖',
+    aliases: ['pat-panel-frames'],
+    description: 'Recovers a per-panel orientation frame from a list of panel meshes (e.g. from Pattern.FacadePanels). Each frame is a plane whose origin is the panel centroid, whose normal is the area-weighted (Newell) panel normal, and whose in-plane axes are orthonormal — the SAME plane shape Geometry.Orient consumes, so a panel family, mullion or box drops flat onto every panel.',
+    inputs: [
+      { id: 'panels', name: 'Panels', type: 'list', description: 'List of panel meshes (quad/polygon meshes)' }
+    ],
+    outputs: [
+      { id: 'frames', name: 'Frames', type: 'list', description: 'Orientation plane per panel (centroid origin + panel normal)' },
+      { id: 'centroids', name: 'Centroids', type: 'list', description: 'Centroid point per panel' }
+    ],
+    controls: [],
+    execute(context, inputs) {
+      const panels = toList(inputs.panels);
+      if (panels.length === 0) return { frames: [], centroids: [] };
+      const frames = Geo.panelFrames(panels);
+      const centroids = frames.map((f) => (f && f.origin ? f.origin : null));
+      return { frames, centroids };
+    },
+    codegen: {
+      python: '{{frames}} = Geo.panelFrames({{panels}})\n{{centroids}} = [f.origin for f in {{frames}}]',
+      csharp: 'var {{frames}} = Geo.panelFrames({{panels}});\nvar {{centroids}} = {{frames}}.Select(f => f.origin).ToList();'
+    },
+    help: {
+      inputs: [
+        { name: 'Panels', description: 'List of panel meshes' }
+      ],
+      outputs: [
+        { name: 'Frames', description: 'Orientation plane per panel' },
+        { name: 'Centroids', description: 'Centroid point per panel' }
+      ],
+      // FACADE RATIONALIZATION LOOP (M1 + M2 + M5): a surface patch →
+      // Pattern.FacadePanels splits it into quad panels → Pattern.PanelFrames
+      // recovers a frame per panel → Geometry.Orient lays a thin panel box
+      // (built on world XY) flat onto every frame → Output.Watch shows the
+      // populated facade. The frames list laces into Orient's toPlane input.
+      example: {
+        title: 'Panelize a patch, recover frames, orient a thin box onto every panel',
+        nodes: [
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 4, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 4, y: 4, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 0, y: 4, z: 0 } },
+          { type: 'List.Create', x: 240, y: 90 },
+          { type: 'Surface.ByPatch', x: 460, y: 90 },
+          { type: 'Input.Integer', x: 460, y: 230, controls: { val: 3 } },
+          { type: 'Input.Integer', x: 460, y: 300, controls: { val: 3 } },
+          { type: 'Pattern.FacadePanels', x: 700, y: 150 },
+          { type: 'Pattern.PanelFrames', x: 940, y: 150 },
+          { type: 'Point.Origin', x: 700, y: 380 },
+          { type: 'Box.ByCenterWidthDepthHeight', x: 940, y: 380, controls: { width: 0.8, depth: 0.8, height: 0.05 } },
+          { type: 'Plane.XY', x: 940, y: 520 },
+          { type: 'Geometry.Orient', x: 1180, y: 250 },
+          { type: 'Output.Watch', x: 1420, y: 250 }
+        ],
+        wires: [
+          [0, 'point', 4, 'item0'],
+          [1, 'point', 4, 'item1'],
+          [2, 'point', 4, 'item2'],
+          [3, 'point', 4, 'item3'],
+          [4, 'list', 5, 'boundary'],
+          [5, 'surface', 8, 'mesh'],
+          [6, 'value', 8, 'uPanels'],
+          [7, 'value', 8, 'vPanels'],
+          [8, 'panels', 9, 'panels'],
+          [10, 'point', 11, 'center'],
+          [11, 'solid', 13, 'geometry'],
+          [12, 'plane', 13, 'fromPlane'],
+          [9, 'frames', 13, 'toPlane'],
+          [13, 'result', 14, 'value']
+        ]
+      },
+      sampleCode: '{{frames}} = Geo.panelFrames({{panels}})'
+    }
+  },
+  {
+    type: 'Pattern.PanelPlanarity',
+    name: 'Pattern.PanelPlanarity',
+    category: 'patterns',
+    subGroup: 'Panels',
+    icon: '⊿',
+    aliases: ['pat-panel-planarity'],
+    description: 'Measures how planar each panel is. For every panel mesh it returns the maximum corner deviation from the panel best-fit plane (0 = perfectly flat, larger = more warp) plus the worst value across all panels. Use it to rationalise a facade: flag panels that exceed a glass cold-bend tolerance or color-by-metric.',
+    inputs: [
+      { id: 'panels', name: 'Panels', type: 'list', description: 'List of panel meshes (quad/polygon meshes)' }
+    ],
+    outputs: [
+      { id: 'planarity', name: 'Planarity', type: 'list', description: 'Max corner-to-plane deviation per panel (0 = planar)' },
+      { id: 'maxWarp', name: 'Max Warp', type: 'number', description: 'Largest deviation across all panels' }
+    ],
+    controls: [],
+    execute(context, inputs) {
+      const panels = toList(inputs.panels);
+      if (panels.length === 0) return { planarity: [], maxWarp: 0 };
+      const planarity = Geo.panelPlanarity(panels);
+      const maxWarp = planarity.reduce((m, v) => (v > m ? v : m), 0);
+      return { planarity, maxWarp };
+    },
+    codegen: {
+      python: '{{planarity}} = Geo.panelPlanarity({{panels}})\n{{maxWarp}} = max({{planarity}}) if {{planarity}} else 0',
+      csharp: 'var {{planarity}} = Geo.panelPlanarity({{panels}});\nvar {{maxWarp}} = {{planarity}}.Count > 0 ? {{planarity}}.Max() : 0;'
+    },
+    help: {
+      inputs: [
+        { name: 'Panels', description: 'List of panel meshes' }
+      ],
+      outputs: [
+        { name: 'Planarity', description: 'Deviation per panel (0 = planar)' },
+        { name: 'Max Warp', description: 'Worst deviation across all panels' }
+      ],
+      // A flat XY patch panelized into quads is perfectly planar, so Max Warp
+      // reports 0 — the rationalization baseline. Producer → focal → consumer.
+      example: {
+        title: 'Planarity of a flat panelized patch — max warp is 0',
+        nodes: [
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 4, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 4, y: 4, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 0, y: 4, z: 0 } },
+          { type: 'List.Create', x: 240, y: 90 },
+          { type: 'Surface.ByPatch', x: 460, y: 90 },
+          { type: 'Input.Integer', x: 460, y: 230, controls: { val: 3 } },
+          { type: 'Input.Integer', x: 460, y: 300, controls: { val: 3 } },
+          { type: 'Pattern.FacadePanels', x: 700, y: 150 },
+          { type: 'Pattern.PanelPlanarity', x: 940, y: 150 },
+          { type: 'Output.Watch', x: 1180, y: 150 }
+        ],
+        wires: [
+          [0, 'point', 4, 'item0'],
+          [1, 'point', 4, 'item1'],
+          [2, 'point', 4, 'item2'],
+          [3, 'point', 4, 'item3'],
+          [4, 'list', 5, 'boundary'],
+          [5, 'surface', 8, 'mesh'],
+          [6, 'value', 8, 'uPanels'],
+          [7, 'value', 8, 'vPanels'],
+          [8, 'panels', 9, 'panels'],
+          [9, 'maxWarp', 10, 'value']
+        ]
+      },
+      sampleCode: '{{planarity}} = Geo.panelPlanarity({{panels}})'
+    }
+  },
+
   // ─── Voronoi ─────────────────────────────────────────────
   {
     type: 'Pattern.VoronoiMesh',
