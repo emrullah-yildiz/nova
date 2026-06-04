@@ -22,6 +22,7 @@ import {
   parseAllSlots, parseActiveSlot, clampSlot, MAX_ACCOUNT_SLOTS
 } from './cookies.mjs';
 import { hashToken } from '../src/enterprise/state-hash.mjs';
+import { createFormaPairingService } from '../src/enterprise/forma-pairing.mjs';
 
 let cachedApi = null;
 
@@ -48,6 +49,12 @@ async function getApi(env) {
 
   const store = new EnterpriseStore({ authService, persistence, stateStore });
   if (typeof store.ready === 'function') await store.ready();
+
+  // FM-M1: Forma pairing-code service. Uses the same KV state store as session
+  // state (codes are stored hashed under the 'formapair:' prefix, so they don't
+  // collide with session:/emailverify:/rate: keys). No KV bound (node/tests) →
+  // an in-memory fallback inside the service.
+  const formaPairing = createFormaPairingService({ stateStore: stateStore || null });
 
   const aiProvider = createConfiguredAiProvider({ env });
   // Resend when RESEND_API_KEY is set, else a console fallback (logs the link).
@@ -83,7 +90,7 @@ async function getApi(env) {
     allowDevLogin: env.NOVA_ALLOW_DEV_LOGIN === 'true',
     rateLimiter
   });
-  cachedApi = { store, dispatch };
+  cachedApi = { store, dispatch, formaPairing };
   return cachedApi;
 }
 
@@ -174,6 +181,112 @@ export async function resolveRoomAccess(env, request, projectId) {
     return { ok: true, status: 200, user: context.user, canEdit };
   } catch (error) {
     return { ok: false, status: error && error.status ? error.status : 401 };
+  }
+}
+
+// ── Forma pairing room (FM-M1) ────────────────────────────────────────────────
+
+// Issue a Forma pairing code bound to the authenticated Nova session/user. The
+// caller MUST present a valid session (cookie or Authorization). Returns
+// { ok, status, code, expiresAt, user } — `code` is the raw code, returned once.
+// Oracle F-001: the code is bound to context.userId; a join as the nova-app peer
+// later re-presents the session and the room verifies the binding.
+export async function issueFormaPairingCode(env, request) {
+  const cookieHeader = request.headers.get('cookie');
+  const authorization = activeAuthorization(request, cookieHeader);
+  if (!authorization) return { ok: false, status: 401 };
+  const token = authorization.replace(/^Bearer\s+/i, '');
+  try {
+    const { store, formaPairing } = await getApi(env);
+    const context = await store.authenticateAsync(token);
+    const { code, expiresAt } = await formaPairing.issue({
+      userId: context.userId,
+      organizationId: context.organizationId
+    });
+    return { ok: true, status: 201, code, expiresAt, user: context.user };
+  } catch (error) {
+    return { ok: false, status: error && error.status ? error.status : 401 };
+  }
+}
+
+// Revoke a Forma pairing code (teardown). Scoped to the code's owner: a user may
+// only revoke a code issued to them. Returns { ok, status, revoked }.
+export async function revokeFormaPairingCode(env, request, code) {
+  const cookieHeader = request.headers.get('cookie');
+  const authorization = activeAuthorization(request, cookieHeader);
+  if (!authorization) return { ok: false, status: 401 };
+  const token = authorization.replace(/^Bearer\s+/i, '');
+  try {
+    const { store, formaPairing } = await getApi(env);
+    const context = await store.authenticateAsync(token);
+    const revoked = await formaPairing.revoke(code, { expectUserId: context.userId });
+    return { ok: true, status: 200, revoked };
+  } catch (error) {
+    return { ok: false, status: error && error.status ? error.status : 401 };
+  }
+}
+
+// Authorize a peer joining the Forma pairing room for `code` as `role`.
+//
+// nova-app peer: MUST present a valid Nova session (cookie/Authorization) AND
+//   the room verifies the code was issued to THAT user (Oracle F-001 — code
+//   possession alone is insufficient).
+// forma-extension peer: joins by code only (it runs inside the user's Forma
+//   iframe, with no Nova session) — but it can only ever reach a room a valid
+//   code authorizes, and the audit owner is resolved from the code's record.
+//
+// Returns { ok, status, identity } where identity carries the resolved
+// (server-authoritative) owning Nova userId/org + pairingRoom for the DO.
+export async function resolveFormaRoomJoin(env, request, code, role) {
+  try {
+    const { store, formaPairing } = await getApi(env);
+    let sessionUserId = null;
+    if (role === 'nova-app') {
+      const cookieHeader = request.headers.get('cookie');
+      const authorization = activeAuthorization(request, cookieHeader);
+      if (!authorization) return { ok: false, status: 401, reason: 'session_required' };
+      try {
+        const context = await store.authenticateAsync(authorization.replace(/^Bearer\s+/i, ''));
+        sessionUserId = context.userId;
+      } catch {
+        return { ok: false, status: 401, reason: 'session_invalid' };
+      }
+    }
+    const join = await formaPairing.authorizeJoin({ code, role, sessionUserId });
+    if (!join.ok) {
+      // 401 for a session/binding failure (F-001), 403 otherwise (expired/used/…).
+      const status = (join.reason === 'session_required' || join.reason === 'session_mismatch') ? 401 : 403;
+      return { ok: false, status, reason: join.reason };
+    }
+    // Server-authoritative identity: the OWNING Nova user the code was issued to
+    // (from the pairing record), so every audit row is keyed to the responsible
+    // user regardless of which peer relays the frame.
+    return {
+      ok: true,
+      status: 200,
+      identity: {
+        role,
+        userId: join.record.userId,
+        organizationId: join.record.organizationId || '',
+        pairingRoom: hashToken(String(code)) // room key is the code hash (never the raw code)
+      }
+    };
+  } catch (error) {
+    return { ok: false, status: error && error.status ? error.status : 500, reason: 'internal' };
+  }
+}
+
+// F-003: persist a server-authoritative audit row for a Forma write frame. Called
+// from the FormaPairingRoom DO (which shares this Worker bundle + env). The
+// identity is resolved by the Worker from the pairing-code record, NOT a client
+// claim, so the row is server-authoritative. Best-effort flush via the store's
+// persistence; never throws into the relay loop.
+export async function recordFormaWriteAudit(env, { userId = '', organizationId = '', pairingRoom = '', operation = '', ok = true, metadata = {} } = {}) {
+  const { store } = await getApi(env);
+  store.recordFormaWrite({ userId, organizationId, pairingRoom, operation, ok, metadata });
+  if (store.flushPersistence) {
+    try { await store.flushPersistence(); }
+    catch (e) { if (typeof console !== 'undefined') console.error('[forma-room] audit flush failed:', (e && e.message) || e); }
   }
 }
 
