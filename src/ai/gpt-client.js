@@ -307,6 +307,29 @@ const GPTClient = {
     return k && k.length > 10;
   },
 
+  // SEC-008: user-facing "disconnect / clear keys". Wipes every BYOK provider
+  // key from the active backend (session or in-memory), drops the legacy
+  // 'nodeflow_openai_key' alias, and scrubs any lingering plaintext copies that
+  // an old build may have left in localStorage. When signed in, the resulting
+  // empty key-set is synced to the server (the in-memory backend's remove()
+  // schedules the PUT), so the encrypted server store is cleared too. Returns
+  // the number of provider key entries that were present before clearing.
+  clearAllKeys() {
+    var self = this;
+    var providerKeys = Object.keys(this.PROVIDERS).map(function (p) { return 'nodeflow_key_' + p; });
+    var allKeys = providerKeys.concat(['nodeflow_openai_key']);
+    var cleared = 0;
+    allKeys.forEach(function (k) {
+      if (self._prefGet(k)) cleared++;
+      self._prefRemove(k);
+      // Belt-and-suspenders: remove any stale plaintext copy left in
+      // localStorage by a pre-SEC-008 build (the active backend may be
+      // sessionStorage/in-memory, which would not touch it).
+      try { if (typeof localStorage !== 'undefined') localStorage.removeItem(k); } catch (e) { /* ignore */ }
+    });
+    return cleared;
+  },
+
   // Returns true when the assistant is ready to take a request. A user API
   // key (BYOK) or enterprise mode qualifies; the shared free-tier proxy only
   // qualifies when it's actually enabled (FREE_TIER_ENABLED). With the free
@@ -1129,13 +1152,15 @@ If you are unsure whether a Geo method exists, DO NOT guess. Instead:
     this._originalProvider = this.getProvider();
     this._originalModel = this.getModel();
     this._rateLimited = true;
-    var groqKey = localStorage.getItem('nodeflow_key_groq');
+    // SEC-008: read fallback keys through the pref backend (session/in-memory),
+    // never directly from long-lived plaintext localStorage.
+    var groqKey = this._prefGet('nodeflow_key_groq');
     if (groqKey) {
       this.setProvider('groq');
       this.setModel('llama-3.3-70b-versatile');
       return 'groq';
     }
-    var orKey = localStorage.getItem('nodeflow_key_openrouter');
+    var orKey = this._prefGet('nodeflow_key_openrouter');
     if (orKey) {
       this.setProvider('openrouter');
       this.setModel('openrouter/free');
@@ -1482,6 +1507,7 @@ const SettingsDialog = {
         </div>
         <div class="settings-footer">
           <button class="settings-save-btn" onclick="SettingsDialog.save()">Save & Close</button>
+          <button class="settings-cancel-btn settings-disconnect-btn" onclick="SettingsDialog.disconnect()" title="Remove all stored API keys from this browser" style="color:var(--accent-red);margin-right:auto">Disconnect / Clear Keys</button>
           <button class="settings-cancel-btn" onclick="SettingsDialog.close()">Cancel</button>
         </div>
       </div>`;
@@ -1541,6 +1567,23 @@ const SettingsDialog = {
     setTimeout(function(){ if(typeof app!=='undefined'&&app.renderWires)app.renderWires();},50);
     // Refresh the header status AND the input gate: adding a key here flips the
     // assistant from inactive → active without a reload.
+    if (typeof app !== 'undefined' && app._updateChatStatus) app._updateChatStatus();
+  },
+
+  // SEC-008: wipe every stored BYOK key (all providers + legacy alias + any
+  // stale localStorage copy). Clears the visible input and refreshes the
+  // status/gate so the assistant immediately reflects the disconnected state.
+  disconnect() {
+    var n = GPTClient.clearAllKeys();
+    const keyInput = document.getElementById('settings-api-key');
+    if (keyInput) { keyInput.value = ''; keyInput.placeholder = 'sk-...'; }
+    const status = document.getElementById('settings-status');
+    if (status) {
+      status.innerHTML = '<span style="color:var(--accent-blue)">🔌 Disconnected — '
+        + (n > 0 ? 'cleared ' + n + ' stored key' + (n === 1 ? '' : 's') : 'no stored keys')
+        + '. Keys are never persisted in plaintext.</span>';
+    }
+    if (typeof NFLogger !== 'undefined') NFLogger.info('settings', 'BYOK keys cleared', { cleared: n });
     if (typeof app !== 'undefined' && app._updateChatStatus) app._updateChatStatus();
   },
 

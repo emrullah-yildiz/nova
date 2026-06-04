@@ -12,7 +12,7 @@ Maintained by the `security-auditor` agent. One row per ticket; see each
 | SEC-005 | Add brute-force / rate-limiting protection to authentication endpoints | high | authn-authz | resolved | code |
 | SEC-006 | Make audit log tamper-resistant, retained, and PII-bounded (not a mutable snapshot) | medium | audit-logging | open | mixed |
 | SEC-007 | Provide data-subject access, portability, and rectification (DSAR) capability | medium | data-protection | open | mixed |
-| SEC-008 | Stop storing BYOK AI API keys in plaintext localStorage | medium | secrets | open | code |
+| SEC-008 | Stop storing BYOK AI API keys in plaintext localStorage | medium | secrets | resolved | code |
 | SEC-009 | Define breach-notification, backup/recovery, and dependency-vulnerability processes | medium | breach-resilience | open | process |
 | SEC-010 | Harden against XSS — add a Content-Security-Policy and audit innerHTML sinks | medium | untrusted-input | open | code |
 | SEC-011 | Bound uploaded spreadsheet/CSV size and dimensions before parsing | medium | untrusted-input | open | code |
