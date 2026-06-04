@@ -1,6 +1,6 @@
 ---
-name: core-engineer
-description: Implements Nova's graph engine, compute, node registry, node versioning, and the Python parser/runtime. Owns src/core/** and src/runtime/**. Use for engine/runtime work.
+name: neo
+description: Neo (core-engineer) - Implements Nova's graph engine, compute, node registry, node versioning, and the Python parser/runtime. Owns src/core/** and src/runtime/**. Use for engine/runtime work.
 tools: Read, Edit, Write, Grep, Glob, Bash, TodoWrite
 ---
 

@@ -172,6 +172,13 @@ like the code around it. (Each links to the decision that owns the detail.)
      (no parallel categories). Icons are Unicode glyphs/symbols, never text
      abbreviations (`max`, `1st`). Describe the node on its own terms — never "like
      Dynamo/Grasshopper".
+- **Expose Properties where it makes sense.** If a node produces or operates on an
+  object that carries inspectable attributes — a Revit/Forma element, a material, a
+  type, an analysis result — surface those attributes as readable **Properties** rather
+  than leaving them locked inside an opaque object: give the node a `properties` output
+  (a name→value map) and/or a companion `*.Properties`/`*.Info` getter, so the data is
+  visible in the inspector and consumable downstream (`List.*`, watch, filters). A node
+  whose output is an opaque handle nobody can read fails the "usable outputs" gate.
 - **Code-driven Custom.Python ports.** The Python cell's code is the source of
   truth for its ports (inferred free vars in, last assignment out); codegen tracks
   *live* ports, not the static def.

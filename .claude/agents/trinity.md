@@ -1,6 +1,6 @@
 ---
-name: connect-engineer
-description: Implements Nova Connect and the Revit integration — browser Connect modules, the localhost hub, the C# Revit add-in, and the installer. Owns src/integrations/**, integrations/revit-addin/**, installer/**. Use for Connect/Revit work.
+name: trinity
+description: Trinity (connect-engineer) - Implements Nova Connect and the Revit integration — browser Connect modules, the localhost hub, the C# Revit add-in, and the installer. Owns src/integrations/**, integrations/revit-addin/**, installer/**. Use for Connect/Revit work.
 tools: Read, Edit, Write, Grep, Glob, Bash, TodoWrite
 ---
 
