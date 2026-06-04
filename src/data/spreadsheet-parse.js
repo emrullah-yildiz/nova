@@ -24,8 +24,38 @@
 //     real numbers / booleans / dates for typed cells), so a numeric cell stays
 //     a number. This mirrors what the user sees in Excel.
 //   • parseJSON / toTable keep values exactly as JSON.parse produced them.
+//
+// RESERVED HEADER NAMES — null-prototype rows:
+//   These parsers run on UNTRUSTED uploaded files, so a column may be named
+//   `__proto__` (or `constructor`, `prototype`, …). On a normal `{}` object
+//   `obj["__proto__"] = value` is a spec no-op: it walks the prototype setter
+//   and silently drops the cell instead of storing it, breaking the uniform
+//   {headers, rows} contract (and being the same class of risk as prototype
+//   pollution). To make EVERY header an honest own-property, the row objects
+//   built here use `Object.create(null)` (a null-prototype bag with no
+//   `__proto__` accessor), via makeRow(). So `row["__proto__"]` is a real own
+//   property carrying the cell value, and `Object.keys(row)` / headers still
+//   enumerate it.
+//
+//   DOWNSTREAM CONTRACT: rows produced by parseCSV/parseXLSX (and toTable, which
+//   re-keys array-of-object rows through makeRow) are null-prototype objects.
+//   They lack Object.prototype methods (no `row.hasOwnProperty(...)`,
+//   `row.toString()`, etc.). This is intentional and acceptable: T8's
+//   toTable / MatchByKey and the rest of the pipeline access cells via bracket
+//   indexing (`row[header]`), `Object.keys(row)`, and the `in` operator, all of
+//   which work on null-prototype objects. Code touching these rows must NOT call
+//   `row.hasOwnProperty(k)` directly — use `Object.prototype.hasOwnProperty.call`
+//   or `key in row` / `Object.keys`.
 
 import * as XLSX from 'xlsx';
+
+// Build a fresh null-prototype row object. Using Object.create(null) means
+// reserved header names (notably `__proto__`) become real own-properties
+// instead of hitting the Object.prototype setter and being silently dropped.
+// See the "RESERVED HEADER NAMES" note in the module header.
+function makeRow() {
+  return Object.create(null);
+}
 
 // ---------------------------------------------------------------------------
 // CSV
@@ -146,7 +176,7 @@ export function parseCSV(text, opts) {
   for (let r = 1; r < table.length; r++) {
     const cells = table[r];
     if (isEmptyRow(cells)) continue; // skip interior blank lines too
-    const obj = {};
+    const obj = makeRow();
     for (let c = 0; c < headers.length; c++) {
       const raw = c < cells.length ? cells[c] : '';
       obj[headers[c]] = coerce && looksNumeric(raw) ? Number(raw) : raw;
@@ -179,16 +209,31 @@ export function parseJSON(text) {
 // toTable — the normalizer that gives every source one shape
 // ---------------------------------------------------------------------------
 
+// Copy an object's own enumerable keys into a fresh null-prototype row so that a
+// reserved key (e.g. a JSON `"__proto__"` member, which JSON.parse stores as an
+// own property) is carried as honest own-property data and can never reach the
+// real Object.prototype. Keeps every importer consistent (see F-002).
+function reRow(item) {
+  const out = makeRow();
+  for (const key of Object.keys(item)) {
+    out[key] = item[key];
+  }
+  return out;
+}
+
 // toTable(value) -> { headers, rows }
 //   Normalizes a few common shapes into the uniform table contract:
-//     • already-a-table  { headers, rows }     -> returned (rows kept as objects)
+//     • already-a-table  { headers, rows }     -> headers kept, rows re-keyed
+//                                                 into null-prototype rows
 //     • array of objects [{a:1,b:2}, ...]      -> headers = union of keys in
-//                                                 first-seen order, rows kept
+//                                                 first-seen order, rows re-keyed
 //     • array of scalars [1, 2, 3]             -> single "value" column
 //     • single object    { a: 1 }              -> one-row table
 //     • null / undefined / empty               -> { headers: [], rows: [] }
 //   Header order is the order keys are first encountered across the rows, so a
 //   later row introducing a new key appends it rather than reordering.
+//   Rows are null-prototype objects (see the module-header reserved-name note)
+//   so a `__proto__` column survives everywhere as own-property data.
 export function toTable(value) {
   if (value == null) {
     return { headers: [], rows: [] };
@@ -198,7 +243,7 @@ export function toTable(value) {
   if (!Array.isArray(value) && typeof value === 'object' && Array.isArray(value.headers) && Array.isArray(value.rows)) {
     return {
       headers: value.headers.map((h) => String(h)),
-      rows: value.rows.slice()
+      rows: value.rows.map((r) => (r != null && typeof r === 'object' ? reRow(r) : r))
     };
   }
 
@@ -217,23 +262,29 @@ export function toTable(value) {
           }
         }
       }
-      return { headers, rows: value.slice() };
+      return { headers, rows: value.map((item) => reRow(item)) };
     }
 
     // Array of scalars (or mixed): expose a single "value" column.
     return {
       headers: ['value'],
-      rows: value.map((v) => ({ value: v }))
+      rows: value.map((v) => {
+        const row = makeRow();
+        row.value = v;
+        return row;
+      })
     };
   }
 
   // A single plain object -> one-row table.
   if (typeof value === 'object') {
-    return { headers: Object.keys(value), rows: [value] };
+    return { headers: Object.keys(value), rows: [reRow(value)] };
   }
 
   // A bare scalar.
-  return { headers: ['value'], rows: [{ value }] };
+  const row = makeRow();
+  row.value = value;
+  return { headers: ['value'], rows: [row] };
 }
 
 // ---------------------------------------------------------------------------
@@ -301,7 +352,7 @@ export function parseXLSX(input, opts) {
   const rows = [];
   for (let r = 1; r < aoa.length; r++) {
     const cells = aoa[r];
-    const obj = {};
+    const obj = makeRow();
     for (let c = 0; c < headers.length; c++) {
       obj[headers[c]] = c < cells.length ? cells[c] : '';
     }
