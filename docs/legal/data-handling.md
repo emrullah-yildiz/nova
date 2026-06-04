@@ -1,14 +1,15 @@
 # Data Handling & Sub-processors
 
-> **DRAFT v0.1 — NOT YET IN EFFECT. Pending legal review.** Implementation-grounded,
-> not legal advice. Confirm each sub-processor's signed DPA/SCCs and fill
-> `[PLACEHOLDERS]` before publishing.
+> **Version 1.0 · Effective June 4, 2026.** Implementation-grounded (verified against
+> the code); prepared in good faith without a lawyer — not legal advice. Before relying
+> on this publicly, **accept and file a DPA with each sub-processor** (§2) and have
+> counsel review for significant/commercial use.
 
 | | |
 |---|---|
-| **Version** | 0.1 (draft) |
-| **Effective date** | `[EFFECTIVE DATE]` |
-| **Document owner** | `[LEGAL ENTITY]` |
+| **Version** | 1.0 |
+| **Effective date** | June 4, 2026 |
+| **Operator** | Nova (independent individual; no incorporated entity yet) |
 
 This document explains, in plain terms, **what data Nova holds, where it lives, who
 processes it, and how it's protected.** It complements the
@@ -27,8 +28,8 @@ processes it, and how it's protected.** It complements the
 | Static app assets / compute | Cloudflare Workers — **global edge** | the SPA + API |
 
 ## 2. Sub-processors
-We use the following third parties to operate Nova. `[You must hold a signed DPA /
-SCCs with each before relying on this list publicly.]`
+We use the following third parties to operate Nova. You should accept and keep on file
+a Data Processing Agreement (DPA) with each.
 
 | Sub-processor | Role | Personal data it processes | Location |
 |---|---|---|---|
@@ -37,7 +38,8 @@ SCCs with each before relying on this list publicly.]`
 | **Google LLC** | "Sign in with Google" (OIDC) **only** | email, name, Google account id | US |
 | **Resend** | Transactional email (account verification, invitations) | Recipient email address + email content | US |
 
-`[Keep this table current; adding/removing a sub-processor is a notify-users event.]`
+*(Maintenance note: keep this table current — adding/removing a sub-processor is a
+notify-users event.)*
 
 > **AI providers are NOT Nova sub-processors.** Nova operates no shared or free AI
 > service and stores no AI key of its own. The assistant is **bring-your-own-key only**:
@@ -72,9 +74,9 @@ Neon. Processing outside the EEA/UK is limited to these Nova-controlled transfer
 3. **Google** (US) for "Sign in with Google".
 
 For these we rely on the providers' **Standard Contractual Clauses and data-processing
-agreements** `[counsel to confirm per provider]`. Separately, **BYOK AI** sends data
-from your browser to the provider *you* chose (often US) — that transfer is under
-*your* arrangement with that provider, not Nova's.
+agreements**. Separately, **BYOK AI** sends data from your browser to the provider
+*you* chose (often US) — that transfer is under *your* arrangement with that provider,
+not Nova's.
 
 ## 5. Security measures (technical & organizational — "TOMs" summary)
 - **In transit:** HTTPS/TLS everywhere; HSTS enforced on production (`hi-nova.work`).
@@ -86,23 +88,24 @@ from your browser to the provider *you* chose (often US) — that transfer is un
   rate-limiting and lockout on authentication; a strict Content-Security-Policy and
   hardening headers on the app.
 - **Sensitive operations:** writes back to a connected CAD host (e.g. Revit) require a
-  **server-issued, single-use approval token** and are recorded in an audit log
-  (audit is a precondition of the write).
+  **server-issued, single-use approval token** and are recorded in an audit log (audit
+  is a precondition of the write).
 - **Isolation:** development and production use **separate** databases (Neon) and
   **separate** Cloudflare KV namespaces, so non-production activity cannot touch real
   user sessions or data.
 - **Erasure:** deleting your account purges your sessions and verification tokens and
   removes your projects; retained audit entries are anonymized.
-- **Supply chain:** dependencies are vulnerability-audited; secrets are kept in
-  managed secret stores, never in source code.
+- **Supply chain:** dependencies are vulnerability-audited; secrets are kept in managed
+  secret stores, never in source code.
 
-`[Items still to formalize: a documented breach-detection & notification process
-(GDPR 72h) and backup/recovery (Neon point-in-time recovery) — tracked as SEC-009;
-audit-log retention/tamper-resistance — SEC-006.]`
+*(Still to formalize as the project matures: a written breach-detection & notification
+process (GDPR 72h) and backup/recovery using Neon point-in-time recovery — SEC-009;
+audit-log retention/tamper-resistance — SEC-006.)*
 
 ## 6. Retention
 See [Privacy Policy §6](privacy-policy.md). Sessions/tokens are short-lived;
-account/project data persists until deletion; audit logs retained `[PERIOD]`.
+account/project data persists until deletion (or within 30 days of account closure);
+audit logs retained 12 months.
 
 ## 7. Contact
-Data-handling questions: **`[PRIVACY CONTACT EMAIL]`**.
+Data-handling questions: **nova.support@hi-nova.work**.
