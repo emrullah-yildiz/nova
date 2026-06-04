@@ -550,12 +550,11 @@ public class NovaHostClient : IDisposable
         JsonElement payload = default;
         if (request.TryGetProperty("payload", out var p)) payload = p;
 
-        var approved = payload.ValueKind == JsonValueKind.Object &&
-            payload.TryGetProperty("approval", out var approval) &&
-            approval.TryGetProperty("approved", out var ap) &&
-            ap.GetBoolean();
-
-        if (!approved)
+        // SEC-013: a write must carry a server-issued approval token, not a
+        // client-set { approved: true } boolean. The hub/backend is the
+        // authoritative gate (it minted + verified the token); the add-in
+        // enforces presence of the token as defense in depth.
+        if (!HasWriteApprovalToken(payload))
         {
             Reply(requestId, "parameter.set.result", new
             {
@@ -563,7 +562,7 @@ public class NovaHostClient : IDisposable
                 count = 0,
                 ok = false,
                 code = "WRITE_APPROVAL_REQUIRED",
-                message = "Revit parameter writes require explicit user approval."
+                message = "Revit parameter writes require a server-issued approval token."
             });
             return;
         }
@@ -667,6 +666,32 @@ public class NovaHostClient : IDisposable
     /// ({ elementId: string, params: { ... } }). Returns the element id and the
     /// parameter names (the keys of the `params` map).
     /// </summary>
+    /// <summary>
+    /// SEC-013 defense-in-depth: a write payload must carry a server-issued
+    /// approval token (payload.approval.token, a non-empty string). The add-in
+    /// trusts the hub — which is the authoritative gate that minted and verified
+    /// the token — but refuses any write lacking a token so a stray/forged
+    /// { approved: true } boolean (the old, client-fabricated shape) can no
+    /// longer drive a write. The add-in does not (and cannot) cryptographically
+    /// re-verify the token; that is the server/hub's responsibility.
+    /// </summary>
+    private static bool HasWriteApprovalToken(JsonElement payload)
+    {
+        if (payload.ValueKind != JsonValueKind.Object) return false;
+        if (!payload.TryGetProperty("approval", out var approval) ||
+            approval.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+        if (!approval.TryGetProperty("token", out var tokenProp) ||
+            tokenProp.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+        var token = tokenProp.GetString();
+        return !string.IsNullOrWhiteSpace(token);
+    }
+
     private static bool TryReadContractParameterPayload(JsonElement request, out long elementId, out List<string> parameterNames)
     {
         elementId = 0;
@@ -1022,8 +1047,8 @@ public class NovaHostClient : IDisposable
     /// <summary>
     /// geometry.place → place a FamilyInstance or AdaptiveComponent. Reuses the
     /// same write-approval gate as HandleGeometryCreate: writes are rejected with
-    /// WRITE_APPROVAL_REQUIRED unless payload.approval.approved is true. Returns
-    /// the created element id(s).
+    /// WRITE_APPROVAL_REQUIRED unless payload.approval carries a server-issued
+    /// token (SEC-013). Returns the created element id(s).
     /// </summary>
     private void HandleGeometryPlace(string? requestId, JsonElement request)
     {
@@ -1038,18 +1063,14 @@ public class NovaHostClient : IDisposable
         if (request.TryGetProperty("payload", out var p)) payload = p;
 
         // ── Write-approval gate (mirrors HandleGeometryCreate) ──
-        var approved = payload.ValueKind == JsonValueKind.Object &&
-            payload.TryGetProperty("approval", out var approval) &&
-            approval.TryGetProperty("approved", out var ap) &&
-            ap.GetBoolean();
-
-        if (!approved)
+        // SEC-013: require a server-issued approval token, not a client boolean.
+        if (!HasWriteApprovalToken(payload))
         {
             Reply(requestId, "geometry.place.result", new
             {
                 ok = false,
                 code = "WRITE_APPROVAL_REQUIRED",
-                message = "Revit writes require explicit user approval."
+                message = "Revit writes require a server-issued approval token."
             });
             return;
         }
@@ -1424,25 +1445,17 @@ public class NovaHostClient : IDisposable
             return;
         }
 
-        // Check approval
-        bool approved = false;
+        // SEC-013: require a server-issued approval token, not a client boolean.
         JsonElement payload = default;
         if (request.TryGetProperty("payload", out var p)) payload = p;
 
-        if (payload.ValueKind == JsonValueKind.Object &&
-            payload.TryGetProperty("approval", out var approval) &&
-            approval.TryGetProperty("approved", out var ap))
-        {
-            approved = ap.GetBoolean();
-        }
-
-        if (!approved)
+        if (!HasWriteApprovalToken(payload))
         {
             Reply(requestId, "geometry.create.result", new
             {
                 ok = false,
                 code = "WRITE_APPROVAL_REQUIRED",
-                message = "Revit writes require explicit user approval."
+                message = "Revit writes require a server-issued approval token."
             });
             return;
         }

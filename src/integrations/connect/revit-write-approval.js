@@ -14,6 +14,71 @@ import { createNovaCloudClient } from '../../enterprise/cloud-client.js';
 const pendingApprovals = new Map();
 let approvalCounter = 0;
 
+// The cloud client is created in cookie mode so it reuses the SPA's httpOnly
+// session (same authority as the rest of the app). Overridable for tests.
+let createClient = () => createNovaCloudClient({ useCookie: true });
+
+/**
+ * Test/override hook for the cloud-client factory. Returns a restore function.
+ */
+export function __setCloudClientFactory(factory) {
+  const previous = createClient;
+  createClient = factory;
+  return () => { createClient = previous; };
+}
+
+/**
+ * SEC-013: obtain a SERVER-ISSUED, single-use write-approval token scoped to
+ * {operation, projectId, graphVersion}. This is the authoritative gate — the
+ * browser cannot mint its own approval; only the enterprise backend can, after
+ * a project-write authorization check.
+ *
+ * Graceful degrade (local-hub note): when there is no cloud session (pure
+ * local, signed-out use against a paired local hub), there is no backend to
+ * mint or audit a token. Rather than hard-breaking every local write, we return
+ * a clearly-marked LOCAL token (`local: true`). This satisfies the add-in's
+ * presence-check (defense-in-depth) and keeps the local read/write pilot usable
+ * offline, while making explicit — here and in revit-connect.md — that
+ * authoritative enforcement (server consume + audit-as-precondition) is only
+ * active when the enterprise backend is present. A local token is NOT
+ * server-verifiable and is never consumed/audited server-side.
+ */
+export async function issueWriteToken(options = {}) {
+  const {
+    host = 'revit',
+    operation = 'parameter.set',
+    projectId = '',
+    graphVersion = ''
+  } = options;
+
+  let client;
+  try {
+    client = createClient();
+  } catch (err) {
+    client = null;
+  }
+
+  // No configured/authenticated backend → graceful local degrade.
+  if (!client || !client.isConfigured() || !client.isAuthenticated() || typeof client.issueHostWriteApproval !== 'function') {
+    return {
+      token: 'local:' + host + ':' + operation + ':' + (approvalCounter + 1) + ':' + Date.now(),
+      approvalId: '',
+      operation,
+      graphVersion,
+      local: true
+    };
+  }
+
+  const issued = await client.issueHostWriteApproval({ host, operation, projectId, graphVersion });
+  return {
+    token: issued && issued.token ? issued.token : '',
+    approvalId: (issued && issued.approvalId) || '',
+    operation: (issued && issued.operation) || operation,
+    graphVersion: (issued && issued.graphVersion) || graphVersion,
+    local: false
+  };
+}
+
 /**
  * Request user approval for a Revit write operation.
  * Returns a promise that resolves with the approval result.
@@ -128,28 +193,36 @@ function emitApprovalEvent(approval) {
  */
 export async function recordHostAuditEvent(operationResult, options = {}) {
   try {
-    const client = createNovaCloudClient();
+    const client = createClient();
     if (!client.isAuthenticated()) {
-      // Silently skip audit if not authenticated (local/dev mode)
+      // No cloud session → the authoritative consume/audit can't run (local
+      // degrade). The write already went out under a local token; nothing to
+      // report server-side.
       return null;
     }
+    // SEC-013: this report is the AUTHORITATIVE CONSUME point. The server burns
+    // the token (single-use) and writes the audit row as a precondition. A
+    // local-only token has no server-side record, so don't bother reporting it.
+    const token = options.token || '';
+    if (!token || String(token).startsWith('local:')) return null;
     const payload = {
       host: options.host || 'revit',
       operation: options.operation || 'parameter.set',
       ok: operationResult && operationResult.ok === true,
+      token,
+      approvalId: options.approvalId || '',
+      graphVersion: options.graphVersion || '',
       metadata: {
         elementCount: options.elementCount || 0,
         elementIds: options.elementIds ? options.elementIds.slice(0, 20) : [],
         parameterName: options.parameterName || '',
-        description: options.description || '',
-        approved: operationResult && operationResult.approved === true,
-        approvedBy: operationResult && operationResult.approvedBy || ''
+        description: options.description || ''
       }
     };
     if (options.projectId) payload.projectId = options.projectId;
     return await client.recordHostOperation(payload);
   } catch (err) {
-    console.warn('[RevitWrite] Failed to record audit event:', err.message);
+    console.warn('[RevitWrite] Failed to record host operation (server consume):', err.message);
     return null;
   }
 }

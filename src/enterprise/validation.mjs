@@ -175,6 +175,23 @@ export function validateHostOperationBody(body = {}) {
   optionalString(body.host, 'host', 40);
   requireString(body.operation, 'operation', 120);
   if (body.ok !== undefined && typeof body.ok !== 'boolean') throw createHttpError(400, 'ok must be a boolean.');
+  // SEC-013: a reported host write MUST carry the server-issued, single-use
+  // approval token (and optional approvalId / graphVersion scope). The token
+  // itself is validated authoritatively by consumeHostWriteApproval; here we
+  // only enforce shape so a malformed body is rejected before the consume.
+  optionalString(body.token, 'token', 256);
+  optionalString(body.approvalId, 'approvalId', 120);
+  optionalString(body.graphVersion, 'graphVersion', 120);
+  optionalPlainObject(body.metadata, 'metadata');
+  return body;
+}
+
+export function validateHostWriteApprovalBody(body = {}) {
+  requirePlainObject(body, 'request body');
+  optionalString(body.projectId, 'projectId', 80);
+  optionalString(body.host, 'host', 40);
+  requireString(body.operation, 'operation', 120);
+  optionalString(body.graphVersion, 'graphVersion', 120);
   optionalPlainObject(body.metadata, 'metadata');
   return body;
 }
