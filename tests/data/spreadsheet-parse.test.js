@@ -5,7 +5,11 @@ import {
   parseJSON,
   parseXLSX,
   toTable,
-  sheetNames
+  sheetNames,
+  MAX_INPUT_CHARS,
+  MAX_ROWS,
+  MAX_COLS,
+  MAX_CELLS
 } from '../../src/data/spreadsheet-parse.js';
 
 describe('spreadsheet-parse', () => {
@@ -327,6 +331,117 @@ describe('spreadsheet-parse', () => {
       expect(Object.prototype.hasOwnProperty.call(rows[0], '__proto__')).toBe(true);
       expect(rows[0]['__proto__']).toBe('foo');
       expect(Object.prototype.polluted).toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Resource bounds — untrusted-input DoS defense (SEC-011)
+  // -------------------------------------------------------------------------
+  describe('resource bounds (SEC-011)', () => {
+    it('exports sane, ordered limit constants', () => {
+      expect(MAX_INPUT_CHARS).toBeGreaterThan(0);
+      expect(MAX_ROWS).toBeGreaterThan(0);
+      expect(MAX_COLS).toBeGreaterThan(0);
+      expect(MAX_CELLS).toBeGreaterThan(0);
+      // A single huge dimension must be catchable by the product cap too.
+      expect(MAX_CELLS).toBeLessThanOrEqual(MAX_ROWS * MAX_COLS);
+    });
+
+    it('parseCSV rejects an input string longer than MAX_INPUT_CHARS', () => {
+      // One char over the cap. The length guard fires before any tokenization,
+      // so this never walks the string. Allocate the big string once.
+      const huge = 'a'.repeat(MAX_INPUT_CHARS + 1);
+      let err;
+      try { parseCSV(huge); } catch (e) { err = e; }
+      expect(err).toBeInstanceOf(Error);
+      expect(err.message).toMatch(/too large/i);
+      expect(err.message).toMatch(/input length/);
+    });
+
+    it('parseCSV rejects a header row with more than MAX_COLS columns', () => {
+      // One short line, but MAX_COLS+1 columns — exercises the column cap
+      // cheaply (no millions of rows allocated).
+      const header = new Array(MAX_COLS + 1).fill('c').join(',');
+      const text = header + '\n1';
+      expect(() => parseCSV(text)).toThrow(/too large/i);
+      expect(() => parseCSV(text)).toThrow(/column count/);
+    });
+
+    it('parseCSV accepts a normal small CSV well within all caps', () => {
+      const { headers, rows } = parseCSV('name,age\nAlice,30\nBob,25');
+      expect(headers).toEqual(['name', 'age']);
+      expect(rows.length).toBe(2);
+    });
+
+    it('parseXLSX rejects a sheet that DECLARES a pathological range (zip-bomb shape)', async () => {
+      // A few-KB workbook can declare an enormous used range. Simulate that with
+      // a sheet object carrying a huge `!ref` but (almost) no real cells, so the
+      // pre-parse `!ref` guard fires before sheet_to_json materializes anything.
+      // Build the column letters via XLSX.utils so the range string is valid.
+      const XLSXmod = await import('xlsx');
+      const end = XLSXmod.utils.encode_cell({ r: MAX_ROWS + 10, c: 50 });
+      const sheet = { '!ref': 'A1:' + end, A1: { t: 's', v: 'x' } };
+      const wb = { SheetNames: ['Bomb'], Sheets: { Bomb: sheet } };
+      vi.resetModules();
+      vi.doMock('xlsx', () => ({
+        read: () => wb,
+        utils: XLSXmod.utils
+      }));
+      try {
+        const mod = await import('../../src/data/spreadsheet-parse.js');
+        expect(() => mod.parseXLSX('whatever')).toThrow(/too large/i);
+        expect(() => mod.parseXLSX('whatever')).toThrow(/row count/);
+      } finally {
+        vi.doUnmock('xlsx');
+        vi.resetModules();
+      }
+    });
+
+    it('parseXLSX rejects a sheet declaring more than MAX_COLS columns', async () => {
+      const XLSXmod = await import('xlsx');
+      const end = XLSXmod.utils.encode_cell({ r: 1, c: MAX_COLS + 5 });
+      const sheet = { '!ref': 'A1:' + end, A1: { t: 's', v: 'x' } };
+      const wb = { SheetNames: ['Wide'], Sheets: { Wide: sheet } };
+      vi.resetModules();
+      vi.doMock('xlsx', () => ({ read: () => wb, utils: XLSXmod.utils }));
+      try {
+        const mod = await import('../../src/data/spreadsheet-parse.js');
+        expect(() => mod.parseXLSX('whatever')).toThrow(/column count/);
+      } finally {
+        vi.doUnmock('xlsx');
+        vi.resetModules();
+      }
+    });
+
+    it('parseXLSX rejects on the cell-count product even when each dimension is alone OK', async () => {
+      // rows and cols each under their own cap, but rows*cols > MAX_CELLS.
+      const XLSXmod = await import('xlsx');
+      const cols = 5000;            // < MAX_COLS
+      const rows = Math.ceil(MAX_CELLS / cols) + 100; // rows*cols > MAX_CELLS, rows < MAX_ROWS
+      expect(cols).toBeLessThan(MAX_COLS);
+      expect(rows).toBeLessThan(MAX_ROWS);
+      const end = XLSXmod.utils.encode_cell({ r: rows, c: cols - 1 });
+      const sheet = { '!ref': 'A1:' + end, A1: { t: 's', v: 'x' } };
+      const wb = { SheetNames: ['Big'], Sheets: { Big: sheet } };
+      vi.resetModules();
+      vi.doMock('xlsx', () => ({ read: () => wb, utils: XLSXmod.utils }));
+      try {
+        const mod = await import('../../src/data/spreadsheet-parse.js');
+        expect(() => mod.parseXLSX('whatever')).toThrow(/cell count/);
+      } finally {
+        vi.doUnmock('xlsx');
+        vi.resetModules();
+      }
+    });
+
+    it('parseXLSX still parses a normal small real workbook', () => {
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet([['a', 'b'], [1, 2]]);
+      XLSX.utils.book_append_sheet(wb, ws, 'OK');
+      const b64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+      const { headers, rows } = parseXLSX(b64);
+      expect(headers).toEqual(['a', 'b']);
+      expect(rows).toEqual([{ a: 1, b: 2 }]);
     });
   });
 

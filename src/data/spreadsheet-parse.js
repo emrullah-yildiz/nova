@@ -46,8 +46,58 @@
 //   which work on null-prototype objects. Code touching these rows must NOT call
 //   `row.hasOwnProperty(k)` directly — use `Object.prototype.hasOwnProperty.call`
 //   or `key in row` / `Object.keys`.
+//
+// RESOURCE BOUNDS — untrusted-input DoS defense (SEC-011):
+//   These parsers run client-side on UNTRUSTED uploaded files. A small file can
+//   expand to a pathological number of cells (a "zip-bomb"-style XLSX declaring
+//   an enormous used range, or a CSV that tokenizes into millions of cells) and
+//   hang or OOM the browser tab. To bound work BEFORE materializing rows, every
+//   parser enforces explicit dimension caps and rejects an oversize input with a
+//   clear Error naming the limit:
+//     • MAX_INPUT_CHARS — parseCSV/tokenizeCSV refuse an input string longer than
+//       this (the tokenizer's inner loop is O(string length)).
+//     • MAX_ROWS / MAX_COLS — the row count and column (header) count caps shared
+//       by parseCSV and parseXLSX.
+//     • MAX_CELLS — the rows*cols product cap; catches the "few rows × millions of
+//       columns" and "millions of rows × few columns" shapes a single dimension
+//       cap would miss. For XLSX this is checked against the worksheet's DECLARED
+//       range (`!ref`) BEFORE sheet_to_json runs, so a sheet merely *declaring* a
+//       huge range is rejected without SheetJS first allocating it.
+//   These caps complement the byte-size guard in src/ui/file-control.js
+//   (MAX_FILE_BYTES), which rejects oversize uploads before any read. The
+//   constants are exported so callers/tests can reference them.
 
 import * as XLSX from 'xlsx';
+
+// ---------------------------------------------------------------------------
+// Resource bounds (SEC-011) — see the "RESOURCE BOUNDS" note in the module
+// header. Tuned generously for legitimate spreadsheets (a 1M-cell sheet, e.g.
+// ~50k rows × 20 cols, still parses) while refusing pathological dimensions
+// long before they can hang the tab.
+// ---------------------------------------------------------------------------
+
+// Max length (in UTF-16 code units) of a CSV/text input string. ~64M chars is
+// well above any legitimate <=10MB upload's character count, but bounds the
+// tokenizer's O(n) scan so a hostile multi-hundred-MB string can't be walked.
+export var MAX_INPUT_CHARS = 64 * 1024 * 1024;
+
+// Max number of data rows (header row excluded) a single sheet/CSV may yield.
+export var MAX_ROWS = 1000000;
+
+// Max number of columns (headers) a single sheet/CSV may have.
+export var MAX_COLS = 16384;
+
+// Max total cells (data rows × columns). The dominant guard: it catches shapes
+// that slip past a single-dimension cap (few rows × huge width, or vice versa).
+export var MAX_CELLS = 5000000;
+
+// Build a clear, throwable limit error. Centralized so every message reads the
+// same way ("... exceeds the limit of N ...") and is easy to assert in tests.
+function limitError(what, got, limit) {
+  return new Error(
+    'Spreadsheet too large: ' + what + ' (' + got + ') exceeds the limit of '
+    + limit + '. Reduce the file and try again.');
+}
 
 // Build a fresh null-prototype row object. Using Object.create(null) means
 // reserved header names (notably `__proto__`) become real own-properties
@@ -66,6 +116,11 @@ function makeRow() {
 // quoted field is a literal quote, and commas / newlines inside quotes are part
 // of the field. Handles both CRLF and LF line endings.
 function tokenizeCSV(text, delimiter) {
+  // Bound the O(n) scan up front: refuse a pathologically long input string
+  // before walking it character by character (SEC-011).
+  if (text.length > MAX_INPUT_CHARS) {
+    throw limitError('input length', text.length, MAX_INPUT_CHARS);
+  }
   const rows = [];
   let row = [];
   let field = '';
@@ -172,6 +227,20 @@ export function parseCSV(text, opts) {
   }
 
   const headers = table[0].map((h) => String(h));
+
+  // Dimension caps (SEC-011): bound rows, columns and the rows*cols product
+  // before building the row objects so a pathological CSV can't hang the tab.
+  const dataRowCount = table.length - 1; // header row excluded
+  if (headers.length > MAX_COLS) {
+    throw limitError('column count', headers.length, MAX_COLS);
+  }
+  if (dataRowCount > MAX_ROWS) {
+    throw limitError('row count', dataRowCount, MAX_ROWS);
+  }
+  if (dataRowCount * headers.length > MAX_CELLS) {
+    throw limitError('cell count', dataRowCount * headers.length, MAX_CELLS);
+  }
+
   const rows = [];
   for (let r = 1; r < table.length; r++) {
     const cells = table[r];
@@ -341,6 +410,27 @@ export function parseXLSX(input, opts) {
     throw new Error('parseXLSX: sheet not found — ' + target);
   }
 
+  // Dimension caps (SEC-011): a hostile workbook can DECLARE an enormous used
+  // range in a few KB. Reject based on the sheet's declared range (`!ref`)
+  // BEFORE sheet_to_json materializes it, so SheetJS never allocates millions
+  // of cells. (No !ref => empty/sparse sheet; the post-parse caps below still
+  // cover whatever rows actually come back.)
+  if (sheet['!ref'] && typeof XLSX.utils.decode_range === 'function') {
+    const range = XLSX.utils.decode_range(sheet['!ref']);
+    const declaredCols = (range.e.c - range.s.c) + 1;
+    const declaredRows = (range.e.r - range.s.r) + 1; // includes header row
+    const declaredDataRows = Math.max(0, declaredRows - 1);
+    if (declaredCols > MAX_COLS) {
+      throw limitError('column count', declaredCols, MAX_COLS);
+    }
+    if (declaredDataRows > MAX_ROWS) {
+      throw limitError('row count', declaredDataRows, MAX_ROWS);
+    }
+    if (declaredDataRows * declaredCols > MAX_CELLS) {
+      throw limitError('cell count', declaredDataRows * declaredCols, MAX_CELLS);
+    }
+  }
+
   // header:1 gives raw rows-of-cells so we control header extraction ourselves
   // and stay consistent with parseCSV. defval:'' fills sparse cells.
   const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '' });
@@ -349,6 +439,20 @@ export function parseXLSX(input, opts) {
   }
 
   const headers = aoa[0].map((h) => String(h));
+
+  // Post-parse backstop for the dimension caps (SEC-011): covers a sheet whose
+  // actual returned shape is large even when `!ref` was absent or understated.
+  const dataRowCount = aoa.length - 1; // header row excluded
+  if (headers.length > MAX_COLS) {
+    throw limitError('column count', headers.length, MAX_COLS);
+  }
+  if (dataRowCount > MAX_ROWS) {
+    throw limitError('row count', dataRowCount, MAX_ROWS);
+  }
+  if (dataRowCount * headers.length > MAX_CELLS) {
+    throw limitError('cell count', dataRowCount * headers.length, MAX_CELLS);
+  }
+
   const rows = [];
   for (let r = 1; r < aoa.length; r++) {
     const cells = aoa[r];
