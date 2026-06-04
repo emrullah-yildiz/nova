@@ -546,6 +546,54 @@ export const NODE_META = {
     example: 'walls = RevitBridge.getElements("Walls")',
     whenToUse: 'Non-interactive, category-scoped reads. Differs from SelectElements, which asks the user to pick elements in Revit.'
   },
+  'revit-filter-by-parameter': {
+    description: 'READ: filter an existing element LIST by a parameter value/comparison. Refines a collector\'s output; does NOT acquire elements itself.',
+    python: 'elements = RevitBridge.filterByParameter(elements, "Mark", "!=", "")',
+    example: 'tagged = RevitBridge.filterByParameter(walls, "Mark", "!=", "")',
+    whenToUse: 'Narrow a collected list by a parameter (e.g. only walls with a Mark). Feed it elements from AllElementsOfCategory / AllElementsInActiveView. Distinct from GetParameterValues (which READS values) — this RETURNS the matching elements.'
+  },
+  'revit-filter-by-level': {
+    description: 'READ: keep only the elements assigned to a given level. Refines a collector\'s output.',
+    python: 'elements = RevitBridge.filterByLevel(elements, "Level 1")',
+    example: 'lvl1Walls = RevitBridge.filterByLevel(walls, "Level 1")',
+    whenToUse: 'Scope a collected list to one level. Differs from FilterByParameter (any named param) by targeting the element\'s level association.'
+  },
+  'revit-elements-by-type': {
+    description: 'READ QUERY: collect every instance of a named family/element type (e.g. "Basic Wall: Generic - 200mm"). Type-scoped, no user interaction.',
+    python: 'elements = RevitBridge.getElementsByType("Basic Wall: Generic - 200mm")',
+    example: 'genericWalls = RevitBridge.getElementsByType("Basic Wall: Generic - 200mm")',
+    whenToUse: 'Acquire elements by their type name. Finer than AllElementsOfCategory (which is category-scoped); use it when you want one specific type, not a whole category.'
+  },
+  'revit-element-by-id': {
+    description: 'READ: resolve a list of element ids back into element handles. The inverse of SelectElements.ids.',
+    python: 'elements = RevitBridge.getElementsById(ids)',
+    example: 'picked = RevitBridge.getElementsById(["1001", "1002"])',
+    whenToUse: 'Re-acquire elements from ids (e.g. ids saved from a previous SelectElements). Not a collector — it needs ids as input.'
+  },
+  'revit-element-solids': {
+    description: 'READ geometry: extract the solid bodies (BREP solids) of elements — not the display mesh.',
+    python: 'solids = RevitBridge.getSolids(elements)',
+    example: 'wallSolids = RevitBridge.getSolids(walls)',
+    whenToUse: 'Boolean/volume analysis needing real solids. Distinct from Element.Geometries, which returns display MESHES.'
+  },
+  'revit-element-faces': {
+    description: 'READ geometry: extract the faces (with face ids) of elements, for hosting or surface analysis.',
+    python: 'faces = RevitBridge.getFaces(elements); faceIds = [f["faceId"] for f in faces]',
+    example: 'wallFaces = RevitBridge.getFaces(walls)',
+    whenToUse: 'Get faces to host a family on (feed faceIds to PlaceFamilyInstance) or to analyze surfaces. Distinct from Element.Solids (whole bodies).'
+  },
+  'revit-element-bounding-box': {
+    description: 'READ geometry: compute each element\'s axis-aligned bounding box as min/max point lists.',
+    python: 'b = RevitBridge.getBoundingBoxes(elements); mins = [x["min"] for x in b]',
+    example: 'boxes = RevitBridge.getBoundingBoxes(furniture)',
+    whenToUse: 'Extents/clash/placement math. Returns parallel min/max point lists, consumable by Point.* / Rectangle.*.'
+  },
+  'revit-element-location': {
+    description: 'READ geometry: element location — a CURVE for line-based elements (walls, beams) and a POINT for point-based families; returns whichever applies.',
+    python: 'loc = RevitBridge.getLocations(elements); curves = [l["curve"] for l in loc if l.get("curve")]',
+    example: 'wallLines = RevitBridge.getLocations(walls)',
+    whenToUse: 'Recover the driving curve of walls/beams or the insertion point of families. Feeds Curve.* / Point.* and downstream placement.'
+  },
   'revit-select-elements': {
     description: 'INTERACTIVE pick: prompts the user to select elements in the live Revit window, then returns what they picked.',
     python: 'r = RevitBridge.requestSelection({}); elements = r.get("elements", [])',

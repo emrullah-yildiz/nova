@@ -13,6 +13,49 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-04 - RV-M1b: C# bridge handlers for RV-M1 Revit read nodes (→ Trinity / connect-engineer)
+
+**From:** Core/Runtime (Neo) — `feat/rv-m1-revit-read` (off `develop`; do not merge/push)
+**To:** Connect/Revit (Trinity) — add these to `integrations/revit-addin/**` in follow-up **RV-M1b**.
+
+RV-M1 shipped 8 **read-only**, codegen-only Revit nodes (no `execute`, NO SEC-013
+write gate) in the existing `revit` category (`src/core/nodes.js`). Each emits a
+`RevitBridge.*` call. Six of those bridge methods do **not** exist in the add-in yet
+and must be implemented. **All are strictly read-only** (FilteredElementCollector /
+geometry reads inside a read transaction — no document mutation, no approval token).
+
+The Nova→hub→add-in transport already exists for `getElements` / `getGeometries` /
+`getParameterValues`; mirror that request/response shape for these. `elements` and
+`ids` arguments are the same element-handle / id-string shapes the existing read
+nodes already pass and receive.
+
+| Method (call site in codegen) | Args | Returns (shape Nova consumes) | Read-only |
+|---|---|---|---|
+| `RevitBridge.filterByParameter(elements, name, op, value)` | `elements`: element list; `name`: string param name; `op`: one of `= != < > <= >=`; `value`: string (coerce by param storage type) | the SUBSET of `elements` whose parameter `name` satisfies `op value` — same element-handle shape as input | yes |
+| `RevitBridge.filterByLevel(elements, level)` | `elements`: element list; `level`: level name string | the subset of `elements` associated with that level | yes |
+| `RevitBridge.getElementsByType(typeName)` | `typeName`: string family/element-type name (e.g. `"Basic Wall: Generic - 200mm"`) | element list — all instances of that type | yes |
+| `RevitBridge.getElementsById(ids)` | `ids`: list of element-id strings | element list resolved from those ids (skip ids that don't resolve) | yes |
+| `RevitBridge.getSolids(elements)` | `elements`: element list | flat list of solid records (BREP solids; serialize as the same geometry-record shape `getGeometries` uses, tagged kind `solid`) | yes |
+| `RevitBridge.getFaces(elements)` | `elements`: element list | flat list of face records, each `{ "faceId": <string>, ...surface data }` — `faceId` must be the SAME id space `requestSelection({includeFaces:true})` returns so it can feed `PlaceFamilyInstance.hostFaceId` | yes |
+| `RevitBridge.getBoundingBoxes(elements)` | `elements`: element list | list aligned to `elements`, each `{ "min": [x,y,z], "max": [x,y,z] }` (model units) | yes |
+| `RevitBridge.getLocations(elements)` | `elements`: element list | list aligned to `elements`, each `{ "curve": <curve-record|null>, "point": [x,y,z]|null }` — curve for `LocationCurve` (walls/beams), point for `LocationPoint` (point-based families); the other key is `null` | yes |
+
+Notes for Trinity:
+- `getGeometries` already exists — `getSolids`/`getFaces` are the BREP-solid /
+  face-record variants of it; reuse its serialization where possible.
+- `filterByParameter` value coercion: parse `value` per the parameter's storage type
+  (Double/Integer/String/ElementId) before comparing; for non-`=`/`!=` ops on string
+  params, fall back to lexical compare.
+- Curve records (`getLocations`) should serialize as the same curve shape Nova's
+  `Curve.*` nodes consume; if no such shape exists yet, coordinate with Mouse
+  (geometry-engineer) on the canonical curve-record format (RV-M1 geometry mapping is
+  Mouse's lane per the plan §5).
+- Mouse (geometry-engineer) owns the Nova-side mapping of these returned records into
+  Nova solids/faces/curves/points for viewer/`Solid.*`/`Surface.*`/`Curve.*` consumption.
+
+**Merge status:** Open branch `feat/rv-m1-revit-read` — node defs + tests landed,
+C# handlers pending in RV-M1b. Do not merge.
+
 ## 2026-06-04 - Revit add-in ribbon: two-button On/Off + Open Nova (feat/revit-connect-ribbon)
 
 **Agent/branch:** Connect/Revit Engineer — `feat/revit-connect-ribbon` (off `develop`; do not merge/push)

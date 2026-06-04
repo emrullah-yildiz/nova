@@ -139,6 +139,59 @@ NODE_LIBRARY.categories.push({ id: 'revit', name: 'Revit', color: '#89dceb', ico
   { type: 'revit-all-elements-view', name: 'Revit.AllElementsInActiveView', icon: '👁', inputs: [], outputs: [{ id: 'elements', name: 'Elements', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [], preview: true, codegen: { python: '{{elements}} = RevitBridge.getAllElements()\\n{{count}} = len({{elements}})\\nprint(f"Found {{{count}}} elements in active view")' } },
   { type: 'revit-all-of-category', name: 'Revit.AllElementsOfCategory', icon: '📦', inputs: [], outputs: [{ id: 'elements', name: 'Elements', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [{ id: 'category', type: 'dropdown', options: ['Walls','Floors','Roofs','Ceilings','Doors','Windows','Rooms','Columns','Structural Columns','Structural Framing','Furniture','Generic Models','Mechanical Equipment','Plumbing Fixtures','Electrical Fixtures','Electrical Equipment','Pipes','Ducts','Stairs','Railings','Curtain Panels','Grids','Levels','Sheets'], default: 'Walls', label: 'Category' }], preview: true, codegen: { python: '{{elements}} = RevitBridge.getElements("{{ctrl.category}}")\\n{{count}} = len({{elements}})\\nprint(f"Found {{{count}}} {{ctrl.category}}")' } },
   { type: 'revit-element-geometries', name: 'Element.Geometries', icon: '🔷', inputs: [{ id: 'elements', name: 'Elements', type: 'list' }], outputs: [{ id: 'meshes', name: 'Meshes', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [], preview: true, codegen: { python: '{{meshes}} = RevitBridge.getGeometries({{elements}})\\n{{count}} = len({{meshes}})\\nprint(f"Extracted {{{count}}} meshes")' } },
+
+  // ── RV-M1 Collectors / Filtering [R] ──────────────────────────────────────
+  // Read-only collectors/filters that extend (never duplicate) the existing
+  // Revit.AllElements* collectors above. Each is codegen-only (no execute, no
+  // SEC-013 write gate) emitting a RevitBridge.* read call, matching the
+  // Element.Geometries / GetParameterValues pattern. The bridge methods these
+  // call are handed to Trinity (connect-engineer) in docs/agent-handoff.md
+  // (RV-M1b) — read-only, no write protocol.
+  //
+  // Sample workflow (FilterByParameter):
+  //   Revit.AllElementsOfCategory(Walls) → Revit.FilterByParameter(name="Mark",
+  //   op="!=", value="") → Element.Geometries → 3D viewer / output-watch.
+  { type: 'revit-filter-by-parameter', name: 'Revit.FilterByParameter', icon: '⛃', inputs: [{ id: 'elements', name: 'Elements', type: 'list' },{ id: 'name', name: 'Parameter Name', type: 'string' },{ id: 'value', name: 'Value', type: 'any' }], outputs: [{ id: 'elements', name: 'Elements', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [{ id: 'name', type: 'text', default: 'Mark', label: 'Parameter Name' },{ id: 'op', type: 'dropdown', options: ['=', '!=', '<', '>', '<=', '>='], default: '=', label: 'Comparison' },{ id: 'value', type: 'text', default: '', label: 'Value' }], preview: true, codegen: { python: '{{elements}} = RevitBridge.filterByParameter({{elements}}, "{{ctrl.name}}", "{{ctrl.op}}", "{{ctrl.value}}")\\n{{count}} = len({{elements}})\\nprint(f"{{{count}}} elements match {{ctrl.name}} {{ctrl.op}} {{ctrl.value}}")' } },
+
+  // Sample workflow (FilterByLevel):
+  //   Revit.AllElementsOfCategory(Walls) → Revit.FilterByLevel(level="Level 1")
+  //   → Revit.GetParameterValues(Area) → output-watch.
+  { type: 'revit-filter-by-level', name: 'Revit.FilterByLevel', icon: '☰', inputs: [{ id: 'elements', name: 'Elements', type: 'list' },{ id: 'level', name: 'Level', type: 'string' }], outputs: [{ id: 'elements', name: 'Elements', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [{ id: 'level', type: 'text', default: 'Level 1', label: 'Level' }], preview: true, codegen: { python: '{{elements}} = RevitBridge.filterByLevel({{elements}}, "{{ctrl.level}}")\\n{{count}} = len({{elements}})\\nprint(f"{{{count}}} elements on level {{ctrl.level}}")' } },
+
+  // Sample workflow (ElementsByType):
+  //   Revit.ElementsByType(typeName="Basic Wall: Generic - 200mm") →
+  //   Element.Location → Curve.* / Line viewer.
+  { type: 'revit-elements-by-type', name: 'Revit.ElementsByType', icon: '⊞', inputs: [{ id: 'typeName', name: 'Type Name', type: 'string' }], outputs: [{ id: 'elements', name: 'Elements', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [{ id: 'typeName', type: 'text', default: '', label: 'Type Name' }], preview: true, codegen: { python: '{{elements}} = RevitBridge.getElementsByType("{{ctrl.typeName}}")\\n{{count}} = len({{elements}})\\nprint(f"Found {{{count}}} elements of type {{ctrl.typeName}}")' } },
+
+  // Sample workflow (ElementById):
+  //   Revit.SelectElements → (.ids) → Revit.ElementById → Element.BoundingBox →
+  //   Point.* / Rectangle.* — re-resolve picked ids into element handles.
+  { type: 'revit-element-by-id', name: 'Revit.ElementById', icon: '#', inputs: [{ id: 'ids', name: 'Ids', type: 'list' }], outputs: [{ id: 'elements', name: 'Elements', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [], preview: true, codegen: { python: '{{elements}} = RevitBridge.getElementsById({{ids}})\\n{{count}} = len({{elements}})\\nprint(f"Resolved {{{count}}} elements by id")' } },
+
+  // ── RV-M1 Geometry extraction [R] ─────────────────────────────────────────
+  // Extend Element.Geometries (display mesh) with richer read-only geometry
+  // getters. Codegen-only, no write gate. Bridge methods handed to Trinity
+  // (RV-M1b) — read-only.
+  //
+  // Sample workflow (Element.Solids):
+  //   Revit.AllElementsOfCategory(Walls) → Element.Solids → Solid.BooleanUnion
+  //   / viewer.
+  { type: 'revit-element-solids', name: 'Element.Solids', icon: '◳', inputs: [{ id: 'elements', name: 'Elements', type: 'list' }], outputs: [{ id: 'solids', name: 'Solids', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [], preview: true, codegen: { python: '{{solids}} = RevitBridge.getSolids({{elements}})\\n{{count}} = len({{solids}})\\nprint(f"Extracted {{{count}}} solids")' } },
+
+  // Sample workflow (Element.Faces):
+  //   Revit.SelectElements → Element.Faces → (.faceIds) →
+  //   Revit.PlaceFamilyInstance(hostFaceId) / Surface.* / viewer.
+  { type: 'revit-element-faces', name: 'Element.Faces', icon: '⬡', inputs: [{ id: 'elements', name: 'Elements', type: 'list' }], outputs: [{ id: 'faces', name: 'Faces', type: 'list' },{ id: 'faceIds', name: 'Face Ids', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [], preview: true, codegen: { python: '{{faces}} = RevitBridge.getFaces({{elements}})\\n{{faceIds}} = [f.get("faceId") for f in {{faces}}]\\n{{count}} = len({{faces}})\\nprint(f"Extracted {{{count}}} faces")' } },
+
+  // Sample workflow (Element.BoundingBox):
+  //   Revit.AllElementsOfCategory(Furniture) → Element.BoundingBox →
+  //   (min/max) → Rectangle.ByCenterWidthDepth / Point.* / viewer.
+  { type: 'revit-element-bounding-box', name: 'Element.BoundingBox', icon: '⬚', inputs: [{ id: 'elements', name: 'Elements', type: 'list' }], outputs: [{ id: 'min', name: 'Min', type: 'list' },{ id: 'max', name: 'Max', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [], preview: true, codegen: { python: '{{_b}} = RevitBridge.getBoundingBoxes({{elements}})\\n{{min}} = [b.get("min") for b in {{_b}}]\\n{{max}} = [b.get("max") for b in {{_b}}]\\n{{count}} = len({{_b}})\\nprint(f"Computed {{{count}}} bounding boxes")' } },
+
+  // Sample workflow (Element.Location):
+  //   Revit.AllElementsOfCategory(Walls) → Element.Location → (.curves) →
+  //   Curve.Divide / Line viewer; point-based families surface on (.points).
+  { type: 'revit-element-location', name: 'Element.Location', icon: '⌖', inputs: [{ id: 'elements', name: 'Elements', type: 'list' }], outputs: [{ id: 'curves', name: 'Curves', type: 'list' },{ id: 'points', name: 'Points', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [], preview: true, codegen: { python: '{{_loc}} = RevitBridge.getLocations({{elements}})\\n{{curves}} = [l.get("curve") for l in {{_loc}} if l.get("curve") is not None]\\n{{points}} = [l.get("point") for l in {{_loc}} if l.get("point") is not None]\\n{{count}} = len({{_loc}})\\nprint(f"Read {{{count}}} element locations")' } },
   { type: 'revit-get-parameter-values', name: 'Revit.GetParameterValues', icon: 'P', inputs: [{ id: 'elements', name: 'Elements', type: 'list' },{ id: 'parameterName', name: 'Parameter Name', type: 'string' }], outputs: [{ id: 'values', name: 'Values', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [{ id: 'parameterName', type: 'text', default: 'Comments', label: 'Parameter Name' }], preview: true, codegen: { python: '{{values}} = RevitBridge.getParameterValues({{elements}}, "{{ctrl.parameterName}}")\\n{{count}} = len({{values}})' } },
   { type: 'revit-set-parameter-values', name: 'Revit.SetParameterValues', icon: 'P+', inputs: [{ id: 'elements', name: 'Elements', type: 'list' },{ id: 'parameterName', name: 'Parameter Name', type: 'string' },{ id: 'value', name: 'Value', type: 'any' }], outputs: [{ id: 'results', name: 'Results', type: 'list' },{ id: 'count', name: 'Count', type: 'number' },{ id: 'success', name: 'Success', type: 'boolean' }], controls: [{ id: 'parameterName', type: 'text', default: 'Comments', label: 'Parameter Name' },{ id: 'value', type: 'text', default: '', label: 'Value' }], preview: true, codegen: { python: '{{results}} = RevitBridge.setParameterValues({{elements}}, "{{ctrl.parameterName}}", "{{ctrl.value}}")\\n{{count}} = len([r for r in {{results}} if r.get("ok")])\\n{{success}} = {{count}} == len({{results}})' } },
   { type: 'revit-send-geometry', name: 'Revit.SendGeometry', icon: '⬆', inputs: [{ id: 'geometry', name: 'Geometry', type: 'any' },{ id: 'category', name: 'Category', type: 'string' },{ id: 'name', name: 'Name', type: 'string' }], outputs: [{ id: 'result', name: 'Result', type: 'any' },{ id: 'elementId', name: 'Element Id', type: 'string' },{ id: 'success', name: 'Success', type: 'boolean' }], controls: [{ id: 'category', type: 'dropdown', options: ['Generic Models','Mass','Furniture','Walls','Floors','Roofs','Ceilings','Columns','Structural Framing','Mechanical Equipment','Plumbing Fixtures','Electrical Fixtures','Electrical Equipment'], default: 'Generic Models', label: 'Category' },{ id: 'name', type: 'text', default: 'Nova Geometry', label: 'Name' }], preview: true, codegen: { python: '{{result}} = RevitBridge.sendGeometry({{geometry}}, {}, {"category": "{{ctrl.category}}", "name": "{{ctrl.name}}"})\\n{{elementId}} = {{result}}.get("data", {}).get("directShapeId")\\n{{success}} = {{result}}.get("ok") == True' } },
