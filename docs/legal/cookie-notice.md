@@ -1,12 +1,13 @@
 # Cookie Notice
 
-> **DRAFT v0.1 — NOT YET IN EFFECT. Pending legal review.** Not legal advice.
+> **Version 1.0 · Effective June 4, 2026.** Prepared in good faith without a lawyer —
+> not legal advice.
 
 | | |
 |---|---|
-| **Version** | 0.1 (draft) |
-| **Effective date** | `[EFFECTIVE DATE]` |
-| **Document owner** | `[LEGAL ENTITY]` |
+| **Version** | 1.0 |
+| **Effective date** | June 4, 2026 |
+| **Operator** | Nova (independent individual; no incorporated entity yet) |
 
 Nova uses the **minimum** browser storage needed to sign you in and run the app. We do
 **not** use advertising, analytics, or cross-site tracking cookies.
@@ -25,13 +26,12 @@ long-lived cookie.
 ## 2. Consent
 The session cookie is **strictly necessary** to provide a service you actively request
 (signing in), so under the ePrivacy rules it does not require prior consent. Because we
-set no analytics/advertising cookies, Nova does not show a cookie-consent banner.
-`[Counsel to confirm this holds for your jurisdictions; if you later add analytics, a
-consent mechanism will be required.]`
+set no analytics/advertising cookies, Nova does not show a cookie-consent banner. (If
+analytics are ever added, a consent mechanism will be required first.)
 
 ## 3. Managing cookies
 You can clear cookies/site data via your browser settings; doing so signs you out. The
 app will not function as a signed-in experience without the session cookie.
 
 ## 4. Contact
-`[PRIVACY CONTACT EMAIL]`
+nova.support@hi-nova.work
