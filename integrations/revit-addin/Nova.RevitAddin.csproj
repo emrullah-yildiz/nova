@@ -20,4 +20,7 @@
       <Private>false</Private>
     </Reference>
   </ItemGroup>
+
+  <!-- Code-signing scaffold (no-op unless /p:Sign=true with NOVA_SIGN_METHOD). -->
+  <Import Project="NovaSigning.targets" />
 </Project>
