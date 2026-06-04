@@ -13,6 +13,89 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-05 - FM-M1: Forma pairing-room Durable Object + pairing codes (feat/forma-pairing-room)
+
+**Agent/branch:** Link (platform-engineer) — `feat/forma-pairing-room` (off `develop`; do not merge/push)
+
+**Goal:** Build the worker-side Forma transport (Option B cloud relay) handed off
+by Trinity below: a `FormaPairingRoom` Durable Object that relays validated Forma
+protocol frames between the `nova-app` and `forma-extension` peers joined by a
+pairing code, plus authenticated, session-bound pairing-code issuance + audit.
+
+**Shipped (owned files):**
+- NEW `src/enterprise/forma-pairing.mjs` — `FormaPairingService` (pure, KV-backed
+  via the injected stateStore; in-memory fallback for node/tests). Mints a 256-bit
+  code (>=128-bit policy bar), stores it HASHED under `formapair:` (raw code never
+  persisted — mirrors the session/email-verify token pattern), 24h expiry,
+  one-time-join PER ROLE, revocable (owner-scoped). `authorizeJoin` enforces
+  Oracle **F-001**: the `nova-app` peer MUST present the session userId the code
+  was issued to (`session_required`/`session_mismatch` rejections); the
+  `forma-extension` peer joins by code only.
+- NEW `src/integrations/forma/forma-room-core.js` — pure relay-routing core
+  (split from the DO like `collab-core.js` is from `room.mjs`): `evaluateJoin`
+  (exactly one peer per role), `routeFrame` (Oracle **F-002** validate-before-route
+  — allow-lists `FORMA_MESSAGE_TYPES`, runs `validateFormaMessage`, REJECTS
+  unknown/forged/malformed frames instead of forwarding), presence + rejection
+  frames.
+- NEW `worker/forma-room.mjs` — the `FormaPairingRoom` DO (I/O shell). Mirrors
+  `ProjectRoom`: the Worker authorizes the upgrade and passes the resolved role +
+  server-authoritative owning Nova user/org + pairing-room key as trusted
+  `X-Forma-*`/`X-Nova-*` headers. Each relayed WRITE frame (and each rejected one)
+  produces a server-authoritative audit row (Oracle **F-003**) via
+  `recordFormaWriteAudit` — Forma writes have NO approval prompt, so the audit IS
+  the accountability control. Audit sink is injectable for tests
+  (`__setFormaWriteAuditSink`, mirroring `__setCloudClientFactory`).
+- EDIT `src/enterprise/domain.mjs` — added `recordFormaWrite({...})` (writes a
+  `forma.write` / `forma.write.denied` audit row keyed by pairing room + Nova user;
+  mirrors `consumeHostWriteApproval`'s audit, minus the token gate).
+- EDIT `worker/api.mjs` — boots a `FormaPairingService` in the cached API (uses
+  `SESSION_KV`, `formapair:` prefix — no collision with session:/emailverify:/rate:);
+  exports `issueFormaPairingCode`, `revokeFormaPairingCode`, `resolveFormaRoomJoin`,
+  `recordFormaWriteAudit`.
+- EDIT `worker/index.mjs` — exports the DO; adds (before the `/api/*` catch-all):
+  `POST /api/forma/pairing-codes` (issue, authenticated), `DELETE
+  /api/forma/pairing-codes/:code` (revoke), `GET /api/forma/rooms/:code?role=…`
+  (WebSocket upgrade → DO; verifies session+code before routing).
+- EDIT `wrangler.toml` — adds the `FORMA_PAIRING_ROOM`/`FormaPairingRoom` DO binding
+  to BOTH dev and production (mirrors `PROJECT_ROOM`; dev keeps its own SEC-012 KV),
+  plus an additive `[[migrations]] tag = "v2" new_sqlite_classes = ["FormaPairingRoom"]`
+  (v1/ProjectRoom untouched).
+- NEW `tests/forma-pairing-room.test.js` — 24 tests: code entropy/hashing, F-001
+  session binding (no session + wrong-user rejected, issuing user allowed),
+  one-time-join, expiry, owner-scoped revoke, unknown code; room-core role-scoping
+  + F-002 allow-list (unknown type + invalid payload rejected, not relayed); DO
+  relay + F-003 write audit (accepted `forma.write` and rejected `forma.write.denied`).
+
+**Validation:** `node node_modules/eslint/bin/eslint.js .` → clean. Full
+`node node_modules/vitest/vitest.mjs run` → 139 files passed, 1 skipped; 1771
+passed, 1 skipped (the spurious teardown error did not surface this run). New file
+→ 24 passed. `wrangler deploy --dry-run` for `--env=""` (prod) AND `--env dev` both
+validate the DO binding + v2 migration and bundle. ProjectRoom DO untouched; no deploy.
+
+**Known gaps / boundary:** The DO's `fetch` returns a `101` upgrade Response which
+node/undici can't construct (Workers-only); the relay tests register the peer then
+tolerate that env-only `RangeError` (logic still proven via the captured sockets).
+Pairing presence is in-memory (no DO storage), so an empty room idles out naturally
+(no alarm-based teardown built — noted as a future hardening).
+
+**FOLLOW-UP HANDOFF → Trinity (connect-engineer), FM-M1:** the Nova-side relay
+CLIENT and the live extension are still Trinity's, and now have a concrete server to
+target:
+- Wire `NovaFormaBridge` (`src/integrations/forma/forma-bridge.js`) `options.relay`
+  to a real client that: `POST /api/forma/pairing-codes` to mint a code, opens a
+  WebSocket to `GET /api/forma/rooms/:code?role=nova-app` (cookie session sent — the
+  server enforces F-001), and implements the pending-by-`id` request/response model
+  over the relayed envelopes. The room emits `forma.presence` frames
+  (`event: peer.connected|peer.disconnected`, `paired: bool`) — flip `isPaired()` on
+  `paired:true`; it emits `forma.error` frames (`reason`, `errors`, `id`) for
+  rejected/invalid/peer-absent frames.
+- The extension relay loop joins as `role=forma-extension` (code only, no Nova
+  session) and answers request frames with live `Forma.*` SDK calls.
+- The `forma`-category node defs (node-plan §4) consume the bridge methods.
+- The Connect/pairing-panel UI (mint + display code, paired indicator) — Switch.
+The room key is `hashToken(code)` (raw code never used as the DO name). Write frames
+need no approval token (owner decision) but ARE audited server-side automatically.
+
 ## 2026-06-04 - RV-M2: C# bridge handlers for RV-M2 Revit params/info/types read nodes (→ Trinity / connect-engineer)
 
 **From:** Core/Runtime (Neo) — `feat/rv-m2-revit-params` (off `develop`; do not merge/push)

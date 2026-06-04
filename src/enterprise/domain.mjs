@@ -1150,6 +1150,33 @@ export class EnterpriseStore {
     }
   }
 
+  /**
+   * FM-M1 / Oracle FM-M0 F-003 — server-authoritative audit row for a Forma
+   * write frame relayed through a pairing room. Unlike a Revit write
+   * (`consumeHostWriteApproval`), a Forma write has NO user-approval prompt and
+   * NO single-use token (owner decision: it acts inside the user's own Forma
+   * session, see docs/architecture/forma-connect.md "Security"). So the audit
+   * trail IS the accountability control: every relayed write frame produces a
+   * `forma.write` row keyed by the pairing room AND the Nova user the code was
+   * issued to. The Worker resolves the owning user from the pairing-code record
+   * (not from a client-supplied id) and passes it here, so the row is server-
+   * authoritative. `ok` records whether the write was accepted/relayed (false
+   * for a rejected/forged frame, mirroring `host.write.denied`).
+   *
+   * @param {{ userId: string, organizationId?: string, pairingRoom: string,
+   *           operation: string, ok?: boolean, metadata?: object }} opts
+   * @returns {object} the recorded audit event.
+   */
+  recordFormaWrite({ userId, organizationId = '', pairingRoom = '', operation = '', ok = true, metadata = {} } = {}) {
+    return this.audit({
+      organizationId: String(organizationId || ''),
+      userId: String(userId || ''),
+      type: ok ? 'forma.write' : 'forma.write.denied',
+      targetId: String(pairingRoom || ''),
+      metadata: { host: 'forma', operation: String(operation || ''), ok: !!ok, pairingRoom: String(pairingRoom || ''), ...metadata }
+    });
+  }
+
   createAiRequest(context, {
     projectId = '',
     provider = 'mock',

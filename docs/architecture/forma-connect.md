@@ -74,10 +74,15 @@ Contrast with Revit:
    app registered as a Forma extension. It owns all `Forma.*` Embedded View SDK
    calls and relays request/response envelopes to/from the pairing room. FM-M0
    ships a scaffold only (README + stub manifest/entry); FM-M1 wires the SDK.
-2. **Durable Object pairing room** (Link's deliverable, FM-M1) — one room per
-   pairing code; both peers join it and the room relays validated envelopes
-   between them. Lifecycle + interface handed off in
-   [`../agent-handoff.md`](../agent-handoff.md).
+2. **Durable Object pairing room** (Link's deliverable, **FM-M1 — built** on
+   `feat/forma-pairing-room`) — one `FormaPairingRoom` DO per pairing code
+   (`worker/forma-room.mjs`, keyed by `idFromName(hashToken(code))`); both peers
+   join it and the room relays validated envelopes between them. Session-bound
+   pairing codes (`src/enterprise/forma-pairing.mjs`), validate-before-route
+   allow-list (`src/integrations/forma/forma-room-core.js`), and per-write audit
+   (`EnterpriseStore.recordFormaWrite`). The Nova-side relay CLIENT that connects
+   `NovaFormaBridge.options.relay` to the room is the FM-M1 follow-up (Trinity).
+   Lifecycle + interface + the follow-up handoff: [`../agent-handoff.md`](../agent-handoff.md).
 3. **`NovaFormaBridge`** (`src/integrations/forma/forma-bridge.js`) — the Nova-side
    async handle. Mirrors `revit-bridge`'s shape: each method builds + validates a
    Forma protocol envelope and (in FM-M1) sends it over the injected relay client.

@@ -81,6 +81,14 @@ id = "1a2391f8e5ea41c9855d0ff12d3c943d"
 name = "PROJECT_ROOM"
 class_name = "ProjectRoom"
 
+# FM-M1: Forma pairing-room DO (one per pairing code) — the Option B cloud relay
+# (see worker/forma-room.mjs). Dev binds it too so the relay can be exercised on
+# nova-dev. Pairing codes live in SESSION_KV under the 'formapair:' prefix (the
+# dev SEC-012 namespace above), so dev never shares prod pairing state.
+[[env.dev.durable_objects.bindings]]
+name = "FORMA_PAIRING_ROOM"
+class_name = "FormaPairingRoom"
+
 # PRODUCTION KV (top-level = the `nova` Worker from main). Session state
 # (sessions + email-verification tokens) and AI-proxy per-IP rate limiting.
 # Both bindings point at the same prod "nova-sessions" namespace — their keys
@@ -109,10 +117,25 @@ id = "2959d0665b324e53b58c2d1d5b752ffe"
 name = "PROJECT_ROOM"
 class_name = "ProjectRoom"
 
-# SQLite-backed Durable Object class. The free Workers plan REQUIRES
+# FM-M1: Forma pairing rooms — one FormaPairingRoom Durable Object per pairing
+# code, relaying validated Forma protocol frames between the Nova app and the
+# Forma extension iframe (see worker/forma-room.mjs). Like ProjectRoom it keeps
+# presence in memory and uses no DO storage; audit rows are written through the
+# enterprise store (Neon), not DO storage.
+[[durable_objects.bindings]]
+name = "FORMA_PAIRING_ROOM"
+class_name = "FormaPairingRoom"
+
+# SQLite-backed Durable Object classes. The free Workers plan REQUIRES
 # new_sqlite_classes (the legacy key-value-backed new_classes is paid-only).
-# ProjectRoom keeps presence in memory and uses no DO storage, so the SQLite
-# backend is a no-cost fit.
+# Both ProjectRoom and FormaPairingRoom keep presence in memory and use no DO
+# storage, so the SQLite backend is a no-cost fit.
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ProjectRoom"]
+
+# v2 adds the Forma pairing-room DO class. A separate migration tag (additive)
+# so the existing ProjectRoom v1 migration is not rewritten.
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["FormaPairingRoom"]
