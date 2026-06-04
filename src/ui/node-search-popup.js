@@ -1,4 +1,4 @@
-import { NODE_LIBRARY, NODE_TYPE_MAP } from '../core/nodes.js';
+import { NODE_LIBRARY, NODE_TYPE_MAP, visibleCategories } from '../core/nodes.js';
 
 // ============================================
 // NODEFLOW AI — Canvas Node Search Popup
@@ -52,7 +52,8 @@ export function installNodeSearchPopup(targetApp = getRuntimeApp()) {
 
   function getAllNodes() {
     var results = [];
-    NODE_LIBRARY.categories.forEach(function(cat) {
+    // Search corpus = discovery surface: exclude hidden categories (Host, Rhino).
+    visibleCategories().forEach(function(cat) {
       cat.nodes.forEach(function(node) {
         results.push({ type: node.type, name: node.name, icon: node.icon, catName: cat.name, catColor: cat.color });
       });

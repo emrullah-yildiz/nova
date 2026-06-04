@@ -8,6 +8,7 @@
 
 import { wrapPythonNodeCode } from '../runtime/python-port-decl.js';
 import { buildNoGeometryGraph, buildGeometryGraph } from '../app/stress-graphs.js';
+import { visibleCategories } from '../core/nodes.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -245,7 +246,9 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
   // ═══════════════════════════════════════
   function buildOutputTypeMap() {
     var map = {};
-    NODE_LIBRARY.categories.forEach(function(cat) {
+    // Port suggestions are a discovery surface — don't suggest hidden-category
+    // (Host, Rhino) nodes. Their nodes still register/resolve for saved graphs.
+    visibleCategories().forEach(function(cat) {
       cat.nodes.forEach(function(node) {
         (node.outputs || []).forEach(function(out) {
           var t = out.type || 'any';
@@ -261,7 +264,8 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
 
   function getInputSuggestions(portType) {
     var results = [], seen = {};
-    NODE_LIBRARY.categories.forEach(function(cat) {
+    // Discovery surface — exclude hidden-category (Host, Rhino) nodes.
+    visibleCategories().forEach(function(cat) {
       cat.nodes.forEach(function(node) {
         (node.inputs || []).forEach(function(inp) {
           var t = inp.type || 'any';
@@ -321,7 +325,8 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
       var graphDesc = app.nodes.map(function(n) { return n.def.name + '(' + n.id + ')'; }).join(', ');
       var wireDesc = app.wires.map(function(w) { return w.fromNode + '.' + w.fromPort + ' → ' + w.toNode + '.' + w.toPort; }).join('; ');
       var allNodeNames = [];
-      NODE_LIBRARY.categories.forEach(function(cat) { cat.nodes.forEach(function(n) { allNodeNames.push(n.name + ' [outputs: ' + n.outputs.map(function(o){return o.name+'('+o.type+')';}).join(',') + ']'); }); });
+      // Suggestion candidates fed to the AI are a discovery surface — skip hidden categories.
+      visibleCategories().forEach(function(cat) { cat.nodes.forEach(function(n) { allNodeNames.push(n.name + ' [outputs: ' + n.outputs.map(function(o){return o.name+'('+o.type+')';}).join(',') + ']'); }); });
       var prompt = 'I have a node graph with: ' + graphDesc + '. Wires: ' + wireDesc + '. I need to connect something to the "' + portName + '" input (type: ' + portType + ') on node "' + nodeName + '".\n\nAvailable nodes:\n' + allNodeNames.join('\n') + '\n\nSuggest the top 3 most useful nodes to connect here. Reply ONLY as a JSON array of objects: [{"name":"ExactNodeName","reason":"brief why"}]. No explanation, just JSON.';
       GPTClient.call(prompt, 'workspace', '').then(function(reply) {
         var aiSection = document.getElementById('port-suggest-ai'); if (!aiSection) return;

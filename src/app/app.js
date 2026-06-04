@@ -1,5 +1,5 @@
 import { AIEngine } from '../ai/ai-engine.js';
-import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS, NODE_VERSION_MAP } from '../core/nodes.js';
+import { NODE_TYPE_MAP, TYPE_COLORS, NODE_VERSION_MAP, visibleCategories } from '../core/nodes.js';
 import { getDefVersion, resolveVersionedDef, migrateControlValues } from '../core/node-versions.js';
 import { describeWireTypeMismatch } from '../core/wire-type-check.js';
 import { computeFitView } from '../core/graph-layout.js';
@@ -1260,7 +1260,9 @@ const app = {
 
   renderNodeLibrary() {
     var html = '';
-    NODE_LIBRARY.categories.forEach(function(cat) {
+    // Discovery surface: skip categories flagged hidden (Host, Rhino). Their
+    // nodes still register/resolve for saved graphs — see visibleCategories().
+    visibleCategories().forEach(function(cat) {
       // Group nodes by their 'group' property
       var groups = {};
       cat.nodes.forEach(function(n) {

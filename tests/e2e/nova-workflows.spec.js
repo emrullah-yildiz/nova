@@ -23,6 +23,47 @@ test.describe('Nova browser workflows', () => {
     );
   });
 
+  test('hides Host and Rhino categories from the rendered node library, keeps Revit', async ({ page }) => {
+    await waitForApp(page);
+    await page.getByRole('button', { name: /New Project/i }).click();
+    await page.waitForFunction(
+      () =>
+        window.app.currentPage === 'workspace' &&
+        document.querySelectorAll('#node-categories .node-category').length > 0
+    );
+
+    // The rendered palette (renderNodeLibrary) is the discovery surface.
+    const result = await page.evaluate(() => {
+      const headers = Array.from(
+        document.querySelectorAll('#node-categories .node-category-name')
+      ).map((el) => el.textContent.trim());
+      const dataCats = Array.from(
+        document.querySelectorAll('#node-categories .node-category')
+      ).map((el) => el.getAttribute('data-cat'));
+      // Host/Rhino nodes must still resolve + compute (saved graphs keep working).
+      const rhino = app.addNodeToCanvas('rhino-objects-by-layer', 80, 80);
+      const host = app.addNodeToCanvas('host-get-elements', 80, 220);
+      return {
+        headers,
+        dataCats,
+        rhinoResolves: !!(rhino && rhino.def),
+        hostResolves: !!(host && host.def)
+      };
+    });
+
+    // Discovery surface excludes the hidden categories…
+    expect(result.dataCats).not.toContain('host');
+    expect(result.dataCats).not.toContain('rhino');
+    expect(result.headers).not.toContain('Host');
+    expect(result.headers).not.toContain('Rhino');
+    // …but keeps Revit visible.
+    expect(result.dataCats).toContain('revit');
+    expect(result.headers).toContain('Revit');
+    // …and the hidden nodes still register/resolve for saved graphs.
+    expect(result.rhinoResolves).toBe(true);
+    expect(result.hostResolves).toBe(true);
+  });
+
   test('creates, runs, saves, and reloads a basic graph', async ({ page }) => {
     await waitForApp(page);
 
