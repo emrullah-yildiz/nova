@@ -1,4 +1,5 @@
 import { Geo } from '../../geometry/index.js';
+import { orient } from '../../geometry/transforms.js';
 
 export const geometryCategory = {
   id: 'geometry',
@@ -21,6 +22,13 @@ function toVector(value, fallback = new Geo.Vector3(0, 0, 0)) {
     return new Geo.Vector3(value.x || 0, value.y || 0, value.z || 0);
   }
   return fallback;
+}
+function toPlane(value) {
+  if (value && value._type === 'Plane') return value;
+  if (value && value.origin && value.normal) {
+    return new Geo.Plane(toPoint(value.origin), toVector(value.normal, new Geo.Vector3(0, 0, 1)));
+  }
+  return new Geo.Plane(new Geo.Point3(0, 0, 0), new Geo.Vector3(0, 0, 1));
 }
 
 export const geometryNodes = [
@@ -449,6 +457,64 @@ export const geometryNodes = [
         ]
       },
       sampleCode: '{{result}} = Geo.arrayPolar({{geometry}}, {{center}}, {{axis}}, {{count}})'
+    }
+  },
+
+  // ─── Transform ───────────────────────────────────────────
+  {
+    type: 'Geometry.Orient',
+    name: 'Geometry.Orient',
+    category: 'geometry',
+    subGroup: 'Transform',
+    icon: '⌖',
+    aliases: ['geometry-orient', 'op-orient'],
+    description: 'The keystone frame transform: rigidly maps a geometry from a source frame (From Plane) to a target frame (To Plane). Each point is expressed in the source frame coordinates and rebuilt in the target frame; free directions (normals/axes) are rotated by the basis change only. Both frames are right-handed so winding and handedness are preserved.',
+    inputs: [
+      { id: 'geometry', name: 'Geometry', type: 'any', description: 'Geometry to reorient' },
+      { id: 'fromPlane', name: 'From Plane', type: 'plane', description: 'Source frame the geometry is currently described in' },
+      { id: 'toPlane', name: 'To Plane', type: 'plane', description: 'Target frame to map the geometry into' }
+    ],
+    outputs: [{ id: 'result', name: 'Result', type: 'any', description: 'Reoriented geometry (same type as the input)' }],
+    controls: [],
+    execute(context, inputs) {
+      const geo = inputs.geometry;
+      if (geo == null) return { result: undefined };
+      return { result: orient(geo, toPlane(inputs.fromPlane), toPlane(inputs.toPlane)) };
+    },
+    codegen: {
+      python: '{{result}} = Geo.orient({{geometry}}, {{fromPlane}}, {{toPlane}})',
+      csharp: 'var {{result}} = Geo.orient({{geometry}}, {{fromPlane}}, {{toPlane}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Geometry', description: 'Geometry to reorient' },
+        { name: 'From Plane', description: 'Source frame' },
+        { name: 'To Plane', description: 'Target frame' }
+      ],
+      outputs: [{ name: 'Result', description: 'Reoriented geometry' }],
+      example: {
+        title: 'Orient a 3-4-5 line World-XY → tilted XZ frame — length unchanged (5)',
+        nodes: [
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
+          { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
+          { type: 'Plane.XY', x: 0, y: 160 },
+          { type: 'Plane.XZ', x: 0, y: 240 },
+          { type: 'Geometry.Orient', x: 480, y: 120 },
+          { type: 'Curve.Length', x: 720, y: 120 },
+          { type: 'Output.Watch', x: 920, y: 120 }
+        ],
+        wires: [
+          [0, 'point', 2, 'startPoint'],
+          [1, 'point', 2, 'endPoint'],
+          [2, 'line', 5, 'geometry'],
+          [3, 'plane', 5, 'fromPlane'],
+          [4, 'plane', 5, 'toPlane'],
+          [5, 'result', 6, 'curve'],
+          [6, 'length', 7, 'value']
+        ]
+      },
+      sampleCode: '{{result}} = Geo.orient({{geometry}}, {{fromPlane}}, {{toPlane}})'
     }
   }
 ];

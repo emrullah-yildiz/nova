@@ -28,6 +28,12 @@ export class EnterpriseStore {
     this.projects = new Map();
     this.graphRuns = new Map();
     this.connectorSessions = new Map();
+    // SEC-013: server-issued, single-use Revit/Connect write-approval tokens.
+    // Keyed by hashToken(rawToken). The raw token is returned to the caller
+    // once at issuance and never stored. A token is the authoritative proof
+    // that a write was approved server-side; the write path consumes (and
+    // thereby burns) it. Map<hashedToken, approvalRecord>.
+    this.hostWriteApprovals = new Map();
     this.aiRequests = new Map();
     this.backgroundJobs = new Map();
     this.objectArtifacts = new Map();
@@ -36,6 +42,17 @@ export class EnterpriseStore {
     // In-memory fallback for email-verification tokens when no stateStore (KV)
     // is wired (node/dev). Keyed by 'emailverify:' + hashToken(token).
     this.emailVerifications = new Map();
+    // SEC-004: per-user index of the KV keys we minted for them — every
+    // 'session:<hash>' and 'emailverify:<hash>' issued while this isolate has
+    // been alive. KV has no list/prefix-scan, so account deletion uses this
+    // index to enumerate the user's tokens and drop them. Map<userId, Set<key>>.
+    // It is best-effort *within an isolate's lifetime*: it is NOT persisted to
+    // Neon (the snapshot schema has no place for it), so after a cold restart
+    // any not-yet-tracked tokens fall back to natural TTL expiry (sessions ~8h,
+    // email-verify 24h). The Worker DELETE branch ALSO derives session keys
+    // straight from the request's slot cookies, so the security-critical case —
+    // a deleted account's live sessions in the same browser — is always purged.
+    this.userKvKeys = new Map();
     this.auditEvents = [];
     this._persistenceReady = Promise.resolve();
     this._lastPersistPromise = Promise.resolve();
@@ -160,12 +177,14 @@ export class EnterpriseStore {
     if (this.stateStore) {
       const payload = this.authService ? await this.authService.verifySessionTokenAsync(token) : { sub: user.id, org: organizationId, role: membership.role };
       const ttlMs = payload.exp ? Math.max(1, payload.exp - this.now()) : 8 * 60 * 60 * 1000;
-      await this.stateStore.set('session:' + hashToken(token), {
+      const key = 'session:' + hashToken(token);
+      await this.stateStore.set(key, {
         userId: user.id,
         organizationId,
         role: membership.role,
         createdAt: this.now()
       }, ttlMs);
+      this.trackUserKvKey(user.id, key);
     }
     return session;
   }
@@ -248,18 +267,51 @@ export class EnterpriseStore {
     for (const [sessionId, session] of this.connectorSessions.entries()) {
       if (session.userId === user.id || deletedProjectIds.has(session.projectId)) this.connectorSessions.delete(sessionId);
     }
+    // SEC-004: enumerate every KV key (session: / emailverify:) we minted for
+    // this user so the caller can drop them from KV — a deleted account's other
+    // sessions must stop authenticating (access-control + erasure). KV has no
+    // prefix scan; this index is the source of truth for keys minted this
+    // isolate. Returned to the Worker, which also adds keys derived from the
+    // request's cookies (covering the cross-isolate case for live sessions).
+    const kvKeys = Array.from(this.userKvKeys.get(user.id) || []);
+    this.userKvKeys.delete(user.id);
+    // Drop in-memory email-verification records (node/dev path; KV path is
+    // covered by the returned kvKeys). Belt-and-suspenders: also sweep by userId
+    // in case any key escaped the index.
+    for (const [key, record] of this.emailVerifications.entries()) {
+      if (record && record.userId === user.id) this.emailVerifications.delete(key);
+    }
+    // SEC-004 / SEC-006: anonymize PII (userId + any email in metadata) in
+    // RETAINED audit rows for this user rather than keeping the link to a person
+    // whose account is erased. In-memory rows are anonymized here; note that the
+    // Neon audit table is append-only by id (snapshot writes ON CONFLICT DO
+    // NOTHING), so durable-store anonymization is a separate retention process
+    // tracked in SEC-006.
+    const deletedEmail = String(user.email || '').toLowerCase();
+    for (const event of this.auditEvents) {
+      if (event.userId === user.id) event.userId = '';
+      if (event.targetId === user.id) event.targetId = '';
+      if (event.metadata && typeof event.metadata === 'object') {
+        for (const [k, v] of Object.entries(event.metadata)) {
+          if (typeof v === 'string' && v.toLowerCase() === deletedEmail) event.metadata[k] = '';
+          if (v === user.id) event.metadata[k] = '';
+        }
+      }
+    }
+    // The deletion record itself carries no userId — it must not re-introduce
+    // the PII we just stripped (SEC-006). projectCount only.
     this.auditEvents.push({
       id: createId('aud'),
       organizationId: '',
-      userId: user.id,
+      userId: '',
       type: 'account.deleted',
-      targetId: user.id,
+      targetId: '',
       metadata: { projectCount: deletedProjectIds.size },
       createdAt: this.now()
     });
     this.users.delete(user.id);
     this.persist();
-    return { ok: true, deletedProjectCount: deletedProjectIds.size };
+    return { ok: true, deletedProjectCount: deletedProjectIds.size, kvKeys };
   }
 
   // Email-verification tokens. Stored hashed (never the raw token) in the
@@ -272,6 +324,7 @@ export class EnterpriseStore {
     const record = { userId, expiresAt: this.now() + ttlMs };
     if (this.stateStore) await this.stateStore.set(key, record, ttlMs);
     else this.emailVerifications.set(key, record);
+    this.trackUserKvKey(userId, key);
     return token;
   }
 
@@ -284,7 +337,25 @@ export class EnterpriseStore {
     }
     if (this.stateStore) await this.stateStore.delete(key);
     else this.emailVerifications.delete(key);
+    this.untrackUserKvKey(record.userId, key);
     return this.markEmailVerified(record.userId);
+  }
+
+  // SEC-004: KV-key index bookkeeping. trackUserKvKey records a key minted for a
+  // user so account deletion can enumerate + drop it; untrackUserKvKey forgets a
+  // key once it is consumed/expired so the set doesn't grow unbounded.
+  trackUserKvKey(userId, key) {
+    if (!userId || !key) return;
+    let set = this.userKvKeys.get(userId);
+    if (!set) { set = new Set(); this.userKvKeys.set(userId, set); }
+    set.add(key);
+  }
+
+  untrackUserKvKey(userId, key) {
+    const set = this.userKvKeys.get(userId);
+    if (!set) return;
+    set.delete(key);
+    if (set.size === 0) this.userKvKeys.delete(userId);
   }
 
   // Personal-workspace model: every user gets a private organization (their
@@ -933,6 +1004,150 @@ export class EnterpriseStore {
       targetId: projectId,
       metadata: { host, operation, ok, ...metadata }
     });
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // SEC-013: authoritative Revit/Connect write-approval gate.
+  //
+  // The browser may *request* a write, but it cannot mint its own approval.
+  // The server (this method) is the single place that, after verifying the
+  // caller has project-write access, issues a single-use approval token bound
+  // to {operation, projectId, graphVersion}. The actual write path must then
+  // consume that token (consumeHostWriteApproval), which is where the write is
+  // audited as a precondition. A write attempted with no/forged/expired/reused
+  // token is rejected at this boundary and audited as a denial.
+  // ──────────────────────────────────────────────────────────────────────
+
+  // Default token lifetime: short — a single user-initiated write should be
+  // executed within seconds of approval, not minutes.
+  static get HOST_WRITE_APPROVAL_TTL_MS() { return 2 * 60 * 1000; }
+
+  /**
+   * Issue a single-use server-side write-approval token. Requires project
+   * write access (when a projectId is supplied). Records a
+   * `host.write.approved` audit event so the approval itself is accountable.
+   * Returns { token, approvalId, operation, projectId, graphVersion, expiresAt }.
+   * The raw token is returned ONCE and is never persisted in cleartext.
+   */
+  issueHostWriteApproval(context, { projectId = '', host = 'revit', operation = '', graphVersion = '', ttlMs = null, metadata = {} } = {}) {
+    this.requireContext(context);
+    if (!operation || typeof operation !== 'string') {
+      throw createHttpError(400, 'A write operation type is required to issue an approval.');
+    }
+    // Project-write authorization is the real gate. When a projectId is
+    // supplied the caller must hold write access; without one the operation is
+    // a project-less local write (still bound to the authenticated user).
+    if (projectId) this.requireProjectWrite(context, this.requireProjectAccess(context, projectId));
+
+    const rawToken = crypto.randomBytes(32).toString('hex'); // 256 bits of entropy
+    const approvalId = createId('hwa');
+    const expiresAt = this.now() + (Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : EnterpriseStore.HOST_WRITE_APPROVAL_TTL_MS);
+    const record = {
+      approvalId,
+      organizationId: context.organizationId,
+      userId: context.userId,
+      projectId,
+      host,
+      operation,
+      graphVersion: String(graphVersion || ''),
+      issuedAt: this.now(),
+      expiresAt,
+      consumed: false
+    };
+    this.hostWriteApprovals.set(hashToken(rawToken), record);
+
+    this.audit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      type: 'host.write.approved',
+      targetId: projectId,
+      metadata: { host, operation, approvalId, graphVersion: record.graphVersion, ...metadata }
+    });
+
+    return { token: rawToken, approvalId, operation, projectId, host, graphVersion: record.graphVersion, expiresAt };
+  }
+
+  /**
+   * Consume a server-issued write-approval token at the moment of the write.
+   * This is the authoritative boundary: the write is only "accepted" if a
+   * valid, unexpired, single-use, scope-matching token is presented. Every
+   * call audits — an accepted write as `host.operation` (ok), a rejected one
+   * as `host.write.denied`. Returns the recorded audit event on success;
+   * throws an HTTP 403 (with a denial audit already written) on failure.
+   */
+  consumeHostWriteApproval(context, rawToken, { projectId = '', host = 'revit', operation = '', graphVersion = '', ok = true, metadata = {} } = {}) {
+    this.requireContext(context);
+
+    const recordDenial = (reason) => {
+      this.audit({
+        organizationId: context.organizationId,
+        userId: context.userId,
+        type: 'host.write.denied',
+        targetId: projectId,
+        metadata: { host, operation, reason, graphVersion: String(graphVersion || ''), ...metadata }
+      });
+    };
+
+    if (!rawToken || typeof rawToken !== 'string') {
+      recordDenial('missing_token');
+      throw createHttpError(403, 'A server-issued write-approval token is required.', 'WRITE_APPROVAL_REQUIRED');
+    }
+
+    const key = hashToken(rawToken);
+    const record = this.hostWriteApprovals.get(key);
+
+    if (!record) {
+      // Unknown / forged / already-burned token.
+      recordDenial('invalid_token');
+      throw createHttpError(403, 'Write-approval token is invalid.', 'WRITE_APPROVAL_INVALID');
+    }
+    if (record.organizationId !== context.organizationId || record.userId !== context.userId) {
+      recordDenial('token_owner_mismatch');
+      throw createHttpError(403, 'Write-approval token does not belong to this caller.', 'WRITE_APPROVAL_INVALID');
+    }
+    if (record.consumed) {
+      // Single-use enforcement (defends against replay).
+      this.hostWriteApprovals.delete(key);
+      recordDenial('token_replayed');
+      throw createHttpError(403, 'Write-approval token has already been used.', 'WRITE_APPROVAL_INVALID');
+    }
+    if (record.expiresAt < this.now()) {
+      this.hostWriteApprovals.delete(key);
+      recordDenial('token_expired');
+      throw createHttpError(403, 'Write-approval token has expired.', 'WRITE_APPROVAL_EXPIRED');
+    }
+    if (record.operation !== operation || record.projectId !== projectId || record.graphVersion !== String(graphVersion || '')) {
+      // Scope mismatch: the token was minted for a different op/project/version.
+      recordDenial('token_scope_mismatch');
+      throw createHttpError(403, 'Write-approval token does not match this operation.', 'WRITE_APPROVAL_INVALID');
+    }
+
+    // Burn the token (single-use) BEFORE recording the accepted write so a
+    // concurrent replay can never slip through.
+    this.hostWriteApprovals.delete(key);
+
+    // Re-verify project write access at consume time (authorization may have
+    // been revoked between issuance and the write).
+    if (projectId) this.requireProjectWrite(context, this.requireProjectAccess(context, projectId));
+
+    return this.audit({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      type: 'host.operation',
+      targetId: projectId,
+      metadata: { host, operation, ok, approvalId: record.approvalId, graphVersion: record.graphVersion, ...metadata }
+    });
+  }
+
+  /**
+   * Drop expired, unconsumed approval tokens. Best-effort hygiene; consume
+   * already rejects expired tokens, so this only bounds memory growth.
+   */
+  pruneExpiredHostWriteApprovals() {
+    const now = this.now();
+    for (const [key, record] of this.hostWriteApprovals) {
+      if (record.expiresAt < now) this.hostWriteApprovals.delete(key);
+    }
   }
 
   createAiRequest(context, {

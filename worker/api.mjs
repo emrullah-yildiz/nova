@@ -15,14 +15,28 @@ import { createGoogleOidcVerifier } from '../server/auth/oidc-verifier.mjs';
 import { createEmailService } from '../server/email/resend.mjs';
 import { NeonPersistence } from '../server/db/neon-persistence.mjs';
 import { createKvStateStore, createR2ObjectStorage } from './adapters.mjs';
+import { checkAuthRate, resetAuthRate } from './auth-rate-limit.mjs';
 import {
   clearSessionCookie, parseCookie,
-  serializeSlotCookie, clearSlotCookie, serializeActivePointer, clearActivePointer,
+  serializeSlotCookie, clearSlotCookie, clearAllSlotCookies, serializeActivePointer, clearActivePointer,
   parseAllSlots, parseActiveSlot, clampSlot, MAX_ACCOUNT_SLOTS
 } from './cookies.mjs';
 import { hashToken } from '../src/enterprise/state-hash.mjs';
 
 let cachedApi = null;
+
+// Test-only: the module-level cache binds the first env's store for the isolate
+// lifetime (correct in the Worker — one env per isolate). Tests that drive
+// handleEnterpriseApi with different envs/KVs must reset it between cases.
+export function __resetApiCacheForTests() {
+  cachedApi = null;
+}
+
+// Test-only: boot (or reuse) the cached store for an env so tests can inspect or
+// mutate store state (e.g. simulate a cold-isolate empty KV index for SEC-004).
+export async function __getStoreForTests(env) {
+  return (await getApi(env)).store;
+}
 
 async function getApi(env) {
   if (cachedApi) return cachedApi;
@@ -51,6 +65,12 @@ async function getApi(env) {
   }
   // Optional in-app support tickets → GitHub issues (FEEDBACK_GITHUB_TOKEN).
   const issueService = createGithubIssueService({ token: env.FEEDBACK_GITHUB_TOKEN, repo: env.FEEDBACK_GITHUB_REPO });
+  // SEC-005: KV-backed brute-force throttle for the auth routes. Closes over the
+  // deployment env (RATE_KV is stable per deploy); no KV bound → fails open.
+  const rateLimiter = {
+    check: (args) => checkAuthRate(env, args),
+    reset: (args) => resetAuthRate(env, args)
+  };
   const dispatch = createApiDispatcher({
     store,
     authService,
@@ -60,7 +80,8 @@ async function getApi(env) {
     secretsService,
     issueService,
     appUrl: env.NOVA_PUBLIC_URL || '',
-    allowDevLogin: env.NOVA_ALLOW_DEV_LOGIN === 'true'
+    allowDevLogin: env.NOVA_ALLOW_DEV_LOGIN === 'true',
+    rateLimiter
   });
   cachedApi = { store, dispatch };
   return cachedApi;
@@ -163,6 +184,9 @@ export async function handleEnterpriseApi(request, env, ctx) {
   // response returns immediately while the isolate is kept alive until the Neon
   // write completes. Null in non-Worker contexts (the dispatcher then awaits).
   const waitUntil = ctx && typeof ctx.waitUntil === 'function' ? (p) => ctx.waitUntil(p) : null;
+  // Caller IP for the SEC-005 auth throttle — same resolution as the AI-proxy
+  // limiter in worker/index.mjs.
+  const ip = request.headers.get('cf-connecting-ip') || (request.headers.get('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
 
   // Public client config: lets the static SPA discover how to render sign-in
   // (Google client id is public; the secret never leaves the Worker).
@@ -174,7 +198,10 @@ export async function handleEnterpriseApi(request, env, ctx) {
   }
 
   let body = {};
-  if (['POST', 'PUT', 'PATCH'].includes(request.method)) {
+  // DELETE carries a body too — `DELETE /api/me` ships { confirmEmail, password }
+  // (SEC-004). Without parsing it the delete dispatcher 400s on a missing
+  // confirmEmail, so account deletion could never complete on the Worker.
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) {
     try { body = await request.json(); } catch { body = {}; }
   }
 
@@ -207,12 +234,29 @@ export async function handleEnterpriseApi(request, env, ctx) {
       return Response.json({ ok: true, user: map[slot].user }, { status: 200, headers: headersWith(env, [serializeActivePointer(slot, null)]) });
     }
 
+    // SEC-004 / F-001: for DELETE /api/me we MUST capture the cookie-derived
+    // slot→token map and the active user's id BEFORE dispatch runs, because
+    // dispatch deletes the user row. After deletion resolveSlots() can no longer
+    // authenticate this browser's cookies (requireUser throws 404), so the
+    // active session's `session:<hash>` key would never be purged. Capturing it
+    // up front guarantees the deleting browser's live session is always dropped.
+    const isDeleteMe = url.pathname === '/api/me' && request.method === 'DELETE';
+    let preDeleteMap = null;
+    let preDeleteActive = null;
+    let capturedSlotTokens = null;
+    if (isDeleteMe) {
+      preDeleteMap = await resolveSlots(store, cookieHeader);
+      preDeleteActive = resolveActiveSlot(cookieHeader, preDeleteMap);
+      capturedSlotTokens = parseAllSlots(cookieHeader);
+    }
+
     const { status, body: payload } = await dispatch({
       method: request.method,
       path: url.pathname,
       searchParams: url.searchParams,
       authorization: activeAuthorization(request, cookieHeader),
       body,
+      ip,
       appUrl: env.NOVA_PUBLIC_URL || url.origin,
       waitUntil
     });
@@ -231,14 +275,49 @@ export async function handleEnterpriseApi(request, env, ctx) {
       cookies.push(serializeActivePointer(slot, cookieMaxAge));
       if (parseCookie(cookieHeader)) cookies.push(clearSessionCookie()); // migrate legacy → slotted
     }
-    if (status < 400 && url.pathname === '/api/me' && request.method === 'DELETE') {
-      const map = await resolveSlots(store, cookieHeader);
-      const active = parseActiveSlot(cookieHeader);
-      if (active !== null) {
-        cookies.push(clearSlotCookie(active));
-        delete map[active];
+    if (status < 400 && isDeleteMe) {
+      // SEC-004: a deleted account must leave NO working credential behind.
+      // The slot map + active slot were captured from this browser's cookies
+      // BEFORE dispatch deleted the user (F-001): re-resolving here would fail
+      // auth (the user row is gone), so we rely on the pre-delete snapshot. The
+      // active slot's user is the one just deleted. Drop the KV session for
+      // EVERY slot owned by that user (not just the active one) plus every
+      // session:/emailverify: key the store enumerated for them, and clear all
+      // of their slot cookies — other signed-in accounts in this browser survive.
+      const map = preDeleteMap || {};
+      const active = preDeleteActive;
+      const deletedUserId = active !== null && map[active] ? map[active].userId : null;
+      const dropKv = async (key) => {
+        if (store.stateStore && key) { try { await store.stateStore.delete(key); } catch { /* ignore */ } }
+      };
+      // KV keys the store enumerated for the deleted user (session + emailverify).
+      // After a cold isolate the in-memory index is empty, so this can be sparse;
+      // the cookie-derived drop below is the always-on guarantee for the active
+      // browser's live session.
+      for (const key of (payload && Array.isArray(payload.kvKeys) ? payload.kvKeys : [])) await dropKv(key);
+      // Plus session keys derived from THIS request's slot cookies, captured
+      // up front. This is the security-critical path: even when the store's
+      // userKvKeys index is empty (cold isolate), the deleting browser's active
+      // `session:<hash>` key is ALWAYS dropped here.
+      const slotTokens = capturedSlotTokens || {};
+      const survivingSlots = {};
+      for (const [slotStr, entry] of Object.entries(map)) {
+        const slot = Number(slotStr);
+        if (deletedUserId !== null && entry.userId === deletedUserId) {
+          await dropKv('session:' + hashToken(entry.token));
+          cookies.push(clearSlotCookie(slot));
+        } else {
+          survivingSlots[slot] = entry;
+        }
       }
-      const next = Object.keys(map).map(Number).sort((a, b) => a - b)[0];
+      // Also clear any slot cookie whose token failed auth (not in map) — it may
+      // be a stale/expired token for the deleted user; safest to wipe it.
+      for (const slotStr of Object.keys(slotTokens)) {
+        const slot = Number(slotStr);
+        if (!(slot in map)) cookies.push(clearSlotCookie(slot));
+      }
+      // Re-point the active pointer to a surviving account, else clear it.
+      const next = Object.keys(survivingSlots).map(Number).sort((a, b) => a - b)[0];
       if (next !== undefined) cookies.push(serializeActivePointer(next));
       else {
         cookies.push(clearActivePointer());
@@ -247,9 +326,15 @@ export async function handleEnterpriseApi(request, env, ctx) {
     }
     return Response.json(payload, { status, headers: headersWith(env, cookies) });
   } catch (error) {
+    const headers = cors(env);
+    // SEC-005: surface the backoff as a standard Retry-After (seconds) so the
+    // client can wait the right amount before retrying.
+    if (error && error.status === 429 && Number(error.retryAfterMs) > 0) {
+      headers['Retry-After'] = String(Math.ceil(error.retryAfterMs / 1000));
+    }
     return Response.json(
       { ok: false, error: { message: error.message || 'Internal server error', code: error.code || 'NOVA_API_ERROR' } },
-      { status: error.status || 500, headers: cors(env) }
+      { status: error.status || 500, headers }
     );
   }
 }
@@ -266,7 +351,7 @@ async function handleLogout(env, store, cookieHeader, body) {
 
   if (scope === 'all') {
     // Clear every slot we can see (valid or not) + the pointer + legacy.
-    for (const s of Object.keys(parseAllSlots(cookieHeader)).map(Number)) cookies.push(clearSlotCookie(s));
+    for (const c of clearAllSlotCookies(cookieHeader)) cookies.push(c);
     for (const s of Object.keys(map).map(Number)) await dropKv(map[s].token);
     cookies.push(clearActivePointer());
     cookies.push(clearSessionCookie());

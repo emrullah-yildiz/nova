@@ -1326,6 +1326,40 @@ input[type="number"] {
   white-space: nowrap;
 }
 
+/* Keyed object rows in the data inspector & Output.Watch */
+.data-obj-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(49,50,68,0.15);
+}
+
+.data-obj-key {
+  color: var(--accent-blue, var(--text-secondary));
+  font-size: 8px;
+  flex: 0 0 auto;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-obj-arrow {
+  color: var(--text-disabled);
+  font-size: 8px;
+  flex: 0 0 auto;
+}
+
+.data-obj-val {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 
 
 /* ===== CHAT PANEL ===== */
@@ -2091,6 +2125,44 @@ input[type="number"] {
 #signin-overlay .signin-toggle button:hover { text-decoration: underline; }
 #signin-overlay .signin-dev { text-align: center; margin-top: 10px; }
 #signin-overlay .signin-dev button { background: none; border: none; color: var(--text-muted, #6c7086); font-size: 11px; cursor: pointer; text-decoration: underline; }
+
+/* Accept-terms footer in the sign-in modal: small, muted, links to the legal viewer. */
+#signin-overlay .signin-legal { text-align: center; font-size: 11px; line-height: 1.45; color: var(--text-muted, #6c7086); margin-top: 12px; }
+#signin-overlay .signin-legal a { color: var(--accent-blue, #89b4fa); text-decoration: none; }
+#signin-overlay .signin-legal a:hover { text-decoration: underline; }
+
+/* ── Legal viewer modal ── */
+/* z-index sits ABOVE #signin-overlay (10001) so the docs are readable when
+   opened from the accept-terms footer in the sign-in modal. */
+#legal-overlay { position: fixed; inset: 0; z-index: 10002; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; }
+#legal-overlay .legal-panel { position: relative; display: flex; width: 880px; max-width: 96vw; height: 80vh; max-height: 760px; background: var(--bg-secondary, #181825); border: 1px solid var(--border-color, #313244); border-radius: 12px; box-shadow: 0 16px 48px rgba(0,0,0,0.55); color: var(--text-primary, #cdd6f4); overflow: hidden; }
+#legal-overlay .legal-close { position: absolute; top: 10px; right: 14px; background: none; border: none; color: var(--text-muted, #6c7086); font-size: 24px; line-height: 1; cursor: pointer; padding: 0 4px; z-index: 1; }
+#legal-overlay .legal-close:hover { color: var(--text-bright, #fff); }
+#legal-overlay .legal-nav { flex: 0 0 200px; border-right: 1px solid var(--border-color, #313244); background: var(--bg-tertiary, #11111b); padding: 18px 10px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+#legal-overlay .legal-nav-item { text-align: left; background: none; border: none; color: var(--text-secondary, #a6adc8); font-size: 13px; padding: 9px 12px; border-radius: 7px; cursor: pointer; }
+#legal-overlay .legal-nav-item:hover { background: var(--bg-surface-hover, #2e2e45); color: var(--text-primary, #cdd6f4); }
+#legal-overlay .legal-nav-item.active { background: var(--accent-blue, #89b4fa); color: #11111b; font-weight: 700; }
+#legal-overlay .legal-content { flex: 1; overflow-y: auto; padding: 30px 34px; font-size: 14px; line-height: 1.6; color: var(--text-secondary, #a6adc8); }
+#legal-overlay .legal-content h1 { font-size: 22px; font-weight: 700; color: var(--text-primary, #cdd6f4); margin: 0 0 14px; }
+#legal-overlay .legal-content h2 { font-size: 17px; font-weight: 700; color: var(--text-primary, #cdd6f4); margin: 26px 0 8px; }
+#legal-overlay .legal-content h3 { font-size: 14px; font-weight: 700; color: var(--text-primary, #cdd6f4); margin: 18px 0 6px; }
+#legal-overlay .legal-content p { margin: 0 0 12px; }
+#legal-overlay .legal-content ul, #legal-overlay .legal-content ol { margin: 0 0 12px; padding-left: 22px; }
+#legal-overlay .legal-content li { margin: 4px 0; }
+#legal-overlay .legal-content a { color: var(--accent-blue, #89b4fa); text-decoration: none; }
+#legal-overlay .legal-content a:hover { text-decoration: underline; }
+#legal-overlay .legal-content strong { color: var(--text-primary, #cdd6f4); }
+#legal-overlay .legal-content code { font-family: monospace; font-size: 12px; background: var(--bg-tertiary, #11111b); border: 1px solid var(--border-color, #313244); border-radius: 4px; padding: 1px 5px; color: var(--accent-blue, #89b4fa); }
+#legal-overlay .legal-content hr { border: none; border-top: 1px solid var(--border-color, #313244); margin: 22px 0; }
+#legal-overlay .legal-content blockquote { margin: 0 0 14px; padding: 10px 14px; border-left: 3px solid var(--accent-blue, #89b4fa); background: var(--bg-tertiary, #11111b); border-radius: 0 6px 6px 0; color: var(--text-secondary, #a6adc8); }
+#legal-overlay .legal-content blockquote p { margin: 0; }
+#legal-overlay .legal-content table { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: 13px; }
+#legal-overlay .legal-content th, #legal-overlay .legal-content td { border: 1px solid var(--border-color, #313244); padding: 8px 10px; text-align: left; vertical-align: top; }
+#legal-overlay .legal-content th { background: var(--bg-tertiary, #11111b); color: var(--text-primary, #cdd6f4); font-weight: 700; }
+@media (max-width: 640px) {
+  #legal-overlay .legal-panel { flex-direction: column; height: 90vh; }
+  #legal-overlay .legal-nav { flex: 0 0 auto; flex-direction: row; flex-wrap: wrap; border-right: none; border-bottom: 1px solid var(--border-color, #313244); }
+}
 
 /* ── Email verification banner (dismissible bottom pill) ── */
 .verify-banner { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; align-items: center; gap: 12px; padding: 10px 14px; font-size: 13px; background: #f9b34a; color: #2a1f00; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.45); max-width: 92vw; }

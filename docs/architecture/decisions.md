@@ -8,9 +8,151 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
-## 2026-06-04 - T1 Count-Based Arrays Coexist With Legacy Arrays On The Global Geo
+## 2026-06-04 - Revit Parameter Nodes: Keep The Live-Bridge / Pre-Pass Model, Drop The M4 `execute()` Duplicates
 
 **Status:** Accepted
+
+**Context:** The Revit category shipped two functional-duplicate pairs that slipped past the
+type-collision check because their `type` strings differed:
+`revit-get-parameters` (Revit.GetParameters) vs `revit-get-parameter-values`
+(Revit.GetParameterValues), and `revit-set-parameters` (Revit.SetParameters) vs
+`revit-set-parameter-values` (Revit.SetParameterValues). Each pair does the same job through
+**two different execution models**:
+- **Model A — engine async pre-pass + `window.RevitBridge`** (the `*-parameter-values`,
+  `revit-element-geometries`, `revit-send-geometry` nodes). `engine.js`
+  `_prepareLiveRevitGeometries()` resolves `globalThis/window.RevitBridge` (installed by
+  `src/integrations/revit/revit-nodes.js` via `installRevitNodes()` in `src/main.js`),
+  awaits the host round-trip, caches the result on the node, and `computeNodeValue` reads
+  the cache. `RevitBridge.setLiveParameterValues`/`sendGeometry` carry the **full SEC-013
+  flow**: server-issued single-use approval token (`acquireWriteApproval`) + authoritative
+  consume/audit (`reportHostWrite`). Takes a **batch list** of elements.
+- **Model B — registry `execute()` + `NovaRevitBridge`** (the M4 `revit-get-parameters`/
+  `revit-set-parameters`/`revit-select-*`/`revit-place-*` nodes). The def carries an async
+  `execute()` that resolves `context.revitBridge` ‖ `globalThis/window.NovaRevitBridge`.
+  But `NovaRevitBridge` is **never wired into the running app** — only injected in unit
+  tests — so the M4 param nodes were inert in production. The M4 write node only passed
+  approval *metadata* through (the hub/server was expected to enforce), not the full
+  client-side SEC-013 token acquisition.
+
+**Decision:** Consolidate each pair to **one** node, keeping the **Model A**
+`*-parameter-values` nodes (`revit-get-parameter-values`, `revit-set-parameter-values`) and
+removing the **Model B** M4 param duplicates (`revit-get-parameters`,
+`revit-set-parameters`). Rationale: Model A is the path actually wired and running in the
+app, carries the stronger (authoritative, client-acquired) SEC-013 token gate on writes,
+and exposes the more useful batch/list API. This **inverts** the original task's
+recommendation to keep the M4 `execute()` path, which was based on the assumption that the
+M4 bridge was live; it is not.
+
+The M4 **select/place** nodes (`revit-select-elements`, `revit-select-faces`,
+`revit-place-family-instance`, `revit-place-adaptive-component`) are NOT duplicates of
+anything and are kept; they still use Model B (`execute()` + `NovaRevitBridge`). To stop the
+genuinely-distinct acquisition/write nodes from *reading* as duplicates, `NODE_META`
+descriptions now spell out interactive-pick (SelectElements/SelectFaces) vs programmatic
+query (AllElementsInActiveView/AllElementsOfCategory), and family-instance/adaptive PLACE vs
+DirectShape SendGeometry.
+
+**Consequence / known residual:** two live-Revit execution models still coexist (pre-pass +
+`window.RevitBridge` for params/geometry; `execute()` + `NovaRevitBridge` for select/place).
+This decision removed the duplicate NODES, not the duplicate MODELS. Until they are unified,
+**new live Revit nodes follow Model A** (pre-pass + `window.RevitBridge`) — it is the path
+running in production and the one bearing the authoritative SEC-013 gate. Unifying the two
+models (either wiring `NovaRevitBridge` into the app and migrating pre-pass nodes to
+`execute()`, or retiring Model B) is a follow-up.
+
+## 2026-06-04 - Branching/Grouping Is Nested Lists, Not A Tree Type (DataTree Infra Removed)
+
+**Status:** Accepted
+
+**Context:** Milestone M1 work added a `DataTree` core type (`src/core/data-tree.js`,
+`src/core/tree-ops.js`) and a `Tree` node category to model branch/path data. The
+`Tree` category was already removed in the 2026-06-04 "Node Library Taxonomy" decision
+(it duplicated `List.*`), but that decision RETAINED the underlying infra "for a future
+milestone." Review concluded the type itself is the wrong abstraction for Nova: it
+duplicates the nested-list model the `List.*` category already uses, and because it was
+a foreign type nothing else understood, a `DataTree` value rendered as `[object Object]`
+in the inspector. The infra had zero importers in `src/` — only its own tests and two
+dead display affordances referenced it.
+
+**Decision:** Nova's data model is **values + (nested) lists with lacing**.
+Branching/grouping/nesting is expressed as a **list of lists** and handled by the
+existing `List.*` category — `List.Chunk` (size 1 = graft; size N = partition),
+`List.Transpose` (flip matrix), `List.Flatten`, `List.GroupBy`, `List.Sort`. There is
+**no** tree type. The dead infra is removed: `src/core/data-tree.js`,
+`src/core/tree-ops.js`, and their tests are deleted; the `DataTree` test case in
+`tests/format-value.test.js`, the `DataTree` branch in `app.formatValue`/
+`_formatItemInline`, the `['datatree','datatree']` row in `node-renderer.js`'s
+`KERNEL_TYPE_MAP`, and its `inspector-type-warnings` assertions are removed with it.
+This **supersedes** the "infra is RETAINED / DataTree exposure deferred" clause of the
+2026-06-04 "Node Library Taxonomy" decision.
+
+**Rationale:** One data model, one set of operators. A parallel tree type splits the
+mental model, duplicates `List.*`, breaks rendering/interop (foreign type →
+`[object Object]`), and fragments the AI's signature map. Nested lists already do
+everything a tree did, with nodes the engine, inspector, and AI already understand.
+
+**Consequences:** Do not reintroduce a `DataTree`/tree type or a node category that
+duplicates `List.*`. New list/nesting behavior folds into the `List.*` category.
+"Re-expose DataTree as nodes" is no longer a roadmap item.
+
+## 2026-06-04 - Node Library Taxonomy: Fold New Nodes Into Existing Categories (No Parallel Categories)
+
+**Status:** Accepted
+
+**Context:** Recent milestone work (T2 Transform, T5/M2 Evaluate, T6/M2 Tree)
+introduced three NEW top-level node categories — `transform`, `evaluate`, and
+`tree` — that ran parallel to, and fragmented, the existing library taxonomy.
+Several of their nodes were outright duplicates: `Geometry.ArrayLinear` /
+`Geometry.ArrayPolar` duplicated the existing `Geometry.LinearArray` /
+`Geometry.PolarArray`; the entire `tree` category (`Tree.Transpose`,
+`Tree.Flatten`, `Tree.GroupByKey`, `Tree.Partition`, plus `List.SortByKey`)
+duplicated existing `List.Transpose` / `List.Flatten` / `List.GroupBy` /
+`List.Chunk` / `List.Sort`. Many descriptions also referenced
+"Grasshopper"/"Dynamo" by name ("Mirrors Grasshopper …").
+
+**Decision:** New nodes fold into their EXISTING home category; we do not create
+parallel categories. Specifically:
+- `Geometry.Orient` → `geometry`; `Plane.ByOriginXAxisYAxis` → `plane`.
+- `Curve.PointAtParameter` / `TangentAtParameter` / `FrameAtParameter` /
+  `Divide` → `curves`; `Surface.PointAtUV` / `NormalAtUV` / `FrameAtUV` /
+  `Divide` → `surfaces`. These are kept because they are parameter/UV-based and
+  distinct from the existing point-based `Curve.TangentAtPoint` and the
+  patch-splitting `Surface.Subdivide`; their descriptions now state the
+  difference explicitly.
+- `Geometry.ArrayLinear` / `Geometry.ArrayPolar` are DELETED in favor of the
+  existing `Geometry.LinearArray` / `Geometry.PolarArray`. The orphaned
+  `Geo.arrayLinearByVector` / `Geo.arrayPolarByAngle` globals are removed from
+  `src/geometry/index.js` (this supersedes the array-globals half of the
+  2026-06-04 "T1 Count-Based Arrays Coexist…" entry below). `Geo.orient` and
+  `Geo.planeFromOriginXY` stay (the moved Orient / Plane nodes still use them).
+- The whole `tree` category is removed. The DataTree-only ops (`Tree.Graft`,
+  `Tree.Simplify`) had no tree-aware consumers yet, so DataTree NODE exposure is
+  deferred to a future milestone. The underlying infrastructure
+  (`src/core/data-tree.js`, `src/core/tree-ops.js`) and its tests are RETAINED.
+  **(Superseded below: the src/core/data-tree.js / tree-ops.js infra was
+  subsequently removed — branching is nested lists, not a tree type.)**
+- The `transform.js`, `evaluate.js`, `tree.js` category files and their tests
+  are deleted; migrated coverage lives in `tests/library-reorg.test.js`.
+- Node descriptions must NOT reference Dynamo or Grasshopper by name; describe
+  what the node does on its own terms.
+
+**Rationale:** One node, one home. Parallel categories and duplicate nodes
+confuse discovery, split the AI's signature map, and create two ways to do the
+same thing. Product/vendor names in descriptions are noise and date the library.
+
+**Consequences:** Future node work adds to the existing category that owns the
+node's noun (Curve.*→curves, Surface.*→surfaces, Geometry.*→geometry, etc.).
+Re-exposing DataTree as nodes is a future milestone that must ship with
+tree-aware consumers, not standalone ops that duplicate List.*.
+**(Superseded — no longer planned.)** The
+`tests/library-reorg.test.js` registration + codegen-resolve guard must stay
+green.
+
+## 2026-06-04 - T1 Count-Based Arrays Coexist With Legacy Arrays On The Global Geo
+
+**Status:** Superseded in part (2026-06-04 "Node Library Taxonomy" above) — the
+`Geo.arrayLinearByVector`/`Geo.arrayPolarByAngle` globals and the duplicate
+`Geometry.ArrayLinear`/`Geometry.ArrayPolar` nodes were removed; `Geo.orient`
+and `Geo.planeFromOriginXY` are retained.
 
 **Context:** The modern Transform nodes (`src/nodes/categories/transform.js`)
 execute() against the T1 ES-module kernel (`src/geometry/frames.js`,

@@ -45,6 +45,14 @@ Treat every change like it ships to production tonight. Discipline over heroics.
 - **When uncertain, make the conservative choice and write it down** in the handoff
   or a decision entry. Silent guesses are how mistakes hide.
 - **Prove it before you call it done** (§4). "It should work" is not done.
+- **Reuse the existing abstraction; don't build a parallel one.** Nova's data model
+  is values + (nested) lists with lacing — branching/grouping/nesting is a
+  *list of lists*, handled by the `List.*` category (`Chunk`, `Transpose`, `Flatten`,
+  `GroupBy`, `Sort`). There is **no** tree/`DataTree` type and must not be one. Before
+  adding a node or a core type, check whether `List.*` (or an existing category)
+  already expresses it; new nodes fold into their existing home category, they don't
+  spawn a parallel one. (A `DataTree` object + `Tree` category were built, found to
+  duplicate `List.*`, and removed — 2026-06-04 decision.)
 
 ---
 
@@ -225,6 +233,13 @@ The canonical end-to-end gate for every task. Tick it.
 - [ ] Secrets/keys/tokens/private URLs absent; deps necessary and reviewed.
 - [ ] User/AI input treated as untrusted; API changes enforce auth + tenant scope.
 - [ ] Revit/Connect write paths require explicit approval + audit.
+- [ ] **Security run on every PR (mandatory).** The reviewer performs a security
+      pass on the diff; for changes touching auth/authz, input parsing, file
+      uploads, external integrations, or personal-data handling it runs
+      `/security-review` and files any new gaps as `docs/security/tickets/SEC-*`.
+      CI's `security` job (`npm audit` + Snyk) is the automated per-PR baseline.
+      Open security tickets are triaged by the **tech-lead** → fixed by the
+      **security-engineer** (or the owning lane) → gated by the **reviewer**.
 
 ### Validation
 - [ ] Ran the testing ladder (§4) appropriate to the risk; recorded results and
@@ -239,6 +254,8 @@ The canonical end-to-end gate for every task. Tick it.
 
 ### Merge blockers — do **not** merge if
 - Required checks fail.
+- The PR did not get its mandatory security pass (see Code & security), or it
+  introduced an unresolved `critical`/`high` security ticket.
 - Docs contradict implemented behavior (or NOVA.md is now stale).
 - A risky behavior change has no test or explicit reason.
 - Secrets or generated artifacts are present.

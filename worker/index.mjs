@@ -11,6 +11,7 @@ import { PROVIDERS, resolveProvider, pickModel, shouldFallthrough, summarizeFail
 import { handleFeedbackRequest } from '../api/feedback/refusals.mjs';
 import { handleEnterpriseApi, resolveRoomAccess } from './api.mjs';
 import { colorForUser, firstNameOf } from '../src/app/collab-core.js';
+import { applySecurity } from './security-headers.mjs';
 
 export { ProjectRoom } from './room.mjs';
 
@@ -160,10 +161,17 @@ async function checkRate(env, ip) {
 }
 
 export default {
-  fetch(request, env, ctx) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api/')) return app.fetch(request, env, ctx);
-    if (env && env.ASSETS) return env.ASSETS.fetch(request); // SPA static assets
+    if (env && env.ASSETS) {
+      // Static SPA assets: serve via the ASSETS binding, then merge the
+      // security headers (CSP + hardening) onto the response (SEC-010). The
+      // CSP allows the app's own assets, Google Fonts, the three.js CDNs, and
+      // the BYOK AI provider origins; SEC-015 can flip on HSTS via { hsts:true }.
+      const res = await env.ASSETS.fetch(request);
+      return applySecurity(res, { hsts: env && env.NOVA_HSTS === '1' });
+    }
     return new Response('Not found', { status: 404 });
   }
 };

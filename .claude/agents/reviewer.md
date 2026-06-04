@@ -37,6 +37,12 @@ author to provide the canonical docs in the branch` and stop alignment checks.
 3. **Scope** — ensure the change is a single task, limited in scope (aim for
    _small diffs_ per repo norms), contains no unrelated refactors, and includes
    no committed secrets or build artifacts.
+   - **No duplicate nodes:** if the diff adds/registers nodes, grep the existing
+     library (`src/nodes/categories/*.js`, `src/core/nodes.js`) and verify it
+     introduces no *functional* duplicate (same purpose, different `type`/name) and
+     no parallel category. The registry's duplicate-`type` guard does NOT catch
+     functional duplicates — checking only for type collisions is insufficient.
+     Treat a functional duplicate as a blocker. (See NOVA.md "No duplicate nodes".)
 4. **Security** — validate handling of untrusted input, presence of auth and
    tenant scoping for API changes, and gating/auditing for sensitive writes
    (e.g., Revit/Connect). Invoke `/security-review` if changes touch

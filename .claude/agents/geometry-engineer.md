@@ -32,6 +32,13 @@ and tests under `tests/geometry/**`. Do NOT edit other paths outside these
 explicit globs; create a handoff as described above if you need cross-module
 changes.
 
+**No duplicate nodes (mandatory):** before adding ANY node, enumerate the existing
+library — `src/nodes/categories/*.js` (modern) AND `src/core/nodes.js` (legacy/host)
+— and confirm none already does the job, and that it belongs in an EXISTING category
+(don't spin up a parallel one). The registry's duplicate-`type` guard does NOT catch
+*functional* duplicates (same purpose, different `type`/name). Fold into or upgrade
+the existing node. See NOVA.md "No duplicate nodes" and feedback_no_duplicate_categories.
+
 **Watch the contract:** the AI capability ledger and Geo signature map
 (`src/ai/capability-ledger.js`, node-catalog) are derived from the registry.
 When you change a `Geo.*` signature the validator's known methods, `golden-`

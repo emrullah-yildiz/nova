@@ -2,11 +2,7 @@ import { Geo } from './geometry-lib.js';
 import './geo-advanced.js';
 import './nurbs-math.js';
 import { planeFromOriginXY } from './frames.js';
-import {
-  orient as t1Orient,
-  arrayLinear as t1ArrayLinear,
-  arrayPolar as t1ArrayPolar
-} from './transforms.js';
+import { orient as t1Orient } from './transforms.js';
 import {
   pointAtT as t4PointAtT,
   tangentAtT as t4TangentAtT,
@@ -19,6 +15,10 @@ import {
   frameAtUV as t4FrameAtUV,
   divideSurface as t4DivideSurface
 } from './surface-eval.js';
+import {
+  panelFrames as m5PanelFrames,
+  panelPlanarity as m5PanelPlanarity
+} from './panel-frames.js';
 import { GEOMETRY_LEVELS, createGeometryRef, geometryCacheKey } from './GeometryRef.js';
 import { GeometryCache } from './GeometryCache.js';
 import { GeometryStore, geometryStore } from './GeometryStore.js';
@@ -26,22 +26,16 @@ import { compressMesh, createPreviewMesh, decompressMesh, meshBounds } from './M
 import { ProgressiveLoading } from './ProgressiveLoading.js';
 
 // ──────────────────────────────────────────────────────────────────────────
-// Expose the T1 frame/transform kernel (frames.js + transforms.js) on the
-// shared global `Geo` so generated Python/C# from the modern Transform nodes
-// (src/nodes/categories/transform.js) resolves at runtime, exactly mirroring
-// the execute() behaviour those nodes use in-app.
-//
-// IMPORTANT: `arrayLinear`/`arrayPolar` are ALREADY taken on Geo by the legacy
-// spacing-based / full-turn-only implementations in geo-advanced.js, which the
-// legacy Geometry.LinearArray / Geometry.PolarArray nodes depend on. We do NOT
-// overwrite them. The T1 count + per-step-vector / count + total-angle versions
-// are exposed under distinct, non-colliding names so both conventions coexist.
+// Expose the frame/transform kernel (frames.js + transforms.js) on the shared
+// global `Geo` so generated Python/C# from the Geometry.Orient and
+// Plane.ByOriginXAxisYAxis nodes resolves at runtime, exactly mirroring the
+// execute() behaviour those nodes use in-app. `Geo.orient` is collision-free
+// against geometry-lib.js / geo-advanced.js (which own the spacing-based
+// arrayLinear/arrayPolar used by Geometry.LinearArray / Geometry.PolarArray).
 // See docs/architecture/decisions.md.
 // ──────────────────────────────────────────────────────────────────────────
 Geo.orient = t1Orient;
 Geo.planeFromOriginXY = planeFromOriginXY;
-Geo.arrayLinearByVector = t1ArrayLinear;
-Geo.arrayPolarByAngle = t1ArrayPolar;
 
 // ──────────────────────────────────────────────────────────────────────────
 // T4 (M2) curve/surface frame-evaluation kernel (curve-eval.js / surface-eval.js).
@@ -59,6 +53,18 @@ Geo.pointAtUV = t4PointAtUV;
 Geo.normalAtUV = t4NormalAtUV;
 Geo.frameAtUV = t4FrameAtUV;
 Geo.divideSurface = t4DivideSurface;
+
+// ──────────────────────────────────────────────────────────────────────────
+// M5 panel-frame recovery (panel-frames.js). The paneling nodes emit bare quad
+// meshes and discard the per-panel frame; these helpers recover it so panels
+// feed Geometry.Orient (M1) and the Revit placement nodes (M4). `panelFrames`
+// returns the SAME Geo.Plane shape M1/M2 produce. Both names verified
+// collision-free against geometry-lib.js / geo-advanced.js / nurbs-math.js —
+// neither shadows an existing global — so node codegen (Pattern.Panel*) that
+// emits `Geo.<name>(...)` resolves at runtime against the assembled global Geo.
+// ──────────────────────────────────────────────────────────────────────────
+Geo.panelFrames = m5PanelFrames;
+Geo.panelPlanarity = m5PanelPlanarity;
 
 if (typeof window !== 'undefined') {
   window.Geo = Geo;

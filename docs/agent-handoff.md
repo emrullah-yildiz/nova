@@ -13,6 +13,218 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-04 - FIX: Revit parameter-node duplicates consolidated (fix/revit-node-dedup)
+
+**Agent/branch:** Core/Runtime Engineer — `fix/revit-node-dedup` (do not merge/push)
+
+**Bug (user-reported):** the Revit category shipped two functional duplicates that
+passed the type-collision check only because their `type` strings differed:
+- get-params: `revit-get-parameters` (Revit.GetParameters, M4) duplicated
+  `revit-get-parameter-values` (Revit.GetParameterValues).
+- set-params: `revit-set-parameters` (Revit.SetParameters, M4) duplicated
+  `revit-set-parameter-values` (Revit.SetParameterValues).
+
+**Which way we consolidated (and why it INVERTS the brief's recommendation):**
+kept the `*-parameter-values` nodes, removed the M4 `*-parameters` nodes. The brief
+guessed the M4 `execute()` nodes were the live/intended path, but the evidence is the
+opposite:
+- The M4 param nodes resolve `globalThis/window.NovaRevitBridge`, which is **never wired
+  into the running app** (`src/main.js` only installs `window.RevitBridge`). They worked
+  only in unit tests with an injected `context.revitBridge`.
+- The `*-parameter-values` nodes ARE the app-wired live path: `engine.js`
+  `_prepareLiveRevitGeometries()` runs them against `window.RevitBridge.getLiveParameterValues
+  / setLiveParameterValues`, and `setLiveParameterValues` carries the **full SEC-013
+  server-issued-token flow** (`acquireWriteApproval` + `reportHostWrite`) — strictly stronger
+  than the M4 node, which only passed approval *metadata* through.
+- They also take a **batch list** of elements (the more useful form), vs the M4
+  single-element contract.
+
+So the survivors satisfy the brief's required traits: codegen fallback (yes), SEC-013
+write gate (server-side, the authoritative form), batch/list API (yes), one clear
+canonical name each. The one trait they don't have is a def-level `execute()` — they run
+live via the engine async pre-pass instead (see architectural note below).
+
+**Edits (Core/Runtime owned only):**
+- `src/core/nodes.js`: removed `revit-get-parameters` + `revit-set-parameters` defs and the
+  now-unused `toElementId` helper; updated the header comment. Kept the M4 select/place
+  nodes (they share `resolveRevitBridge`/`buildApprovalMeta`/`splitNames`/`extractElementIds`).
+- `src/core/node-metadata.js`: added Revit NODE_META so the genuinely-distinct nodes don't
+  read as duplicates — interactive SelectElements/SelectFaces vs programmatic
+  AllElementsInActiveView/AllElementsOfCategory; family-instance/adaptive PLACE vs DirectShape
+  SendGeometry; plus canonical get/set-parameter-values entries.
+- `tests/revit-host-nodes.test.js`: trimmed the M4 node lists from six to four, removed the
+  GetParameters/SetParameters describe blocks, swapped the WRITE dispatch guard to
+  `revit-place-family-instance`, and added a dedup guard (removed types are undefined, exactly
+  one get/one set param node, full canonical Revit inventory asserted).
+
+**Architectural concern flagged (TWO execution models still coexist):** live Revit nodes run
+through two different bridges/dispatch paths — (1) the engine async pre-pass against
+`window.RevitBridge` (the app-wired, SEC-013-bearing path used by element-geometries,
+parameter-values, send-geometry), and (2) the registry `execute()` dispatch against
+`NovaRevitBridge` (used by select/place; NovaRevitBridge is not wired in the app yet). This
+dedup removed the duplicate param NODES but did not unify the two MODELS. Follow-up: either
+wire `NovaRevitBridge` into the app and migrate the pre-pass nodes to `execute()`, or retire
+the `execute()`/NovaRevitBridge path in favor of the pre-pass + `window.RevitBridge`. Until
+then, NEW live Revit nodes should follow the pre-pass + `window.RevitBridge` model (it is the
+one actually running in production and the one carrying the SEC-013 gate).
+
+## 2026-06-04 - FIX M4-T4: legacy→registry bridge dropped `execute` (F-001/F-002)
+
+**Agent/branch:** Core/Runtime Engineer — `feat/m4-host-node-defs` (fix in place, do not merge/push)
+
+**Bug (reviewer F-001/F-002):** The 6 M4 Revit host nodes in `src/core/nodes.js` define
+an async `execute`, but they reach the live engine only via the registry: the engine's
+`default:` branch runs `getLiveCoreRegistry().getNode(type)` and dispatches only when
+`typeof registryNode.execute === 'function'`. Legacy nodes flow into the registry through
+`legacyCoreNodes` → `legacyNodeToRegistryDefinition` (`src/nodes/legacyBridge.js`), which
+did NOT copy `execute`; `defineNode` then stored `execute: null`. So execute was reachable
+only via `NODE_TYPE_MAP` (what the unit tests called) — never via the engine. The nodes
+were inert in the app (output undefined).
+
+**Fix (in scope: legacyBridge + tests only):**
+- `src/nodes/legacyBridge.js`: `legacyNodeToRegistryDefinition` now carries
+  `execute: node.execute || undefined` through to the registry definition, mirroring how
+  `toLegacyNodeDefinition` (registry.js) already preserves execute. `defineNode` keeps its
+  `execute: definition.execute || null` rule, so pure-codegen legacy nodes (the vast
+  majority — `revit-element-geometries`, `host-get-elements`, `rhino-objects-by-layer`,
+  etc.) stay `execute: null`: ZERO behavior change for them. Only nodes that DEFINE an
+  execute (the 6 M4 nodes) become engine-reachable.
+- `tests/revit-host-nodes.test.js`: added an "engine registry path (F-001/F-002 wiring
+  guard)" block that asserts each M4 node's `execute` is a function on
+  `getLiveCoreRegistry().getNode(type)` (the exact predicate the engine gates on) AND on a
+  fresh `createCoreNodeRegistry()`, asserts pure-codegen legacy nodes still have NO execute,
+  and drives two nodes through `executeRegistryNodeUnlaced` (the engine's dispatch helper)
+  with a mocked bridge. This guard fails if the bridge ever drops execute again.
+
+**Registry execute is now reachable — proven by the new guard test.** Without this fix
+execute was never called by the engine; with it, the engine's `default:` branch invokes
+`executeRegistryNodeUnlaced(registryNode, …)`.
+
+**RESIDUAL — app/engine async pre-pass (NOT done here, out of scope):** the engine's
+`computeNodeValue` is SYNCHRONOUS. These M4 nodes' execute is `async`, so the registry-path
+dispatch returns an unresolved Promise; the sync compute path does not await it, so a LIVE
+round-trip still won't surface the resolved selection/place/param values yet. The OLDER
+legacy Revit nodes solve this with `app._prepareLiveRevitGeometries` (`src/core/engine.js`,
+awaited in `runGraph` before the sync compute) which resolves the bridge calls and caches
+results onto `nd._liveXxxResult`; a sync `case` then reads the cache. The 6 M4 nodes are
+NOT yet wired into that pre-pass. Completing the live round-trip needs either (a) extending
+the pre-pass to resolve these nodes' execute and cache the result, or (b) an
+await-aware compute for async registry nodes. That touches the app-layer run loop / pre-pass
+wiring beyond the legacyBridge fix and was intentionally left as a follow-up.
+
+## 2026-06-04 - SEC-013: wire the server-side write-approval token end-to-end
+
+**Agent/branch:** Connect/Revit Engineer — `feat/sec-013-revit-write-gate`
+
+**Goal:** the domain token gate (issue/consume) was sound but NOT wired at runtime.
+Wire it: add `POST /api/host-write-approvals` (issue) and make
+`POST /api/host-operations` REQUIRE+CONSUME a server token (authoritative
+consumer + audit-as-precondition); implement `issueWriteToken` in
+revit-write-approval.js and expose it on `window.__revitWriteApproval`; make
+client.js `normalizeWriteApproval` preserve `token/approvalId/operation/graphVersion`
+and stop defaulting `{approved:true}`.
+
+**Claimed files (owned):** `src/integrations/connect/revit-write-approval.js`,
+`src/integrations/connect/client.js`, `src/integrations/revit/revit-nodes.js`,
+`src/enterprise/api-dispatch.mjs`, `src/enterprise/validation.mjs`,
+`src/enterprise/cloud-client.js`, `src/main.js` (hot file, minimal touch),
+`docs/architecture/revit-connect.md`, `docs/NOVA.md`, SEC-013 ticket + INDEX, tests.
+
+## 2026-06-04 - M4-T2: C# Revit add-in handlers for the round-trip
+
+**Agent/branch:** Connect/Revit Engineer — `feat/m4-revit-addin-handlers` (off `develop` @ 25763c7)
+
+**Goal:** Implement the C# Revit add-in handlers for the M4 round-trip, pinned to the
+M4-T1 contract in `src/integrations/connect/protocol.js`: `selection.query` →
+`selection.result` (elements + optional planar faces), `geometry.place`
+(FamilyInstance via `NewFamilyInstance`, AdaptiveComponent via
+`AdaptiveComponentInstanceUtils`) under the existing write-approval gate, and the
+contract-shaped `parameter.get` / `parameter.set` (singular `elementId` + `params`
+map; set honors the approval gate).
+
+**Claimed files (owned):** EDIT `integrations/revit-addin/NovaHostClient.cs` only.
+READ-only on `src/integrations/connect/protocol.js`. NOT touching any `src/**` or
+`worker/**`.
+
+**Merge status:** Open branch `feat/m4-revit-addin-handlers` — IN PROGRESS, do not merge.
+
+## 2026-06-04 - M4-T3: Browser-side RevitBridge to the M4 protocol
+
+**Agent/branch:** Connect/Revit Engineer — `feat/m4-browser-bridge` (off `develop` @ 25763c7)
+
+**Goal:** Browser bridge that builds M4-T1-contract envelopes and pushes them over
+NovaConnectClient for the Revit round-trip (selection.query / geometry.place /
+parameter.get / parameter.set), validating every request client-side.
+
+**Claimed files (owned):** NEW `src/integrations/revit/revit-bridge.js`, NEW
+`tests/m4-bridge.test.js`, EDIT `src/integrations/connect/client.js` (added FOUR new
+M4 send methods only). READ-only on `protocol.js` (M4-T1), `revit-nodes.js`
+(SEC-013/M4-T4), `connect-panel.js` (M4-T5), `integrations/revit-addin/**` (M4-T2),
+`src/core/nodes.js`. None of those were touched.
+
+**Bridge API surface (M4-T4/T5 pin to this):**
+- `requestSelection(opts, deps?) -> { elements: ContractElement[] }` — sends
+  `selection.query` ({ categories?, includeFaces? }); parses `selection.result` into
+  the contract element shape (id coerced to string, params flat-scalar, optional faces).
+- `placeInstance(spec, deps?) -> placeResultPayload` — sends `geometry.place`
+  ({ kind, familyType, points, hostFaceId?, params? }); normalizes {x,y,z}/single point
+  to [x,y,z] tuples; forwards optional `spec.approval` metadata (WRITE).
+- `getParameters(elementId, names, deps?) -> { elementId, params:{name:value} }` — sends
+  `parameter.get` with the NEW contract ({ elementId, params } mirror, null placeholders).
+- `setParameters(elementId, params, deps?) -> setResultPayload` — sends `parameter.set`
+  ({ elementId, params }); forwards optional `deps.approval` metadata (WRITE).
+- `BridgeValidationError` (carries `.type` + structured `.errors`) — thrown when a
+  request fails client-side `validateMessage`, BEFORE anything leaves the browser.
+- `deps.client` injects a client (tests); default is `window.NovaConnect`.
+
+**Legacy coexistence (reviewer flag from M4-T1) — how the legacy path stays intact:**
+- The M4 parameter contract `{ elementId, params:{name:value} }` DIVERGES from the
+  legacy client methods `getParameterValues/setParameterValues({elementIds,
+  parameterName, values})` that `revit-nodes.js` (RevitBridge.getLive/setLive…) still
+  calls. I did NOT remove or repurpose those legacy methods.
+- Added FOUR NEW, separate client methods instead — `sendSelectionQuery`,
+  `sendGeometryPlace`, `sendParameterGet`, `sendParameterSet` — each just sends the
+  typed envelope and returns the raw response payload. They are documented in-file as
+  intentionally separate from the legacy methods.
+- A test asserts the bridge never calls `client.getParameterValues/setParameterValues`.
+  Full suite (incl. `connect-panel.test.js` and the revit-nodes path) stays green.
+
+**Migration note (M4-T4's concern):** the legacy `{elementIds, parameterName, values}`
+parameter path (client.js `getParameterValues`/`setParameterValues` + revit-nodes.js
+`getLiveParameterValues`/`setLiveParameterValues`) should later migrate to the M4
+`{elementId, params}` contract — e.g. revit-nodes.js delegating per-element to the new
+bridge `getParameters`/`setParameters`, then the legacy client methods can be retired.
+That edit touches `revit-nodes.js` (SEC-013/M4-T4-owned), so it is deliberately out of
+scope here. Until then both shapes coexist.
+
+**Validation:** `node node_modules/eslint/bin/eslint.js .` → exit 0 (clean). Full
+`node node_modules/vitest/vitest.mjs run` → 125 files passed, 1 skipped; 1586 passed,
+1 skipped (the spurious invite-redeem-landing teardown error did not surface this run).
+New `tests/m4-bridge.test.js` → 21 passed. Fully testable without Revit (mock transport).
+
+**Known gaps:** No live Revit smoke test (the round-trip needs M4-T2's add-in + the
+hub's approval UI). Bridge passes approval METADATA through; the interactive approval
+dialog + approval_id are the hub's responsibility (server is the authority).
+
+**Merge status:** Open branch `feat/m4-browser-bridge` — committed, NOT merged/pushed.
+
+## 2026-06-04 - M4-T1: Connect protocol/contract for the Revit round-trip
+
+**Agent/branch:** Connect/Revit Engineer — `feat/m4-connect-protocol` (off `develop` @ f9fae48)
+
+**Goal:** Extend `src/integrations/connect/protocol.js` envelope schemas + payload
+validators for the M4 round-trip message classes — `selection.query`,
+`selection.result`, `geometry.place`, `parameter.set`, `parameter.get`. THIS IS THE
+CONTRACT for M4-T2 (C# add-in), M4-T3 (browser bridge), M4-T4 (node defs), M4-T5
+(picker UI).
+
+**Claimed files (owned):** EDIT `src/integrations/connect/protocol.js`, NEW
+`tests/m4-connect-protocol.test.js`. READ-only on `client.js`, `connect-panel.js`,
+`revit-nodes.js`, `connect-hub.cjs`. NOT touching `src/core/nodes.js`,
+`integrations/revit-addin/**` (later M4 tasks own those).
+
+**Merge status:** Open branch `feat/m4-connect-protocol` — IN PROGRESS, do not merge.
+
 ## 2026-06-04 - T4 (M2): Curve/Surface frame-evaluation kernel
 
 **Agent/branch:** Geometry/Kernel Engineer — `feat/geo-curve-surface-eval` (off `develop` @ 3ee59cc)
