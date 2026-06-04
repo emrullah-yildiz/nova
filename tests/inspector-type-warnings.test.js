@@ -34,7 +34,6 @@ describe('inferValueType', () => {
     expect(inferValueType(kernel('Mesh3'))).toBe('mesh');
     expect(inferValueType(kernel('CompressedMesh'))).toBe('mesh');
     expect(inferValueType(kernel('Plane'))).toBe('plane');
-    expect(inferValueType(kernel('DataTree'))).toBe('datatree');
   });
 
   it('is case-insensitive on _type', () => {
@@ -73,10 +72,6 @@ describe('portAcceptsType — zero false positives for legitimate pairings', () 
     expect(accepts('curve', kernel('Polyline3'))).toBe(true);
     expect(accepts('curve', kernel('Arc3'))).toBe(true);
     expect(accepts('curve', kernel('Ellipse3'))).toBe(true);
-  });
-
-  it('accepts DataTree value -> datatree port', () => {
-    expect(accepts('datatree', kernel('DataTree'))).toBe(true);
   });
 
   it('accepts meshes/surfaces into mesh and surface ports', () => {

@@ -130,6 +130,14 @@ like the code around it. (Each links to the decision that owns the detail.)
 - **Single value → one-item list.** A scalar wired into a `list` input is auto-
   promoted to a one-item list (Grasshopper/Dynamo parity); list-consuming nodes
   are not auto-laceable.
+- **Data is values + nested lists — there is no tree type.** Branching, grouping,
+  and nesting are modeled as **lists of lists**, not a bespoke tree/`DataTree`
+  object. Every "tree" operation is a `List.*` node on nested lists: `List.Chunk`
+  (size 1) grafts each item into its own sub-list, `List.Chunk` (size N) partitions,
+  `List.Transpose` flips a matrix (rows↔columns), `List.Flatten` flattens. Do **not**
+  add a parallel tree type or a node category that duplicates `List.*`; fold new
+  list/nesting behavior into the existing `List.*` category. (A `DataTree` type was
+  built and removed — see the 2026-06-04 decision.)
 - **Code-driven Custom.Python ports.** The Python cell's code is the source of
   truth for its ports (inferred free vars in, last assignment out); codegen tracks
   *live* ports, not the static def.

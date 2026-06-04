@@ -1326,7 +1326,7 @@ input[type="number"] {
   white-space: nowrap;
 }
 
-/* Keyed object / DataTree branch rows in the data inspector & Output.Watch */
+/* Keyed object rows in the data inspector & Output.Watch */
 .data-obj-row {
   display: flex;
   align-items: flex-start;

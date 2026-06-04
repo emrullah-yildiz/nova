@@ -45,6 +45,14 @@ Treat every change like it ships to production tonight. Discipline over heroics.
 - **When uncertain, make the conservative choice and write it down** in the handoff
   or a decision entry. Silent guesses are how mistakes hide.
 - **Prove it before you call it done** (§4). "It should work" is not done.
+- **Reuse the existing abstraction; don't build a parallel one.** Nova's data model
+  is values + (nested) lists with lacing — branching/grouping/nesting is a
+  *list of lists*, handled by the `List.*` category (`Chunk`, `Transpose`, `Flatten`,
+  `GroupBy`, `Sort`). There is **no** tree/`DataTree` type and must not be one. Before
+  adding a node or a core type, check whether `List.*` (or an existing category)
+  already expresses it; new nodes fold into their existing home category, they don't
+  spawn a parallel one. (A `DataTree` object + `Tree` category were built, found to
+  duplicate `List.*`, and removed — 2026-06-04 decision.)
 
 ---
 

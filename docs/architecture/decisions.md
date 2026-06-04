@@ -8,6 +8,41 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-04 - Branching/Grouping Is Nested Lists, Not A Tree Type (DataTree Infra Removed)
+
+**Status:** Accepted
+
+**Context:** Milestone M1 work added a `DataTree` core type (`src/core/data-tree.js`,
+`src/core/tree-ops.js`) and a `Tree` node category to model branch/path data. The
+`Tree` category was already removed in the 2026-06-04 "Node Library Taxonomy" decision
+(it duplicated `List.*`), but that decision RETAINED the underlying infra "for a future
+milestone." Review concluded the type itself is the wrong abstraction for Nova: it
+duplicates the nested-list model the `List.*` category already uses, and because it was
+a foreign type nothing else understood, a `DataTree` value rendered as `[object Object]`
+in the inspector. The infra had zero importers in `src/` — only its own tests and two
+dead display affordances referenced it.
+
+**Decision:** Nova's data model is **values + (nested) lists with lacing**.
+Branching/grouping/nesting is expressed as a **list of lists** and handled by the
+existing `List.*` category — `List.Chunk` (size 1 = graft; size N = partition),
+`List.Transpose` (flip matrix), `List.Flatten`, `List.GroupBy`, `List.Sort`. There is
+**no** tree type. The dead infra is removed: `src/core/data-tree.js`,
+`src/core/tree-ops.js`, and their tests are deleted; the `DataTree` test case in
+`tests/format-value.test.js`, the `DataTree` branch in `app.formatValue`/
+`_formatItemInline`, the `['datatree','datatree']` row in `node-renderer.js`'s
+`KERNEL_TYPE_MAP`, and its `inspector-type-warnings` assertions are removed with it.
+This **supersedes** the "infra is RETAINED / DataTree exposure deferred" clause of the
+2026-06-04 "Node Library Taxonomy" decision.
+
+**Rationale:** One data model, one set of operators. A parallel tree type splits the
+mental model, duplicates `List.*`, breaks rendering/interop (foreign type →
+`[object Object]`), and fragments the AI's signature map. Nested lists already do
+everything a tree did, with nodes the engine, inspector, and AI already understand.
+
+**Consequences:** Do not reintroduce a `DataTree`/tree type or a node category that
+duplicates `List.*`. New list/nesting behavior folds into the `List.*` category.
+"Re-expose DataTree as nodes" is no longer a roadmap item.
+
 ## 2026-06-04 - Node Library Taxonomy: Fold New Nodes Into Existing Categories (No Parallel Categories)
 
 **Status:** Accepted
@@ -42,6 +77,8 @@ parallel categories. Specifically:
   `Tree.Simplify`) had no tree-aware consumers yet, so DataTree NODE exposure is
   deferred to a future milestone. The underlying infrastructure
   (`src/core/data-tree.js`, `src/core/tree-ops.js`) and its tests are RETAINED.
+  **(Superseded below: the src/core/data-tree.js / tree-ops.js infra was
+  subsequently removed — branching is nested lists, not a tree type.)**
 - The `transform.js`, `evaluate.js`, `tree.js` category files and their tests
   are deleted; migrated coverage lives in `tests/library-reorg.test.js`.
 - Node descriptions must NOT reference Dynamo or Grasshopper by name; describe
@@ -54,7 +91,8 @@ same thing. Product/vendor names in descriptions are noise and date the library.
 **Consequences:** Future node work adds to the existing category that owns the
 node's noun (Curve.*→curves, Surface.*→surfaces, Geometry.*→geometry, etc.).
 Re-exposing DataTree as nodes is a future milestone that must ship with
-tree-aware consumers, not standalone ops that duplicate List.*. The
+tree-aware consumers, not standalone ops that duplicate List.*.
+**(Superseded — no longer planned.)** The
 `tests/library-reorg.test.js` registration + codegen-resolve guard must stay
 green.
 
