@@ -50,14 +50,30 @@ export function installNodeSearchPopup(targetApp = getRuntimeApp()) {
     return results;
   }
 
+  // Synthetic PRESET entry: "Series (Code Block)" drops a Custom.CodeBlock pre-filled
+  // with `nums = 0..10` (a preset of the SAME type, not a new node type). Carries a
+  // sentinel type the placer special-cases.
+  var SERIES_PRESET = {
+    type: '__preset:series-codeblock',
+    name: 'Series (Code Block)',
+    icon: '{ }',
+    catName: 'Custom / AI',
+    catColor: '#94e2d5'
+  };
+
   function getAllNodes() {
     var results = [];
-    // Search corpus = discovery surface: exclude hidden categories (Host, Rhino).
+    // Search corpus = discovery surface: exclude hidden categories (Host, Rhino)
+    // and deprecated nodes (e.g. Custom.Formula) — they still resolve for saved
+    // graphs but must not appear in discovery (G-2b).
     visibleCategories().forEach(function(cat) {
       cat.nodes.forEach(function(node) {
+        if (node.metadata && node.metadata.deprecated) return;
         results.push({ type: node.type, name: node.name, icon: node.icon, catName: cat.name, catColor: cat.color });
       });
     });
+    // Append the Series preset so it is discoverable by search alongside the type.
+    results.push(SERIES_PRESET);
     return results;
   }
 
@@ -124,6 +140,16 @@ export function installNodeSearchPopup(targetApp = getRuntimeApp()) {
 
   function placeNode(type) {
     closePopup();
+    // Series preset: a Custom.CodeBlock pre-filled with `nums = 0..10`. Placed via
+    // addSeriesCodeBlock (codeblock-node.js) at the click point — same type, preset
+    // controls. Not added to recents (it isn't a real type).
+    if (type === '__preset:series-codeblock') {
+      var pnd = app.addSeriesCodeBlock
+        ? app.addSeriesCodeBlock(_clickCanvasX, _clickCanvasY)
+        : app.addNodeToCanvas('Custom.CodeBlock', _clickCanvasX, _clickCanvasY, { controls: { code: 'nums = 0..10' } });
+      if (pnd) app.selectNode(pnd.id, false);
+      return;
+    }
     addRecent(type);
     var nd = app.addNodeToCanvas(type, _clickCanvasX, _clickCanvasY);
     if (nd) app.selectNode(nd.id, false);
