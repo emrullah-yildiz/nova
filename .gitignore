@@ -32,3 +32,6 @@ installer/nova-connect/obj/
 
 # Playwright screenshot artifacts from local runs
 tests/e2e/__artifacts__/
+
+# Agent worktrees (never commit; deep dotnet obj/ paths break Windows worktree checkout)
+.claude/worktrees/
