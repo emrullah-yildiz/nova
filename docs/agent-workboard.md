@@ -25,7 +25,7 @@ root `README.md` · `docs/NOVA.md` · `.github/workflows/ci.yml`
 
 | Branch | Agent | Task | Owned paths (globs) | Hot locks | Started | Status |
 |---|---|---|---|---|---|---|
-| _(none — board is clear)_ | | | | | | |
+| feat/run-modes | ui-engineer (Switch) | graph Run Modes (Automatic/Manual) toggle + Run button + stale affordance + persistence | src/ui/run-mode.js, tests/** | src/main.js, docs/NOVA.md | 2026-06-05 | active |
 
 <!--
 Example row (copy, fill in, remove this comment block's example when claiming):
