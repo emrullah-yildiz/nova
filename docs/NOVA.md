@@ -138,6 +138,16 @@ like the code around it. (Each links to the decision that owns the detail.)
   add a parallel tree type or a node category that duplicates `List.*`; fold new
   list/nesting behavior into the existing `List.*` category. (A `DataTree` type was
   built and removed — see the 2026-06-04 decision.)
+- **No duplicate nodes — enumerate the existing library FIRST.** Before adding ANY
+  node, list the nodes already in its target category (`src/nodes/categories/*.js`
+  for modern nodes, `src/core/nodes.js` for legacy/host) and confirm none already
+  does the job. Never ship two nodes for the same purpose under different `type`s or
+  names — the registry's duplicate-`type` guard does **not** catch *functional*
+  duplicates (same purpose, different `type`). Fold into / upgrade the existing node
+  instead. (2026-06-04: M4 shipped `Revit.GetParameters`/`Revit.SetParameters`
+  duplicating the existing `Revit.GetParameterValues`/`Revit.SetParameterValues` —
+  exactly this trap; the type-collision check passed because the `type` strings
+  differed.) Reviewers must check for functional duplicates, not just collisions.
 - **Code-driven Custom.Python ports.** The Python cell's code is the source of
   truth for its ports (inferred free vars in, last assignment out); codegen tracks
   *live* ports, not the static def.
