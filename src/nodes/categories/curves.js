@@ -1,4 +1,10 @@
 import { Geo } from '../../geometry/index.js';
+import {
+  pointAtT,
+  tangentAtT,
+  frameAtT,
+  divideCurve
+} from '../../geometry/curve-eval.js';
 
 export const curvesCategory = {
   id: 'curves',
@@ -6,6 +12,21 @@ export const curvesCategory = {
   color: '#94e2d5',
   icon: '∿'
 };
+
+// t is a NORMALIZED parameter in [0,1]; clamp so a stray control value never
+// samples past the curve domain.
+function toParam(value, fallback = 0.5) {
+  const n = Number(value ?? fallback);
+  const v = Number.isNaN(n) ? fallback : n;
+  if (v < 0) return 0;
+  if (v > 1) return 1;
+  return v;
+}
+
+function toEvalCount(value, fallback = 1) {
+  const n = Number(value ?? fallback);
+  return Math.max(1, Math.floor(Number.isNaN(n) ? fallback : n));
+}
 
 function toPoint(value, fallback = new Geo.Point3(0, 0, 0)) {
   if (value && typeof value === 'object' && value.x !== undefined) return value;
@@ -1222,6 +1243,217 @@ export const curvesNodes = [
         ]
       },
       sampleCode: '{{result}} = Geo.trimLine({{line}}, {{t0}}, {{t1}})'
+    }
+  },
+
+  // ─── Evaluate & Divide ───────────────────────────────────
+  {
+    type: 'Curve.PointAtParameter',
+    name: 'Curve.PointAtParameter',
+    category: 'curves',
+    subGroup: 'Evaluate',
+    icon: '•',
+    aliases: ['curve-pointatparameter', 'curve-pointat'],
+    description: 'Evaluates the point on a curve at a normalized parameter t ∈ [0,1] (t=0 is the start, t=1 is the end). Works for lines, polylines, arcs, circles, ellipses and NURBS curves — the parameter is normalized arc-domain, not raw knot value, so 0.5 is always the parametric midpoint.',
+    inputs: [
+      { id: 'curve', name: 'Curve', type: 'curve', description: 'Curve to evaluate' },
+      { id: 't', name: 't', type: 'number', description: 'Normalized parameter in [0,1]' }
+    ],
+    outputs: [{ id: 'point', name: 'Point', type: 'point', description: 'Point on the curve at t' }],
+    controls: [{ id: 't', type: 'formula', default: '0.5', label: 't' }],
+    execute(context, inputs) {
+      if (inputs.curve == null) return { point: undefined };
+      return { point: pointAtT(inputs.curve, toParam(inputs.t, 0.5)) };
+    },
+    codegen: {
+      python: '{{point}} = Geo.pointAtT({{curve}}, {{t}})',
+      csharp: 'var {{point}} = Geo.pointAtT({{curve}}, {{t}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Curve', description: 'Curve to evaluate' },
+        { name: 't', description: 'Normalized parameter in [0,1]' }
+      ],
+      outputs: [{ name: 'Point', description: 'Point on the curve at t' }],
+      example: {
+        title: 'Midpoint (t=0.5) of a 3-4-5 line — point (1.5, 2, 0)',
+        nodes: [
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 3, y: 4, z: 0 } },
+          { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
+          { type: 'Input.Number', x: 0, y: 160, controls: { val: 0.5 } },
+          { type: 'Curve.PointAtParameter', x: 480, y: 60 },
+          { type: 'Output.Watch', x: 720, y: 60 }
+        ],
+        wires: [
+          [0, 'point', 2, 'startPoint'],
+          [1, 'point', 2, 'endPoint'],
+          [2, 'line', 4, 'curve'],
+          [3, 'value', 4, 't'],
+          [4, 'point', 5, 'value']
+        ]
+      },
+      sampleCode: '{{point}} = Geo.pointAtT({{curve}}, {{t}})'
+    }
+  },
+  {
+    type: 'Curve.TangentAtParameter',
+    name: 'Curve.TangentAtParameter',
+    category: 'curves',
+    subGroup: 'Evaluate',
+    icon: '↗',
+    aliases: ['curve-tangentatparameter', 'curve-tangentat'],
+    description: 'Evaluates the unit tangent vector of a curve at a normalized parameter t ∈ [0,1] — the direction the curve is travelling at that station. The input is a parameter, not a point (use Curve.TangentAtPoint when you already have a point on the curve). Always unit length; uses the curve\'s own analytic tangent where available, otherwise a finite-difference approximation.',
+    inputs: [
+      { id: 'curve', name: 'Curve', type: 'curve', description: 'Curve to evaluate' },
+      { id: 't', name: 't', type: 'number', description: 'Normalized parameter in [0,1]' }
+    ],
+    outputs: [{ id: 'tangent', name: 'Tangent', type: 'vector', description: 'Unit tangent vector at t' }],
+    controls: [{ id: 't', type: 'formula', default: '0.5', label: 't' }],
+    execute(context, inputs) {
+      if (inputs.curve == null) return { tangent: undefined };
+      return { tangent: tangentAtT(inputs.curve, toParam(inputs.t, 0.5)) };
+    },
+    codegen: {
+      python: '{{tangent}} = Geo.tangentAtT({{curve}}, {{t}})',
+      csharp: 'var {{tangent}} = Geo.tangentAtT({{curve}}, {{t}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Curve', description: 'Curve to evaluate' },
+        { name: 't', description: 'Normalized parameter in [0,1]' }
+      ],
+      outputs: [{ name: 'Tangent', description: 'Unit tangent vector at t' }],
+      example: {
+        title: 'Tangent of a quarter-circle at t=0.5 — unit vector along the sweep',
+        nodes: [
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 10 } },
+          { type: 'Circle.ByCenterRadius', x: 240, y: 30 },
+          { type: 'Input.Number', x: 0, y: 170, controls: { val: 0.25 } },
+          { type: 'Curve.TangentAtParameter', x: 480, y: 60 },
+          { type: 'Vector.Deconstruct', x: 720, y: 60 },
+          { type: 'Output.Watch', x: 940, y: 60 }
+        ],
+        wires: [
+          [0, 'point', 2, 'center'],
+          [1, 'value', 2, 'radius'],
+          [2, 'circle', 4, 'curve'],
+          [3, 'value', 4, 't'],
+          [4, 'tangent', 5, 'vector'],
+          [5, 'y', 6, 'value']
+        ]
+      },
+      sampleCode: '{{tangent}} = Geo.tangentAtT({{curve}}, {{t}})'
+    }
+  },
+  {
+    type: 'Curve.FrameAtParameter',
+    name: 'Curve.FrameAtParameter',
+    category: 'curves',
+    subGroup: 'Evaluate',
+    icon: '⊹',
+    aliases: ['curve-frameatparameter', 'curve-frameat'],
+    description: 'Evaluates an oriented frame (a Plane) on a curve at a normalized parameter t ∈ [0,1]. The frame origin is the curve point; its normal is the unit tangent (local Z runs ALONG the curve) and the in-plane X/Y are chosen deterministically for a continuous, non-tumbling frame. Feed straight into Geometry.Orient to place a family member at that station.',
+    inputs: [
+      { id: 'curve', name: 'Curve', type: 'curve', description: 'Curve to evaluate' },
+      { id: 't', name: 't', type: 'number', description: 'Normalized parameter in [0,1]' }
+    ],
+    outputs: [{ id: 'plane', name: 'Plane', type: 'plane', description: 'Oriented frame at t (normal = tangent)' }],
+    controls: [{ id: 't', type: 'formula', default: '0.5', label: 't' }],
+    execute(context, inputs) {
+      if (inputs.curve == null) return { plane: undefined };
+      return { plane: frameAtT(inputs.curve, toParam(inputs.t, 0.5)) };
+    },
+    codegen: {
+      python: '{{plane}} = Geo.frameAtT({{curve}}, {{t}})',
+      csharp: 'var {{plane}} = Geo.frameAtT({{curve}}, {{t}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Curve', description: 'Curve to evaluate' },
+        { name: 't', description: 'Normalized parameter in [0,1]' }
+      ],
+      outputs: [{ name: 'Plane', description: 'Oriented frame at t (normal = tangent)' }],
+      example: {
+        title: 'Frame at the midpoint of a line — its normal is the line tangent',
+        nodes: [
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 5, y: 0, z: 0 } },
+          { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
+          { type: 'Input.Number', x: 0, y: 160, controls: { val: 0.5 } },
+          { type: 'Curve.FrameAtParameter', x: 480, y: 60 },
+          { type: 'Plane.Normal', x: 720, y: 60 },
+          { type: 'Output.Watch', x: 940, y: 60 }
+        ],
+        wires: [
+          [0, 'point', 2, 'startPoint'],
+          [1, 'point', 2, 'endPoint'],
+          [2, 'line', 4, 'curve'],
+          [3, 'value', 4, 't'],
+          [4, 'plane', 5, 'plane'],
+          [5, 'normal', 6, 'value']
+        ]
+      },
+      sampleCode: '{{plane}} = Geo.frameAtT({{curve}}, {{t}})'
+    }
+  },
+  {
+    type: 'Curve.Divide',
+    name: 'Curve.Divide',
+    category: 'curves',
+    subGroup: 'Evaluate',
+    icon: '⋮',
+    aliases: ['curve-divide', 'curve-dividebycount'],
+    description: 'Divides a curve into Count equal segments (by normalized parameter) and returns both the sample Points and an oriented Frame at each. An OPEN curve yields Count+1 samples (both endpoints included); a CLOSED curve (circle / closed polyline) yields exactly Count (the wrap-around duplicate is dropped). The frames feed Geometry.Orient for placing a family along the curve.',
+    inputs: [
+      { id: 'curve', name: 'Curve', type: 'curve', description: 'Curve to divide' },
+      { id: 'count', name: 'Count', type: 'number', description: 'Number of segments (open curve → Count+1 points)' }
+    ],
+    outputs: [
+      { id: 'points', name: 'Points', type: 'list', description: 'Sample points along the curve' },
+      { id: 'frames', name: 'Frames', type: 'list', description: 'Oriented frame at each sample (normal = tangent)' }
+    ],
+    controls: [{ id: 'count', type: 'formula', default: '10', label: 'Count' }],
+    execute(context, inputs) {
+      if (inputs.curve == null) return { points: [], frames: [] };
+      const { points, frames } = divideCurve(inputs.curve, toEvalCount(inputs.count, 10));
+      return { points, frames };
+    },
+    codegen: {
+      python: "_d = Geo.divideCurve({{curve}}, int({{count}}))\n{{points}} = _d['points']\n{{frames}} = _d['frames']",
+      csharp: 'var _d = Geo.divideCurve({{curve}}, (int){{count}});\nvar {{points}} = _d.points;\nvar {{frames}} = _d.frames;'
+    },
+    help: {
+      inputs: [
+        { name: 'Curve', description: 'Curve to divide' },
+        { name: 'Count', description: 'Number of segments' }
+      ],
+      outputs: [
+        { name: 'Points', description: 'Sample points along the curve' },
+        { name: 'Frames', description: 'Oriented frame at each sample' }
+      ],
+      example: {
+        title: 'Divide a line into 4 segments → 5 points (open-curve Count+1 convention)',
+        nodes: [
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 8, y: 0, z: 0 } },
+          { type: 'Line.ByStartPointEndPoint', x: 240, y: 30 },
+          { type: 'Input.Integer', x: 0, y: 160, controls: { val: 4 } },
+          { type: 'Curve.Divide', x: 480, y: 60 },
+          { type: 'List.Count', x: 720, y: 60 },
+          { type: 'Output.Watch', x: 920, y: 60 }
+        ],
+        wires: [
+          [0, 'point', 2, 'startPoint'],
+          [1, 'point', 2, 'endPoint'],
+          [2, 'line', 4, 'curve'],
+          [3, 'value', 4, 'count'],
+          [4, 'points', 5, 'list'],
+          [5, 'count', 6, 'value']
+        ]
+      },
+      sampleCode: "_d = Geo.divideCurve({{curve}}, int({{count}}))\n{{points}} = _d['points']\n{{frames}} = _d['frames']"
     }
   }
 ];

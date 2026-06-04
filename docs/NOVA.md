@@ -130,11 +130,71 @@ like the code around it. (Each links to the decision that owns the detail.)
 - **Single value → one-item list.** A scalar wired into a `list` input is auto-
   promoted to a one-item list (Grasshopper/Dynamo parity); list-consuming nodes
   are not auto-laceable.
+- **Data is values + nested lists — there is no tree type.** Branching, grouping,
+  and nesting are modeled as **lists of lists**, not a bespoke tree/`DataTree`
+  object. Every "tree" operation is a `List.*` node on nested lists: `List.Chunk`
+  (size 1) grafts each item into its own sub-list, `List.Chunk` (size N) partitions,
+  `List.Transpose` flips a matrix (rows↔columns), `List.Flatten` flattens. Do **not**
+  add a parallel tree type or a node category that duplicates `List.*`; fold new
+  list/nesting behavior into the existing `List.*` category. (A `DataTree` type was
+  built and removed — see the 2026-06-04 decision.)
+- **No duplicate nodes — enumerate the existing library FIRST.** Before adding ANY
+  node, list the nodes already in its target category (`src/nodes/categories/*.js`
+  for modern nodes, `src/core/nodes.js` for legacy/host) and confirm none already
+  does the job. Never ship two nodes for the same purpose under different `type`s or
+  names — the registry's duplicate-`type` guard does **not** catch *functional*
+  duplicates (same purpose, different `type`). Fold into / upgrade the existing node
+  instead. (2026-06-04: M4 shipped `Revit.GetParameters`/`Revit.SetParameters`
+  duplicating the existing `Revit.GetParameterValues`/`Revit.SetParameterValues` —
+  exactly this trap; the type-collision check passed because the `type` strings
+  differed.) Reviewers must check for functional duplicates, not just collisions.
+- **Adding a node — the fit gate (run BEFORE writing any node; the reviewer
+  re-checks every point).** A node earns its place only if it passes ALL of these:
+  1. **Valuable workflow.** It unlocks a real workflow users want — not a thin,
+     rarely-used API wrapper added for completeness. If you can't name the workflow
+     it enables, don't add it.
+  2. **Not a duplicate.** No existing library node already does it (see "No duplicate
+     nodes" above). Fold into / upgrade the existing node instead of shipping a
+     parallel one.
+  3. **Usable inputs, with real producers.** Each input is a type other nodes can
+     actually produce — confirm existing node(s) emit it, so a user can wire it up.
+     An input nothing can feed is a dead port.
+  4. **Usable outputs, with real consumers.** Each output is a type other nodes can
+     actually consume — confirm existing node(s) take it, so the result flows
+     onward. An output nothing can read is a dead end.
+  5. **Working, meaningful sample.** Its `help.example` is a complete
+     producer → focal node → consumer graph that RUNS and produces a defined,
+     readable, correct result — never `[object Object]`, `NaN`, or undefined.
+     Verify it, don't assume it.
+  6. **Naming & presentation.** Name `ParentName.NodeName` (e.g. `Wall.ByCurve`);
+     creation nodes use `By` + the input names (`Surface.ByPatch`,
+     `AdaptiveComponent.ByPoints`). Fold into the EXISTING category it belongs to
+     (no parallel categories). Icons are Unicode glyphs/symbols, never text
+     abbreviations (`max`, `1st`). Describe the node on its own terms — never "like
+     Dynamo/Grasshopper".
+- **Expose Properties where it makes sense.** If a node produces or operates on an
+  object that carries inspectable attributes — a Revit/Forma element, a material, a
+  type, an analysis result — surface those attributes as readable **Properties** rather
+  than leaving them locked inside an opaque object: give the node a `properties` output
+  (a name→value map) and/or a companion `*.Properties`/`*.Info` getter, so the data is
+  visible in the inspector and consumable downstream (`List.*`, watch, filters). A node
+  whose output is an opaque handle nobody can read fails the "usable outputs" gate.
 - **Code-driven Custom.Python ports.** The Python cell's code is the source of
   truth for its ports (inferred free vars in, last assignment out); codegen tracks
   *live* ports, not the static def.
 - **Server is the authority.** Realtime roles (viewer RO / editor RW) and Connect
-  write approvals are enforced server-side; clients are never trusted.
+  write approvals are enforced server-side; clients are never trusted. A Connect/
+  Revit write must present a **single-use, server-issued approval token**: the
+  browser obtains one over **`POST /api/host-write-approvals`**
+  (`EnterpriseStore.issueHostWriteApproval`, after a project-write check), carries
+  it to the hub/add-in inside `payload.approval`, and reports the completed write
+  over **`POST /api/host-operations`** — the authoritative consumer that calls
+  `consumeHostWriteApproval` to **burn the token (single-use) and write the audit
+  row as a precondition** (accepted → `host.operation`, rejected → `host.write.denied`).
+  No client-set `{ approved: true }` boolean exists on the wire. The local hub is a
+  transport and the add-in token-presence check is defense-in-depth; authoritative
+  enforcement requires the enterprise backend (signed out → graceful local degrade).
+  See [`architecture/revit-connect.md`](architecture/revit-connect.md) (SEC-013).
 
 ---
 
@@ -213,3 +273,5 @@ Consolidated forward view. Detail lives in the linked specs — don't duplicate 
 - **`agent-workboard.md`** — claim/release your owned paths as you start/finish.
 
 If two of these ever disagree, NOVA.md + decisions.md win; fix the others.
+
+

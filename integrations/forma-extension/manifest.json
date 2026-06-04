@@ -1,0 +1,22 @@
+{
+  "$comment": "FM-M0 STUB Forma extension manifest. Placeholder values — finalized when registered with the Autodesk Forma Developer Platform in FM-M1. Not deployed in FM-M0.",
+  "schemaVersion": "0-stub",
+  "id": "nova.forma.connect",
+  "name": "Nova Connect for Forma",
+  "description": "Thin bridge that relays Forma geometry and analysis to the standalone Nova app over a paired Cloudflare Durable Object room. Skeleton (FM-M0); SDK + relay wired in FM-M1.",
+  "version": "0.0.0",
+  "entry": "index.html",
+  "surface": "panel",
+  "requestedScopes": [
+    "proposal:read",
+    "geometry:read",
+    "geometry:write",
+    "terrain:read",
+    "analysis:read"
+  ],
+  "fmM0": {
+    "status": "skeleton",
+    "live": false,
+    "notes": "No live SDK calls or relay connection. See README.md and docs/architecture/forma-connect.md."
+  }
+}

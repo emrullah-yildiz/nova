@@ -47,6 +47,13 @@ export function legacyNodeToRegistryDefinition(node, category) {
     preview: node.preview !== false,
     dynamicInputs: node.dynamicInputs === true,
     lacing: node.lacing,
+    // Carry the node's execute through to the registry definition so the live
+    // engine's registry-path dispatch (engine.js default branch:
+    // getLiveCoreRegistry().getNode(type).execute) can run it. Legacy nodes that
+    // define no execute stay null in defineNode (execute: definition.execute ||
+    // null) — only nodes that DEFINE an execute (e.g. the M4 Revit host nodes)
+    // become reachable from the engine; pure-codegen legacy nodes are unchanged.
+    execute: node.execute || undefined,
     codegen: node.codegen || {},
     metadata: {
       source: 'legacy-node-library',

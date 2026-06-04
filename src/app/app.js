@@ -1,10 +1,22 @@
 import { AIEngine } from '../ai/ai-engine.js';
-import { NODE_LIBRARY, NODE_TYPE_MAP, TYPE_COLORS, NODE_VERSION_MAP } from '../core/nodes.js';
+import { NODE_TYPE_MAP, TYPE_COLORS, NODE_VERSION_MAP, visibleCategories } from '../core/nodes.js';
 import { getDefVersion, resolveVersionedDef, migrateControlValues } from '../core/node-versions.js';
 import { describeWireTypeMismatch } from '../core/wire-type-check.js';
 import { computeFitView } from '../core/graph-layout.js';
 import { CodeParser } from '../runtime/parser.js';
 import { Viewer3D } from '../viewer/viewer3d.js';
+import { LEGAL_DOCS, renderMarkdown } from '../ui/legal-viewer.js';
+import { buildLearningHtml, attachLearningShots } from '../ui/learning-page.js';
+// Legal docs published in-app. docs/legal lives at the repo root, which is the
+// Vite project root, so `?raw` resolves at build time and the markdown text is
+// bundled as a string (no runtime fetch, no markdown dependency).
+import privacyMd from '../../docs/legal/privacy-policy.md?raw';
+import termsMd from '../../docs/legal/terms-of-service.md?raw';
+import dataMd from '../../docs/legal/data-handling.md?raw';
+import ipMd from '../../docs/legal/ip-and-ownership.md?raw';
+import cookiesMd from '../../docs/legal/cookie-notice.md?raw';
+
+const LEGAL_MD = { privacy: privacyMd, terms: termsMd, data: dataMd, ip: ipMd, cookies: cookiesMd };
 
 // ============================================
 
@@ -644,6 +656,7 @@ const app = {
           '<button class="signin-submit" id="signin-submit" type="submit">Sign in</button>' +
         '</form>' +
         '<div class="signin-toggle" id="signin-toggle">New to Nova? <button type="button" onclick="app.toggleSignInMode()">Create an account</button></div>' +
+        '<div class="signin-legal">By continuing, you agree to our <a href="#" onclick="app.showLegal(\'terms\');return false;">Terms of Service</a> and <a href="#" onclick="app.showLegal(\'privacy\');return false;">Privacy Policy</a>.</div>' +
       '</div>';
     overlay.addEventListener('click', (e) => { if (e.target === overlay) this.closeSignIn(); });
     document.body.appendChild(overlay);
@@ -1248,7 +1261,9 @@ const app = {
 
   renderNodeLibrary() {
     var html = '';
-    NODE_LIBRARY.categories.forEach(function(cat) {
+    // Discovery surface: skip categories flagged hidden (Host, Rhino). Their
+    // nodes still register/resolve for saved graphs — see visibleCategories().
+    visibleCategories().forEach(function(cat) {
       // Group nodes by their 'group' property
       var groups = {};
       cat.nodes.forEach(function(n) {
@@ -1761,7 +1776,9 @@ const app = {
 
 
 
-  formatValue(val) {
+  formatValue(val, depth) {
+
+    depth = depth || 0;
 
     if (val === undefined) return '<span style="color:var(--text-muted)">—</span>';
 
@@ -1777,13 +1794,12 @@ const app = {
 
     }
 
-    if (typeof val === 'string') return `<span style="color:var(--accent-yellow)">"${val}"</span>`;
+    if (typeof val === 'string') return `<span style="color:var(--accent-yellow)">"${this.escapeHtml(val)}"</span>`;
 
     if (Array.isArray(val)) {
 
       const items = val.map((v, i) => {
-        const display = typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(2)) : String(v);
-        return `<div class="data-list-row"><span class="data-list-index">${i}</span><span class="data-list-item" style="color:var(--accent-peach)">${display}</span></div>`;
+        return `<div class="data-list-row"><span class="data-list-index">${i}</span><span class="data-list-item" style="color:var(--accent-peach)">${this._formatItemInline(v)}</span></div>`;
       }).join('');
 
 
@@ -1791,8 +1807,66 @@ const app = {
 
     }
 
-    return `<span style="color:var(--text-secondary)">${val}</span>`;
+    // A non-array object whose String() is meaningful (e.g. Geo types define a
+    // useful toString) — keep using it.
+    if (typeof val === 'object') {
 
+      const str = this._safeToString(val);
+      if (str !== null && str !== '[object Object]') return `<span style="color:var(--text-secondary)">${this.escapeHtml(str)}</span>`;
+
+      // Plain record/row object → expandable keyed view. Rows from the data
+      // parser are null-prototype objects, so enumerate with Object.keys (do
+      // NOT call obj.hasOwnProperty — it doesn't exist on null-proto objects).
+      const keys = Object.keys(val);
+      if (depth >= 3) return `<span style="color:var(--text-secondary)">Object(${keys.length})</span>`;
+
+      const rows = keys.map(k => {
+        return `<div class="data-obj-row"><span class="data-obj-key">${this.escapeHtml(k)}</span><span class="data-obj-arrow">→</span><span class="data-obj-val">${this.formatValue(val[k], depth + 1)}</span></div>`;
+      }).join('');
+
+      return `<div class="data-list-view"><div class="data-list-header"><span style="font-size:8px;color:var(--text-muted)">Object</span><span style="font-size:8px;color:var(--accent-peach)">(${keys.length})</span></div><div class="data-list-body">${rows}</div></div>`;
+
+    }
+
+    const fallback = String(val);
+    if (fallback === '[object Object]') return '<span style="color:var(--text-muted)">{…}</span>';
+    return `<span style="color:var(--text-secondary)">${this.escapeHtml(fallback)}</span>`;
+
+  },
+
+  // Compact inline rendering of a single value inside a list/tree branch row.
+  _formatItemInline(v) {
+    if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(2);
+    if (typeof v === 'string') return this.escapeHtml(v);
+    if (v === null) return 'null';
+    if (v === undefined) return '—';
+    if (typeof v === 'object') {
+      const str = this._safeToString(v);
+      // Geo types and anything with a meaningful toString.
+      if (str !== null && str !== '[object Object]') return this.escapeHtml(str);
+      if (Array.isArray(v)) return 'List(' + v.length + ')';
+      const keys = Object.keys(v);
+      if (!keys.length) return 'Object(0)';
+      const preview = keys.slice(0, 3).map(k => {
+        const kv = v[k];
+        const kvStr = (kv !== null && typeof kv === 'object') ? '…' : String(kv);
+        return this.escapeHtml(k) + ': ' + this.escapeHtml(kvStr);
+      }).join(', ');
+      const more = keys.length > 3 ? ', …' : '';
+      return '{' + preview + more + '}';
+    }
+    return this.escapeHtml(String(v));
+  },
+
+  // String(obj) throws on a null-prototype object (no Symbol.toPrimitive /
+  // toString). Return null when no meaningful string conversion exists so the
+  // caller falls through to the keyed-object rendering.
+  _safeToString(v) {
+    try {
+      return String(v);
+    } catch (e) {
+      return null;
+    }
   },
 
 
@@ -2326,6 +2400,86 @@ const app = {
     ov.innerHTML=`<div class="sc-panel" role="dialog" aria-label="Keyboard Shortcuts"><div class="sc-head"><span>Keyboard Shortcuts</span><button class="sc-close" title="Close">×</button></div><div class="sc-sub">Read-only reference</div><div class="sc-list">${rows}</div></div>`;
     ov.addEventListener('click',e=>{ if(e.target===ov||e.target.classList.contains('sc-close')) ov.remove(); });
     document.body.appendChild(ov);
+  },
+
+  // ── LEGAL VIEWER ──
+  // In-app viewer for Nova's published legal docs. Renders the markdown with the
+  // small, safe renderer in src/ui/legal-viewer.js (all text escaped). Opens
+  // above the sign-in overlay so the accept-terms links are readable from it.
+  showLegal(slug) {
+    const valid = LEGAL_DOCS.some(d => d.slug === slug);
+    const active = valid ? slug : 'privacy';
+    let overlay = document.getElementById('legal-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'legal-overlay';
+      overlay.innerHTML =
+        '<div class="legal-panel" role="dialog" aria-modal="true" aria-label="Legal & data documents">' +
+          '<button class="legal-close" aria-label="Close" onclick="app.closeLegal()">&times;</button>' +
+          '<nav class="legal-nav" id="legal-nav"></nav>' +
+          '<div class="legal-content" id="legal-content"></div>' +
+        '</div>';
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) this.closeLegal(); });
+      // Delegate internal doc links (rendered as <a data-legal-slug=…>) to the
+      // doc switcher so they never navigate away from the app.
+      overlay.addEventListener('click', (e) => {
+        const link = e.target.closest && e.target.closest('a[data-legal-slug]');
+        if (link) { e.preventDefault(); this.showLegal(link.getAttribute('data-legal-slug')); }
+      });
+      document.body.appendChild(overlay);
+      this._escLegal = (e) => { if (e.key === 'Escape') this.closeLegal(); };
+      document.addEventListener('keydown', this._escLegal);
+    }
+    this._renderLegal(active);
+  },
+
+  _renderLegal(active) {
+    const nav = document.getElementById('legal-nav');
+    const content = document.getElementById('legal-content');
+    if (!nav || !content) return;
+    nav.innerHTML = LEGAL_DOCS.map(d =>
+      '<button class="legal-nav-item' + (d.slug === active ? ' active' : '') + '"' +
+      ' onclick="app.showLegal(\'' + d.slug + '\')">' + this.escapeHtml(d.title) + '</button>'
+    ).join('');
+    // renderMarkdown escapes all doc text; only its own structural tags appear.
+    content.innerHTML = renderMarkdown(LEGAL_MD[active] || '');
+    content.scrollTop = 0;
+  },
+
+  closeLegal() {
+    const overlay = document.getElementById('legal-overlay');
+    if (overlay) overlay.remove();
+    if (this._escLegal) { document.removeEventListener('keydown', this._escLegal); this._escLegal = null; }
+  },
+
+  // ── NOVA LEARNING ──
+  // A designed, full-page scrollable "how to use Nova" guide. Mirrors the legal
+  // viewer's overlay/Esc/click-outside pattern, but the body is a richer
+  // scrolling layout built by src/ui/learning-page.js. All illustrations are
+  // self-contained inline SVG (no external image dependency); each step also has
+  // an optional screenshot slot that swaps in a real image only if it loads.
+  showLearning() {
+    let overlay = document.getElementById('learning-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'learning-overlay';
+      overlay.innerHTML = buildLearningHtml();
+      // Click on the backdrop (outside the panel) closes the page.
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) this.closeLearning(); });
+      document.body.appendChild(overlay);
+      this._escLearning = (e) => { if (e.key === 'Escape') this.closeLearning(); };
+      document.addEventListener('keydown', this._escLearning);
+      // Wire the optional screenshot slots (no-ops where no screenshot exists).
+      attachLearningShots(document);
+    }
+    const scroll = document.getElementById('learn-scroll');
+    if (scroll) scroll.scrollTop = 0;
+  },
+
+  closeLearning() {
+    const overlay = document.getElementById('learning-overlay');
+    if (overlay) overlay.remove();
+    if (this._escLearning) { document.removeEventListener('keydown', this._escLearning); this._escLearning = null; }
   },
 
 

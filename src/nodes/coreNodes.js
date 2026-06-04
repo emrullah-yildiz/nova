@@ -1,7 +1,6 @@
 import { NODE_LIBRARY, NODE_TYPE_MAP, NODE_VERSION_MAP } from '../core/nodes.js';
 import { addDefToVersionMap } from '../core/node-versions.js';
 import { curvesCategory, curvesNodes } from './categories/curves.js';
-import { evaluateCategory, evaluateNodes } from './categories/evaluate.js';
 import { geometryCategory, geometryNodes } from './categories/geometry.js';
 import { inputCategory, inputNodes } from './categories/input.js';
 import { listCategory, listNodes } from './categories/list.js';
@@ -9,14 +8,13 @@ import { logicCategory, logicNodes } from './categories/logic.js';
 import { mathCategory, mathNodes } from './categories/math.js';
 import { outputCategory, outputNodes } from './categories/output.js';
 import { customCategory, customNodes } from './categories/custom.js';
+import { dataCategory, dataNodes } from './categories/data.js';
 import { patternsCategory, patternsNodes } from './categories/patterns.js';
 import { planeCategory, planeNodes } from './categories/plane.js';
 import { pointCategory, pointNodes } from './categories/point.js';
 import { solidsCategory, solidsNodes } from './categories/solids.js';
 import { surfacesCategory, surfacesNodes } from './categories/surfaces.js';
 import { testingCategory, testingNodes } from './categories/testing.js';
-import { transformCategory, transformNodes } from './categories/transform.js';
-import { treeCategory, treeNodes } from './categories/tree.js';
 import { vectorCategory, vectorNodes } from './categories/vector.js';
 import { legacyCoreCategories, legacyCoreNodes } from './legacyCoreNodes.js';
 import { createNodeRegistry, toLegacyNodeDefinition } from './registry.js';
@@ -24,7 +22,7 @@ import { createNodeRegistry, toLegacyNodeDefinition } from './registry.js';
 const modernCategories = [
   curvesCategory,
   customCategory,
-  evaluateCategory,
+  dataCategory,
   geometryCategory,
   inputCategory,
   listCategory,
@@ -37,8 +35,6 @@ const modernCategories = [
   solidsCategory,
   surfacesCategory,
   testingCategory,
-  transformCategory,
-  treeCategory,
   vectorCategory
 ];
 
@@ -52,7 +48,7 @@ export const coreCategories = [
 export const coreNodes = [
   ...curvesNodes,
   ...customNodes,
-  ...evaluateNodes,
+  ...dataNodes,
   ...geometryNodes,
   ...inputNodes,
   ...listNodes,
@@ -65,8 +61,6 @@ export const coreNodes = [
   ...solidsNodes,
   ...surfacesNodes,
   ...testingNodes,
-  ...transformNodes,
-  ...treeNodes,
   ...vectorNodes,
   ...legacyCoreNodes
 ];

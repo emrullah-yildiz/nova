@@ -9,10 +9,12 @@
 import { Hono } from 'hono';
 import { PROVIDERS, resolveProvider, pickModel, shouldFallthrough, summarizeFailure } from '../api/proxy/chat.mjs';
 import { handleFeedbackRequest } from '../api/feedback/refusals.mjs';
-import { handleEnterpriseApi, resolveRoomAccess } from './api.mjs';
+import { handleEnterpriseApi, resolveRoomAccess, issueFormaPairingCode, revokeFormaPairingCode, resolveFormaRoomJoin } from './api.mjs';
 import { colorForUser, firstNameOf } from '../src/app/collab-core.js';
+import { applySecurity } from './security-headers.mjs';
 
 export { ProjectRoom } from './room.mjs';
+export { FormaPairingRoom } from './forma-room.mjs';
 
 const MAX_TOKENS_CAP = 512;
 const RATE_LIMIT = 30;            // requests…
@@ -124,6 +126,63 @@ app.get('/api/projects/:id/room', async (c) => {
   return stub.fetch(new Request(request.url, { method: request.method, headers, body: request.body }));
 });
 
+// ── Forma pairing room (FM-M1) ────────────────────────────────────────────────
+// The Forma transport (Option B cloud relay): mint an authenticated, session-
+// bound pairing code, then both peers join the FormaPairingRoom DO by that code.
+// All registered BEFORE the /api/* catch-all so the upgrade + scoped routes win.
+
+// Issue a pairing code bound to the authenticated Nova session/user (F-001).
+app.post('/api/forma/pairing-codes', async (c) => {
+  const env = c.env;
+  const result = await issueFormaPairingCode(env, c.req.raw);
+  if (!result.ok) {
+    return c.json({ error: { message: 'Sign in to create a Forma pairing code.', code: 'FORMA_PAIRING_UNAUTHENTICATED' } }, result.status || 401, cors(env));
+  }
+  return c.json({ code: result.code, expiresAt: result.expiresAt }, 201, cors(env));
+});
+
+// Revoke a pairing code (teardown). Scoped to the code owner.
+app.delete('/api/forma/pairing-codes/:code', async (c) => {
+  const env = c.env;
+  const result = await revokeFormaPairingCode(env, c.req.raw, c.req.param('code'));
+  if (!result.ok) {
+    return c.json({ error: { message: 'Sign in to revoke a Forma pairing code.', code: 'FORMA_PAIRING_UNAUTHENTICATED' } }, result.status || 401, cors(env));
+  }
+  return c.json({ revoked: result.revoked }, 200, cors(env));
+});
+
+// Join the pairing room by code: a WebSocket upgrade. The nova-app peer presents
+// its session (verified here, F-001); the forma-extension peer joins by code.
+// The Worker resolves the OWNING Nova user from the code record and passes it to
+// the DO via trusted headers (the DO cannot be reached except through here).
+app.get('/api/forma/rooms/:code', async (c) => {
+  const env = c.env;
+  const request = c.req.raw;
+  if ((request.headers.get('Upgrade') || '').toLowerCase() !== 'websocket') {
+    return c.json({ error: { message: 'Expected a WebSocket upgrade.', code: 'UPGRADE_REQUIRED' } }, 426, cors(env));
+  }
+  if (!env.FORMA_PAIRING_ROOM) {
+    return c.json({ error: { message: 'Forma Connect is not enabled for this deployment.', code: 'FORMA_DISABLED' } }, 503, cors(env));
+  }
+  const code = c.req.param('code');
+  const role = c.req.query('role') || '';
+  const join = await resolveFormaRoomJoin(env, request, code, role);
+  if (!join.ok) {
+    return c.json({ error: { message: 'Not allowed to join this Forma pairing room.', code: 'FORMA_ROOM_FORBIDDEN', reason: join.reason } }, join.status || 403, cors(env));
+  }
+
+  // Trusted, server-authoritative identity for the DO (audit owner + role).
+  const headers = new Headers(request.headers);
+  headers.set('X-Forma-Role', join.identity.role);
+  headers.set('X-Nova-User-Id', String(join.identity.userId));
+  headers.set('X-Nova-Org-Id', String(join.identity.organizationId || ''));
+  headers.set('X-Forma-Pairing-Room', String(join.identity.pairingRoom));
+
+  // One DO instance per pairing code (keyed by the code hash, never the raw code).
+  const stub = env.FORMA_PAIRING_ROOM.get(env.FORMA_PAIRING_ROOM.idFromName(join.identity.pairingRoom));
+  return stub.fetch(new Request(request.url, { method: request.method, headers, body: request.body }));
+});
+
 // Enterprise API (auth/projects/versions/members/…): the shared dispatcher
 // driven by worker-safe deps (Neon serverless DB, KV session state, R2 objects,
 // WebCrypto auth) — see worker/api.mjs. Registered last so /api/health and
@@ -160,10 +219,17 @@ async function checkRate(env, ip) {
 }
 
 export default {
-  fetch(request, env, ctx) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api/')) return app.fetch(request, env, ctx);
-    if (env && env.ASSETS) return env.ASSETS.fetch(request); // SPA static assets
+    if (env && env.ASSETS) {
+      // Static SPA assets: serve via the ASSETS binding, then merge the
+      // security headers (CSP + hardening) onto the response (SEC-010). The
+      // CSP allows the app's own assets, Google Fonts, the three.js CDNs, and
+      // the BYOK AI provider origins; SEC-015 can flip on HSTS via { hsts:true }.
+      const res = await env.ASSETS.fetch(request);
+      return applySecurity(res, { hsts: env && env.NOVA_HSTS === '1' });
+    }
     return new Response('Not found', { status: 404 });
   }
 };

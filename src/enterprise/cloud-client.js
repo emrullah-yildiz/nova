@@ -190,6 +190,21 @@ export class NovaCloudClient {
     });
   }
 
+  // SEC-013: ask the server to mint a single-use write-approval token bound to
+  // {operation, projectId, graphVersion}. Returns { token, approvalId,
+  // operation, projectId, host, graphVersion, expiresAt }. Requires project
+  // write access (server-enforced). The raw token is returned ONCE.
+  async issueHostWriteApproval({ host = 'revit', operation, projectId = '', graphVersion = '', metadata = {} } = {}) {
+    return this.request('/api/host-write-approvals', {
+      method: 'POST',
+      body: { host, operation, projectId, graphVersion, metadata }
+    });
+  }
+
+  // SEC-013: report a completed host write. The server CONSUMES the token here
+  // (authoritative single-use burn + audit-as-precondition), so `payload.token`
+  // is required — a report without a valid token is rejected + audited as a
+  // denial server-side.
   async recordHostOperation(payload) {
     return this.request('/api/host-operations', {
       method: 'POST',

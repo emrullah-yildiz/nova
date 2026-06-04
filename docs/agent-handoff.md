@@ -13,6 +13,486 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-05 - FM-M1: Forma pairing-room Durable Object + pairing codes (feat/forma-pairing-room)
+
+**Agent/branch:** Link (platform-engineer) — `feat/forma-pairing-room` (off `develop`; do not merge/push)
+
+**Goal:** Build the worker-side Forma transport (Option B cloud relay) handed off
+by Trinity below: a `FormaPairingRoom` Durable Object that relays validated Forma
+protocol frames between the `nova-app` and `forma-extension` peers joined by a
+pairing code, plus authenticated, session-bound pairing-code issuance + audit.
+
+**Shipped (owned files):**
+- NEW `src/enterprise/forma-pairing.mjs` — `FormaPairingService` (pure, KV-backed
+  via the injected stateStore; in-memory fallback for node/tests). Mints a 256-bit
+  code (>=128-bit policy bar), stores it HASHED under `formapair:` (raw code never
+  persisted — mirrors the session/email-verify token pattern), 24h expiry,
+  one-time-join PER ROLE, revocable (owner-scoped). `authorizeJoin` enforces
+  Oracle **F-001**: the `nova-app` peer MUST present the session userId the code
+  was issued to (`session_required`/`session_mismatch` rejections); the
+  `forma-extension` peer joins by code only.
+- NEW `src/integrations/forma/forma-room-core.js` — pure relay-routing core
+  (split from the DO like `collab-core.js` is from `room.mjs`): `evaluateJoin`
+  (exactly one peer per role), `routeFrame` (Oracle **F-002** validate-before-route
+  — allow-lists `FORMA_MESSAGE_TYPES`, runs `validateFormaMessage`, REJECTS
+  unknown/forged/malformed frames instead of forwarding), presence + rejection
+  frames.
+- NEW `worker/forma-room.mjs` — the `FormaPairingRoom` DO (I/O shell). Mirrors
+  `ProjectRoom`: the Worker authorizes the upgrade and passes the resolved role +
+  server-authoritative owning Nova user/org + pairing-room key as trusted
+  `X-Forma-*`/`X-Nova-*` headers. Each relayed WRITE frame (and each rejected one)
+  produces a server-authoritative audit row (Oracle **F-003**) via
+  `recordFormaWriteAudit` — Forma writes have NO approval prompt, so the audit IS
+  the accountability control. Audit sink is injectable for tests
+  (`__setFormaWriteAuditSink`, mirroring `__setCloudClientFactory`).
+- EDIT `src/enterprise/domain.mjs` — added `recordFormaWrite({...})` (writes a
+  `forma.write` / `forma.write.denied` audit row keyed by pairing room + Nova user;
+  mirrors `consumeHostWriteApproval`'s audit, minus the token gate).
+- EDIT `worker/api.mjs` — boots a `FormaPairingService` in the cached API (uses
+  `SESSION_KV`, `formapair:` prefix — no collision with session:/emailverify:/rate:);
+  exports `issueFormaPairingCode`, `revokeFormaPairingCode`, `resolveFormaRoomJoin`,
+  `recordFormaWriteAudit`.
+- EDIT `worker/index.mjs` — exports the DO; adds (before the `/api/*` catch-all):
+  `POST /api/forma/pairing-codes` (issue, authenticated), `DELETE
+  /api/forma/pairing-codes/:code` (revoke), `GET /api/forma/rooms/:code?role=…`
+  (WebSocket upgrade → DO; verifies session+code before routing).
+- EDIT `wrangler.toml` — adds the `FORMA_PAIRING_ROOM`/`FormaPairingRoom` DO binding
+  to BOTH dev and production (mirrors `PROJECT_ROOM`; dev keeps its own SEC-012 KV),
+  plus an additive `[[migrations]] tag = "v2" new_sqlite_classes = ["FormaPairingRoom"]`
+  (v1/ProjectRoom untouched).
+- NEW `tests/forma-pairing-room.test.js` — 24 tests: code entropy/hashing, F-001
+  session binding (no session + wrong-user rejected, issuing user allowed),
+  one-time-join, expiry, owner-scoped revoke, unknown code; room-core role-scoping
+  + F-002 allow-list (unknown type + invalid payload rejected, not relayed); DO
+  relay + F-003 write audit (accepted `forma.write` and rejected `forma.write.denied`).
+
+**Validation:** `node node_modules/eslint/bin/eslint.js .` → clean. Full
+`node node_modules/vitest/vitest.mjs run` → 139 files passed, 1 skipped; 1771
+passed, 1 skipped (the spurious teardown error did not surface this run). New file
+→ 24 passed. `wrangler deploy --dry-run` for `--env=""` (prod) AND `--env dev` both
+validate the DO binding + v2 migration and bundle. ProjectRoom DO untouched; no deploy.
+
+**Known gaps / boundary:** The DO's `fetch` returns a `101` upgrade Response which
+node/undici can't construct (Workers-only); the relay tests register the peer then
+tolerate that env-only `RangeError` (logic still proven via the captured sockets).
+Pairing presence is in-memory (no DO storage), so an empty room idles out naturally
+(no alarm-based teardown built — noted as a future hardening).
+
+**FOLLOW-UP HANDOFF → Trinity (connect-engineer), FM-M1:** the Nova-side relay
+CLIENT and the live extension are still Trinity's, and now have a concrete server to
+target:
+- Wire `NovaFormaBridge` (`src/integrations/forma/forma-bridge.js`) `options.relay`
+  to a real client that: `POST /api/forma/pairing-codes` to mint a code, opens a
+  WebSocket to `GET /api/forma/rooms/:code?role=nova-app` (cookie session sent — the
+  server enforces F-001), and implements the pending-by-`id` request/response model
+  over the relayed envelopes. The room emits `forma.presence` frames
+  (`event: peer.connected|peer.disconnected`, `paired: bool`) — flip `isPaired()` on
+  `paired:true`; it emits `forma.error` frames (`reason`, `errors`, `id`) for
+  rejected/invalid/peer-absent frames.
+- The extension relay loop joins as `role=forma-extension` (code only, no Nova
+  session) and answers request frames with live `Forma.*` SDK calls.
+- The `forma`-category node defs (node-plan §4) consume the bridge methods.
+- The Connect/pairing-panel UI (mint + display code, paired indicator) — Switch.
+The room key is `hashToken(code)` (raw code never used as the DO name). Write frames
+need no approval token (owner decision) but ARE audited server-side automatically.
+
+## 2026-06-04 - RV-M2: C# bridge handlers for RV-M2 Revit params/info/types read nodes (→ Trinity / connect-engineer)
+
+**From:** Core/Runtime (Neo) — `feat/rv-m2-revit-params` (off `develop`; do not merge/push)
+**To:** Connect/Revit (Trinity) — add these to `integrations/revit-addin/**` in follow-up **RV-M2**.
+
+RV-M2 shipped 7 **read-only**, codegen-only Revit nodes (no `execute`, NO SEC-013
+write gate) in the existing `revit` category (`src/core/nodes.js`). Each emits a
+`RevitBridge.*` call; **seven new bridge methods** must be implemented on the add-in.
+**All are strictly read-only** (FilteredElementCollector / Parameter / element reads
+inside a read transaction — no document mutation, no approval token). Mirror the
+existing read request/response transport (`getElements` / `getGeometries`). `elements`
+arguments are the same element-handle shapes the existing read nodes pass.
+
+| Method (call site in codegen) | Args | Returns (shape Nova consumes) | Read-only |
+|---|---|---|---|
+| `RevitBridge.getElementInfo(elements)` | `elements`: element list | list aligned to `elements`, each `{ "id": <string>, "category": <string>, "typeName": <string>, "level": <string\|null>, "name": <string>, "properties": { <name>: <value>, ... } }`. `properties` = the element's readable instance attributes as a name→value map (per NOVA.md "Expose Properties where it makes sense") — include the common instance params + the scalar fields above. | yes |
+| `RevitBridge.getParameterByBuiltIn(elements, bip)` | `elements`: element list; `bip`: BuiltInParameter **enum name** string (e.g. `"ALL_MODEL_MARK"`, `"HOST_AREA_COMPUTED"`) | list of values aligned to `elements` — read each element's parameter resolved via `Enum.Parse<BuiltInParameter>(bip)` then `element.get_Parameter(bip)`; coerce by storage type (Double/Integer/String/ElementId→name); `null` where the element lacks that BIP. **Distinct key space from `getParameterValues` (name-keyed).** | yes |
+| `RevitBridge.getTypeParameters(elements)` | `elements`: element list | list aligned to `elements`, each `{ "properties": { <typeParamName>: <value>, ... } }` — read the element's **type** (`GetTypeId()` → `ElementType`) parameters, NOT instance params. | yes |
+| `RevitBridge.getTypes(category)` | `category`: string category name, or `""` for all | list of `{ "name": <string>, "id": <string> }` — the document's available family symbols / element types, optionally filtered to `category` (skip the filter when blank). The producer that feeds creation-node type inputs (RV-M3). | yes |
+| `RevitBridge.getMaterials()` | none | list of `{ "name": <string>, "id": <string> }` (extend with color/appearance later if needed) — all `Material` elements in the document. | yes |
+| `RevitBridge.getPhase(elements)` | `elements`: element list | list aligned to `elements`, each `{ "created": <phaseName\|null>, "demolished": <phaseName\|null> }` (resolve `PhaseCreated` / `PhaseDemolished` ElementIds to phase names). | yes |
+| `RevitBridge.getWorkset(elements)` | `elements`: element list | list of workset-name strings aligned to `elements` (resolve `WorksetId` via the document's `WorksetTable`; `null` for non-workshared docs). | yes |
+
+Notes for Trinity:
+- `getElementInfo.properties` and `getTypeParameters.properties` are the **Properties
+  maps** the nodes surface to the inspector; serialize values as flat scalars/strings
+  (no opaque handles) so they read cleanly in the data inspector and flow into `List.*`.
+- `getParameterByBuiltIn` keys by the **BuiltInParameter enum** — do NOT route it through
+  the name-based `getParameterValues` path; it is intentionally a different key space
+  (robust across Revit UI language / shared-param renames).
+- `getTypes` is the design-time type producer; a **live-populated dropdown control** for
+  it (so `Revit.FamilyTypes`/creation-node type inputs offer the live doc's types at
+  edit time) is a **Switch (ui-engineer) UI follow-up** — the node returns the list at
+  run time for now.
+- The Nova-side mapping of `materials`/`types` records into any richer geometry/appearance
+  shape (if added later) is Mouse's lane; RV-M2 keeps them as `{name,id}`.
+
+**Merge status:** Open branch `feat/rv-m2-revit-params` — node defs + tests landed,
+C# handlers pending in RV-M2. Do not merge.
+---
+## 2026-06-04 - RV-M1b: C# bridge handlers for RV-M1 Revit read nodes (→ Trinity / connect-engineer)
+
+**From:** Core/Runtime (Neo) — `feat/rv-m1-revit-read` (off `develop`; do not merge/push)
+**To:** Connect/Revit (Trinity) — add these to `integrations/revit-addin/**` in follow-up **RV-M1b**.
+
+RV-M1 shipped 8 **read-only**, codegen-only Revit nodes (no `execute`, NO SEC-013
+write gate) in the existing `revit` category (`src/core/nodes.js`). Each emits a
+`RevitBridge.*` call. Six of those bridge methods do **not** exist in the add-in yet
+and must be implemented. **All are strictly read-only** (FilteredElementCollector /
+geometry reads inside a read transaction — no document mutation, no approval token).
+
+The Nova→hub→add-in transport already exists for `getElements` / `getGeometries` /
+`getParameterValues`; mirror that request/response shape for these. `elements` and
+`ids` arguments are the same element-handle / id-string shapes the existing read
+nodes already pass and receive.
+
+| Method (call site in codegen) | Args | Returns (shape Nova consumes) | Read-only |
+|---|---|---|---|
+| `RevitBridge.filterByParameter(elements, name, op, value)` | `elements`: element list; `name`: string param name; `op`: one of `= != < > <= >=`; `value`: string (coerce by param storage type) | the SUBSET of `elements` whose parameter `name` satisfies `op value` — same element-handle shape as input | yes |
+| `RevitBridge.filterByLevel(elements, level)` | `elements`: element list; `level`: level name string | the subset of `elements` associated with that level | yes |
+| `RevitBridge.getElementsByType(typeName)` | `typeName`: string family/element-type name (e.g. `"Basic Wall: Generic - 200mm"`) | element list — all instances of that type | yes |
+| `RevitBridge.getElementsById(ids)` | `ids`: list of element-id strings | element list resolved from those ids (skip ids that don't resolve) | yes |
+| `RevitBridge.getSolids(elements)` | `elements`: element list | flat list of solid records (BREP solids; serialize as the same geometry-record shape `getGeometries` uses, tagged kind `solid`) | yes |
+| `RevitBridge.getFaces(elements)` | `elements`: element list | flat list of face records, each `{ "faceId": <string>, ...surface data }` — `faceId` must be the SAME id space `requestSelection({includeFaces:true})` returns so it can feed `PlaceFamilyInstance.hostFaceId` | yes |
+| `RevitBridge.getBoundingBoxes(elements)` | `elements`: element list | list aligned to `elements`, each `{ "min": [x,y,z], "max": [x,y,z] }` (model units) | yes |
+| `RevitBridge.getLocations(elements)` | `elements`: element list | list aligned to `elements`, each `{ "curve": <curve-record|null>, "point": [x,y,z]|null }` — curve for `LocationCurve` (walls/beams), point for `LocationPoint` (point-based families); the other key is `null` | yes |
+
+Notes for Trinity:
+- `getGeometries` already exists — `getSolids`/`getFaces` are the BREP-solid /
+  face-record variants of it; reuse its serialization where possible.
+- `filterByParameter` value coercion: parse `value` per the parameter's storage type
+  (Double/Integer/String/ElementId) before comparing; for non-`=`/`!=` ops on string
+  params, fall back to lexical compare.
+- Curve records (`getLocations`) should serialize as the same curve shape Nova's
+  `Curve.*` nodes consume; if no such shape exists yet, coordinate with Mouse
+  (geometry-engineer) on the canonical curve-record format (RV-M1 geometry mapping is
+  Mouse's lane per the plan §5).
+- Mouse (geometry-engineer) owns the Nova-side mapping of these returned records into
+  Nova solids/faces/curves/points for viewer/`Solid.*`/`Surface.*`/`Curve.*` consumption.
+
+**Merge status:** Open branch `feat/rv-m1-revit-read` — node defs + tests landed,
+C# handlers pending in RV-M1b. Do not merge.
+---
+## 2026-06-04 - FM-M0: Forma bridge skeleton (feat/fm-m0-forma-bridge-skeleton)
+
+**Agent/branch:** Trinity (connect-engineer) — `feat/fm-m0-forma-bridge-skeleton` (off `develop`; do not merge/push)
+
+**Goal:** Build the FM-M0 skeleton for the Forma track (Option B, per
+`docs/architecture/revit-forma-node-plan.md` §7 DECISION): a `NovaFormaBridge`
+client interface mirroring `revit-bridge`'s async-handle shape, with inert
+method STUBS (no live SDK, no live relay); the Option B design doc; the Forma
+extension scaffold; and a platform handoff for the Durable Object pairing room.
+NO `forma`-category nodes (that is FM-M1).
+
+**Claimed files (owned, EDIT/NEW only these):**
+- NEW `src/integrations/forma/forma-bridge.js` (NovaFormaBridge stubs + protocol message types)
+- NEW `docs/architecture/forma-connect.md` (Option B design doc)
+- NEW `integrations/forma-extension/README.md` (extension scaffold)
+- NEW `integrations/forma-extension/manifest.json` (stub manifest)
+- NEW `integrations/forma-extension/index.html` + `src/main.js` (stub entry, no live SDK)
+- NEW `tests/forma-bridge.test.js` (interface + unpaired-reject test)
+- EDIT `docs/agent-handoff.md` (this entry + the Link platform DO handoff below)
+
+**Decisions referenced:** `revit-forma-node-plan.md` §7 DECISION (Option B, cloud
+relay not localhost, no Forma write-approval gate). No new `decisions.md` entry —
+the decision was already recorded on develop (commit 254b383).
+
+**Known gaps (FM-M1 owners):** stubs reject with `FORMA_NOT_PAIRED` /
+`NOT_IMPLEMENTED_FM1`; no live Forma SDK calls, no live relay, no nodes. The
+Durable Object pairing room is a handoff to Link (see entry below).
+
+**Merge status:** Open branch (committed, not pushed/merged).
+
+---
+
+## 2026-06-04 - PLATFORM HANDOFF → Link: Forma DO pairing room (FM-M1)
+
+**From:** Trinity (connect-engineer), branch `feat/fm-m0-forma-bridge-skeleton`.
+**To:** Link (platform-engineer), to implement in **FM-M1**. **Do not build here.**
+
+**Goal:** A Cloudflare **Durable Object pairing room** that relays JSON envelopes
+between the Nova Forma extension iframe (`forma-extension` peer) and the standalone
+Nova app (`nova-app` peer), joined by a **pairing code**. This is the Forma transport
+(cloud relay), the analogue of Revit's localhost hub — see
+[`architecture/forma-connect.md`](architecture/forma-connect.md). Reuse the existing
+ProjectRoom DO infra/patterns ([`architecture/accounts-collaboration.md`](architecture/accounts-collaboration.md)).
+
+**Interface (proposed — refine in FM-M1):**
+- **Room key = pairing code.** One DO instance per pairing code (idFromName).
+- **Join:** `GET /forma-room/:code` → WebSocket upgrade. Peer announces role in a
+  `hello` frame (`source: 'nova-app' | 'forma-extension'`). Room accepts at most one
+  peer per role; a third/duplicate join is rejected.
+- **Relay:** the room forwards a request envelope from one peer to the other and the
+  reply back, keyed by envelope `id` (mirror NovaConnectClient's pending-by-id model).
+  Run `validateFormaMessage` (from `src/integrations/forma/forma-bridge.js`) **before
+  routing**; reject + audit on validation failure (do not relay).
+- **Presence:** emit `peer.connected` / `peer.disconnected`; the Nova bridge flips
+  `isPaired()` on both-peers-present.
+- **Lifecycle:** room is created on first join; torn down when the pairing code expires
+  or is revoked, or after both peers disconnect + an idle timeout.
+
+**Pairing code (backend, authoritative — Link owns):** ≥128 bits entropy; default 24h
+expiry; **one-time join** (a stale/used code is rejected); **revocable** via an admin
+path. Carries no Forma credentials and no Nova enterprise secrets.
+
+**Security:** no provider API keys / enterprise secrets transit the room; Forma writes
+need NO approval gate (owner decision) but are pairing-scoped + auditable at the room
+(emit per-operation audit events keyed by pairing room/code).
+
+**Owned files (Link, FM-M1):** `worker/` (the DO + route), backend pairing-code issuance
+in `src/enterprise/` + worker routes. Trinity owns the Nova-side relay client wiring into
+`NovaFormaBridge` (injected `options.relay`) and the extension relay loop
+(`integrations/forma-extension/`).
+
+**Not in FM-M0:** the room itself, the relay client, the pairing-code backend.
+
+---
+
+## 2026-06-04 - Revit add-in ribbon: two-button On/Off + Open Nova (feat/revit-connect-ribbon)
+
+**Agent/branch:** Connect/Revit Engineer — `feat/revit-connect-ribbon` (off `develop`; do not merge/push)
+
+**Goal:** Replace the single "Add-Ins > External Tools > Nova Connect" command with a
+Revit ribbon panel ("Nova Connect" on the built-in Add-Ins tab) created by a new
+`IExternalApplication`. Two buttons: (1) a connection On/Off toggle (red dot →
+green dot) that starts the hub + `NovaHostClient`; (2) "Open Nova" that launches the
+PRODUCTION web app (https://hi-nova.work/) in the browser with the connect auto-params.
+
+**Claimed files (owned, EDIT/NEW only these):**
+- NEW `integrations/revit-addin/NovaConnectApp.cs` (IExternalApplication, ribbon)
+- NEW `integrations/revit-addin/ConnectionToggleCommand.cs` (toggle command)
+- NEW `integrations/revit-addin/DotIcons.cs` (programmatic red/green dot ImageSources)
+- EDIT `integrations/revit-addin/OpenNovaCommand.cs` (now just opens the prod site)
+- EDIT `integrations/revit-addin/NovaConnectSettings.cs` (DefaultNovaUrl → prod)
+- EDIT `integrations/revit-addin/Nova.addin.template` (register the Application)
+- EDIT `docs/architecture/revit-connect.md`, `docs/agent-handoff.md` (this entry)
+
+**Follow-up flagged (hub bundling):** the hub still requires a Nova git checkout + Node
+(via `NovaLocalPaths.FindRepoRoot` / `NOVA_REPO_ROOT`) until the installer bundles a
+self-contained hub — so the connection toggle only goes green on a dev machine (or with
+`NOVA_REPO_ROOT` set). The toggle fails gracefully (stays red + TaskDialog) otherwise.
+See the "Connection toggle and the hub-bundling follow-up" section in revit-connect.md.
+
+**Merge status:** Open branch `feat/revit-connect-ribbon` — IN PROGRESS, do not merge.
+
+## 2026-06-04 - FIX: Revit parameter-node duplicates consolidated (fix/revit-node-dedup)
+
+**Agent/branch:** Core/Runtime Engineer — `fix/revit-node-dedup` (do not merge/push)
+
+**Bug (user-reported):** the Revit category shipped two functional duplicates that
+passed the type-collision check only because their `type` strings differed:
+- get-params: `revit-get-parameters` (Revit.GetParameters, M4) duplicated
+  `revit-get-parameter-values` (Revit.GetParameterValues).
+- set-params: `revit-set-parameters` (Revit.SetParameters, M4) duplicated
+  `revit-set-parameter-values` (Revit.SetParameterValues).
+
+**Which way we consolidated (and why it INVERTS the brief's recommendation):**
+kept the `*-parameter-values` nodes, removed the M4 `*-parameters` nodes. The brief
+guessed the M4 `execute()` nodes were the live/intended path, but the evidence is the
+opposite:
+- The M4 param nodes resolve `globalThis/window.NovaRevitBridge`, which is **never wired
+  into the running app** (`src/main.js` only installs `window.RevitBridge`). They worked
+  only in unit tests with an injected `context.revitBridge`.
+- The `*-parameter-values` nodes ARE the app-wired live path: `engine.js`
+  `_prepareLiveRevitGeometries()` runs them against `window.RevitBridge.getLiveParameterValues
+  / setLiveParameterValues`, and `setLiveParameterValues` carries the **full SEC-013
+  server-issued-token flow** (`acquireWriteApproval` + `reportHostWrite`) — strictly stronger
+  than the M4 node, which only passed approval *metadata* through.
+- They also take a **batch list** of elements (the more useful form), vs the M4
+  single-element contract.
+
+So the survivors satisfy the brief's required traits: codegen fallback (yes), SEC-013
+write gate (server-side, the authoritative form), batch/list API (yes), one clear
+canonical name each. The one trait they don't have is a def-level `execute()` — they run
+live via the engine async pre-pass instead (see architectural note below).
+
+**Edits (Core/Runtime owned only):**
+- `src/core/nodes.js`: removed `revit-get-parameters` + `revit-set-parameters` defs and the
+  now-unused `toElementId` helper; updated the header comment. Kept the M4 select/place
+  nodes (they share `resolveRevitBridge`/`buildApprovalMeta`/`splitNames`/`extractElementIds`).
+- `src/core/node-metadata.js`: added Revit NODE_META so the genuinely-distinct nodes don't
+  read as duplicates — interactive SelectElements/SelectFaces vs programmatic
+  AllElementsInActiveView/AllElementsOfCategory; family-instance/adaptive PLACE vs DirectShape
+  SendGeometry; plus canonical get/set-parameter-values entries.
+- `tests/revit-host-nodes.test.js`: trimmed the M4 node lists from six to four, removed the
+  GetParameters/SetParameters describe blocks, swapped the WRITE dispatch guard to
+  `revit-place-family-instance`, and added a dedup guard (removed types are undefined, exactly
+  one get/one set param node, full canonical Revit inventory asserted).
+
+**Architectural concern flagged (TWO execution models still coexist):** live Revit nodes run
+through two different bridges/dispatch paths — (1) the engine async pre-pass against
+`window.RevitBridge` (the app-wired, SEC-013-bearing path used by element-geometries,
+parameter-values, send-geometry), and (2) the registry `execute()` dispatch against
+`NovaRevitBridge` (used by select/place; NovaRevitBridge is not wired in the app yet). This
+dedup removed the duplicate param NODES but did not unify the two MODELS. Follow-up: either
+wire `NovaRevitBridge` into the app and migrate the pre-pass nodes to `execute()`, or retire
+the `execute()`/NovaRevitBridge path in favor of the pre-pass + `window.RevitBridge`. Until
+then, NEW live Revit nodes should follow the pre-pass + `window.RevitBridge` model (it is the
+one actually running in production and the one carrying the SEC-013 gate).
+
+## 2026-06-04 - FIX M4-T4: legacy→registry bridge dropped `execute` (F-001/F-002)
+
+**Agent/branch:** Core/Runtime Engineer — `feat/m4-host-node-defs` (fix in place, do not merge/push)
+
+**Bug (reviewer F-001/F-002):** The 6 M4 Revit host nodes in `src/core/nodes.js` define
+an async `execute`, but they reach the live engine only via the registry: the engine's
+`default:` branch runs `getLiveCoreRegistry().getNode(type)` and dispatches only when
+`typeof registryNode.execute === 'function'`. Legacy nodes flow into the registry through
+`legacyCoreNodes` → `legacyNodeToRegistryDefinition` (`src/nodes/legacyBridge.js`), which
+did NOT copy `execute`; `defineNode` then stored `execute: null`. So execute was reachable
+only via `NODE_TYPE_MAP` (what the unit tests called) — never via the engine. The nodes
+were inert in the app (output undefined).
+
+**Fix (in scope: legacyBridge + tests only):**
+- `src/nodes/legacyBridge.js`: `legacyNodeToRegistryDefinition` now carries
+  `execute: node.execute || undefined` through to the registry definition, mirroring how
+  `toLegacyNodeDefinition` (registry.js) already preserves execute. `defineNode` keeps its
+  `execute: definition.execute || null` rule, so pure-codegen legacy nodes (the vast
+  majority — `revit-element-geometries`, `host-get-elements`, `rhino-objects-by-layer`,
+  etc.) stay `execute: null`: ZERO behavior change for them. Only nodes that DEFINE an
+  execute (the 6 M4 nodes) become engine-reachable.
+- `tests/revit-host-nodes.test.js`: added an "engine registry path (F-001/F-002 wiring
+  guard)" block that asserts each M4 node's `execute` is a function on
+  `getLiveCoreRegistry().getNode(type)` (the exact predicate the engine gates on) AND on a
+  fresh `createCoreNodeRegistry()`, asserts pure-codegen legacy nodes still have NO execute,
+  and drives two nodes through `executeRegistryNodeUnlaced` (the engine's dispatch helper)
+  with a mocked bridge. This guard fails if the bridge ever drops execute again.
+
+**Registry execute is now reachable — proven by the new guard test.** Without this fix
+execute was never called by the engine; with it, the engine's `default:` branch invokes
+`executeRegistryNodeUnlaced(registryNode, …)`.
+
+**RESIDUAL — app/engine async pre-pass (NOT done here, out of scope):** the engine's
+`computeNodeValue` is SYNCHRONOUS. These M4 nodes' execute is `async`, so the registry-path
+dispatch returns an unresolved Promise; the sync compute path does not await it, so a LIVE
+round-trip still won't surface the resolved selection/place/param values yet. The OLDER
+legacy Revit nodes solve this with `app._prepareLiveRevitGeometries` (`src/core/engine.js`,
+awaited in `runGraph` before the sync compute) which resolves the bridge calls and caches
+results onto `nd._liveXxxResult`; a sync `case` then reads the cache. The 6 M4 nodes are
+NOT yet wired into that pre-pass. Completing the live round-trip needs either (a) extending
+the pre-pass to resolve these nodes' execute and cache the result, or (b) an
+await-aware compute for async registry nodes. That touches the app-layer run loop / pre-pass
+wiring beyond the legacyBridge fix and was intentionally left as a follow-up.
+
+## 2026-06-04 - SEC-013: wire the server-side write-approval token end-to-end
+
+**Agent/branch:** Connect/Revit Engineer — `feat/sec-013-revit-write-gate`
+
+**Goal:** the domain token gate (issue/consume) was sound but NOT wired at runtime.
+Wire it: add `POST /api/host-write-approvals` (issue) and make
+`POST /api/host-operations` REQUIRE+CONSUME a server token (authoritative
+consumer + audit-as-precondition); implement `issueWriteToken` in
+revit-write-approval.js and expose it on `window.__revitWriteApproval`; make
+client.js `normalizeWriteApproval` preserve `token/approvalId/operation/graphVersion`
+and stop defaulting `{approved:true}`.
+
+**Claimed files (owned):** `src/integrations/connect/revit-write-approval.js`,
+`src/integrations/connect/client.js`, `src/integrations/revit/revit-nodes.js`,
+`src/enterprise/api-dispatch.mjs`, `src/enterprise/validation.mjs`,
+`src/enterprise/cloud-client.js`, `src/main.js` (hot file, minimal touch),
+`docs/architecture/revit-connect.md`, `docs/NOVA.md`, SEC-013 ticket + INDEX, tests.
+
+## 2026-06-04 - M4-T2: C# Revit add-in handlers for the round-trip
+
+**Agent/branch:** Connect/Revit Engineer — `feat/m4-revit-addin-handlers` (off `develop` @ 25763c7)
+
+**Goal:** Implement the C# Revit add-in handlers for the M4 round-trip, pinned to the
+M4-T1 contract in `src/integrations/connect/protocol.js`: `selection.query` →
+`selection.result` (elements + optional planar faces), `geometry.place`
+(FamilyInstance via `NewFamilyInstance`, AdaptiveComponent via
+`AdaptiveComponentInstanceUtils`) under the existing write-approval gate, and the
+contract-shaped `parameter.get` / `parameter.set` (singular `elementId` + `params`
+map; set honors the approval gate).
+
+**Claimed files (owned):** EDIT `integrations/revit-addin/NovaHostClient.cs` only.
+READ-only on `src/integrations/connect/protocol.js`. NOT touching any `src/**` or
+`worker/**`.
+
+**Merge status:** Open branch `feat/m4-revit-addin-handlers` — IN PROGRESS, do not merge.
+
+## 2026-06-04 - M4-T3: Browser-side RevitBridge to the M4 protocol
+
+**Agent/branch:** Connect/Revit Engineer — `feat/m4-browser-bridge` (off `develop` @ 25763c7)
+
+**Goal:** Browser bridge that builds M4-T1-contract envelopes and pushes them over
+NovaConnectClient for the Revit round-trip (selection.query / geometry.place /
+parameter.get / parameter.set), validating every request client-side.
+
+**Claimed files (owned):** NEW `src/integrations/revit/revit-bridge.js`, NEW
+`tests/m4-bridge.test.js`, EDIT `src/integrations/connect/client.js` (added FOUR new
+M4 send methods only). READ-only on `protocol.js` (M4-T1), `revit-nodes.js`
+(SEC-013/M4-T4), `connect-panel.js` (M4-T5), `integrations/revit-addin/**` (M4-T2),
+`src/core/nodes.js`. None of those were touched.
+
+**Bridge API surface (M4-T4/T5 pin to this):**
+- `requestSelection(opts, deps?) -> { elements: ContractElement[] }` — sends
+  `selection.query` ({ categories?, includeFaces? }); parses `selection.result` into
+  the contract element shape (id coerced to string, params flat-scalar, optional faces).
+- `placeInstance(spec, deps?) -> placeResultPayload` — sends `geometry.place`
+  ({ kind, familyType, points, hostFaceId?, params? }); normalizes {x,y,z}/single point
+  to [x,y,z] tuples; forwards optional `spec.approval` metadata (WRITE).
+- `getParameters(elementId, names, deps?) -> { elementId, params:{name:value} }` — sends
+  `parameter.get` with the NEW contract ({ elementId, params } mirror, null placeholders).
+- `setParameters(elementId, params, deps?) -> setResultPayload` — sends `parameter.set`
+  ({ elementId, params }); forwards optional `deps.approval` metadata (WRITE).
+- `BridgeValidationError` (carries `.type` + structured `.errors`) — thrown when a
+  request fails client-side `validateMessage`, BEFORE anything leaves the browser.
+- `deps.client` injects a client (tests); default is `window.NovaConnect`.
+
+**Legacy coexistence (reviewer flag from M4-T1) — how the legacy path stays intact:**
+- The M4 parameter contract `{ elementId, params:{name:value} }` DIVERGES from the
+  legacy client methods `getParameterValues/setParameterValues({elementIds,
+  parameterName, values})` that `revit-nodes.js` (RevitBridge.getLive/setLive…) still
+  calls. I did NOT remove or repurpose those legacy methods.
+- Added FOUR NEW, separate client methods instead — `sendSelectionQuery`,
+  `sendGeometryPlace`, `sendParameterGet`, `sendParameterSet` — each just sends the
+  typed envelope and returns the raw response payload. They are documented in-file as
+  intentionally separate from the legacy methods.
+- A test asserts the bridge never calls `client.getParameterValues/setParameterValues`.
+  Full suite (incl. `connect-panel.test.js` and the revit-nodes path) stays green.
+
+**Migration note (M4-T4's concern):** the legacy `{elementIds, parameterName, values}`
+parameter path (client.js `getParameterValues`/`setParameterValues` + revit-nodes.js
+`getLiveParameterValues`/`setLiveParameterValues`) should later migrate to the M4
+`{elementId, params}` contract — e.g. revit-nodes.js delegating per-element to the new
+bridge `getParameters`/`setParameters`, then the legacy client methods can be retired.
+That edit touches `revit-nodes.js` (SEC-013/M4-T4-owned), so it is deliberately out of
+scope here. Until then both shapes coexist.
+
+**Validation:** `node node_modules/eslint/bin/eslint.js .` → exit 0 (clean). Full
+`node node_modules/vitest/vitest.mjs run` → 125 files passed, 1 skipped; 1586 passed,
+1 skipped (the spurious invite-redeem-landing teardown error did not surface this run).
+New `tests/m4-bridge.test.js` → 21 passed. Fully testable without Revit (mock transport).
+
+**Known gaps:** No live Revit smoke test (the round-trip needs M4-T2's add-in + the
+hub's approval UI). Bridge passes approval METADATA through; the interactive approval
+dialog + approval_id are the hub's responsibility (server is the authority).
+
+**Merge status:** Open branch `feat/m4-browser-bridge` — committed, NOT merged/pushed.
+
+## 2026-06-04 - M4-T1: Connect protocol/contract for the Revit round-trip
+
+**Agent/branch:** Connect/Revit Engineer — `feat/m4-connect-protocol` (off `develop` @ f9fae48)
+
+**Goal:** Extend `src/integrations/connect/protocol.js` envelope schemas + payload
+validators for the M4 round-trip message classes — `selection.query`,
+`selection.result`, `geometry.place`, `parameter.set`, `parameter.get`. THIS IS THE
+CONTRACT for M4-T2 (C# add-in), M4-T3 (browser bridge), M4-T4 (node defs), M4-T5
+(picker UI).
+
+**Claimed files (owned):** EDIT `src/integrations/connect/protocol.js`, NEW
+`tests/m4-connect-protocol.test.js`. READ-only on `client.js`, `connect-panel.js`,
+`revit-nodes.js`, `connect-hub.cjs`. NOT touching `src/core/nodes.js`,
+`integrations/revit-addin/**` (later M4 tasks own those).
+
+**Merge status:** Open branch `feat/m4-connect-protocol` — IN PROGRESS, do not merge.
+
 ## 2026-06-04 - T4 (M2): Curve/Surface frame-evaluation kernel
 
 **Agent/branch:** Geometry/Kernel Engineer — `feat/geo-curve-surface-eval` (off `develop` @ 3ee59cc)

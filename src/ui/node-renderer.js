@@ -15,6 +15,7 @@
 
 
 import { getWiredControlDisplay, removeControlInputWires } from './property-wire-controls.js';
+import { fileToControlValue } from './file-control.js';
 import { isAutoLaceable } from '../core/lacing.js';
 import { NODE_VERSION_MAP } from '../core/nodes.js';
 import { availableVersions, getDefVersion } from '../core/node-versions.js';
@@ -47,8 +48,7 @@ var KERNEL_TYPE_MAP = [
   ['surface', 'surface'],
   ['compressedmesh', 'mesh'],
   ['mesh3', 'mesh'],
-  ['plane', 'plane'],
-  ['datatree', 'datatree']
+  ['plane', 'plane']
 ];
 
 // Compatibility families: a port whose type is in `ports` accepts any actual
@@ -141,6 +141,27 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
     } finally {
       this._historySuspended = false;
     }
+  };
+
+  // File control: read the picked File asynchronously into the contract value
+  // object, store it via the app's normal value-change path (onCtrl →
+  // invalidateCompute → graph re-run), then re-render the node so the picker
+  // button shows the chosen file name. Defensive: a failed read leaves the
+  // existing control value untouched.
+  app._onFileControlInput = function(nodeId, controlId, file) {
+    if (!file) return;
+    var self = this;
+    fileToControlValue(file).then(function(value) {
+      self.onCtrl(nodeId, controlId, value);
+      if (self._refreshRenderedNode) self._refreshRenderedNode(nodeId);
+    }).catch(function(err) {
+      // Leave the prior control value intact (we never called onCtrl). Surface
+      // the reason — covers oversize rejections (MAX_FILE_BYTES) and read
+      // failures. Prefer the app toast if present, else console.warn.
+      var msg = '⚠️ Could not load file: ' + ((err && err.message) ? err.message : 'read failed');
+      if (typeof self._toast === 'function') self._toast(msg);
+      else if (typeof console !== 'undefined' && console.warn) console.warn('[file-control]', msg, err);
+    });
   };
 
   app._inputHasPropertyControl = function(nodeId, inputId) {
@@ -411,6 +432,42 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
           var rStep = nd.controlValues['_step'] !== undefined ? nd.controlValues['_step'] : 1;
 
           h += '<input type="range" min="' + rMin + '" max="' + rMax + '" step="' + rStep + '" value="' + nd.controlValues[c.id] + '" oninput="app.onCtrl(\'' + nd.id + '\',\'' + c.id + '\',this.value)">';
+
+        } else if (c.type === 'file') {
+
+          // File picker: a button (showing the chosen file name) that triggers a
+          // hidden <input type="file">. On selection app._onFileControlInput
+          // reads the file via the pure helper and routes it through onCtrl.
+          var cvFile = nd.controlValues[c.id];
+
+          // SECURITY: the chosen file name is user-controlled, stored in
+          // controlValues, persisted in saved projects and broadcast to
+          // collaborators. It MUST be HTML-escaped before being concatenated
+          // into innerHTML, both in the title="" attribute and the button text,
+          // otherwise a crafted name (e.g. "><img src=x onerror=...>.csv) is a
+          // stored/propagating XSS vector. escapeHtml escapes & < > " '.
+          var rawFileName = (cvFile && cvFile.name) ? cvFile.name : (c.label || 'Choose file…');
+
+          var fileName = app.escapeHtml(rawFileName);
+
+          var titleName = app.escapeHtml((cvFile && cvFile.name) ? cvFile.name : (c.label || 'Choose file'));
+
+          var accept = c.accept ? ' accept="' + app.escapeHtml(c.accept) + '"' : '';
+
+          var fileInputId = app.escapeHtml(nd.id + '-file-' + c.id);
+
+          var ndIdEsc = app.escapeHtml(nd.id);
+
+          var cIdEsc = app.escapeHtml(c.id);
+
+          h += '<input type="file"' + accept + ' id="' + fileInputId + '" style="display:none" '
+            + 'onchange="app._onFileControlInput(\'' + ndIdEsc + '\',\'' + cIdEsc + '\',this.files&&this.files[0])" '
+            + 'onclick="event.stopPropagation()">';
+
+          h += '<button type="button" class="node-file-btn" title="' + titleName + '" '
+            + 'style="width:100%;padding:4px 8px;font-size:11px;height:24px;box-sizing:border-box;background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:4px;color:var(--text-primary);cursor:pointer;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" '
+            + 'onclick="event.stopPropagation();document.getElementById(\'' + fileInputId + '\').click()" '
+            + 'onmousedown="event.stopPropagation()">📄 ' + fileName + '</button>';
 
         }
 

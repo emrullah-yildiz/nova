@@ -1,4 +1,5 @@
 import { Geo } from '../../geometry/index.js';
+import { planeFromOriginXY } from '../../geometry/frames.js';
 
 export const planeCategory = {
   id: 'plane',
@@ -407,6 +408,64 @@ export const planeNodes = [
         ]
       },
       sampleCode: '{{yAxis}} = {{plane}}.yAxis()'
+    }
+  },
+  {
+    type: 'Plane.ByOriginXAxisYAxis',
+    name: 'Plane.ByOriginXAxisYAxis',
+    category: 'plane',
+    subGroup: 'Creation',
+    icon: '⊞',
+    aliases: ['plane-byoriginxaxisyaxis', 'frame-byaxes'],
+    description: 'Builds a fully oriented plane (an orthonormal frame) from an origin and two in-plane axis hints. The X axis is the normalised X hint; Y is the Y hint made orthogonal to X (Gram-Schmidt); the normal is X × Y. Unlike Plane.ByOriginNormal it carries an explicit in-plane orientation, so it is the right source/target frame for Geometry.Orient.',
+    inputs: [
+      { id: 'origin', name: 'Origin', type: 'point', description: 'Anchor point of the frame' },
+      { id: 'xAxis', name: 'X Axis', type: 'vector', description: 'Desired X direction (normalised internally)' },
+      { id: 'yAxis', name: 'Y Axis', type: 'vector', description: 'In-plane Y hint (orthogonalised against X)' }
+    ],
+    outputs: [{ id: 'plane', name: 'Plane', type: 'plane', description: 'Oriented plane carrying an explicit X/Y/normal frame' }],
+    controls: [],
+    execute(context, inputs) {
+      return {
+        plane: planeFromOriginXY(
+          toPoint(inputs.origin),
+          toVector(inputs.xAxis, new Geo.Vector3(1, 0, 0)),
+          toVector(inputs.yAxis, new Geo.Vector3(0, 1, 0))
+        )
+      };
+    },
+    codegen: {
+      python: '{{plane}} = Geo.planeFromOriginXY({{origin}}, {{xAxis}}, {{yAxis}})',
+      csharp: 'var {{plane}} = Geo.planeFromOriginXY({{origin}}, {{xAxis}}, {{yAxis}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Origin', description: 'Anchor point of the frame' },
+        { name: 'X Axis', description: 'Desired X direction' },
+        { name: 'Y Axis', description: 'In-plane Y hint' }
+      ],
+      outputs: [{ name: 'Plane', description: 'Oriented frame' }],
+      example: {
+        title: 'Frame from X=(1,0,0), Y=(0,1,0) — normal Z component = 1',
+        nodes: [
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Vector.XAxis', x: 0, y: 80 },
+          { type: 'Vector.YAxis', x: 0, y: 150 },
+          { type: 'Plane.ByOriginXAxisYAxis', x: 280, y: 60 },
+          { type: 'Plane.Normal', x: 520, y: 60 },
+          { type: 'Vector.Deconstruct', x: 720, y: 60 },
+          { type: 'Output.Watch', x: 940, y: 60 }
+        ],
+        wires: [
+          [0, 'point', 3, 'origin'],
+          [1, 'vector', 3, 'xAxis'],
+          [2, 'vector', 3, 'yAxis'],
+          [3, 'plane', 4, 'plane'],
+          [4, 'normal', 5, 'vector'],
+          [5, 'z', 6, 'value']
+        ]
+      },
+      sampleCode: '{{plane}} = Geo.planeFromOriginXY({{origin}}, {{xAxis}}, {{yAxis}})'
     }
   }
 ];

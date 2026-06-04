@@ -55,6 +55,17 @@ export function clearSlotCookie(slot) {
   return `${SLOT_PREFIX}${s}=; ${COOKIE_ATTRS}; HttpOnly; Max-Age=0`;
 }
 
+// SEC-004: clear EVERY `nova_session_<slot>` cookie present in the request, not
+// just the active slot. On account deletion all of a browser's slots for the
+// deleted user must be wiped. Returns an array of Set-Cookie strings (one per
+// slot seen in the header), so callers can spread them into headersWith().
+export function clearAllSlotCookies(header) {
+  return Object.keys(parseAllSlots(header))
+    .map(Number)
+    .map(slot => clearSlotCookie(slot))
+    .filter(Boolean);
+}
+
 // Readable (no HttpOnly) — just the active slot index.
 export function serializeActivePointer(slot, maxAgeSeconds = 8 * 60 * 60) {
   const s = clampSlot(slot);

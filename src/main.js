@@ -57,7 +57,7 @@ import { installNovaConnectPanel } from './integrations/connect/connect-panel.js
 import { installGeoSelector } from './viewer/geo-selector.js';
 import { RuntimeConfig, getRuntimeConfig } from './config/runtime-config.js';
 import { NovaCloudClient, createNovaCloudClient } from './enterprise/cloud-client.js';
-import { requestWriteApproval, resolveApproval, getPendingApprovals, getApprovalStatus, recordHostAuditEvent } from './integrations/connect/revit-write-approval.js';
+import { requestWriteApproval, resolveApproval, getPendingApprovals, getApprovalStatus, recordHostAuditEvent, issueWriteToken } from './integrations/connect/revit-write-approval.js';
 
 const NovaConnect = createNovaConnectClient();
 let installedRevitBridge = RevitBridge;
@@ -206,7 +206,10 @@ function installAfterAppInit() {
       resolveApproval,
       getPendingApprovals,
       getApprovalStatus,
-      recordHostAuditEvent
+      recordHostAuditEvent,
+      // SEC-013: the authoritative server-token issuer RevitBridge calls before
+      // any write. Without it wired, writes are blocked client-side.
+      issueWriteToken
     };
   }
   installGeoSelector(app);

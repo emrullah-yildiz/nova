@@ -1,4 +1,10 @@
 import { Geo } from '../../geometry/index.js';
+import {
+  pointAtUV,
+  normalAtUV,
+  frameAtUV,
+  divideSurface
+} from '../../geometry/surface-eval.js';
 
 export const surfacesCategory = {
   id: 'surfaces',
@@ -10,6 +16,14 @@ export const surfacesCategory = {
 function toNumber(value, fallback = 0) {
   const n = Number(value ?? fallback);
   return Number.isNaN(n) ? fallback : n;
+}
+// u/v are NORMALIZED parameters in [0,1]; clamp so a stray control value never
+// samples past the surface domain.
+function toParam(value, fallback = 0.5) {
+  const n = toNumber(value, fallback);
+  if (n < 0) return 0;
+  if (n > 1) return 1;
+  return n;
 }
 function toInteger(value, fallback = 0) {
   return Math.max(1, Math.floor(toNumber(value, fallback)));
@@ -1029,6 +1043,242 @@ export const surfacesNodes = [
         ]
       },
       sampleCode: '{{surface}} = Geo.wavyGrid({{width}}, {{depth}}, 20, 20, {{amplitude}}, 0.3, 0.3)'
+    }
+  },
+
+  // ─── Evaluate & Divide ───────────────────────────────────
+  {
+    type: 'Surface.PointAtUV',
+    name: 'Surface.PointAtUV',
+    category: 'surfaces',
+    subGroup: 'Evaluate',
+    icon: '•',
+    aliases: ['surface-pointatuv', 'surface-pointat'],
+    description: 'Evaluates the point on a surface at a normalized parameter pair (u, v) ∈ [0,1]². Handles parametric surfaces, NURBS surfaces and grid/mesh surfaces; the parameters are normalized so (0,0) is one corner and (1,1) the opposite.',
+    inputs: [
+      { id: 'surface', name: 'Surface', type: 'mesh', description: 'Surface to evaluate' },
+      { id: 'u', name: 'u', type: 'number', description: 'Normalized U parameter in [0,1]' },
+      { id: 'v', name: 'v', type: 'number', description: 'Normalized V parameter in [0,1]' }
+    ],
+    outputs: [{ id: 'point', name: 'Point', type: 'point', description: 'Point on the surface at (u, v)' }],
+    controls: [
+      { id: 'u', type: 'formula', default: '0.5', label: 'u' },
+      { id: 'v', type: 'formula', default: '0.5', label: 'v' }
+    ],
+    execute(context, inputs) {
+      if (inputs.surface == null) return { point: undefined };
+      return { point: pointAtUV(inputs.surface, toParam(inputs.u, 0.5), toParam(inputs.v, 0.5)) };
+    },
+    codegen: {
+      python: '{{point}} = Geo.pointAtUV({{surface}}, {{u}}, {{v}})',
+      csharp: 'var {{point}} = Geo.pointAtUV({{surface}}, {{u}}, {{v}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Surface', description: 'Surface to evaluate' },
+        { name: 'u', description: 'Normalized U parameter in [0,1]' },
+        { name: 'v', description: 'Normalized V parameter in [0,1]' }
+      ],
+      outputs: [{ name: 'Point', description: 'Point on the surface at (u, v)' }],
+      example: {
+        title: 'Center point (u=0.5, v=0.5) of a Dini surface',
+        nodes: [
+          { type: 'Surface.Dini', x: 0, y: 0, controls: { a: 1, b: 0.2 } },
+          { type: 'Input.Number', x: 0, y: 110, controls: { val: 0.5 } },
+          { type: 'Input.Number', x: 0, y: 180, controls: { val: 0.5 } },
+          { type: 'Surface.PointAtUV', x: 280, y: 60 },
+          { type: 'Output.Watch', x: 520, y: 60 }
+        ],
+        wires: [
+          [0, 'surface', 3, 'surface'],
+          [1, 'value', 3, 'u'],
+          [2, 'value', 3, 'v'],
+          [3, 'point', 4, 'value']
+        ]
+      },
+      sampleCode: '{{point}} = Geo.pointAtUV({{surface}}, {{u}}, {{v}})'
+    }
+  },
+  {
+    type: 'Surface.NormalAtUV',
+    name: 'Surface.NormalAtUV',
+    category: 'surfaces',
+    subGroup: 'Evaluate',
+    icon: '⊥',
+    aliases: ['surface-normalatuv', 'surface-normalat'],
+    description: 'Evaluates the unit surface normal at a normalized parameter pair (u, v) ∈ [0,1]² — the direction perpendicular to the tangent plane at that point. Uses the surface\'s analytic normal where available, otherwise dU × dV from finite differences. Always unit length.',
+    inputs: [
+      { id: 'surface', name: 'Surface', type: 'mesh', description: 'Surface to evaluate' },
+      { id: 'u', name: 'u', type: 'number', description: 'Normalized U parameter in [0,1]' },
+      { id: 'v', name: 'v', type: 'number', description: 'Normalized V parameter in [0,1]' }
+    ],
+    outputs: [{ id: 'normal', name: 'Normal', type: 'vector', description: 'Unit surface normal at (u, v)' }],
+    controls: [
+      { id: 'u', type: 'formula', default: '0.5', label: 'u' },
+      { id: 'v', type: 'formula', default: '0.5', label: 'v' }
+    ],
+    execute(context, inputs) {
+      if (inputs.surface == null) return { normal: undefined };
+      return { normal: normalAtUV(inputs.surface, toParam(inputs.u, 0.5), toParam(inputs.v, 0.5)) };
+    },
+    codegen: {
+      python: '{{normal}} = Geo.normalAtUV({{surface}}, {{u}}, {{v}})',
+      csharp: 'var {{normal}} = Geo.normalAtUV({{surface}}, {{u}}, {{v}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Surface', description: 'Surface to evaluate' },
+        { name: 'u', description: 'Normalized U parameter in [0,1]' },
+        { name: 'v', description: 'Normalized V parameter in [0,1]' }
+      ],
+      outputs: [{ name: 'Normal', description: 'Unit surface normal at (u, v)' }],
+      example: {
+        title: 'Normal at the center of a Dini surface — deconstruct its Z',
+        nodes: [
+          { type: 'Surface.Dini', x: 0, y: 0, controls: { a: 1, b: 0.2 } },
+          { type: 'Input.Number', x: 0, y: 110, controls: { val: 0.5 } },
+          { type: 'Input.Number', x: 0, y: 180, controls: { val: 0.5 } },
+          { type: 'Surface.NormalAtUV', x: 280, y: 60 },
+          { type: 'Vector.Deconstruct', x: 520, y: 60 },
+          { type: 'Output.Watch', x: 740, y: 60 }
+        ],
+        wires: [
+          [0, 'surface', 3, 'surface'],
+          [1, 'value', 3, 'u'],
+          [2, 'value', 3, 'v'],
+          [3, 'normal', 4, 'vector'],
+          [4, 'z', 5, 'value']
+        ]
+      },
+      sampleCode: '{{normal}} = Geo.normalAtUV({{surface}}, {{u}}, {{v}})'
+    }
+  },
+  {
+    type: 'Surface.FrameAtUV',
+    name: 'Surface.FrameAtUV',
+    category: 'surfaces',
+    subGroup: 'Evaluate',
+    icon: '⊹',
+    aliases: ['surface-frameatuv', 'surface-frameat'],
+    description: 'Evaluates an oriented frame (a Plane) on a surface at a normalized parameter pair (u, v) ∈ [0,1]². Origin = surface point; normal = surface normal; in-plane X follows the dU direction, Y = normal × X. Lay a panel flat onto the surface by orienting it from the world XY plane onto this frame via Geometry.Orient.',
+    inputs: [
+      { id: 'surface', name: 'Surface', type: 'mesh', description: 'Surface to evaluate' },
+      { id: 'u', name: 'u', type: 'number', description: 'Normalized U parameter in [0,1]' },
+      { id: 'v', name: 'v', type: 'number', description: 'Normalized V parameter in [0,1]' }
+    ],
+    outputs: [{ id: 'plane', name: 'Plane', type: 'plane', description: 'Oriented frame at (u, v) (normal = surface normal)' }],
+    controls: [
+      { id: 'u', type: 'formula', default: '0.5', label: 'u' },
+      { id: 'v', type: 'formula', default: '0.5', label: 'v' }
+    ],
+    execute(context, inputs) {
+      if (inputs.surface == null) return { plane: undefined };
+      return { plane: frameAtUV(inputs.surface, toParam(inputs.u, 0.5), toParam(inputs.v, 0.5)) };
+    },
+    codegen: {
+      python: '{{plane}} = Geo.frameAtUV({{surface}}, {{u}}, {{v}})',
+      csharp: 'var {{plane}} = Geo.frameAtUV({{surface}}, {{u}}, {{v}});'
+    },
+    help: {
+      inputs: [
+        { name: 'Surface', description: 'Surface to evaluate' },
+        { name: 'u', description: 'Normalized U parameter in [0,1]' },
+        { name: 'v', description: 'Normalized V parameter in [0,1]' }
+      ],
+      outputs: [{ name: 'Plane', description: 'Oriented frame at (u, v)' }],
+      example: {
+        title: 'Frame at the center of a Dini surface — its normal is the surface normal',
+        nodes: [
+          { type: 'Surface.Dini', x: 0, y: 0, controls: { a: 1, b: 0.2 } },
+          { type: 'Input.Number', x: 0, y: 110, controls: { val: 0.5 } },
+          { type: 'Input.Number', x: 0, y: 180, controls: { val: 0.5 } },
+          { type: 'Surface.FrameAtUV', x: 280, y: 60 },
+          { type: 'Plane.Normal', x: 520, y: 60 },
+          { type: 'Output.Watch', x: 740, y: 60 }
+        ],
+        wires: [
+          [0, 'surface', 3, 'surface'],
+          [1, 'value', 3, 'u'],
+          [2, 'value', 3, 'v'],
+          [3, 'plane', 4, 'plane'],
+          [4, 'normal', 5, 'value']
+        ]
+      },
+      sampleCode: '{{plane}} = Geo.frameAtUV({{surface}}, {{u}}, {{v}})'
+    }
+  },
+  {
+    type: 'Surface.Divide',
+    name: 'Surface.Divide',
+    category: 'surfaces',
+    subGroup: 'Evaluate',
+    icon: '▦',
+    aliases: ['surface-divide', 'surface-isotrim'],
+    description: 'Samples a surface on a (U Count × V Count) grid and returns both the grid Points and an oriented Frame at each — the panelization substrate. Unlike Surface.Subdivide (which splits the surface into sub-surface patches), this returns sample points + frames, not new surfaces. U/V Count are SEGMENT counts, so the grid has (U Count+1) × (V Count+1) samples in row-major order. Feed Frames into Geometry.Orient to lay a panel/adaptive component flat onto every cell.',
+    inputs: [
+      { id: 'surface', name: 'Surface', type: 'mesh', description: 'Surface to divide' },
+      { id: 'uCount', name: 'U Count', type: 'number', description: 'U segment count ((U Count+1) samples along U)' },
+      { id: 'vCount', name: 'V Count', type: 'number', description: 'V segment count ((V Count+1) samples along V)' }
+    ],
+    outputs: [
+      { id: 'points', name: 'Points', type: 'list', description: 'Grid sample points (row-major)' },
+      { id: 'frames', name: 'Frames', type: 'list', description: 'Oriented frame at each sample (normal = surface normal)' }
+    ],
+    controls: [
+      { id: 'uCount', type: 'formula', default: '5', label: 'U Count' },
+      { id: 'vCount', type: 'formula', default: '5', label: 'V Count' }
+    ],
+    execute(context, inputs) {
+      if (inputs.surface == null) return { points: [], frames: [] };
+      const { points, frames } = divideSurface(
+        inputs.surface,
+        toInteger(inputs.uCount, 5),
+        toInteger(inputs.vCount, 5)
+      );
+      return { points, frames };
+    },
+    codegen: {
+      python: "_d = Geo.divideSurface({{surface}}, int({{uCount}}), int({{vCount}}))\n{{points}} = _d['points']\n{{frames}} = _d['frames']",
+      csharp: 'var _d = Geo.divideSurface({{surface}}, (int){{uCount}}, (int){{vCount}});\nvar {{points}} = _d.points;\nvar {{frames}} = _d.frames;'
+    },
+    help: {
+      inputs: [
+        { name: 'Surface', description: 'Surface to divide' },
+        { name: 'U Count', description: 'U segment count' },
+        { name: 'V Count', description: 'V segment count' }
+      ],
+      outputs: [
+        { name: 'Points', description: 'Grid sample points (row-major)' },
+        { name: 'Frames', description: 'Oriented frame at each sample' }
+      ],
+      // PANELIZATION PAYOFF: a surface → Surface.Divide → Frames → Geometry.Orient
+      // lays a small panel box (built on the world XY plane) flat onto every grid
+      // cell, then Output.Watch shows the populated surface.
+      example: {
+        title: 'Panelize a Dini surface: 4×4 grid → orient a flat panel onto every frame',
+        nodes: [
+          { type: 'Surface.Dini', x: 0, y: 0, controls: { a: 1, b: 0.2 } },
+          { type: 'Input.Integer', x: 0, y: 110, controls: { val: 4 } },
+          { type: 'Input.Integer', x: 0, y: 180, controls: { val: 4 } },
+          { type: 'Surface.Divide', x: 280, y: 60 },
+          { type: 'Point.Origin', x: 0, y: 300 },
+          { type: 'Box.ByCenterWidthDepthHeight', x: 280, y: 300, controls: { width: 0.4, depth: 0.4, height: 0.05 } },
+          { type: 'Plane.XY', x: 280, y: 440 },
+          { type: 'Geometry.Orient', x: 560, y: 200 },
+          { type: 'Output.Watch', x: 820, y: 200 }
+        ],
+        wires: [
+          [0, 'surface', 3, 'surface'],
+          [1, 'value', 3, 'uCount'],
+          [2, 'value', 3, 'vCount'],
+          [4, 'point', 5, 'center'],
+          [5, 'solid', 7, 'geometry'],
+          [6, 'plane', 7, 'fromPlane'],
+          [3, 'frames', 7, 'toPlane'],
+          [7, 'result', 8, 'value']
+        ]
+      },
+      sampleCode: "_d = Geo.divideSurface({{surface}}, int({{uCount}}), int({{vCount}}))\n{{points}} = _d['points']\n{{frames}} = _d['frames']"
     }
   }
 ];

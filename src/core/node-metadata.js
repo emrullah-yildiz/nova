@@ -527,6 +527,114 @@ export const NODE_META = {
     csharp: '// Manual C# code block',
     example: 'Loop generating point arrays, complex math expressions',
     whenToUse: 'LAST RESORT. Only for: (1) loops building arrays with .append(), (2) complex expressions that cannot be decomposed into single-line assignments. ALWAYS log WHY in the console if using this node.'
+  },
+
+  // ═══════════════════════════════════════
+  // REVIT NODES (Nova Connect round-trip)
+  // Descriptions exist to keep the genuinely-distinct element-acquisition and
+  // write nodes from reading as duplicates of one another. (fix/revit-node-dedup)
+  // ═══════════════════════════════════════
+  'revit-all-elements-view': {
+    description: 'Programmatic QUERY: returns every element in the active Revit view (no user interaction).',
+    python: 'elements = RevitBridge.getAllElements()',
+    example: 'elements = RevitBridge.getAllElements()',
+    whenToUse: 'Bulk-read everything currently visible. Use this (or AllElementsOfCategory) for non-interactive queries; use SelectElements when the user should pick.'
+  },
+  'revit-all-of-category': {
+    description: 'Programmatic QUERY: returns all elements of one Revit category (Walls, Doors, …) with no user interaction.',
+    python: 'elements = RevitBridge.getElements("Walls")',
+    example: 'walls = RevitBridge.getElements("Walls")',
+    whenToUse: 'Non-interactive, category-scoped reads. Differs from SelectElements, which asks the user to pick elements in Revit.'
+  },
+  'revit-filter-by-parameter': {
+    description: 'READ: filter an existing element LIST by a parameter value/comparison. Refines a collector\'s output; does NOT acquire elements itself.',
+    python: 'elements = RevitBridge.filterByParameter(elements, "Mark", "!=", "")',
+    example: 'tagged = RevitBridge.filterByParameter(walls, "Mark", "!=", "")',
+    whenToUse: 'Narrow a collected list by a parameter (e.g. only walls with a Mark). Feed it elements from AllElementsOfCategory / AllElementsInActiveView. Distinct from GetParameterValues (which READS values) — this RETURNS the matching elements.'
+  },
+  'revit-filter-by-level': {
+    description: 'READ: keep only the elements assigned to a given level. Refines a collector\'s output.',
+    python: 'elements = RevitBridge.filterByLevel(elements, "Level 1")',
+    example: 'lvl1Walls = RevitBridge.filterByLevel(walls, "Level 1")',
+    whenToUse: 'Scope a collected list to one level. Differs from FilterByParameter (any named param) by targeting the element\'s level association.'
+  },
+  'revit-elements-by-type': {
+    description: 'READ QUERY: collect every instance of a named family/element type (e.g. "Basic Wall: Generic - 200mm"). Type-scoped, no user interaction.',
+    python: 'elements = RevitBridge.getElementsByType("Basic Wall: Generic - 200mm")',
+    example: 'genericWalls = RevitBridge.getElementsByType("Basic Wall: Generic - 200mm")',
+    whenToUse: 'Acquire elements by their type name. Finer than AllElementsOfCategory (which is category-scoped); use it when you want one specific type, not a whole category.'
+  },
+  'revit-element-by-id': {
+    description: 'READ: resolve a list of element ids back into element handles. The inverse of SelectElements.ids.',
+    python: 'elements = RevitBridge.getElementsById(ids)',
+    example: 'picked = RevitBridge.getElementsById(["1001", "1002"])',
+    whenToUse: 'Re-acquire elements from ids (e.g. ids saved from a previous SelectElements). Not a collector — it needs ids as input.'
+  },
+  'revit-element-solids': {
+    description: 'READ geometry: extract the solid bodies (BREP solids) of elements — not the display mesh.',
+    python: 'solids = RevitBridge.getSolids(elements)',
+    example: 'wallSolids = RevitBridge.getSolids(walls)',
+    whenToUse: 'Boolean/volume analysis needing real solids. Distinct from Element.Geometries, which returns display MESHES.'
+  },
+  'revit-element-faces': {
+    description: 'READ geometry: extract the faces (with face ids) of elements, for hosting or surface analysis.',
+    python: 'faces = RevitBridge.getFaces(elements); faceIds = [f["faceId"] for f in faces]',
+    example: 'wallFaces = RevitBridge.getFaces(walls)',
+    whenToUse: 'Get faces to host a family on (feed faceIds to PlaceFamilyInstance) or to analyze surfaces. Distinct from Element.Solids (whole bodies).'
+  },
+  'revit-element-bounding-box': {
+    description: 'READ geometry: compute each element\'s axis-aligned bounding box as min/max point lists.',
+    python: 'b = RevitBridge.getBoundingBoxes(elements); mins = [x["min"] for x in b]',
+    example: 'boxes = RevitBridge.getBoundingBoxes(furniture)',
+    whenToUse: 'Extents/clash/placement math. Returns parallel min/max point lists, consumable by Point.* / Rectangle.*.'
+  },
+  'revit-element-location': {
+    description: 'READ geometry: element location — a CURVE for line-based elements (walls, beams) and a POINT for point-based families; returns whichever applies.',
+    python: 'loc = RevitBridge.getLocations(elements); curves = [l["curve"] for l in loc if l.get("curve")]',
+    example: 'wallLines = RevitBridge.getLocations(walls)',
+    whenToUse: 'Recover the driving curve of walls/beams or the insertion point of families. Feeds Curve.* / Point.* and downstream placement.'
+  },
+  'revit-select-elements': {
+    description: 'INTERACTIVE pick: prompts the user to select elements in the live Revit window, then returns what they picked.',
+    python: 'r = RevitBridge.requestSelection({}); elements = r.get("elements", [])',
+    example: 'r = RevitBridge.requestSelection({}); picked = r.get("elements", [])',
+    whenToUse: 'When the user should choose elements by hand. For a non-interactive query of all/typed elements, use AllElementsInActiveView or AllElementsOfCategory instead.'
+  },
+  'revit-select-faces': {
+    description: 'INTERACTIVE pick: prompts the user to select faces in the live Revit window; returns their elements and face ids.',
+    python: 'r = RevitBridge.requestSelection({"includeFaces": True}); faceIds = [f["faceId"] for e in r["elements"] for f in e.get("faces", [])]',
+    example: 'r = RevitBridge.requestSelection({"includeFaces": True})',
+    whenToUse: 'Host a family instance on a user-picked face. Like SelectElements but for faces.'
+  },
+  'revit-get-parameter-values': {
+    description: 'Read one parameter from a LIST of elements (batch). Canonical Revit parameter-read node.',
+    python: 'values = RevitBridge.getParameterValues(elements, "Comments")',
+    example: 'marks = RevitBridge.getParameterValues(walls, "Mark")',
+    whenToUse: 'Read a parameter across many elements at once. (Replaced the single-element Revit.GetParameters.)'
+  },
+  'revit-set-parameter-values': {
+    description: 'Write one parameter onto a LIST of elements (batch). Canonical Revit parameter-write node; gated by the SEC-013 server-issued approval token.',
+    python: 'results = RevitBridge.setParameterValues(elements, "Comments", "Nova")',
+    example: 'results = RevitBridge.setParameterValues(walls, "Comments", "Reviewed")',
+    whenToUse: 'Write a parameter across many elements at once. WRITE — runs only after a server-issued approval token is granted. (Replaced the single-element Revit.SetParameters.)'
+  },
+  'revit-place-family-instance': {
+    description: 'WRITE: place loadable FAMILY INSTANCES (point- or face-hosted) at the given points. Creates real Revit family elements.',
+    python: 'r = RevitBridge.placeInstance({"kind": "familyInstance", "familyType": ft, "points": pts})',
+    example: 'r = RevitBridge.placeInstance({"kind": "familyInstance", "familyType": "Furniture: Chair", "points": pts})',
+    whenToUse: 'Insert catalogued Revit families. Distinct from SendGeometry, which bakes raw Nova mesh geometry into a DirectShape.'
+  },
+  'revit-place-adaptive-component': {
+    description: 'WRITE: place ADAPTIVE COMPONENT family instances driven by N placement points. Creates real Revit family elements.',
+    python: 'r = RevitBridge.placeInstance({"kind": "adaptiveComponent", "familyType": ft, "points": pts})',
+    example: 'r = RevitBridge.placeInstance({"kind": "adaptiveComponent", "familyType": "Panel_4pt", "points": quad})',
+    whenToUse: 'Place panel/adaptive families whose shape follows multiple points. Distinct from SendGeometry (DirectShape) and PlaceFamilyInstance (single/point/face hosting).'
+  },
+  'revit-send-geometry': {
+    description: 'WRITE: bake raw Nova mesh/geometry into a Revit DirectShape. Creates geometry, NOT a catalogued family instance.',
+    python: 'r = RevitBridge.sendGeometry(geometry, {}, {"category": "Generic Models", "name": "Nova Geometry"})',
+    example: 'r = RevitBridge.sendGeometry(mesh, {}, {"category": "Mass", "name": "Tower"})',
+    whenToUse: 'Push Nova-generated geometry into Revit as a DirectShape. Distinct from PlaceFamilyInstance / PlaceAdaptiveComponent, which insert loadable families.'
   }
 };
 
