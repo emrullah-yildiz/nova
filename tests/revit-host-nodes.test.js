@@ -24,16 +24,18 @@ function makeBridge(overrides = {}) {
 }
 
 describe('M4 Revit host node registration', () => {
+  // The live-bridge execute() round-trip nodes that remain after the
+  // fix/revit-node-dedup consolidation. The single-element parameter nodes
+  // (revit-get-parameters / revit-set-parameters) were removed as duplicates of
+  // the batch, app-wired Revit.Get/SetParameterValues nodes.
   const types = [
     'revit-select-elements',
     'revit-select-faces',
     'revit-place-family-instance',
-    'revit-place-adaptive-component',
-    'revit-get-parameters',
-    'revit-set-parameters'
+    'revit-place-adaptive-component'
   ];
 
-  it('registers all six M4 round-trip nodes in the existing Revit category', () => {
+  it('registers all four M4 round-trip nodes in the existing Revit category', () => {
     const revit = NODE_LIBRARY.categories.find((c) => c.id === 'revit');
     expect(revit).toBeTruthy();
     const names = revit.nodes.map((n) => n.type);
@@ -48,6 +50,41 @@ describe('M4 Revit host node registration', () => {
       expect(def(t)).toBeTruthy();
       expect(typeof def(t).execute).toBe('function');
     });
+  });
+
+  // Dedup guard: the removed single-element parameter duplicates must NOT come
+  // back. There is exactly ONE get-parameters node (the batch
+  // revit-get-parameter-values) and ONE set-parameters node
+  // (revit-set-parameter-values) in the Revit category.
+  it('does not re-register the removed single-element parameter duplicates', () => {
+    expect(def('revit-get-parameters')).toBeUndefined();
+    expect(def('revit-set-parameters')).toBeUndefined();
+  });
+
+  it('keeps exactly one canonical get- and one set-parameters node', () => {
+    const revit = NODE_LIBRARY.categories.find((c) => c.id === 'revit');
+    const typeList = revit.nodes.map((n) => n.type);
+    const getParamNodes = typeList.filter((t) => /get-param/i.test(t));
+    const setParamNodes = typeList.filter((t) => /set-param/i.test(t));
+    expect(getParamNodes).toEqual(['revit-get-parameter-values']);
+    expect(setParamNodes).toEqual(['revit-set-parameter-values']);
+  });
+
+  it('matches the expected canonical Revit node inventory', () => {
+    const revit = NODE_LIBRARY.categories.find((c) => c.id === 'revit');
+    const typeList = revit.nodes.map((n) => n.type).sort();
+    expect(typeList).toEqual([
+      'revit-all-elements-view',
+      'revit-all-of-category',
+      'revit-element-geometries',
+      'revit-get-parameter-values',
+      'revit-place-adaptive-component',
+      'revit-place-family-instance',
+      'revit-select-elements',
+      'revit-select-faces',
+      'revit-send-geometry',
+      'revit-set-parameter-values'
+    ]);
   });
 
   it('builds a fresh registry with no duplicate-type collision', () => {
@@ -174,65 +211,13 @@ describe('Revit.PlaceAdaptiveComponent', () => {
   });
 });
 
-describe('Revit.GetParameters', () => {
-  it('calls getParameters with element id + name list and surfaces params/values', async () => {
-    const bridge = makeBridge({
-      getParameters: vi.fn(async () => ({ elementId: '42', params: { Comments: 'hi', Mark: 'M1' } }))
-    });
-    const out = await def('revit-get-parameters').execute(
-      { revitBridge: bridge },
-      { element: { id: 42 }, names: 'Comments, Mark' },
-      { names: 'Comments' }
-    );
-    expect(bridge.getParameters).toHaveBeenCalledWith('42', ['Comments', 'Mark']);
-    expect(out.elementId).toBe('42');
-    expect(out.params).toEqual({ Comments: 'hi', Mark: 'M1' });
-    expect(out.values).toEqual(['hi', 'M1']);
-  });
-
-  it('falls back to the names control when the port is empty', async () => {
-    const bridge = makeBridge({
-      getParameters: vi.fn(async () => ({ elementId: '9', params: { Comments: 'x' } }))
-    });
-    await def('revit-get-parameters').execute(
-      { revitBridge: bridge },
-      { element: '9' },
-      { names: 'Comments' }
-    );
-    expect(bridge.getParameters).toHaveBeenCalledWith('9', ['Comments']);
-  });
-});
-
-describe('Revit.SetParameters', () => {
-  it('calls setParameters with element id + params map and passes approval through', async () => {
-    const bridge = makeBridge({
-      setParameters: vi.fn(async () => ({ ok: true, data: {} }))
-    });
-    const out = await def('revit-set-parameters').execute(
-      { revitBridge: bridge },
-      { element: { identity: { sourceId: 'u-77' } }, params: { Comments: 'done' } },
-      { requireApproval: true }
-    );
-    expect(bridge.setParameters).toHaveBeenCalledTimes(1);
-    const [elementId, params, deps] = bridge.setParameters.mock.calls[0];
-    expect(elementId).toBe('u-77');
-    expect(params).toEqual({ Comments: 'done' });
-    expect(deps.approval).toMatchObject({ required: true });
-    expect(out.elementId).toBe('u-77');
-    expect(out.success).toBe(true);
-  });
-
-  it('does not fabricate approval when requireApproval is false', async () => {
-    const bridge = makeBridge();
-    await def('revit-set-parameters').execute(
-      { revitBridge: bridge },
-      { element: '3', params: { Mark: 'Z' } },
-      { requireApproval: false }
-    );
-    const [, , deps] = bridge.setParameters.mock.calls[0];
-    expect(deps.approval).toBeUndefined();
-  });
-});
+// NOTE: Revit.GetParameters / Revit.SetParameters (the single-element M4
+// parameter nodes) were removed as duplicates of the batch, app-wired
+// Revit.Get/SetParameterValues nodes — see fix/revit-node-dedup. Their live
+// behavior (read/write parameters with the SEC-013 token gate) is covered by
+// the engine pre-pass tests in tests/engine.test.js
+// ('reads cached Revit parameter values' / 'prefetches live Revit parameter
+// writes for SetParameterValues nodes').
 
 describe('element-id extraction (result.data.elementIds variants)', () => {
   it('handles top-level elementIds, single id, and bare array shapes', async () => {
@@ -266,9 +251,7 @@ describe('engine registry path (F-001/F-002 wiring guard)', () => {
     'revit-select-elements',
     'revit-select-faces',
     'revit-place-family-instance',
-    'revit-place-adaptive-component',
-    'revit-get-parameters',
-    'revit-set-parameters'
+    'revit-place-adaptive-component'
   ];
 
   it('exposes each M4 node execute on the LIVE core registry (not just NODE_TYPE_MAP)', () => {
@@ -322,27 +305,28 @@ describe('engine registry path (F-001/F-002 wiring guard)', () => {
     expect(out.count).toBe(2);
   });
 
-  it('drives revit-set-parameters (a WRITE) through the dispatch helper and passes approval through', async () => {
+  it('drives revit-place-family-instance (a WRITE) through the dispatch helper and passes approval through', async () => {
     const registry = getLiveCoreRegistry();
-    const node = registry.getNode('revit-set-parameters');
-    const bridge = makeBridge({ setParameters: vi.fn(async () => ({ ok: true, data: {} })) });
-    const nodeInstance = { type: 'revit-set-parameters', controlValues: { requireApproval: true } };
+    const node = registry.getNode('revit-place-family-instance');
+    const bridge = makeBridge({ placeInstance: vi.fn(async () => ({ ok: true, data: { elementIds: ['e-9'] } })) });
+    const nodeInstance = { type: 'revit-place-family-instance', controlValues: { familyType: 'Chair', requireApproval: true } };
     executeRegistryNodeUnlaced(
       node,
       nodeInstance,
       (portId) => {
-        if (portId === 'element') return { id: 'e-9' };
-        if (portId === 'params') return { Comments: 'done' };
+        if (portId === 'familyType') return 'Chair';
+        if (portId === 'points') return [[0, 0, 0]];
         return undefined;
       },
       (id, def) => def,
       { revitBridge: bridge }
     );
     // The registry node's execute ran with the engine-resolved inputs/controls.
-    const [elementId, params, deps] = bridge.setParameters.mock.calls[0];
-    expect(elementId).toBe('e-9');
-    expect(params).toEqual({ Comments: 'done' });
-    expect(deps.approval).toMatchObject({ required: true });
+    const spec = bridge.placeInstance.mock.calls[0][0];
+    expect(spec.kind).toBe('familyInstance');
+    expect(spec.familyType).toBe('Chair');
+    // Approval metadata passed THROUGH (not a fabricated approval).
+    expect(spec.approval).toMatchObject({ required: true });
   });
 });
 
