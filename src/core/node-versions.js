@@ -94,9 +94,56 @@ export function migrateControlValues(fromDef, toDef, controlValues) {
   return next;
 }
 
+// Type→type migration (distinct from the within-a-type versioning above). Some
+// node types are RETIRED in favor of a different type — e.g. `Custom.Formula`
+// (inputs x/y, control `expr`) is superseded by `Custom.CodeBlock` (a code block
+// whose code is `Result = <expr>`). Versioning can't express that because it keys
+// by a single type; this helper rewrites an instance of `oldDef.type` into an
+// instance of the target type the old def names in `metadata.migrateTo`.
+//
+// `metadata.migrateTo` shape (carried on the deprecated def, see custom.js):
+//   {
+//     type,                              // target node type id
+//     codeFromControls(controls)->string // builds the target `code` control
+//       (optional — only for code-driven targets like CodeBlock),
+//     controlsFrom(controls)->object,    // builds the full target controlValues
+//       (optional alternative to codeFromControls),
+//     portMap: { oldPortId: newPortId }  // wire remap, by name
+//   }
+//
+// Returns null when the def has no migration. Otherwise returns a PLAN the caller
+// applies to the instance + its wires (kept pure — no DOM/app state, no wire
+// mutation here; the load-time hook does the in-place edit using `portMap`):
+//   { type, controlValues, portMap }
+// `type` is the new type, `controlValues` the migrated controls, `portMap` the
+// old→new port id remap (apply to every wire touching the instance). Pure.
+export function migrateNodeType(oldDef, instance) {
+  const spec = oldDef && oldDef.metadata && oldDef.metadata.migrateTo;
+  if (!spec || !spec.type) return null;
+  const curControls = (instance && instance.controlValues) || {};
+
+  let controlValues;
+  if (typeof spec.controlsFrom === 'function') {
+    controlValues = spec.controlsFrom(Object.assign({}, curControls)) || {};
+  } else if (typeof spec.codeFromControls === 'function') {
+    controlValues = { code: spec.codeFromControls(Object.assign({}, curControls)) };
+  } else {
+    controlValues = Object.assign({}, curControls);
+  }
+
+  const portMap = (spec.portMap && typeof spec.portMap === 'object') ? Object.assign({}, spec.portMap) : {};
+  return { type: spec.type, controlValues, portMap };
+}
+
+// Convenience for the load-time pass: is this def a retired type with a migration?
+export function isDeprecatedType(def) {
+  return !!(def && def.metadata && (def.metadata.deprecated || def.metadata.migrateTo));
+}
+
 if (typeof window !== 'undefined') {
   window.NodeVersions = {
     getDefVersion, addDefToVersionMap, latestVersion,
-    availableVersions, resolveVersionedDef, migrateControlValues
+    availableVersions, resolveVersionedDef, migrateControlValues,
+    migrateNodeType, isDeprecatedType
   };
 }

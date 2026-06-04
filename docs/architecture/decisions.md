@@ -8,6 +8,46 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-05 - CodeBlock Node (Python-First): Rename Custom.Code → Custom.CodeBlock, Retire Custom.Formula, Inclusive Series, Wire-Boundary Bool Coercion
+
+**Status:** Accepted (CORE landed; on-node editor UI + hot-file integration are follow-ups)
+
+**Context:** Per `docs/architecture/codeblock-node-plan.md` (owner-approved decisions:
+Python-first / no C# this phase, series end **inclusive**, keep `Custom.Python`
+distinct). Nova has no C# runtime (csharp fields are codegen-export templates only),
+so the Code Block executes as Python on the existing PythonRunner.
+
+**Decisions:**
+- **`Custom.Code` → `Custom.CodeBlock`** (canonical type `Custom.CodeBlock`, v2,
+  `metadata.language='python'`). The old JS single-input block is preserved as the
+  v1 `priorVersions[0]`; `custom-codeblock`/`custom-code`/`Custom.Code` resolve as
+  aliases. **Old graphs keep old behavior:** absent version ⇒ v1 ⇒ the engine runs
+  the original JS `execute`; new nodes default to v2. The version-map alias-merge in
+  `coreNodes.js` mirrors the canonical bucket under the alias so a graph saved with
+  the old type string resolves its pinned version.
+- **Ports are code-driven, but CodeBlock differs from Python:** CodeBlock exposes
+  **ALL** top-level assignments as outputs (`resolveCodeBlockPorts` →
+  `topLevelAssignments`); `Custom.Python` keeps **last-assignment-only**
+  (`resolvePythonPorts`) — unchanged. Shared inference engine, distinct nodes with a
+  capability boundary (no-duplicate rule satisfied).
+- **Series shorthand desugars, end INCLUSIVE.** `desugarSeries` (pure pre-pass)
+  rewrites `..`/`#` to a Python list literal before execution — NOT a new range node
+  (no `List.Range`/`List.Sequence` clone). Inclusive end intentionally diverges from
+  `List.Range` (exclusive); documented for users.
+- **`Custom.Formula` retired,** folded into CodeBlock (`Result = <expr>`). Kept one
+  release as a `metadata.deprecated` hidden fallback carrying `metadata.migrateTo`
+  consumed by the pure `migrateNodeType` (type→type migration, distinct from
+  within-a-type versioning).
+- **Numeric↔boolean coercion is a WIRE-BOUNDARY rule**, applied in `resolveInputs`
+  alongside single→list (number→boolean input: 0=false/else true; boolean→number
+  input: 1/0). Not a redefinition of Python `==`.
+
+**Consequences / follow-ups:** the inline auto-grow editor + dynamic-port render +
+series library preset + hiding deprecated nodes are Switch (ui-engineer). The
+`generateNodeCode` desugar-on-export and the load-time Formula auto-migration are
+hot-file (`app.js`/`save-load.js`) integration tasks. See the 2026-06-05
+`feat/codeblock-core` handoff entry.
+
 ## 2026-06-04 - Revit Parameter Nodes: Keep The Live-Bridge / Pre-Pass Model, Drop The M4 `execute()` Duplicates
 
 **Status:** Accepted

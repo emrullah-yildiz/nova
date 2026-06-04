@@ -1,3 +1,6 @@
+import { resolveCodeBlockPorts } from '../../runtime/python-port-decl.js';
+import { desugarSeries } from '../../runtime/codeblock-syntax.js';
+
 export const customCategory = {
   id: 'custom',
   name: 'Custom / AI',
@@ -31,6 +34,133 @@ function safeJsFunction(body, argNames) {
     return null;
   }
 }
+
+// Default code for a fresh CodeBlock — a self-contained example that produces a
+// port `Result` from two free-variable inputs `x`, `y` (no wiring required to run
+// once they are fed). Multi-statement and literal-friendly.
+export const DEFAULT_CODEBLOCK_CODE = 'Result = x + y';
+
+// Custom.Code v1 — the ORIGINAL JavaScript single-input code block, preserved
+// verbatim as the version-1 predecessor of Custom.CodeBlock so a graph pinned to
+// v1 keeps running the exact old JS behavior (`return input0;`). New nodes default
+// to v2 (the Python CodeBlock below). Carried in `priorVersions`, never shown in
+// the library on its own. type MUST equal the canonical `Custom.CodeBlock` so the
+// version map buckets v1 and v2 under one type.
+const CUSTOM_CODEBLOCK_V1 = {
+  type: 'Custom.CodeBlock',
+  name: 'Custom.Code',
+  category: 'custom',
+  subGroup: 'Custom',
+  icon: '{ }',
+  version: 1,
+  description: 'A JavaScript code block that takes a single input (named input0) and returns one value. The Code control is the body of an anonymous function, so it must contain an explicit return statement.',
+  inputs: [
+    { id: 'input0', name: 'input0', type: 'any', description: 'Single input value passed to the code block as input0' }
+  ],
+  outputs: [
+    { id: 'output0', name: 'output0', type: 'any', description: 'Value returned by the code block' }
+  ],
+  controls: [
+    { id: 'code', type: 'text', default: 'return input0;', label: 'Code' }
+  ],
+  execute(context, inputs, controls) {
+    const fn = safeJsFunction(String(controls.code || 'return input0;'), ['input0']);
+    if (!fn) return { output0: undefined };
+    try {
+      return { output0: fn(inputs.input0) };
+    } catch (e) {
+      return { output0: undefined };
+    }
+  },
+  codegen: {
+    python: '{{output0}} = (lambda input0: {{ctrl.code}})({{input0}})',
+    csharp: 'var {{output0}} = (new Func<object, object>((input0) => { {{ctrl.code}} }))({{input0}});'
+  }
+};
+
+// Custom.CodeBlock (v2) — the canonical lightweight, multi-statement, code-driven
+// inline block. Language = python (the only real runtime). Ports derive from the
+// code: free variables → inputs, ALL top-level assignments → outputs (via
+// resolveCodeBlockPorts). The `..`/`#` series shorthand desugars to a Python list
+// literal (desugarSeries) before execution. Outputs are raw values (numbers /
+// strings / lists), so it is Properties-rule friendly.
+//
+// `custom-codeblock` / `custom-code` / `Custom.Code` resolve here as aliases; the
+// engine's PythonRunner switch arm routes all of these spellings. The `language`
+// field is carried so a future C# language is a value change, not a new node type.
+const CUSTOM_CODEBLOCK_DEF = {
+  type: 'Custom.CodeBlock',
+  name: 'Custom.CodeBlock',
+  category: 'custom',
+  subGroup: 'Custom',
+  icon: '{ }',
+  version: 2,
+  aliases: ['custom-codeblock', 'custom-code', 'Custom.Code'],
+  priorVersions: [CUSTOM_CODEBLOCK_V1],
+  description: 'A lightweight code block. Free variables read in the code become input ports; every top-level assignment becomes an output port. Supports a series shorthand (e.g. 0..10, 0..10..2, 0..10..#5) that expands to a number list. Outputs are plain values consumable by List, math, and watch nodes.',
+  // Static SEED ports that match the default code `Result = x + y`. At runtime the
+  // ports are code-driven (resolveCodeBlockPorts re-derives them on edit-commit
+  // via the on-node editor), but the def carries these so a freshly-dropped node
+  // renders with the right ports and the help sample validates — exactly how
+  // Custom.Python seeds `elements`/`options`/`result`.
+  inputs: [
+    { id: 'x', name: 'x', type: 'any', description: 'Free variable read in the default code → input port' },
+    { id: 'y', name: 'y', type: 'any', description: 'Free variable read in the default code → input port' }
+  ],
+  outputs: [
+    { id: 'Result', name: 'Result', type: 'any', description: 'Value of the top-level assignment Result' }
+  ],
+  controls: [
+    { id: 'code', type: 'text', default: DEFAULT_CODEBLOCK_CODE, label: 'Code' }
+  ],
+  metadata: {
+    // language = the execution runtime; carried so a future C# language is a value
+    // change, not a new node type. The on-node editor calls resolveCodeBlockPorts
+    // (python-port-decl.js) on commit to derive ports from the code.
+    language: 'python',
+    codeDriven: true,
+    skipSampleExecution: true
+  },
+  execute() {
+    // Live execution is routed through PythonRunner by the engine (the
+    // custom-codeblock switch arm), which desugars the series syntax first. This
+    // stub keeps the registry def shape consistent.
+    return { output0: undefined };
+  },
+  codegen: {
+    // {{ctrl.code}} is substituted with the raw code at export; the engine
+    // desugars the series syntax for live execution. The exporter short-circuit
+    // (app.js generateNodeCode) emits the desugared code for a clean round-trip.
+    python: '{{ctrl.code}}',
+    csharp: '/* CodeBlock (Python runtime) — not directly portable */'
+  },
+  help: {
+    inputs: [
+      { name: 'x', description: 'Free variable read in the code → input port' },
+      { name: 'y', description: 'Free variable read in the code → input port' }
+    ],
+    outputs: [{ name: 'Result', description: 'Top-level assignment → output port' }],
+    example: {
+      title: 'CodeBlock Result = x * 2 on 5 → 10',
+      nodes: [
+        { type: 'Input.Number', x: 0, y: 0, controls: { val: 5 } },
+        { type: 'Custom.CodeBlock', x: 240, y: 0, controls: { code: 'Result = x * 2' } },
+        { type: 'Output.Watch', x: 480, y: 0 }
+      ],
+      wires: [
+        [0, 'value', 1, 'x'],
+        [1, 'Result', 2, 'value']
+      ]
+    },
+    sampleCode: 'Result = x * 2'
+  }
+};
+
+// Re-export the CodeBlock primitives so consumers (engine, exporter, on-node
+// editor, tests) import them from one place alongside the node defs without
+// reaching into runtime internals. resolveCodeBlockPorts is the port-resolution
+// contract the on-node editor (Switch) calls on edit-commit.
+export { desugarSeries, resolveCodeBlockPorts };
 
 export const customNodes = [
   {
@@ -75,54 +205,7 @@ export const customNodes = [
       sampleCode: '{{out0}} = {{in0}}'
     }
   },
-  {
-    type: 'Custom.Code',
-    name: 'Custom.Code',
-    category: 'custom',
-    subGroup: 'Custom',
-    icon: '{ }',
-    aliases: ['custom-code'],
-    description: 'A JavaScript code block that takes a single input (named input0) and returns one value. The Code control is the body of an anonymous function, so it must contain an explicit return statement.',
-    inputs: [
-      { id: 'input0', name: 'input0', type: 'any', description: 'Single input value passed to the code block as input0' }
-    ],
-    outputs: [
-      { id: 'output0', name: 'output0', type: 'any', description: 'Value returned by the code block' }
-    ],
-    controls: [
-      { id: 'code', type: 'text', default: 'return input0;', label: 'Code' }
-    ],
-    execute(context, inputs, controls) {
-      const fn = safeJsFunction(String(controls.code || 'return input0;'), ['input0']);
-      if (!fn) return { output0: undefined };
-      try {
-        return { output0: fn(inputs.input0) };
-      } catch (e) {
-        return { output0: undefined };
-      }
-    },
-    codegen: {
-      python: '{{output0}} = (lambda input0: {{ctrl.code}})({{input0}})',
-      csharp: 'var {{output0}} = (new Func<object, object>((input0) => { {{ctrl.code}} }))({{input0}});'
-    },
-    help: {
-      inputs: [{ name: 'input0', description: 'Single input' }],
-      outputs: [{ name: 'output0', description: 'Return value' }],
-      example: {
-        title: 'Pass 5 through default code (return input0) → 5',
-        nodes: [
-          { type: 'Input.Number', x: 0, y: 0, controls: { val: 5 } },
-          { type: 'Custom.Code', x: 240, y: 0 },
-          { type: 'Output.Watch', x: 480, y: 0 }
-        ],
-        wires: [
-          [0, 'value', 1, 'input0'],
-          [1, 'output0', 2, 'value']
-        ]
-      },
-      sampleCode: '{{output0}} = (lambda input0: {{ctrl.code}})({{input0}})'
-    }
-  },
+  CUSTOM_CODEBLOCK_DEF,
   {
     type: 'Custom.Comment',
     name: 'Custom.Comment',
@@ -157,6 +240,13 @@ export const customNodes = [
       sampleCode: '# {{ctrl.text}}'
     }
   },
+  // Custom.Formula is REMOVED from the library — superseded by Custom.CodeBlock
+  // (a CodeBlock with `Result = <expr>` produces the same x/y inputs and one
+  // output, with arbitrary expressions and more inputs). This def is retained ONE
+  // release ONLY as a deprecated, hidden resolving FALLBACK so a graph saved with
+  // un-migrated Custom.Formula nodes still computes. `metadata.deprecated` hides
+  // it from the library/fit gate; `metadata.migrateTo` describes the type→type
+  // migration (see core/node-versions.js `migrateNodeType` + the load-time hook).
   {
     type: 'Custom.Formula',
     name: 'Custom.Formula',
@@ -164,7 +254,7 @@ export const customNodes = [
     subGroup: 'Custom',
     icon: 'ƒ',
     aliases: ['custom-formula'],
-    description: 'Evaluates a single math expression against the two numeric inputs x and y. The Expression control is a JavaScript expression — the default x + y can be replaced with any formula that returns a number.',
+    description: 'Deprecated — replaced by Custom.CodeBlock. Retained so existing graphs keep working; new graphs use a CodeBlock with Result = <expression>.',
     inputs: [
       { id: 'x', name: 'x', type: 'number', description: 'First numeric input' },
       { id: 'y', name: 'y', type: 'number', description: 'Second numeric input' }
@@ -175,6 +265,20 @@ export const customNodes = [
     controls: [
       { id: 'expr', type: 'text', default: 'x + y', label: 'Expression' }
     ],
+    metadata: {
+      deprecated: true,
+      // type→type migration target consumed by migrateNodeType(): each
+      // Custom.Formula instance becomes a Custom.CodeBlock whose code is
+      // `Result = <expr>`, with ports remapped x→x, y→y, result→Result.
+      migrateTo: {
+        type: 'Custom.CodeBlock',
+        codeFromControls(controls) {
+          const expr = (controls && controls.expr != null && String(controls.expr).trim()) || 'x + y';
+          return 'Result = ' + expr;
+        },
+        portMap: { x: 'x', y: 'y', result: 'Result' }
+      }
+    },
     execute(context, inputs, controls) {
       const expr = String(controls.expr || 'x + y');
       const fn = safeJsFunction('return (' + expr + ');', ['x', 'y']);
@@ -188,28 +292,6 @@ export const customNodes = [
     codegen: {
       python: '{{result}} = {{ctrl.expr}}',
       csharp: 'var {{result}} = {{ctrl.expr}};'
-    },
-    help: {
-      inputs: [
-        { name: 'x', description: 'First number' },
-        { name: 'y', description: 'Second number' }
-      ],
-      outputs: [{ name: 'Result', description: 'Evaluated value' }],
-      example: {
-        title: 'Default expression x + y on 5 and 3 → 8',
-        nodes: [
-          { type: 'Input.Number', x: 0, y: 0, controls: { val: 5 } },
-          { type: 'Input.Number', x: 0, y: 70, controls: { val: 3 } },
-          { type: 'Custom.Formula', x: 240, y: 30 },
-          { type: 'Output.Watch', x: 480, y: 30 }
-        ],
-        wires: [
-          [0, 'value', 2, 'x'],
-          [1, 'value', 2, 'y'],
-          [2, 'result', 3, 'value']
-        ]
-      },
-      sampleCode: '{{result}} = {{ctrl.expr}}'
     }
   },
   {

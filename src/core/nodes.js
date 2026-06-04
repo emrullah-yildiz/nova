@@ -25,10 +25,13 @@ export const TYPE_COLORS = {
 // ═══════════════════════════════════════
 
 // Custom / AI category migrated to src/nodes/categories/custom.js
-// (Custom.AI, Custom.Code, Custom.Comment, Custom.Formula, Custom.Python).
-// Engine retains 'custom-python'/'custom-code'/'Custom.Python' case for
-// PythonRunner routing; modern Custom.Code uses native JS via the default
-// registry execute path.
+// (Custom.AI, Custom.CodeBlock, Custom.Comment, Custom.Python; Custom.Formula
+// retained one release as a deprecated migration fallback).
+// Custom.Code was renamed to Custom.CodeBlock (canonical type 'custom-codeblock',
+// v2 Python); 'custom-code'/'Custom.Code' are deprecated aliases and the old JS
+// behavior is preserved as the v1 priorVersion. Engine retains
+// 'custom-python'/'custom-code'/'custom-codeblock'/'Custom.Python'/'Custom.CodeBlock'
+// cases for PythonRunner routing (with series desugaring for the CodeBlock).
 
 // Testing category migrated to src/nodes/categories/testing.js
 // (Testing.SlowCompute). Engine retains 'slow-compute'/'Testing.SlowCompute'
