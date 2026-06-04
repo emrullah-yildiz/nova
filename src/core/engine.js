@@ -32,6 +32,7 @@ import { NODE_TYPE_MAP } from './nodes.js';
 import { getDefVersion } from './node-versions.js';
 import { getLiveCoreRegistry } from '../nodes/coreNodes.js';
 import { executeRegistryNodeUnlaced } from '../nodes/runtimeAdapter.js';
+import { desugarSeries } from '../runtime/codeblock-syntax.js';
 
 /* eslint-disable no-redeclare, no-inner-declarations, no-empty, no-unused-vars */
 
@@ -283,7 +284,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       // Python node results
 
-      if ((srcNd.type === 'custom-python' || srcNd.type === 'custom-code' || srcNd.type === 'Custom.Python') && srcNd._pyResults) {
+      if ((srcNd.type === 'custom-python' || srcNd.type === 'custom-code' || srcNd.type === 'custom-codeblock' || srcNd.type === 'Custom.Python' || srcNd.type === 'Custom.CodeBlock' || srcNd.type === 'Custom.Code') && srcNd._pyResults) {
 
         if (srcNd._pyResults[wire.fromPort] !== undefined) return srcNd._pyResults[wire.fromPort];
 
@@ -903,7 +904,31 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       // ── Python / Code ──
 
-      case 'custom-python': case 'custom-code': case 'Custom.Python': {
+      case 'custom-python': case 'custom-code': case 'custom-codeblock': case 'Custom.Python': case 'Custom.CodeBlock': case 'Custom.Code': {
+
+        // CodeBlock (and its custom-code / Custom.Code aliases) desugar the
+        // `..`/`#` series shorthand to a Python list literal before execution.
+        // Custom.Python is a full script with no series sugar — left untouched.
+        var __isCodeBlock = (nd.type === 'custom-codeblock' || nd.type === 'custom-code' || nd.type === 'Custom.CodeBlock' || nd.type === 'Custom.Code');
+
+        // Old graphs pinned to Custom.Code v1 keep the ORIGINAL JavaScript
+        // behavior: run the v1 def's JS execute (carried on nd.def) instead of the
+        // Python runtime. Absent version ⇒ v1 (node-versions.js rule), so an
+        // un-versioned legacy custom-code instance also takes this path. v2
+        // CodeBlock (and Custom.Python) fall through to PythonRunner below.
+        if (__isCodeBlock && (nd.version === 1 || nd.version == null)
+          && nd.def && typeof nd.def.execute === 'function' && getDefVersion(nd.def) === 1) {
+          var v1Inputs = {};
+          (nd.def.inputs || []).forEach(function(p) { v1Inputs[p.id] = getInput(p.id); });
+          var v1Out = nd.def.execute({ app: getRuntimeApp() }, v1Inputs, ctrl, nd);
+          if (v1Out && typeof v1Out === 'object' && !Array.isArray(v1Out)) {
+            nd._portValues = v1Out;
+            var v1Keys = Object.keys(v1Out);
+            return v1Keys.length === 1 ? v1Out[v1Keys[0]] : v1Out;
+          }
+          return v1Out;
+        }
+
 
         if (nd._pyResults) {
 
@@ -929,7 +954,9 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
           });
 
-          var result = PythonRunner.execute(nd.controlValues.code || '', inputs);
+          var __code = nd.controlValues.code || '';
+          if (__isCodeBlock) { try { __code = desugarSeries(__code); } catch (e) { /* leave raw on failure */ } }
+          var result = PythonRunner.execute(__code, inputs);
 
           if (!result.error) {
 

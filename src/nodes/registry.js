@@ -134,7 +134,12 @@ export function toLegacyNodeDefinition(node) {
     execute: node.execute || undefined,
     version: node.version,
     priorVersions: node.priorVersions,
-    migrateFrom: node.migrateFrom
+    migrateFrom: node.migrateFrom,
+    // Carry node metadata (e.g. language/codeDriven, deprecated/migrateTo) into the
+    // legacy NODE_TYPE_MAP shape so type→type migration (isDeprecatedType/
+    // migrateNodeType) and library hiding work against the live def, not just the
+    // modern registry. Without this, metadata-driven behavior silently no-ops.
+    metadata: node.metadata || {}
   };
 }
 
