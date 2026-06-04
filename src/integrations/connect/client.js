@@ -141,6 +141,48 @@ export class NovaConnectClient {
     return response.payload.results || [];
   }
 
+  // ── Milestone-4 round-trip messages ──────────────────────────────────────
+  // These ride the M4-T1 contract payload shapes (selection.query / geometry.place /
+  // parameter.get / parameter.set with the { elementId, params } shape) and are
+  // intentionally SEPARATE from the legacy parameter methods above
+  // (getParameterValues / setParameterValues, { elementIds, parameterName, values })
+  // that revit-nodes.js still depends on. Do not fold the two together — see the
+  // M4-T3 handoff note. Envelope construction/validation lives in the bridge
+  // (src/integrations/revit/revit-bridge.js); these just send the typed envelope and
+  // return the raw response payload.
+
+  async sendSelectionQuery(payload = {}, options = {}) {
+    const response = await this.request('selection.query', payload, {
+      target: 'host',
+      timeoutMs: options.timeoutMs
+    });
+    return response.payload || {};
+  }
+
+  async sendGeometryPlace(payload = {}, options = {}) {
+    const response = await this.request('geometry.place', payload, {
+      target: 'host',
+      timeoutMs: options.timeoutMs
+    });
+    return response.payload || {};
+  }
+
+  async sendParameterGet(payload = {}, options = {}) {
+    const response = await this.request('parameter.get', payload, {
+      target: 'host',
+      timeoutMs: options.timeoutMs
+    });
+    return response.payload || {};
+  }
+
+  async sendParameterSet(payload = {}, options = {}) {
+    const response = await this.request('parameter.set', payload, {
+      target: 'host',
+      timeoutMs: options.timeoutMs
+    });
+    return response.payload || {};
+  }
+
   async sendGeometry(geometry, identity = {}, options = {}) {
     const envelope = geometry && geometry._type === 'GeometryEnvelope'
       ? geometry
