@@ -28,18 +28,21 @@ processes it, and how it's protected.** It complements the
 | Static app assets / compute | Cloudflare Workers — **global edge** | the SPA + API |
 
 ## 2. Sub-processors
-We use the following third parties to operate Nova. You should accept and keep on file
-a Data Processing Agreement (DPA) with each.
+We use the following third parties to operate Nova. Each one's Data Processing
+Agreement (DPA) — including its Standard Contractual Clauses for transfers — is
+incorporated into its standard terms, which apply to our account.
 
-| Sub-processor | Role | Personal data it processes | Location |
-|---|---|---|---|
-| **Cloudflare, Inc.** | Hosting (Workers), session/token/rate store (KV), real-time rooms (Durable Objects), CDN, DNS | Account & session identifiers; all request traffic; KV-stored session/verification/rate data | Global edge (HQ US) |
-| **Neon, Inc.** | Serverless Postgres database | Account, projects, collaboration, audit, encrypted AI key | **EU — Ireland** |
-| **Google LLC** | "Sign in with Google" (OIDC) **only** | email, name, Google account id | US |
-| **Resend** | Transactional email (account verification, invitations) | Recipient email address + email content | US |
+| Sub-processor | Role | Personal data it processes | Location | DPA / SCCs |
+|---|---|---|---|---|
+| **Cloudflare, Inc.** | Hosting (Workers), session/token/rate store (KV), real-time rooms (Durable Objects), CDN, DNS | Account & session identifiers; all request traffic; KV-stored session/verification/rate data | Global edge (HQ US) | Cloudflare DPA, incorporated into the self-serve Subscription Agreement (cloudflare.com/cloudflare-customer-dpa) |
+| **Neon, Inc.** | Serverless Postgres database | Account, projects, collaboration, audit, encrypted AI key | **EU — Ireland** | Neon DPA (neon.tech legal / DPA) |
+| **Google LLC** | "Sign in with Google" (OIDC) **only** | email, name, Google account id | US | Google Cloud/Workspace Data Processing Addendum (cloud.google.com/terms/data-processing-addendum) |
+| **Resend** | Transactional email (account verification, invitations) | Recipient email address + email content | US | Resend DPA (resend.com legal) |
 
-*(Maintenance note: keep this table current — adding/removing a sub-processor is a
-notify-users event.)*
+*(Maintenance notes: (1) keep this table current — adding/removing a sub-processor is
+a notify-users event. (2) The DPA links above are the canonical locations; keep the
+exact current URL/acceptance on file for accountability — each provider auto-applies
+its DPA via its terms, but you should be able to produce it on request.)*
 
 > **AI providers are NOT Nova sub-processors.** Nova operates no shared or free AI
 > service and stores no AI key of its own. The assistant is **bring-your-own-key only**:
