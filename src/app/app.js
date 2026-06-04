@@ -5,6 +5,17 @@ import { describeWireTypeMismatch } from '../core/wire-type-check.js';
 import { computeFitView } from '../core/graph-layout.js';
 import { CodeParser } from '../runtime/parser.js';
 import { Viewer3D } from '../viewer/viewer3d.js';
+import { LEGAL_DOCS, renderMarkdown } from '../ui/legal-viewer.js';
+// Legal docs published in-app. docs/legal lives at the repo root, which is the
+// Vite project root, so `?raw` resolves at build time and the markdown text is
+// bundled as a string (no runtime fetch, no markdown dependency).
+import privacyMd from '../../docs/legal/privacy-policy.md?raw';
+import termsMd from '../../docs/legal/terms-of-service.md?raw';
+import dataMd from '../../docs/legal/data-handling.md?raw';
+import ipMd from '../../docs/legal/ip-and-ownership.md?raw';
+import cookiesMd from '../../docs/legal/cookie-notice.md?raw';
+
+const LEGAL_MD = { privacy: privacyMd, terms: termsMd, data: dataMd, ip: ipMd, cookies: cookiesMd };
 
 // ============================================
 
@@ -644,6 +655,7 @@ const app = {
           '<button class="signin-submit" id="signin-submit" type="submit">Sign in</button>' +
         '</form>' +
         '<div class="signin-toggle" id="signin-toggle">New to Nova? <button type="button" onclick="app.toggleSignInMode()">Create an account</button></div>' +
+        '<div class="signin-legal">By continuing, you agree to our <a href="#" onclick="app.showLegal(\'terms\');return false;">Terms of Service</a> and <a href="#" onclick="app.showLegal(\'privacy\');return false;">Privacy Policy</a>.</div>' +
       '</div>';
     overlay.addEventListener('click', (e) => { if (e.target === overlay) this.closeSignIn(); });
     document.body.appendChild(overlay);
@@ -2385,6 +2397,56 @@ const app = {
     ov.innerHTML=`<div class="sc-panel" role="dialog" aria-label="Keyboard Shortcuts"><div class="sc-head"><span>Keyboard Shortcuts</span><button class="sc-close" title="Close">×</button></div><div class="sc-sub">Read-only reference</div><div class="sc-list">${rows}</div></div>`;
     ov.addEventListener('click',e=>{ if(e.target===ov||e.target.classList.contains('sc-close')) ov.remove(); });
     document.body.appendChild(ov);
+  },
+
+  // ── LEGAL VIEWER ──
+  // In-app viewer for Nova's published legal docs. Renders the markdown with the
+  // small, safe renderer in src/ui/legal-viewer.js (all text escaped). Opens
+  // above the sign-in overlay so the accept-terms links are readable from it.
+  showLegal(slug) {
+    const valid = LEGAL_DOCS.some(d => d.slug === slug);
+    const active = valid ? slug : 'privacy';
+    let overlay = document.getElementById('legal-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'legal-overlay';
+      overlay.innerHTML =
+        '<div class="legal-panel" role="dialog" aria-modal="true" aria-label="Legal & data documents">' +
+          '<button class="legal-close" aria-label="Close" onclick="app.closeLegal()">&times;</button>' +
+          '<nav class="legal-nav" id="legal-nav"></nav>' +
+          '<div class="legal-content" id="legal-content"></div>' +
+        '</div>';
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) this.closeLegal(); });
+      // Delegate internal doc links (rendered as <a data-legal-slug=…>) to the
+      // doc switcher so they never navigate away from the app.
+      overlay.addEventListener('click', (e) => {
+        const link = e.target.closest && e.target.closest('a[data-legal-slug]');
+        if (link) { e.preventDefault(); this.showLegal(link.getAttribute('data-legal-slug')); }
+      });
+      document.body.appendChild(overlay);
+      this._escLegal = (e) => { if (e.key === 'Escape') this.closeLegal(); };
+      document.addEventListener('keydown', this._escLegal);
+    }
+    this._renderLegal(active);
+  },
+
+  _renderLegal(active) {
+    const nav = document.getElementById('legal-nav');
+    const content = document.getElementById('legal-content');
+    if (!nav || !content) return;
+    nav.innerHTML = LEGAL_DOCS.map(d =>
+      '<button class="legal-nav-item' + (d.slug === active ? ' active' : '') + '"' +
+      ' onclick="app.showLegal(\'' + d.slug + '\')">' + this.escapeHtml(d.title) + '</button>'
+    ).join('');
+    // renderMarkdown escapes all doc text; only its own structural tags appear.
+    content.innerHTML = renderMarkdown(LEGAL_MD[active] || '');
+    content.scrollTop = 0;
+  },
+
+  closeLegal() {
+    const overlay = document.getElementById('legal-overlay');
+    if (overlay) overlay.remove();
+    if (this._escLegal) { document.removeEventListener('keydown', this._escLegal); this._escLegal = null; }
   },
 
 
