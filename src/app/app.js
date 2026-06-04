@@ -6,6 +6,7 @@ import { computeFitView } from '../core/graph-layout.js';
 import { CodeParser } from '../runtime/parser.js';
 import { Viewer3D } from '../viewer/viewer3d.js';
 import { LEGAL_DOCS, renderMarkdown } from '../ui/legal-viewer.js';
+import { buildLearningHtml, attachLearningShots } from '../ui/learning-page.js';
 // Legal docs published in-app. docs/legal lives at the repo root, which is the
 // Vite project root, so `?raw` resolves at build time and the markdown text is
 // bundled as a string (no runtime fetch, no markdown dependency).
@@ -2447,6 +2448,36 @@ const app = {
     const overlay = document.getElementById('legal-overlay');
     if (overlay) overlay.remove();
     if (this._escLegal) { document.removeEventListener('keydown', this._escLegal); this._escLegal = null; }
+  },
+
+  // ── NOVA LEARNING ──
+  // A designed, full-page scrollable "how to use Nova" guide. Mirrors the legal
+  // viewer's overlay/Esc/click-outside pattern, but the body is a richer
+  // scrolling layout built by src/ui/learning-page.js. All illustrations are
+  // self-contained inline SVG (no external image dependency); each step also has
+  // an optional screenshot slot that swaps in a real image only if it loads.
+  showLearning() {
+    let overlay = document.getElementById('learning-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'learning-overlay';
+      overlay.innerHTML = buildLearningHtml();
+      // Click on the backdrop (outside the panel) closes the page.
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) this.closeLearning(); });
+      document.body.appendChild(overlay);
+      this._escLearning = (e) => { if (e.key === 'Escape') this.closeLearning(); };
+      document.addEventListener('keydown', this._escLearning);
+      // Wire the optional screenshot slots (no-ops where no screenshot exists).
+      attachLearningShots(document);
+    }
+    const scroll = document.getElementById('learn-scroll');
+    if (scroll) scroll.scrollTop = 0;
+  },
+
+  closeLearning() {
+    const overlay = document.getElementById('learning-overlay');
+    if (overlay) overlay.remove();
+    if (this._escLearning) { document.removeEventListener('keydown', this._escLearning); this._escLearning = null; }
   },
 
 
