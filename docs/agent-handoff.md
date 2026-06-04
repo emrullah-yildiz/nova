@@ -13,6 +13,66 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-05 - CodeBlock UI half — on-node auto-grow editor + G-1/G-2 hooks (feat/codeblock-ui)
+
+**Agent/branch:** Switch (ui-engineer) — `feat/codeblock-ui` (off `develop` @ 9f0ca04;
+committed, NOT merged/pushed). Consumes Neo's CodeBlock CORE (entry below).
+
+**Goal:** The UI half of the Dynamo-style Code Block — inline auto-grow editor,
+dynamic ports on commit, and the export/load/hide/preset hooks Neo handed off.
+
+**Shipped (owned files):**
+- NEW `src/ui/codeblock-node.js` — `installCodeBlockNode(app)` installs
+  `app.enhanceCodeBlockNode` (inline `<textarea.cb-editor>` on the node body),
+  `isCodeBlockNode` (v2+ Custom.CodeBlock/custom-codeblock; v1 legacy JS excluded),
+  `codeBlockCommit` (re-derives ports via **resolveCodeBlockPorts** on commit, drops
+  wires to removed ports), `codeBlockSyncPortsFromCode`, and the preset helpers
+  `addCodeBlockPreset` / `addSeriesCodeBlock` (`nums = 0..10`) / `addBlankCodeBlock`.
+  **Auto-grow:** per-`input` keystroke → height = `scrollHeight` (+border under
+  border-box, no max), width = longest line clamped `CB_MIN_W..CB_MAX_W` (canvas
+  `measureText`, jsdom char-count fallback), soft-wrap at MAX. `overflow:hidden` →
+  NO scrollbars. Ports re-derive on **commit (blur/change)**, NOT per keystroke
+  (mirrors `pySyncPorts`). Pure exports (`codeBlockWidth`/`autoGrowCodeBlock`/
+  `isCodeBlockNode`) are unit-tested headlessly.
+- EDIT `src/ui/node-renderer.js` — `renderNode` calls `enhanceCodeBlockNode` for
+  CodeBlock v2 (checked BEFORE the Python branch so the shared `custom-code`/
+  `Custom.Code` aliases route to the inline editor for v2; v1 falls through to the
+  Python terminal hint). `installNodeRenderer` calls `installCodeBlockNode(app)` up
+  front so the first render has the methods — **no DOMContentLoaded/load-order race**.
+- EDIT `src/ui/node-library.js` — G-1 in the LIVE `generateNodeCode` override:
+  Custom.CodeBlock v2 emits `desugarSeries(code)` (valid Python list literal), not
+  raw `0..10` / `{{ctrl.code}}`. G-2b: skip `metadata.deprecated` in
+  `buildOutputTypeMap` / `getInputSuggestions` / the AI candidate list.
+- EDIT `src/ui/node-search-popup.js` — G-2b: `getAllNodes` skips deprecated; added a
+  synthetic **"Series (Code Block)"** preset entry (drops a CodeBlock with
+  `nums = 0..10`, not a new type).
+- EDIT `src/app/app.js` — import `desugarSeries`; G-1 short-circuit in the base
+  `generateNodeCode`; G-2b: `renderNodeLibrary` hides `metadata.deprecated` nodes
+  (count reflects visible only) + a "Series (Code Block)" palette item under Custom.
+- EDIT `src/app/save-load.js` — G-2a: `deserializeGraph` pre-pass runs
+  `migrateNodeType` for `isDeprecatedType` instances (Custom.Formula →
+  Custom.CodeBlock `Result = <expr>`, pins migrated type's version, drops stale
+  dyn-ports, remaps wires by `portMap` incl. `result→Result`). Deprecated defs still
+  RESOLVE, so an un-migratable instance falls through and keeps computing.
+- EDIT `style.css` — `.cb-editor` (overflow:hidden, pre-wrap, mono, existing tokens)
+  + `.cb-port-row`/`.cb-node-toolbar`/`.cb-node-status`.
+- NEW `tests/codeblock-ui.test.js` (jsdom, 19) + `tests/e2e/codeblock-node.spec.js`
+  (real DOM, 2: type → ports appear + no scrollbars; Series preset).
+
+**Found + worked around (NOT fixed — outside my lane):** `addNodeToCanvas`'s 4th
+`opts.controls` arg is DROPPED by two installed wrappers that re-bind it with a
+`(type,x,y)` signature — `src/app/logger-patch.js:26` and
+`src/runtime/ExecutionEngine.js:120`. So preset `controls` overrides don't stick.
+`addCodeBlockPreset` therefore sets `controlValues.code` + re-renders AFTER creation
+(the same post-create pattern the showcase templates use). Anyone relying on
+`addNodeToCanvas(...,{controls})` elsewhere will hit the same latent bug — worth a
+core/runtime follow-up to make the wrappers forward `opts`.
+
+**Validation:** `eslint .` clean; full `vitest run` 142 files / 1868 passed (1
+skipped); `vite build` OK; `playwright test` 10/10 (incl. the 2 new CodeBlock specs).
+
+**Merge status:** Open branch `feat/codeblock-ui` — committed, NOT merged/pushed.
+
 ## 2026-06-05 - CodeBlock CORE (Python-first) → Switch (ui-engineer) for the on-node editor (feat/codeblock-core)
 
 **Agent/branch:** Neo (core-engineer) — `feat/codeblock-core` (off `develop`; committed, NOT merged/pushed)

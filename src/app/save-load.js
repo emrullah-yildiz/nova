@@ -1,5 +1,5 @@
 import { NODE_TYPE_MAP, NODE_VERSION_MAP } from '../core/nodes.js';
-import { resolveVersionedDef } from '../core/node-versions.js';
+import { resolveVersionedDef, migrateNodeType, isDeprecatedType, getDefVersion } from '../core/node-versions.js';
 import { getRuntimeConfig } from '../config/runtime-config.js';
 import { buildInviteStatus } from './invite-status.js';
 import { CollaboClient } from './collab.js';
@@ -113,6 +113,41 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     app.panX = data.panX || 0;
     app.panY = data.panY || 0;
     app.nextNodeId = data.nextNodeId || 1;
+
+    // G-2a — load-time type→type migration. A graph saved with a DEPRECATED node
+    // type (e.g. Custom.Formula) is rewritten to its replacement (Custom.CodeBlock
+    // with `Result = <expr>`) so the node opens as the modern type. migrateNodeType
+    // returns a PLAN { type, controlValues, portMap }; we apply it to the saved
+    // instance and remap every wire port the def renamed (e.g. result→Result). The
+    // deprecated def still RESOLVES, so an un-migratable instance falls through and
+    // keeps computing. Defensive — never blocks load.
+    const _wireMaps = {}; // nodeId -> { oldPort: newPort } applied to its wires
+    data.nodes.forEach(saved => {
+      try {
+        const oldDef = NODE_TYPE_MAP[saved.type];
+        if (!oldDef || !isDeprecatedType(oldDef)) return;
+        const plan = migrateNodeType(oldDef, { controlValues: saved.controlValues || {} });
+        if (!plan || !plan.type || !NODE_TYPE_MAP[plan.type]) return;
+        saved.type = plan.type;
+        saved.controlValues = plan.controlValues || {};
+        // Pin to the migrated type's latest version (CodeBlock v2), not the old
+        // instance's saved version, so it routes through the modern behavior.
+        saved.version = getDefVersion(NODE_TYPE_MAP[plan.type]);
+        // CodeBlock is code-driven: drop any stale saved dyn-ports so they re-derive
+        // from the migrated code (the editor seeds them on render).
+        delete saved._dynInputs;
+        delete saved._dynOutputs;
+        if (plan.portMap && Object.keys(plan.portMap).length) _wireMaps[saved.id] = plan.portMap;
+      } catch (e) { /* leave the node un-migrated; it still resolves */ }
+    });
+    if (Array.isArray(data.wires) && Object.keys(_wireMaps).length) {
+      data.wires.forEach(w => {
+        const inMap = _wireMaps[w.toNode];
+        if (inMap && inMap[w.toPort]) w.toPort = inMap[w.toPort];
+        const outMap = _wireMaps[w.fromNode];
+        if (outMap && outMap[w.fromPort]) w.fromPort = outMap[w.fromPort];
+      });
+    }
 
     // Rebuild nodes
     data.nodes.forEach(saved => {

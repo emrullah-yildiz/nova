@@ -1,6 +1,7 @@
 import { AIEngine } from '../ai/ai-engine.js';
 import { NODE_TYPE_MAP, TYPE_COLORS, NODE_VERSION_MAP, visibleCategories } from '../core/nodes.js';
 import { getDefVersion, resolveVersionedDef, migrateControlValues } from '../core/node-versions.js';
+import { desugarSeries } from '../runtime/codeblock-syntax.js';
 import { describeWireTypeMismatch } from '../core/wire-type-check.js';
 import { computeFitView } from '../core/graph-layout.js';
 import { CodeParser } from '../runtime/parser.js';
@@ -1264,9 +1265,12 @@ const app = {
     // Discovery surface: skip categories flagged hidden (Host, Rhino). Their
     // nodes still register/resolve for saved graphs — see visibleCategories().
     visibleCategories().forEach(function(cat) {
-      // Group nodes by their 'group' property
+      // Group nodes by their 'group' property. Skip nodes flagged
+      // metadata.deprecated (e.g. Custom.Formula) — they stay registered/resolvable
+      // for un-migrated graphs but are hidden from this discovery surface (G-2b).
       var groups = {};
       cat.nodes.forEach(function(n) {
+        if (n.metadata && n.metadata.deprecated) return;
         var g = n.subGroup || n.group || '_ungrouped';
         if (!groups[g]) groups[g] = [];
         groups[g].push(n);
@@ -1282,12 +1286,14 @@ const app = {
       // adds a click for no organizational value.
       var namedGroupCount = groupKeys.filter(function(g) { return g !== '_ungrouped'; }).length;
       var skipSubgroupHeaders = namedGroupCount <= 1;
+      // Count only visible (non-deprecated) nodes — the deprecated ones are hidden.
+      var visibleCount = groupKeys.reduce(function(sum, g) { return sum + groups[g].length; }, 0);
 
       html += `<div class="node-category open" data-cat="${cat.id}">
         <button class="node-category-header" onclick="app.toggleCategory('${cat.id}')">
           <span class="node-category-dot" style="background:${cat.color}"></span>
           <span class="node-category-name">${cat.name}</span>
-          <span class="node-category-count">${cat.nodes.length}</span>
+          <span class="node-category-count">${visibleCount}</span>
           <svg class="node-category-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </button>
         <div class="node-category-items">`;
@@ -1309,6 +1315,13 @@ const app = {
           html += `</div></div>`;
         }
       });
+
+      // PRESET — "Series (Code Block)": a Custom.CodeBlock pre-filled with the
+      // `0..10` series shorthand. A preset of the SAME type (not a new node type),
+      // so it never violates no-duplicate. Surfaced under the Custom / AI category.
+      if (cat.id === 'custom') {
+        html += `<button class="node-lib-item" data-preset="series-codeblock" draggable="false" onclick="app.addSeriesCodeBlock()"><span class="nli-icon" style="color:${cat.color}">{ }</span>Series (Code Block)</button>`;
+      }
 
       html += `</div></div>`;
     });
@@ -3059,6 +3072,19 @@ const app = {
   // Generate code for a single node
 
   generateNodeCode(nd) {
+
+    // Custom.CodeBlock (v2): emit the DESUGARED code so the `..`/`#` series
+    // shorthand becomes a valid Python list literal in the export — never the raw
+    // `0..10` (which is not valid Python) or the un-substituted `{{ctrl.code}}`
+    // template. v1 (legacy JS Custom.Code) is handled by the def-template path.
+
+    if ((nd.type === 'Custom.CodeBlock' || nd.type === 'custom-codeblock') && nd.version !== 1 && nd.controlValues.code) {
+
+      try { return desugarSeries(nd.controlValues.code); } catch (e) { return nd.controlValues.code; }
+
+    }
+
+
 
     // Python/Custom nodes: output their raw code directly for perfect round-trip
 

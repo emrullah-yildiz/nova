@@ -7,6 +7,7 @@
 // ============================================
 
 import { wrapPythonNodeCode } from '../runtime/python-port-decl.js';
+import { desugarSeries } from '../runtime/codeblock-syntax.js';
 import { buildNoGeometryGraph, buildGeometryGraph } from '../app/stress-graphs.js';
 import { visibleCategories } from '../core/nodes.js';
 
@@ -163,6 +164,15 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
     // never reads. Bind each wired input to the cell's input variable, and
     // export each output under its canonical downstream name, using the live
     // ports so codegen stays in sync with what the node actually renders/runs.
+    // Custom.CodeBlock (v2): emit the DESUGARED code (G-1) so the series shorthand
+    // becomes a valid Python list literal — not the raw `0..10` or `{{ctrl.code}}`.
+    // This is the live codegen path (overrides app.generateNodeCode); the same
+    // short-circuit lives in app.js for the base path. v1 (legacy JS) falls through
+    // to the def template below.
+    if ((nd.type === 'Custom.CodeBlock' || nd.type === 'custom-codeblock') && nd.version !== 1 && nd.controlValues.code) {
+      try { return desugarSeries(nd.controlValues.code); } catch (e) { return nd.controlValues.code; }
+    }
+
     if ((nd.type === 'Custom.Python' || nd.type === 'custom-python') && this.codeLang === 'python') {
       var liveIn = (nd._dynInputs && nd._dynInputs.length) ? nd._dynInputs : nd.def.inputs.map(function(i) { return i.id; });
       var liveOut = (nd._dynOutputs && nd._dynOutputs.length) ? nd._dynOutputs : nd.def.outputs.map(function(o) { return o.id; });
@@ -250,6 +260,7 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
     // (Host, Rhino) nodes. Their nodes still register/resolve for saved graphs.
     visibleCategories().forEach(function(cat) {
       cat.nodes.forEach(function(node) {
+        if (node.metadata && node.metadata.deprecated) return; // G-2b: hide deprecated
         (node.outputs || []).forEach(function(out) {
           var t = out.type || 'any';
           if (!map[t]) map[t] = [];
@@ -267,6 +278,7 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
     // Discovery surface — exclude hidden-category (Host, Rhino) nodes.
     visibleCategories().forEach(function(cat) {
       cat.nodes.forEach(function(node) {
+        if (node.metadata && node.metadata.deprecated) return; // G-2b: hide deprecated
         (node.inputs || []).forEach(function(inp) {
           var t = inp.type || 'any';
           if ((t === portType || t === 'any' || portType === 'any') && !seen[node.type]) {
@@ -325,8 +337,9 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
       var graphDesc = app.nodes.map(function(n) { return n.def.name + '(' + n.id + ')'; }).join(', ');
       var wireDesc = app.wires.map(function(w) { return w.fromNode + '.' + w.fromPort + ' → ' + w.toNode + '.' + w.toPort; }).join('; ');
       var allNodeNames = [];
-      // Suggestion candidates fed to the AI are a discovery surface — skip hidden categories.
-      visibleCategories().forEach(function(cat) { cat.nodes.forEach(function(n) { allNodeNames.push(n.name + ' [outputs: ' + n.outputs.map(function(o){return o.name+'('+o.type+')';}).join(',') + ']'); }); });
+      // Suggestion candidates fed to the AI are a discovery surface — skip hidden
+      // categories and deprecated nodes (G-2b: Custom.Formula must not be suggested).
+      visibleCategories().forEach(function(cat) { cat.nodes.forEach(function(n) { if (n.metadata && n.metadata.deprecated) return; allNodeNames.push(n.name + ' [outputs: ' + n.outputs.map(function(o){return o.name+'('+o.type+')';}).join(',') + ']'); }); });
       var prompt = 'I have a node graph with: ' + graphDesc + '. Wires: ' + wireDesc + '. I need to connect something to the "' + portName + '" input (type: ' + portType + ') on node "' + nodeName + '".\n\nAvailable nodes:\n' + allNodeNames.join('\n') + '\n\nSuggest the top 3 most useful nodes to connect here. Reply ONLY as a JSON array of objects: [{"name":"ExactNodeName","reason":"brief why"}]. No explanation, just JSON.';
       GPTClient.call(prompt, 'workspace', '').then(function(reply) {
         var aiSection = document.getElementById('port-suggest-ai'); if (!aiSection) return;
