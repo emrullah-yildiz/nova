@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { EnterpriseStore, ROLES } from '../src/enterprise/domain.mjs';
 import { AuthService } from '../src/enterprise/auth.mjs';
 import { MemoryStateStore, hashToken } from '../src/enterprise/state-store.mjs';
-import { handleEnterpriseApi, __resetApiCacheForTests } from '../worker/api.mjs';
+import { handleEnterpriseApi, __resetApiCacheForTests, __getStoreForTests } from '../worker/api.mjs';
 import { serializeSlotCookie, serializeActivePointer } from '../worker/cookies.mjs';
 
 // SEC-004: deleting an account must purge ALL of the user's credentials —
@@ -112,11 +112,11 @@ describe('SEC-004 — Worker DELETE /api/me end-to-end', () => {
     };
   }
 
-  it('clears the deleted account slot cookie and leaves NO session: key that authenticates', async () => {
-    // Capture the verification link the console email service logs.
+  // Stub the signup MX/DNS check + console email logger so signup never hits the
+  // network and we can read the verification link. Returns { logged, restore }.
+  function stubNetworkAndEmail() {
     const logged = [];
     vi.spyOn(console, 'log').mockImplementation((...args) => { logged.push(args.join(' ')); });
-    // Stub the signup MX/DNS check so it never hits the network.
     vi.stubGlobal('fetch', async (url) => {
       const u = new URL(url);
       if (u.hostname === 'dns.google') {
@@ -125,6 +125,41 @@ describe('SEC-004 — Worker DELETE /api/me end-to-end', () => {
       }
       return { ok: false, status: 404, text: async () => '', json: async () => ({}) };
     });
+    return logged;
+  }
+
+  // Build a `call(method, path, {body, cookie})` bound to one env. Parses the
+  // Response into { status, body, res } so tests can read payload + Set-Cookie.
+  function makeCall(env) {
+    return async (method, path, { body, cookie } = {}) => {
+      const headers = { 'content-type': 'application/json' };
+      if (cookie) headers.cookie = cookie;
+      const init = { method, headers };
+      if (body !== undefined) init.body = JSON.stringify(body);
+      const res = await handleEnterpriseApi(new Request('https://nova.test' + path, init), env, null);
+      const parsed = await res.clone().json().catch(() => ({}));
+      return { status: res.status, body: parsed, res };
+    };
+  }
+
+  // Run signup → verify → login for one account; returns the session token.
+  async function provisionAccount(call, logged, email, password) {
+    const signup = await call('POST', '/api/auth/signup', { body: { email, password } });
+    expect(signup.status).toBe(201);
+    const link = logged.join('\n').match(/verify=([0-9a-f]+)/g);
+    // Use the LAST verify link logged (so multiple accounts don't collide).
+    const token = link[link.length - 1].replace('verify=', '');
+    const verify = await call('POST', '/api/auth/verify', { body: { token } });
+    expect(verify.status).toBe(200);
+    const login = await call('POST', '/api/auth/login', { body: { email, password } });
+    expect(login.status).toBe(200);
+    expect(login.body.token).toBeTruthy();
+    return login.body.token;
+  }
+
+  it('clears the deleted account slot cookie and leaves NO session: key that authenticates', async () => {
+    // Capture the verification link the console email service logs.
+    const logged = stubNetworkAndEmail();
 
     const kv = fakeKv();
     const env = {
@@ -134,15 +169,7 @@ describe('SEC-004 — Worker DELETE /api/me end-to-end', () => {
     };
     // handleEnterpriseApi returns a Response; parse it into { status, body, res }
     // so we can read both the JSON payload and the Set-Cookie headers.
-    const call = async (method, path, { body, cookie } = {}) => {
-      const headers = { 'content-type': 'application/json' };
-      if (cookie) headers.cookie = cookie;
-      const init = { method, headers };
-      if (body !== undefined) init.body = JSON.stringify(body);
-      const res = await handleEnterpriseApi(new Request('https://nova.test' + path, init), env, null);
-      const parsed = await res.clone().json().catch(() => ({}));
-      return { status: res.status, body: parsed, res };
-    };
+    const call = makeCall(env);
 
     // 1. Sign up (no session yet — verification required).
     const signup = await call('POST', '/api/auth/signup', { body: { email: 'gone@example.com', password: 'delete-me-9' } });
@@ -181,5 +208,98 @@ describe('SEC-004 — Worker DELETE /api/me end-to-end', () => {
     // session: key not carried by this browser's cookies — is purged via the
     // kvKeys the store returns; proven at store level above.)
     expect(await kv.get('session:' + hashToken(sessionToken), 'json')).toBeNull();
+  });
+
+  // F-002 #1 — no over-deletion: with TWO distinct users in two slots, deleting
+  // one must NOT touch the other user's slot cookie or its KV session.
+  it('deleting one of two signed-in accounts leaves the OTHER account fully intact', async () => {
+    const logged = stubNetworkAndEmail();
+    const kv = fakeKv();
+    const env = {
+      NOVA_SESSION_SECRET: 'worker-sec004-multi',
+      SESSION_KV: kv,
+      NOVA_PUBLIC_URL: 'https://nova.test'
+    };
+    const call = makeCall(env);
+
+    // Two distinct users → two distinct, simultaneously-valid sessions.
+    const tokenA = await provisionAccount(call, logged, 'keep@example.com', 'keep-me-12');
+    const tokenB = await provisionAccount(call, logged, 'gone@example.com', 'delete-me-9');
+    expect(tokenA).not.toBe(tokenB);
+    expect(await kv.get('session:' + hashToken(tokenA), 'json')).toBeTruthy();
+    expect(await kv.get('session:' + hashToken(tokenB), 'json')).toBeTruthy();
+
+    // Browser cookie: slot 0 = keep (A), slot 1 = gone (B), active = slot 1.
+    const cookie = [
+      serializeSlotCookie(0, tokenA, null).split(';')[0],
+      serializeSlotCookie(1, tokenB, null).split(';')[0],
+      serializeActivePointer(1, null).split(';')[0]
+    ].join('; ');
+
+    // DELETE the active account (B / gone).
+    const del = await call('DELETE', '/api/me', { body: { confirmEmail: 'gone@example.com', password: 'delete-me-9' }, cookie });
+    expect(del.status).toBe(200);
+
+    const setCookies = del.res.headers.getSetCookie ? del.res.headers.getSetCookie() : [del.res.headers.get('set-cookie')];
+    // The deleted account's slot 1 cookie is cleared…
+    expect(setCookies.some(c => /nova_session_1=;.*Max-Age=0/.test(c))).toBe(true);
+    // …but the surviving account's slot 0 cookie is NEVER cleared.
+    expect(setCookies.some(c => /nova_session_0=;.*Max-Age=0/.test(c))).toBe(false);
+    // The active pointer is re-pointed to the surviving slot 0.
+    expect(setCookies.some(c => /nova_active=0(;|$)/.test(c))).toBe(true);
+
+    // The deleted account's KV session is gone…
+    expect(await kv.get('session:' + hashToken(tokenB), 'json')).toBeNull();
+    // …while the surviving account's KV session still resolves AND authenticates.
+    expect(await kv.get('session:' + hashToken(tokenA), 'json')).toBeTruthy();
+    const me = await call('GET', '/api/me', { cookie: serializeSlotCookie(0, tokenA, null).split(';')[0] });
+    expect(me.status).toBe(200);
+    expect(me.body.user.email).toBe('keep@example.com');
+  });
+
+  // F-002 #2 — cold-isolate residual / captured-token purge (the F-001 fix):
+  // the deleted user's live session is present via cookie but the store's
+  // userKvKeys index is empty (as after a cold isolate restart). The active
+  // session: key must STILL be dropped — proving it comes from the captured
+  // cookie token, not the index. An other-device key the index never saw would
+  // fall back to TTL; we assert that residual explicitly.
+  it('drops the active session via the captured cookie token even when the store index is empty (cold isolate)', async () => {
+    const logged = stubNetworkAndEmail();
+    const kv = fakeKv();
+    const env = {
+      NOVA_SESSION_SECRET: 'worker-sec004-cold',
+      SESSION_KV: kv,
+      NOVA_PUBLIC_URL: 'https://nova.test'
+    };
+    const call = makeCall(env);
+
+    const sessionToken = await provisionAccount(call, logged, 'gone@example.com', 'delete-me-9');
+    expect(await kv.get('session:' + hashToken(sessionToken), 'json')).toBeTruthy();
+
+    // Simulate an other-device session for the same user that this browser does
+    // NOT carry as a cookie. Put a plausible session: key in KV directly; with an
+    // empty index it is unknown to deleteUserAccount and must survive to TTL.
+    const otherDeviceKey = 'session:' + hashToken('other-device-token-not-in-cookies');
+    await kv.put(otherDeviceKey, JSON.stringify({ stub: true }));
+
+    // Cold isolate: wipe the in-memory userKvKeys index so kvKeys comes back
+    // empty for this user. The captured-token path is now the ONLY thing that
+    // can drop the active session: key.
+    const store = await __getStoreForTests(env);
+    store.userKvKeys.clear();
+
+    const cookie = [
+      serializeSlotCookie(0, sessionToken, null).split(';')[0],
+      serializeActivePointer(0, null).split(';')[0]
+    ].join('; ');
+
+    const del = await call('DELETE', '/api/me', { body: { confirmEmail: 'gone@example.com', password: 'delete-me-9' }, cookie });
+    expect(del.status).toBe(200);
+    // F-001 FIX: the active browser's session: key is dropped via the captured
+    // cookie token, despite the empty index.
+    expect(await kv.get('session:' + hashToken(sessionToken), 'json')).toBeNull();
+    // Documented residual: the other-device key the index never knew about is
+    // NOT purged here — it falls back to natural TTL expiry (SEC-006/SEC-009).
+    expect(await kv.get(otherDeviceKey, 'json')).toBeTruthy();
   });
 });

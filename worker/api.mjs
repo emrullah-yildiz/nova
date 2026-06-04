@@ -31,6 +31,12 @@ export function __resetApiCacheForTests() {
   cachedApi = null;
 }
 
+// Test-only: boot (or reuse) the cached store for an env so tests can inspect or
+// mutate store state (e.g. simulate a cold-isolate empty KV index for SEC-004).
+export async function __getStoreForTests(env) {
+  return (await getApi(env)).store;
+}
+
 async function getApi(env) {
   if (cachedApi) return cachedApi;
   const oidcVerifier = env.GOOGLE_CLIENT_ID ? createGoogleOidcVerifier({ clientId: env.GOOGLE_CLIENT_ID }) : null;
@@ -217,6 +223,22 @@ export async function handleEnterpriseApi(request, env, ctx) {
       return Response.json({ ok: true, user: map[slot].user }, { status: 200, headers: headersWith(env, [serializeActivePointer(slot, null)]) });
     }
 
+    // SEC-004 / F-001: for DELETE /api/me we MUST capture the cookie-derived
+    // slot→token map and the active user's id BEFORE dispatch runs, because
+    // dispatch deletes the user row. After deletion resolveSlots() can no longer
+    // authenticate this browser's cookies (requireUser throws 404), so the
+    // active session's `session:<hash>` key would never be purged. Capturing it
+    // up front guarantees the deleting browser's live session is always dropped.
+    const isDeleteMe = url.pathname === '/api/me' && request.method === 'DELETE';
+    let preDeleteMap = null;
+    let preDeleteActive = null;
+    let capturedSlotTokens = null;
+    if (isDeleteMe) {
+      preDeleteMap = await resolveSlots(store, cookieHeader);
+      preDeleteActive = resolveActiveSlot(cookieHeader, preDeleteMap);
+      capturedSlotTokens = parseAllSlots(cookieHeader);
+    }
+
     const { status, body: payload } = await dispatch({
       method: request.method,
       path: url.pathname,
@@ -241,24 +263,31 @@ export async function handleEnterpriseApi(request, env, ctx) {
       cookies.push(serializeActivePointer(slot, cookieMaxAge));
       if (parseCookie(cookieHeader)) cookies.push(clearSessionCookie()); // migrate legacy → slotted
     }
-    if (status < 400 && url.pathname === '/api/me' && request.method === 'DELETE') {
+    if (status < 400 && isDeleteMe) {
       // SEC-004: a deleted account must leave NO working credential behind.
-      // resolveSlots authenticated every slot cookie this browser carries; the
+      // The slot map + active slot were captured from this browser's cookies
+      // BEFORE dispatch deleted the user (F-001): re-resolving here would fail
+      // auth (the user row is gone), so we rely on the pre-delete snapshot. The
       // active slot's user is the one just deleted. Drop the KV session for
       // EVERY slot owned by that user (not just the active one) plus every
-      // session:/emailverify: key the store minted for them, and clear all of
-      // their slot cookies — other signed-in accounts in this browser survive.
-      const map = await resolveSlots(store, cookieHeader);
-      const active = resolveActiveSlot(cookieHeader, map);
+      // session:/emailverify: key the store enumerated for them, and clear all
+      // of their slot cookies — other signed-in accounts in this browser survive.
+      const map = preDeleteMap || {};
+      const active = preDeleteActive;
       const deletedUserId = active !== null && map[active] ? map[active].userId : null;
       const dropKv = async (key) => {
         if (store.stateStore && key) { try { await store.stateStore.delete(key); } catch { /* ignore */ } }
       };
       // KV keys the store enumerated for the deleted user (session + emailverify).
+      // After a cold isolate the in-memory index is empty, so this can be sparse;
+      // the cookie-derived drop below is the always-on guarantee for the active
+      // browser's live session.
       for (const key of (payload && Array.isArray(payload.kvKeys) ? payload.kvKeys : [])) await dropKv(key);
-      // Plus session keys derived from THIS request's slot cookies (covers a
-      // cold-isolate store whose in-memory index lost older sessions).
-      const slotTokens = parseAllSlots(cookieHeader);
+      // Plus session keys derived from THIS request's slot cookies, captured
+      // up front. This is the security-critical path: even when the store's
+      // userKvKeys index is empty (cold isolate), the deleting browser's active
+      // `session:<hash>` key is ALWAYS dropped here.
+      const slotTokens = capturedSlotTokens || {};
       const survivingSlots = {};
       for (const [slotStr, entry] of Object.entries(map)) {
         const slot = Number(slotStr);
