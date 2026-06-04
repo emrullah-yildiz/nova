@@ -43,6 +43,36 @@ internal static class NovaConnectHubProcess
         }
     }
 
+    /// <summary>
+    /// Stops the hub process this add-in started, if any. A hub that was already
+    /// running before the add-in turned the connection on (detected via the open
+    /// port, so <see cref="_hubProcess"/> is null) is left untouched. Used on
+    /// shutdown; safe to call when no hub was started.
+    /// </summary>
+    public static void StopIfStarted()
+    {
+        var process = _hubProcess;
+        _hubProcess = null;
+        if (process == null) return;
+
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(2000);
+            }
+        }
+        catch
+        {
+            // Best-effort: the hub is a localhost dev process; ignore teardown races.
+        }
+        finally
+        {
+            process.Dispose();
+        }
+    }
+
     private static bool WaitForHub()
     {
         var deadline = DateTime.UtcNow.AddSeconds(6);

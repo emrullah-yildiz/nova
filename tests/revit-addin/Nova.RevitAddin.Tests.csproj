@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Unit tests for the Revit-free pieces of the Nova Connect add-in. This project
+    deliberately does NOT reference the Revit API; it compiles the standalone,
+    dependency-free source files directly (currently the Open Nova URL builder) so
+    the routing/URL logic can run headlessly in CI without Revit installed.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Nova.RevitAddin.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Revit-free source under test, pulled in by file rather than by assembly
+         reference so we never need to load the Revit API to test it. -->
+    <Compile Include="..\..\integrations\revit-addin\NovaWebUrl.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+</Project>

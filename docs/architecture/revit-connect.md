@@ -250,6 +250,64 @@ Before enterprise pilot:
 - Load test covers 100 concurrent local Connect sessions.
 - Security review covers pairing, origin validation, write approval, and audit events.
 
+## Revit add-in UI: the Nova Connect ribbon
+
+The add-in's entry point is an `IExternalApplication`
+(`integrations/revit-addin/NovaConnectApp.cs`) registered in the `.addin` manifest
+as `<AddIn Type="Application">`. On `OnStartup` it builds a **"Nova Connect" ribbon
+panel** (on the built-in Add-Ins tab) with two independent buttons. This replaces the
+old single `Add-Ins > External Tools > Nova Connect` command, which tried to start a
+local dev server + hub from a git checkout and never opened the web app on an
+installed machine.
+
+**Button 1 — connection On/Off toggle (`ConnectionToggleCommand`).**
+- **OFF (default):** a **red dot** icon, label "Connect".
+- Click to turn **ON:** starts the local hub (`NovaConnectHubProcess.EnsureStarted`)
+  and a `NovaHostClient` against `ws://127.0.0.1:8765`. On success the button flips to
+  a **green dot**, label "Connected", tooltip "Connected to Nova".
+- Click again to turn **OFF:** disposes the host client and reverts to the red dot.
+- The command updates **its own** button: `NovaConnectApp` captures the created
+  `PushButton` at startup (`NovaConnectApp.ToggleButton`) and sets `.LargeImage` /
+  `.Image` / `.ItemText` on each toggle. Connection state and the `NovaHostClient`
+  lifecycle live in `NovaConnectApp` (static) so `OnShutdown` can dispose the client
+  and stop the hub process the add-in started.
+- If turning on fails (no hub/Node/repo on this machine — see follow-up below), the
+  command does **not** crash: it stays OFF (red dot) and shows a `TaskDialog` with the
+  reason and the `NOVA_REPO_ROOT` hint.
+
+**Button 2 — Open Nova (`OpenNovaCommand`).** Opens the **production** web app
+`https://hi-nova.work/` (`NovaConnectSettings.DefaultNovaUrl`, overridable via the
+`NOVA_WEB_URL` env var) in the default browser with `UseShellExecute=true`. It appends
+the Connect auto-connect query params (`novaConnectOpen=1`, `novaConnectAuto=1`,
+`novaConnectUrl=<HubUrl>`, `novaConnectToken=<token>`, `novaConnectProject=<id>`;
+built by the Revit-free `NovaWebUrl.Build`) so a freshly opened tab auto-pairs with the
+local hub. This button is **independent of the connection toggle**: it never starts the
+hub or a local web server (the default URL is non-localhost, so
+`NovaWebProcess.ShouldStartLocalServer` returns false) and always opens the browser.
+Equally, turning the connection on does not require opening the site — if the web app is
+already open, flipping the toggle on is enough to connect.
+
+**Icons (no committed binaries).** `DotIcons.cs` renders the red / green / Nova-blue
+dots programmatically as frozen `BitmapSource`es (a filled circle via `DrawingVisual` +
+`RenderTargetBitmap`) at 32x32 (`LargeImage`) and 16x16 (`Image`), so no image assets
+are committed to the repo. The toggle swaps the dot color visibly on each On/Off.
+
+### Connection toggle and the hub-bundling follow-up (next step for distribution)
+
+The connection toggle's "On" path depends on `NovaConnectHubProcess` +
+`NovaLocalPaths.FindRepoRoot`, which still require a **Nova git checkout and Node.js** on
+the machine (the hub is launched as `node scripts/connect-hub.cjs`). So on a clean
+end-user install the toggle will fail to go green and show the red-dot TaskDialog with
+the `NOVA_REPO_ROOT` hint. It works today on a developer machine, or anywhere
+`NOVA_REPO_ROOT` points at a Nova repo with Node available.
+
+**Next step for true distribution:** bundle a self-contained hub with the installer (e.g.
+a packaged single-file hub executable, or shipping `connect-hub.cjs` + a pinned Node
+runtime inside `%APPDATA%\...\Nova\`) and have `NovaConnectHubProcess` prefer that bundled
+hub over `FindRepoRoot`. Until then the "Open Nova" button works unconditionally on any
+install (it just opens the production site), but the live Revit↔hub connection is
+dev-machine-only. This is tracked in `docs/agent-handoff.md`.
+
 ## Installing the add-in (downloadable installer)
 
 The Connect panel has a **Download Nova Connect** button that serves a packaged
@@ -266,7 +324,8 @@ End-user flow:
    if it isn't found.
 4. It copies `Nova.RevitAddin.dll` into `%APPDATA%\Autodesk\Revit\Addins\2027\Nova\`
    and writes `Nova.addin` (from `Nova.addin.template`, filling `{{ASSEMBLY_PATH}}`).
-5. Restart Revit -> **Add-Ins -> External Tools -> Nova Connect**.
+5. Restart Revit -> the **Add-Ins** tab shows a **Nova Connect** ribbon panel with two
+   buttons: **Connect** (the On/Off connection toggle) and **Open Nova**.
 
 Run `NovaConnect-Setup.exe /uninstall` to remove it.
 

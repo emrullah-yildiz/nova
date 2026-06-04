@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RevitAddIns>
-  <AddIn Type="Command">
+  <!--
+    Nova Connect registers an IExternalApplication. It builds the "Nova Connect"
+    ribbon panel (on the built-in Add-Ins tab) with two buttons: a connection
+    On/Off toggle and "Open Nova". The button commands (ConnectionToggleCommand,
+    OpenNovaCommand) are invoked from the ribbon via the same assembly and do not
+    need their own <AddIn Type="Command"> entries.
+  -->
+  <AddIn Type="Application">
     <Name>Nova Connect</Name>
     <Assembly>{{ASSEMBLY_PATH}}</Assembly>
     <AddInId>7F742056-0C3A-4F5D-9440-AED68D8AF0F9</AddInId>
-    <FullClassName>Nova.RevitAddin.OpenNovaCommand</FullClassName>
+    <FullClassName>Nova.RevitAddin.NovaConnectApp</FullClassName>
     <VendorId>NOVA</VendorId>
     <VendorDescription>Nova visual scripting integration</VendorDescription>
   </AddIn>
