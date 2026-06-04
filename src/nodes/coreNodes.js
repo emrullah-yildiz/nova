@@ -8,6 +8,7 @@ import { logicCategory, logicNodes } from './categories/logic.js';
 import { mathCategory, mathNodes } from './categories/math.js';
 import { outputCategory, outputNodes } from './categories/output.js';
 import { customCategory, customNodes } from './categories/custom.js';
+import { dataCategory, dataNodes } from './categories/data.js';
 import { patternsCategory, patternsNodes } from './categories/patterns.js';
 import { planeCategory, planeNodes } from './categories/plane.js';
 import { pointCategory, pointNodes } from './categories/point.js';
@@ -21,6 +22,7 @@ import { createNodeRegistry, toLegacyNodeDefinition } from './registry.js';
 const modernCategories = [
   curvesCategory,
   customCategory,
+  dataCategory,
   geometryCategory,
   inputCategory,
   listCategory,
@@ -46,6 +48,7 @@ export const coreCategories = [
 export const coreNodes = [
   ...curvesNodes,
   ...customNodes,
+  ...dataNodes,
   ...geometryNodes,
   ...inputNodes,
   ...listNodes,
