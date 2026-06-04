@@ -362,7 +362,21 @@ path: **prototype on Option A** (embed a minimal Nova-for-Forma panel to validat
 node set proves out and a standalone-Nova flow is wanted. FM-M0 deliverable: pick A or B
 (or the A→B path), define the `NovaFormaBridge` surface (mirror `revit-bridge`'s async
 handle), and stand up the extension skeleton. Owners: **The Architect** + **Trinity** +
-**Link**. **Decision still needs the owner's pick before FM-M1.**
+**Link**.
+
+### DECISION (owner, 2026-06-04): **Option B**
+A **Nova extension lives inside Forma** and bridges data to the **standalone Nova web
+app**; the **user activates the connection** (mirroring Revit's Connect toggle) to pair
+them. Rationale: Nova stays the full standalone home, Forma is a data source, and the
+activation UX is consistent with Revit Connect.
+
+**Key difference from Revit — the transport is a cloud relay, not localhost.** Revit's
+bridge is a localhost hub because Revit is a desktop app on the same machine. Forma's two
+ends are **both browser contexts** (the Forma extension iframe + the Nova tab), which
+cannot talk directly — so `NovaFormaBridge` = a **Forma-extension SDK client** +
+a **Cloudflare Durable Object pairing room** (reuse Nova's existing realtime/collab
+infra) + a **Nova-side client**. Activation = a pairing code (mirrors Revit's pairing
+token). FM-M0 now produces this skeleton; no localhost hub for Forma.
 
 ---
 
