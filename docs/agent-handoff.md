@@ -13,6 +13,66 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-04 - T4 (M2): Curve/Surface frame-evaluation kernel
+
+**Agent/branch:** Geometry/Kernel Engineer — `feat/geo-curve-surface-eval` (off `develop` @ 3ee59cc)
+
+**Goal:** Pure kernel functions to evaluate a point, tangent/normal, and an oriented
+FRAME at a normalized parameter on curves and surfaces — the substrate paneling and
+adaptive-component placement consume (divide → frame per cell → orient family onto it).
+
+**Claimed/changed files:** NEW `src/geometry/curve-eval.js`, NEW
+`src/geometry/surface-eval.js`, NEW `tests/geometry/curve-eval.test.js`, NEW
+`tests/geometry/surface-eval.test.js`; thin wire EDIT `src/geometry/index.js` (8
+`Geo.<name>` assignments + imports). No other files touched. READ-only on
+`frames.js`, `transforms.js`, `geometry-lib.js`, `geo-advanced.js`, `nurbs-math.js`.
+
+**Exported signatures (for T5 node codegen):**
+- curve-eval.js: `pointAtT(curve, t) → Point3`, `tangentAtT(curve, t) → Vector3`
+  (unit), `frameAtT(curve, t) → Plane`, `divideCurve(curve, count) → {points, frames}`.
+- surface-eval.js: `pointAtUV(surface, u, v) → Point3`, `normalAtUV(surface, u, v) →
+  Vector3` (unit), `frameAtUV(surface, u, v) → Plane`, `divideSurface(surface, uCount,
+  vCount) → {points, frames}`.
+
+**Global Geo names added (all verified collision-free vs geometry-lib/geo-advanced/
+nurbs-math before assignment):** `Geo.pointAtT`, `Geo.tangentAtT`, `Geo.frameAtT`,
+`Geo.divideCurve`, `Geo.pointAtUV`, `Geo.normalAtUV`, `Geo.frameAtUV`,
+`Geo.divideSurface`. A guard test asserts every one resolves as a function on the
+assembled global `Geo` (mirrors `tests/transform-codegen.test.js`).
+
+**Decisions / conventions:**
+- Frames are the SAME `Geo.Plane` shape M1 produces (origin + explicit
+  `{xaxis,yaxis,normal}` via `frames.frameAt`), so `Geometry.Orient` consumes
+  `frameAtT`/`frameAtUV` directly.
+- `frameAtT`: frame NORMAL = unit tangent (curve runs along local Z); in-plane X/Y from
+  `frames.frameAt`'s stable world-axis pick (continuous, non-tumbling — avoids Frenet
+  inflection flips).
+- `frameAtUV`: origin = surface point, normal = surface normal, in-plane X follows dU.
+- **Count conventions (Grasshopper):** `divideCurve(curve, count)` — `count` = SEGMENTS,
+  so an OPEN curve → `count+1` points (both endpoints), a CLOSED curve (Circle3 / closed
+  Polyline3) → exactly `count` points (the coincident final sample is dropped).
+  `divideSurface(uCount, vCount)` — segment counts → `(uCount+1)×(vCount+1)` frames,
+  row-major (outer u, inner v).
+- Reused existing evaluators: `Curve3.pointAt/tangentAt`, `NurbsCurve.evaluate`,
+  `NurbsSurface.evaluate/normalAt`, parametric `Surface.evaluate` (mapped from its
+  uDomain/vDomain onto [0,1]), and `Geo.evaluateSurface` for grid/mesh (Mesh3) surfaces.
+  NURBS params clamp to 0.9999 (same as the kernel's toPoints). Genuinely non-evaluable
+  surfaces throw a clear "unsupported surface type" error rather than returning garbage.
+
+**Codegen/contract note:** No `capability-ledger.js` or `golden-examples` exist in this
+repo (confirmed); node-catalog/validator allow-lists are derived live from the registry,
+so there is nothing to sync until T5 adds the consuming nodes.
+
+**Validation:** `npm.cmd run lint:all` → exit 0 (clean). `npm.cmd test` → 1419 passed,
+1 skipped (120 files); the lone "1 error" is the known spurious vitest worker-teardown
+hiccup in unrelated `invite-redeem-landing.test.js` (re-ran in isolation → 4 passed
+clean). `npm.cmd run build` → built OK. New tests: 21 passed.
+
+**Known gaps:** T5 nodes (Curve/Surface eval + Divide + paneling) consume these next.
+3D viewport rendering of frame outputs not exercised headlessly (executes verified in JS).
+
+**Merge status:** Open branch `feat/geo-curve-surface-eval` — committed, not merged.
+
 ## 2026-06-04 - FIX: Transform-node codegen now resolves on the global Geo (BLOCKING)
 
 **Agent/branch:** Geometry/Kernel Engineer — `feat/nodes-transform` (fix in place).
