@@ -13,6 +13,46 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-04 - RV-M2: C# bridge handlers for RV-M2 Revit params/info/types read nodes (→ Trinity / connect-engineer)
+
+**From:** Core/Runtime (Neo) — `feat/rv-m2-revit-params` (off `develop`; do not merge/push)
+**To:** Connect/Revit (Trinity) — add these to `integrations/revit-addin/**` in follow-up **RV-M2**.
+
+RV-M2 shipped 7 **read-only**, codegen-only Revit nodes (no `execute`, NO SEC-013
+write gate) in the existing `revit` category (`src/core/nodes.js`). Each emits a
+`RevitBridge.*` call; **seven new bridge methods** must be implemented on the add-in.
+**All are strictly read-only** (FilteredElementCollector / Parameter / element reads
+inside a read transaction — no document mutation, no approval token). Mirror the
+existing read request/response transport (`getElements` / `getGeometries`). `elements`
+arguments are the same element-handle shapes the existing read nodes pass.
+
+| Method (call site in codegen) | Args | Returns (shape Nova consumes) | Read-only |
+|---|---|---|---|
+| `RevitBridge.getElementInfo(elements)` | `elements`: element list | list aligned to `elements`, each `{ "id": <string>, "category": <string>, "typeName": <string>, "level": <string\|null>, "name": <string>, "properties": { <name>: <value>, ... } }`. `properties` = the element's readable instance attributes as a name→value map (per NOVA.md "Expose Properties where it makes sense") — include the common instance params + the scalar fields above. | yes |
+| `RevitBridge.getParameterByBuiltIn(elements, bip)` | `elements`: element list; `bip`: BuiltInParameter **enum name** string (e.g. `"ALL_MODEL_MARK"`, `"HOST_AREA_COMPUTED"`) | list of values aligned to `elements` — read each element's parameter resolved via `Enum.Parse<BuiltInParameter>(bip)` then `element.get_Parameter(bip)`; coerce by storage type (Double/Integer/String/ElementId→name); `null` where the element lacks that BIP. **Distinct key space from `getParameterValues` (name-keyed).** | yes |
+| `RevitBridge.getTypeParameters(elements)` | `elements`: element list | list aligned to `elements`, each `{ "properties": { <typeParamName>: <value>, ... } }` — read the element's **type** (`GetTypeId()` → `ElementType`) parameters, NOT instance params. | yes |
+| `RevitBridge.getTypes(category)` | `category`: string category name, or `""` for all | list of `{ "name": <string>, "id": <string> }` — the document's available family symbols / element types, optionally filtered to `category` (skip the filter when blank). The producer that feeds creation-node type inputs (RV-M3). | yes |
+| `RevitBridge.getMaterials()` | none | list of `{ "name": <string>, "id": <string> }` (extend with color/appearance later if needed) — all `Material` elements in the document. | yes |
+| `RevitBridge.getPhase(elements)` | `elements`: element list | list aligned to `elements`, each `{ "created": <phaseName\|null>, "demolished": <phaseName\|null> }` (resolve `PhaseCreated` / `PhaseDemolished` ElementIds to phase names). | yes |
+| `RevitBridge.getWorkset(elements)` | `elements`: element list | list of workset-name strings aligned to `elements` (resolve `WorksetId` via the document's `WorksetTable`; `null` for non-workshared docs). | yes |
+
+Notes for Trinity:
+- `getElementInfo.properties` and `getTypeParameters.properties` are the **Properties
+  maps** the nodes surface to the inspector; serialize values as flat scalars/strings
+  (no opaque handles) so they read cleanly in the data inspector and flow into `List.*`.
+- `getParameterByBuiltIn` keys by the **BuiltInParameter enum** — do NOT route it through
+  the name-based `getParameterValues` path; it is intentionally a different key space
+  (robust across Revit UI language / shared-param renames).
+- `getTypes` is the design-time type producer; a **live-populated dropdown control** for
+  it (so `Revit.FamilyTypes`/creation-node type inputs offer the live doc's types at
+  edit time) is a **Switch (ui-engineer) UI follow-up** — the node returns the list at
+  run time for now.
+- The Nova-side mapping of `materials`/`types` records into any richer geometry/appearance
+  shape (if added later) is Mouse's lane; RV-M2 keeps them as `{name,id}`.
+
+**Merge status:** Open branch `feat/rv-m2-revit-params` — node defs + tests landed,
+C# handlers pending in RV-M2. Do not merge.
+---
 ## 2026-06-04 - RV-M1b: C# bridge handlers for RV-M1 Revit read nodes (→ Trinity / connect-engineer)
 
 **From:** Core/Runtime (Neo) — `feat/rv-m1-revit-read` (off `develop`; do not merge/push)
