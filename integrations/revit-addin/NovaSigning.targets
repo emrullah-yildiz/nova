@@ -1,0 +1,56 @@
+<Project>
+  <!--
+    Shared code-signing target for Nova Connect artifacts (the Revit add-in DLL
+    and the installer EXE). Imported by Nova.RevitAddin.csproj and
+    NovaConnect.Installer.csproj.
+
+    Gating: signing runs only when it is opted in AND a method is configured:
+      * /p:Sign=true on the build/publish command, OR
+      * the NOVA_SIGN_METHOD environment variable is set.
+    With neither, the target is a clean NO-OP (it logs and skips) so unsigned
+    dev builds succeed.
+
+    The target shells out to scripts/sign-revit-addin.ps1, which holds the
+    actual Trusted Signing / signtool logic and reads all credentials from the
+    environment (nothing sensitive lives in the repo). Set /p:SignDryRun=true
+    (or NOVA_SIGN_DRYRUN=1) to echo the command instead of running it.
+  -->
+  <PropertyGroup>
+    <!-- Opt-in: explicit /p:Sign=true, or the presence of a signing method. -->
+    <Sign Condition="'$(Sign)' == '' and '$(NOVA_SIGN_METHOD)' != ''">true</Sign>
+    <Sign Condition="'$(Sign)' == ''">false</Sign>
+    <SignDryRun Condition="'$(SignDryRun)' == ''">false</SignDryRun>
+
+    <NovaSignScript>$(MSBuildThisFileDirectory)..\..\scripts\sign-revit-addin.ps1</NovaSignScript>
+  </PropertyGroup>
+
+  <!--
+    Sign after a normal build. For the single-file installer the real artifact
+    is produced by `dotnet publish`, so the installer project also hooks Publish
+    (see SignNovaArtifactAfterPublish below).
+  -->
+  <Target Name="SignNovaArtifact" AfterTargets="Build"
+          Condition="'$(Sign)' == 'true'">
+    <!-- The signed file: each importing project may set NovaSignTarget; default
+         to the primary build output. Resolved inside the target so $(TargetPath)
+         is populated. -->
+    <PropertyGroup>
+      <NovaSignTarget Condition="'$(NovaSignTarget)' == ''">$(TargetPath)</NovaSignTarget>
+    </PropertyGroup>
+    <Message Importance="high" Text="[sign] SignNovaArtifact: method=$(NOVA_SIGN_METHOD) dryRun=$(SignDryRun) target=$(NovaSignTarget)" />
+    <Error Condition="!Exists('$(NovaSignScript)')"
+           Text="Signing requested (Sign=true) but sign script not found at $(NovaSignScript)." />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(NovaSignScript)&quot; $(SignDryRunFlag) &quot;$(NovaSignTarget)&quot;"
+          Condition="Exists('$(NovaSignTarget)')" />
+  </Target>
+
+  <!-- A friendly no-op log on a normal (unsigned) dev build. -->
+  <Target Name="SignNovaArtifactSkipped" AfterTargets="Build"
+          Condition="'$(Sign)' != 'true'">
+    <Message Importance="normal" Text="[sign] Code signing skipped (Sign=$(Sign)). Pass /p:Sign=true with NOVA_SIGN_METHOD to sign." />
+  </Target>
+
+  <PropertyGroup>
+    <SignDryRunFlag Condition="'$(SignDryRun)' == 'true'">-DryRun</SignDryRunFlag>
+  </PropertyGroup>
+</Project>

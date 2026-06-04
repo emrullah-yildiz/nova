@@ -17,9 +17,39 @@
     <Copyright>Copyright © Nova</Copyright>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <!-- Which add-in build to embed. Release by default; override with
+         /p:AddinConfiguration=Debug for a dev/debug payload. -->
+    <AddinConfiguration Condition="'$(AddinConfiguration)' == ''">Release</AddinConfiguration>
+    <AddinOutDir>..\..\integrations\revit-addin\bin\$(AddinConfiguration)\net10.0-windows</AddinOutDir>
+  </PropertyGroup>
+
   <ItemGroup>
-    <EmbeddedResource Include="..\..\integrations\revit-addin\bin\Debug\net10.0-windows\Nova.RevitAddin.dll" LogicalName="Payload.Nova.RevitAddin.dll" />
-    <EmbeddedResource Include="..\..\integrations\revit-addin\bin\Debug\net10.0-windows\Nova.RevitAddin.deps.json" LogicalName="Payload.Nova.RevitAddin.deps.json" Condition="Exists('..\..\integrations\revit-addin\bin\Debug\net10.0-windows\Nova.RevitAddin.deps.json')" />
+    <EmbeddedResource Include="$(AddinOutDir)\Nova.RevitAddin.dll" LogicalName="Payload.Nova.RevitAddin.dll" />
+    <EmbeddedResource Include="$(AddinOutDir)\Nova.RevitAddin.deps.json" LogicalName="Payload.Nova.RevitAddin.deps.json" Condition="Exists('$(AddinOutDir)\Nova.RevitAddin.deps.json')" />
     <EmbeddedResource Include="..\..\integrations\revit-addin\Nova.addin.template" LogicalName="Payload.Nova.addin.template" />
   </ItemGroup>
+
+  <!-- Fail fast (with an actionable hint) if the add-in payload is missing,
+       so we never embed a stale or absent DLL. -->
+  <Target Name="EnsureAddinPayload" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(AddinOutDir)\Nova.RevitAddin.dll')"
+           Text="Add-in payload not found at $(AddinOutDir)\Nova.RevitAddin.dll. Build it first: dotnet build integrations/revit-addin/Nova.RevitAddin.csproj -c $(AddinConfiguration)" />
+  </Target>
+
+  <!-- Code-signing scaffold (no-op unless /p:Sign=true with NOVA_SIGN_METHOD).
+       The installer's real artifact is the single-file EXE from `dotnet
+       publish`, so also sign after Publish. -->
+  <Import Project="..\..\integrations\revit-addin\NovaSigning.targets" />
+
+  <Target Name="SignNovaArtifactAfterPublish" AfterTargets="Publish"
+          Condition="'$(Sign)' == 'true'">
+    <PropertyGroup>
+      <NovaPublishedExe>$(PublishDir)$(AssemblyName)$(_NativeExecutableExtension)</NovaPublishedExe>
+      <NovaPublishedExe Condition="'$(_NativeExecutableExtension)' == ''">$(PublishDir)$(AssemblyName).exe</NovaPublishedExe>
+    </PropertyGroup>
+    <Message Importance="high" Text="[sign] SignNovaArtifactAfterPublish: target=$(NovaPublishedExe)" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(NovaSignScript)&quot; $(SignDryRunFlag) &quot;$(NovaPublishedExe)&quot;"
+          Condition="Exists('$(NovaPublishedExe)')" />
+  </Target>
 </Project>
