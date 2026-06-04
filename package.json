@@ -56,6 +56,6 @@
     "hono": "^4.6.0",
     "pg": "^8.21.0",
     "ws": "^8.20.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
 }
