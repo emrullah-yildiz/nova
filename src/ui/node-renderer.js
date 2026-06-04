@@ -156,7 +156,12 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
       self.onCtrl(nodeId, controlId, value);
       if (self._refreshRenderedNode) self._refreshRenderedNode(nodeId);
     }).catch(function(err) {
-      if (typeof console !== 'undefined' && console.warn) console.warn('[file-control] read failed', err);
+      // Leave the prior control value intact (we never called onCtrl). Surface
+      // the reason — covers oversize rejections (MAX_FILE_BYTES) and read
+      // failures. Prefer the app toast if present, else console.warn.
+      var msg = '⚠️ Could not load file: ' + ((err && err.message) ? err.message : 'read failed');
+      if (typeof self._toast === 'function') self._toast(msg);
+      else if (typeof console !== 'undefined' && console.warn) console.warn('[file-control]', msg, err);
     });
   };
 
@@ -436,17 +441,31 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
           // reads the file via the pure helper and routes it through onCtrl.
           var cvFile = nd.controlValues[c.id];
 
-          var fileName = (cvFile && cvFile.name) ? cvFile.name : (c.label || 'Choose file…');
+          // SECURITY: the chosen file name is user-controlled, stored in
+          // controlValues, persisted in saved projects and broadcast to
+          // collaborators. It MUST be HTML-escaped before being concatenated
+          // into innerHTML, both in the title="" attribute and the button text,
+          // otherwise a crafted name (e.g. "><img src=x onerror=...>.csv) is a
+          // stored/propagating XSS vector. escapeHtml escapes & < > " '.
+          var rawFileName = (cvFile && cvFile.name) ? cvFile.name : (c.label || 'Choose file…');
 
-          var accept = c.accept ? ' accept="' + c.accept + '"' : '';
+          var fileName = app.escapeHtml(rawFileName);
 
-          var fileInputId = nd.id + '-file-' + c.id;
+          var titleName = app.escapeHtml((cvFile && cvFile.name) ? cvFile.name : (c.label || 'Choose file'));
+
+          var accept = c.accept ? ' accept="' + app.escapeHtml(c.accept) + '"' : '';
+
+          var fileInputId = app.escapeHtml(nd.id + '-file-' + c.id);
+
+          var ndIdEsc = app.escapeHtml(nd.id);
+
+          var cIdEsc = app.escapeHtml(c.id);
 
           h += '<input type="file"' + accept + ' id="' + fileInputId + '" style="display:none" '
-            + 'onchange="app._onFileControlInput(\'' + nd.id + '\',\'' + c.id + '\',this.files&&this.files[0])" '
+            + 'onchange="app._onFileControlInput(\'' + ndIdEsc + '\',\'' + cIdEsc + '\',this.files&&this.files[0])" '
             + 'onclick="event.stopPropagation()">';
 
-          h += '<button type="button" class="node-file-btn" title="' + (cvFile && cvFile.name ? cvFile.name : (c.label || 'Choose file')) + '" '
+          h += '<button type="button" class="node-file-btn" title="' + titleName + '" '
             + 'style="width:100%;padding:4px 8px;font-size:11px;height:24px;box-sizing:border-box;background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:4px;color:var(--text-primary);cursor:pointer;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" '
             + 'onclick="event.stopPropagation();document.getElementById(\'' + fileInputId + '\').click()" '
             + 'onmousedown="event.stopPropagation()">📄 ' + fileName + '</button>';

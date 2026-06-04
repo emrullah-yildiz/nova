@@ -23,7 +23,21 @@
 // in node-renderer.js; it calls this helper then routes the value through the
 // app's existing onCtrl()/invalidateCompute() value-change path — no parallel
 // notification system.
+//
+// FILE-SIZE LIMIT (MAX_FILE_BYTES, 10 MB):
+//   The whole file is base64-encoded into controlValues, which is persisted in
+//   saved projects and broadcast to collaborators over the realtime channel.
+//   Base64 also inflates payload ~33%. To avoid corrupting saved-project state
+//   and flooding the collab broadcast, fileToControlValue REJECTS files larger
+//   than MAX_FILE_BYTES with a clear Error BEFORE reading any bytes. The
+//   renderer's _onFileControlInput .catch() leaves the prior control value
+//   intact and surfaces the message (toast if available, else console.warn).
 // ═══════════════════════════════════════════════════
+
+// Maximum accepted file size (raw bytes, before base64). 10 MB — large enough
+// for typical CSV/JSON/XLSX inputs, small enough to keep saved-project JSON and
+// collab broadcasts sane. Exported so callers/tests can reference the limit.
+export var MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 // Control types the node renderer knows how to draw. `file` is added here so a
 // declared file control is recognized (and the renderer's unknown-control
@@ -100,6 +114,16 @@ function readText(file) {
 // leave the control value unchanged). `text` is best-effort and may be null.
 export function fileToControlValue(file) {
   if (!file) return Promise.reject(new Error('fileToControlValue: no file'));
+  // Reject oversized files up front (before reading bytes) so we never base64
+  // them into controlValues / saved projects / collab broadcasts. file.size is
+  // present on real File/Blob objects.
+  if (typeof file.size === 'number' && file.size > MAX_FILE_BYTES) {
+    var limitMb = Math.round((MAX_FILE_BYTES / (1024 * 1024)) * 10) / 10;
+    var gotMb = Math.round((file.size / (1024 * 1024)) * 10) / 10;
+    return Promise.reject(new Error(
+      'File too large: ' + gotMb + ' MB exceeds the ' + limitMb + ' MB limit. '
+      + 'Choose a smaller file.'));
+  }
   var name = file.name || '';
   var mime = file.type || '';
   return readArrayBuffer(file).then(function(buffer) {
