@@ -13,6 +13,24 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-04 - M4-T2: C# Revit add-in handlers for the round-trip
+
+**Agent/branch:** Connect/Revit Engineer — `feat/m4-revit-addin-handlers` (off `develop` @ 25763c7)
+
+**Goal:** Implement the C# Revit add-in handlers for the M4 round-trip, pinned to the
+M4-T1 contract in `src/integrations/connect/protocol.js`: `selection.query` →
+`selection.result` (elements + optional planar faces), `geometry.place`
+(FamilyInstance via `NewFamilyInstance`, AdaptiveComponent via
+`AdaptiveComponentInstanceUtils`) under the existing write-approval gate, and the
+contract-shaped `parameter.get` / `parameter.set` (singular `elementId` + `params`
+map; set honors the approval gate).
+
+**Claimed files (owned):** EDIT `integrations/revit-addin/NovaHostClient.cs` only.
+READ-only on `src/integrations/connect/protocol.js`. NOT touching any `src/**` or
+`worker/**`.
+
+**Merge status:** Open branch `feat/m4-revit-addin-handlers` — IN PROGRESS, do not merge.
+
 ## 2026-06-04 - M4-T1: Connect protocol/contract for the Revit round-trip
 
 **Agent/branch:** Connect/Revit Engineer — `feat/m4-connect-protocol` (off `develop` @ f9fae48)
