@@ -1792,24 +1792,6 @@ const app = {
 
     }
 
-    // DataTree ({ _type:'DataTree', branches:Map, paths:[] }) — render as a
-    // path → items tree view so it never coerces to "[object Object]".
-    if (val && val._type === 'DataTree' && val.branches instanceof Map) {
-
-      const paths = Array.isArray(val.paths) ? val.paths : Array.from(val.branches.keys());
-      const rows = paths.map(pathKey => {
-        const branch = val.branches.get(pathKey);
-        const branchItems = Array.isArray(branch) ? branch : [];
-        const itemsHtml = branchItems.map((v, i) => {
-          return `<div class="data-list-row"><span class="data-list-index">${i}</span><span class="data-list-item" style="color:var(--accent-peach)">${this._formatItemInline(v)}</span></div>`;
-        }).join('');
-        return `<div class="data-obj-row"><span class="data-obj-key">${this.escapeHtml(pathKey)}</span><div class="data-obj-val">${itemsHtml || '<span style="color:var(--text-muted)">—</span>'}</div></div>`;
-      }).join('');
-
-      return `<div class="data-list-view"><div class="data-list-header"><span style="font-size:8px;color:var(--text-muted)">Tree</span><span style="font-size:8px;color:var(--accent-peach)">(${paths.length})</span></div><div class="data-list-body">${rows}</div></div>`;
-
-    }
-
     // A non-array object whose String() is meaningful (e.g. Geo types define a
     // useful toString) — keep using it.
     if (typeof val === 'object') {
@@ -1844,9 +1826,6 @@ const app = {
     if (v === null) return 'null';
     if (v === undefined) return '—';
     if (typeof v === 'object') {
-      if (v._type === 'DataTree' && v.branches instanceof Map) {
-        return 'Tree(' + (Array.isArray(v.paths) ? v.paths.length : v.branches.size) + ')';
-      }
       const str = this._safeToString(v);
       // Geo types and anything with a meaningful toString.
       if (str !== null && str !== '[object Object]') return this.escapeHtml(str);

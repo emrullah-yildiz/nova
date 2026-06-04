@@ -1,5 +1,4 @@
 import { app } from '../src/app/app.js';
-import { DataTree } from '../src/core/data-tree.js';
 
 describe('app.formatValue', () => {
   it('renders primitives as before', () => {
@@ -46,18 +45,6 @@ describe('app.formatValue', () => {
     expect(html).toContain('a:');
     expect(html).toContain('1');
     expect(html).toContain('2');
-  });
-
-  it('renders a DataTree as a Tree/branch view (no "[object Object]")', () => {
-    const tree = new DataTree();
-    tree.add([0], ['a', 'b']);
-    tree.add([1], ['c']);
-    const html = app.formatValue(tree);
-    expect(html).toContain('Tree');
-    expect(html).toContain('{0}');
-    expect(html).toContain('{1}');
-    expect(html).toContain('a'); // inline list items render the escaped string content
-    expect(html).not.toContain('[object Object]');
   });
 
   it('keeps a Geo-like object custom toString', () => {

@@ -48,8 +48,7 @@ var KERNEL_TYPE_MAP = [
   ['surface', 'surface'],
   ['compressedmesh', 'mesh'],
   ['mesh3', 'mesh'],
-  ['plane', 'plane'],
-  ['datatree', 'datatree']
+  ['plane', 'plane']
 ];
 
 // Compatibility families: a port whose type is in `ports` accepts any actual
