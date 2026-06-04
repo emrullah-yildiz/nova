@@ -7,7 +7,7 @@ import {
   groupByKey,
   sortByKey
 } from '../../core/tree-ops.js';
-import { toTree, toArray } from '../../core/data-tree.js';
+import { toTree, toArray, isDataTree } from '../../core/data-tree.js';
 
 // ============================================
 // NOVA — Tree node category (T6 / Milestone M2)
@@ -19,8 +19,19 @@ import { toTree, toArray } from '../../core/data-tree.js';
 //
 // execute() wires straight to the tree-ops exports — no reimplementation.
 // Tree-typed ports use the 'datatree' port type (recognised by the inspector
-// type-warning system); list/scalar ports use 'list'/'any', normalised through
+// type-warning system); list-consuming ports use 'list', normalised through
 // toTree/toArray at the boundary.
+//
+// LACING CONTRACT (F-001): the list-consuming inputs (Graft.data, Flatten.tree,
+// Partition.data) MUST be typed 'list', NOT 'any'. An 'any' scalar port makes
+// the node auto-laceable (src/core/lacing.js isAutoLaceable), so a real flat
+// list wired in would FAN execute() per item instead of being passed whole —
+// e.g. Flatten([1,2,3]) would return [[1],[2],[3]]. Typing them 'list' opts the
+// node out of auto-lacing (same as Tree.GroupByKey.items / List.SortByKey).
+// SUBTLETY: a 'list' port triggers resolveInputs' single->one-item-list
+// promotion (src/nodes/runtimeAdapter.js), which wraps a DataTree input into
+// [tree]. unwrapTreeInput() below undoes that wrap so a DataTree still flattens/
+// grafts/partitions correctly through the engine path.
 //
 // CODEGEN CONTRACT (learned in M1/T2): the tree-ops live in src/core, NOT on
 // the global `Geo` object the Python/C# runtime assembles. So codegen MUST NOT
@@ -48,12 +59,14 @@ export const treeNodes = [
     aliases: ['tree-graft'],
     description: 'Grafts data into a DataTree where each item becomes its own branch. A flat list [a, b, c] yields branches {0}=[a], {1}=[b], {2}=[c]; an existing tree grafts each item of each branch one level deeper. Mirrors Grasshopper "Graft Tree".',
     inputs: [
-      { id: 'data', name: 'Data', type: 'any', description: 'List or tree whose items each become their own branch' }
+      // 'list' (not 'any') so the engine passes the whole list intact instead of
+      // fanning execute() per item — see LACING CONTRACT above.
+      { id: 'data', name: 'Data', type: 'list', description: 'List or tree whose items each become their own branch' }
     ],
     outputs: [{ id: 'tree', name: 'Tree', type: 'datatree', description: 'DataTree with one item per branch' }],
     controls: [],
     execute(context, inputs) {
-      return { tree: graft(toTree(inputs.data)) };
+      return { tree: graft(toTree(unwrapTreeInput(inputs.data))) };
     },
     codegen: {
       python: '{{tree}} = [[x] for x in {{data}}]',
@@ -96,7 +109,10 @@ export const treeNodes = [
     aliases: ['tree-flatten'],
     description: 'Collapses every branch of a DataTree into a single flat list, concatenating items in branch (path) order. Accepts a tree or a plain list (returned flattened). Mirrors Grasshopper "Flatten Tree".',
     inputs: [
-      { id: 'tree', name: 'Tree', type: 'any', description: 'DataTree (or list) to collapse to a flat list' }
+      // 'list' (not 'any') so a flat list is passed whole, not fanned per item —
+      // see LACING CONTRACT above. unwrapTreeInput restores a DataTree that the
+      // single->one-item-list promotion would otherwise have wrapped.
+      { id: 'tree', name: 'Tree', type: 'list', description: 'DataTree (or list) to collapse to a flat list' }
     ],
     outputs: [{ id: 'list', name: 'List', type: 'list', description: 'Flat list of every item across all branches' }],
     controls: [],
@@ -104,7 +120,7 @@ export const treeNodes = [
       // toArray flattens a DataTree across branches; flatten() keeps the tree-op
       // path on record but the consumer here wants a plain list, so use toArray
       // of the single-branch flatten result.
-      return { list: toArray(flatten(toTree(inputs.tree))) };
+      return { list: toArray(flatten(toTree(unwrapTreeInput(inputs.tree)))) };
     },
     codegen: {
       python: '{{list}} = [item for sub in {{tree}} for item in (sub if isinstance(sub, list) else [sub])]',
@@ -210,6 +226,9 @@ export const treeNodes = [
     codegen: {
       // List-of-branches transpose == matrix transpose of the rows (zip(*rows)),
       // exactly mirroring List.Transpose.
+      // F-003: this generated transpose assumes rectangular input (equal-length
+      // branches); ragged branches diverge from execute(), matching the accepted
+      // List.Transpose precedent.
       python: '{{tree}} = list(map(list, zip(*{{tree}})))',
       csharp: 'var {{tree}} = Enumerable.Range(0, {{tree}}.Max(r => r.Count)).Select(i => {{tree}}.Select(r => r.ElementAtOrDefault(i)).ToList()).ToList();'
     },
@@ -254,14 +273,16 @@ export const treeNodes = [
     aliases: ['tree-partition'],
     description: 'Chunks data into a DataTree of branches of at most Size items each: branch {0} holds the first Size items, {1} the next, and so on. Accepts a list or a tree (flattened first). A Size of 0 or less puts everything in one branch. Mirrors Grasshopper "Partition List".',
     inputs: [
-      { id: 'data', name: 'Data', type: 'any', description: 'List or tree to partition (flattened first)' },
+      // 'list' (not 'any') so the whole list is partitioned, not fanned per item
+      // — see LACING CONTRACT above.
+      { id: 'data', name: 'Data', type: 'list', description: 'List or tree to partition (flattened first)' },
       { id: 'size', name: 'Size', type: 'number', description: 'Maximum number of items per branch' }
     ],
     outputs: [{ id: 'tree', name: 'Tree', type: 'datatree', description: 'DataTree of fixed-size branches' }],
     controls: [{ id: 'size', type: 'formula', default: '3', label: 'Size' }],
     execute(context, inputs) {
       const size = Number(inputs.size ?? 3);
-      return { tree: partition(toTree(inputs.data), Number.isNaN(size) ? 3 : size) };
+      return { tree: partition(toTree(unwrapTreeInput(inputs.data)), Number.isNaN(size) ? 3 : size) };
     },
     codegen: {
       python: '_items = [item for sub in {{data}} for item in (sub if isinstance(sub, list) else [sub])]\n{{tree}} = [_items[i:i+int({{size}})] for i in range(0, len(_items), max(1, int({{size}})))]',
@@ -319,8 +340,11 @@ export const treeNodes = [
       return { tree: groupByKey(list, (item) => String(keyFn(item))) };
     },
     codegen: {
-      python: '_g = {}\nfor x in {{items}}:\n    _g.setdefault({{key}}, []).append(x)\n{{tree}} = list(_g.values())',
-      csharp: 'var {{tree}} = {{items}}.GroupBy(x => {{key}}).Select(g => g.ToList()).ToList();'
+      // F-002: execute() buckets on String(keyFn(item)), so distinct values with
+      // the same string form (1 and '1') collapse into one branch. The generated
+      // code MUST stringify the key the same way or it would emit extra buckets.
+      python: '_g = {}\nfor x in {{items}}:\n    _g.setdefault(str({{key}}), []).append(x)\n{{tree}} = list(_g.values())',
+      csharp: 'var {{tree}} = {{items}}.GroupBy(x => Convert.ToString({{key}})).Select(g => g.ToList()).ToList();'
     },
     help: {
       inputs: [{ name: 'Items', description: 'Flat list to bucket' }],
@@ -411,6 +435,19 @@ export const treeNodes = [
     }
   }
 ];
+
+// Undo the engine's single->one-item-list promotion for a DataTree input.
+// resolveInputs (src/nodes/runtimeAdapter.js) wraps any non-array value reaching
+// a 'list'-typed port into [value]; for a DataTree that yields [tree], which
+// toTree would then mis-read as a single root branch holding the tree object.
+// Unwrap that exact shape back to the DataTree; everything else passes through
+// untouched (a plain list stays a list, a bare DataTree stays a tree).
+function unwrapTreeInput(value) {
+  if (Array.isArray(value) && value.length === 1 && isDataTree(value[0])) {
+    return value[0];
+  }
+  return value;
+}
 
 // Compile a Key f(x) formula control into a function of the item. Mirrors the
 // approach the List.Map / List.GroupBy nodes use; falls back to the identity on
