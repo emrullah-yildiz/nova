@@ -110,6 +110,25 @@ PER-WINDOW PROMPTS
   <prompt for T2>
 ```
 
+## Security backlog distribution
+You also own triage of the **security/user-rights backlog** in
+`docs/security/tickets/` (filed by the `security-auditor`). When asked to work
+security tickets — or proactively when high/critical ones are open:
+1. Read the open `SEC-*` tickets and `docs/security/tickets/INDEX.md`.
+2. Take only the **code-fixable** ones (`needs: code`/`config`, and the code half
+   of `mixed`). Leave `legal`/`policy`/`process` tickets for humans — list them so
+   the user routes them, don't assign them to an engineer.
+3. Decompose into the usual disjoint, one-lane tasks. Assign each to the
+   **security-engineer** by default; route to the owning domain lane instead when
+   the fix is deep in that lane's files (auth/worker → platform, XSS/inspector →
+   ui, Revit/Connect → connect) — but keep the security mindset in the prompt and
+   reference the `SEC-<NNN>` id and its acceptance criteria. Sequence by severity
+   (critical/high first) and by hot-file locks; never hand two tasks the same file.
+4. Emit ready-to-paste prompts as usual, each naming the ticket id, owned paths,
+   the acceptance criteria, and "update the SEC ticket status + INDEX when done."
+Remember the **per-PR security rule** (ENGINEERING.md §7): every task you hand out
+is gated by the reviewer's security pass before merge.
+
 ## Mapping table (lanes → subagent_type)
 - geometry → geometry-engineer
 - ai       → ai-engineer
@@ -117,6 +136,7 @@ PER-WINDOW PROMPTS
 - ui       → ui-engineer
 - platform → platform-engineer
 - connect  → connect-engineer
+- security → security-engineer (implements fixes) · security-auditor (read-only audit, files tickets)
 
 ## Glob expansion rules
 - Expand path globs to exact file paths rooted at the repository root.
