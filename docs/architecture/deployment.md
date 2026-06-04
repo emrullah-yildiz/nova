@@ -104,7 +104,42 @@ npx wrangler secret put RESEND_API_KEY --env dev
 ```
 
 Use a separate Neon database or schema for `dev` so changes from `develop` do
-not touch production data.
+not touch production data. This is **required**, not optional: set
+`NOVA_DATABASE_URL --env dev` to a dev-only Neon database/schema connection
+string. Production and dev must never resolve to the same Postgres data.
+
+## Dev KV namespaces (SEC-012)
+
+Dev and production must NOT share KV namespaces. The `nova-dev` Worker has
+weaker controls and runs untested code; if it bound the same namespace as
+production it could read, forge, or evict production session tokens
+(`session:<hash>`), email-verification tokens (`emailverify:<hash>`), and rate
+buckets.
+
+`wrangler.toml` therefore binds **dev-only** `SESSION_KV` and `RATE_KV`
+namespaces under `[[env.dev.kv_namespaces]]`, distinct from the production
+`[[kv_namespaces]]` ids. The dev ids ship as placeholders
+(`REPLACE_WITH_DEV_SESSION_KV_ID`, `REPLACE_WITH_DEV_RATE_KV_ID`) because KV
+namespaces can only be created from a Cloudflare-authenticated shell, not from
+this repo or CI.
+
+**One-time manual step** (run once, by someone with Cloudflare access for the
+`ey.myacc@gmail.com` account):
+
+```bash
+# Creates the dev-only namespaces and prints their ids.
+npx wrangler kv namespace create SESSION_KV --env dev
+npx wrangler kv namespace create RATE_KV --env dev
+```
+
+Each command prints an `id = "…"`. Paste those values over the matching
+`REPLACE_WITH_DEV_*_KV_ID` placeholders in `wrangler.toml`, commit, and deploy.
+Until the placeholders are replaced, `wrangler deploy --env dev` fails fast on
+an unknown namespace id — an intentional fail-safe that prevents dev from
+silently falling back to production KV.
+
+Do not point the dev bindings at the production namespace id
+(`2959d0665b324e53b58c2d1d5b752ffe`) — that id is production-only.
 
 ## Runtime Variables
 
