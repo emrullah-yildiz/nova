@@ -114,29 +114,55 @@ Flow:
    count / geometry summary) and the user approves it in the Connect panel.
    This is a usability gate only — approving here does not by itself authorize
    the write.
-2. **Issue (authoritative).** The browser asks the backend
-   (`EnterpriseStore.issueHostWriteApproval`) to issue a token. The server first
-   verifies the caller holds **project-write access**, then mints a token with
-   ≥256 bits of entropy (`crypto.randomBytes(32)`), bound to the
+2. **Issue (authoritative).** The browser asks the backend over
+   **`POST /api/host-write-approvals`** (handled by
+   `EnterpriseStore.issueHostWriteApproval` via the cloud client
+   `issueHostWriteApproval(...)`, wired through
+   `window.__revitWriteApproval.issueWriteToken`). The server first verifies the
+   caller holds **project-write access**, then mints a token with ≥256 bits of
+   entropy (`crypto.randomBytes(32)`), bound to the
    `{operation, projectId, graphVersion}` scope and given a short TTL (default
    2 minutes). Issuance is itself audited as `host.write.approved` (carrying the
-   `approvalId`). The raw token is returned **once** and never persisted in
-   cleartext — only its hash (`hashToken`) is stored.
+   `approvalId`). The raw token is returned **once** (HTTP 201) and never
+   persisted in cleartext — only its hash (`hashToken`) is stored.
 3. **Carry.** `RevitBridge` forwards the token to the hub/add-in inside
-   `payload.approval = { token, approvalId, operation, graphVersion }`. There is
-   no `{ approved: true }` boolean anywhere on the wire.
-4. **Consume (authoritative).** When the write lands, the authoritative side
-   calls `EnterpriseStore.consumeHostWriteApproval(context, token, scope)`. The
-   token must be **present, known, owned by the same caller, unconsumed,
+   `payload.approval = { token, approvalId, operation, graphVersion }`
+   (`client.js` `normalizeWriteApproval` preserves exactly those fields and
+   strips everything else). There is no `{ approved: true }` boolean anywhere on
+   the wire. The hub is a **transport**; the add-in checks token *presence* only
+   (defense in depth).
+4. **Consume (authoritative).** After the write lands in Revit, the browser
+   **reports the completed operation** to the backend over
+   **`POST /api/host-operations`** (cloud client `recordHostOperation(...)`,
+   wired through `window.__revitWriteApproval.recordHostAuditEvent`, called by
+   `RevitBridge` after each write). That endpoint is the authoritative consumer:
+   it calls `EnterpriseStore.consumeHostWriteApproval(context, token, scope)`.
+   The token must be **present, known, owned by the same caller, unconsumed,
    unexpired, and scope-matching**. The token is **burned (single-use) before**
    the write is recorded, defeating replay. Project-write access is re-checked at
-   consume time (authorization may have been revoked since issuance).
+   consume time (authorization may have been revoked since issuance). A report
+   with a missing/invalid/expired/replayed/out-of-scope token is **rejected at
+   the server boundary** (HTTP 403) and audited as a denial — the recorded write
+   never lands in the audit log.
 5. **Audit as a precondition.** `consumeHostWriteApproval` *always* writes an
    audit row: an accepted write as `host.operation` (with `ok` + `approvalId`), a
    rejected one as `host.write.denied` (with a structured `reason`:
    `missing_token`, `invalid_token`, `token_owner_mismatch`, `token_replayed`,
    `token_expired`, or `token_scope_mismatch`). The audit record is therefore a
-   side-effect of the write path, not an optional client call.
+   side-effect of the consume path, not an optional client call — there is no
+   route that records a host write without consuming a token.
+
+**Where authoritative enforcement lives.** The server (enterprise backend) is
+the only authoritative gate: it mints the token (step 2) and consumes+audits it
+(steps 4–5). The local hub is purely a transport and the add-in's token-presence
+check is defense-in-depth — neither can cryptographically verify a token. When
+there is **no cloud session** (pure local, signed-out use against a paired local
+hub), `issueWriteToken` degrades gracefully: it returns a clearly-marked
+**local token** (`local:` prefix, `local: true`) so the local read/write pilot
+stays usable offline. A local token satisfies the add-in presence-check but is
+**never** sent to `POST /api/host-operations` and is therefore never
+server-consumed or audited; authoritative governance is only active when the
+enterprise backend is present and the user is signed in.
 
 **Token format & verification.** The raw token is a 64-character hex string
 (256 bits). The server stores only `hashToken(token)` keyed to an approval record

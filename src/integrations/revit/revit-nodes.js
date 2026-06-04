@@ -153,6 +153,22 @@ async function acquireWriteApproval(win, request) {
   }
 }
 
+// SEC-013: report a completed host write to the server (the AUTHORITATIVE
+// CONSUME point). recordHostAuditEvent POSTs /api/host-operations carrying the
+// token; the server burns it (single-use) and writes the audit row as a
+// precondition. Best-effort + never-throw: a reporting failure must not corrupt
+// the already-completed write result the node returns. With a local-only token
+// (no backend), recordHostAuditEvent is a no-op by design.
+async function reportHostWrite(win, ok, details) {
+  var approvalMod = win && win.__revitWriteApproval;
+  if (!approvalMod || typeof approvalMod.recordHostAuditEvent !== 'function') return null;
+  try {
+    return await approvalMod.recordHostAuditEvent({ ok: ok === true }, details || {});
+  } catch (err) {
+    return null;
+  }
+}
+
 // ═══════════════════════════════════════
 // RevitBridge — data access layer
 // ═══════════════════════════════════════
@@ -382,6 +398,22 @@ RevitBridge = {
       var element = elements[index];
       if (element && element.params) element.params[paramName] = result.value;
       if (element && element.raw && element.raw.params) element.raw.params[paramName] = result.value;
+    });
+    // SEC-013: report the completed write to the server, which CONSUMES the
+    // token (single-use burn) and writes the audit row as a precondition. This
+    // is the authoritative consume point — the write isn't governed until the
+    // server has consumed+audited it.
+    await reportHostWrite(window, results.some(function(r) { return r && r.ok; }), {
+      host: 'revit',
+      operation: 'parameter.set',
+      token: gate.token,
+      approvalId: gate.approvalId,
+      graphVersion: gate.graphVersion || '',
+      projectId: (options && options.projectId) || '',
+      elementCount: ids.length,
+      elementIds: ids,
+      parameterName: paramName,
+      description: 'Set ' + paramName + ' on ' + ids.length + ' Revit elements'
     });
     return results;
   },
@@ -645,10 +677,23 @@ RevitBridge = {
       };
     }
     var envelope = createGeometryEnvelope(geometry, identity || { source: SOURCES.REVIT_LOCAL }, opts);
-    return client.sendGeometry(envelope, envelope.identity, {
+    var result = await client.sendGeometry(envelope, envelope.identity, {
       ...opts,
       approval: { token: gate.token, approvalId: gate.approvalId, operation: 'geometry.create', graphVersion: gate.graphVersion || '' }
     });
+    // SEC-013: authoritative consume — report the completed geometry write so
+    // the server burns the token and audits it as a precondition.
+    await reportHostWrite(window, !!(result && result.ok), {
+      host: 'revit',
+      operation: 'geometry.create',
+      token: gate.token,
+      approvalId: gate.approvalId,
+      graphVersion: gate.graphVersion || '',
+      projectId: opts.projectId || '',
+      elementCount: 1,
+      description: 'Create geometry in the live Revit model'
+    });
+    return result;
   }
 };
 window.RevitBridge = RevitBridge;

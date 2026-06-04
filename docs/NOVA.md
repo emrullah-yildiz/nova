@@ -143,11 +143,17 @@ like the code around it. (Each links to the decision that owns the detail.)
   *live* ports, not the static def.
 - **Server is the authority.** Realtime roles (viewer RO / editor RW) and Connect
   write approvals are enforced server-side; clients are never trusted. A Connect/
-  Revit write must present a **single-use, server-issued approval token** (minted by
-  `EnterpriseStore.issueHostWriteApproval` after a project-write check, burned by
-  `consumeHostWriteApproval`, which audits every accepted write and every denial) —
-  not a client-set `{ approved: true }` boolean. See
-  [`architecture/revit-connect.md`](architecture/revit-connect.md) (SEC-013).
+  Revit write must present a **single-use, server-issued approval token**: the
+  browser obtains one over **`POST /api/host-write-approvals`**
+  (`EnterpriseStore.issueHostWriteApproval`, after a project-write check), carries
+  it to the hub/add-in inside `payload.approval`, and reports the completed write
+  over **`POST /api/host-operations`** — the authoritative consumer that calls
+  `consumeHostWriteApproval` to **burn the token (single-use) and write the audit
+  row as a precondition** (accepted → `host.operation`, rejected → `host.write.denied`).
+  No client-set `{ approved: true }` boolean exists on the wire. The local hub is a
+  transport and the add-in token-presence check is defense-in-depth; authoritative
+  enforcement requires the enterprise backend (signed out → graceful local degrade).
+  See [`architecture/revit-connect.md`](architecture/revit-connect.md) (SEC-013).
 
 ---
 

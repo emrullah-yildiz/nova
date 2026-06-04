@@ -13,6 +13,24 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-04 - SEC-013: wire the server-side write-approval token end-to-end
+
+**Agent/branch:** Connect/Revit Engineer — `feat/sec-013-revit-write-gate`
+
+**Goal:** the domain token gate (issue/consume) was sound but NOT wired at runtime.
+Wire it: add `POST /api/host-write-approvals` (issue) and make
+`POST /api/host-operations` REQUIRE+CONSUME a server token (authoritative
+consumer + audit-as-precondition); implement `issueWriteToken` in
+revit-write-approval.js and expose it on `window.__revitWriteApproval`; make
+client.js `normalizeWriteApproval` preserve `token/approvalId/operation/graphVersion`
+and stop defaulting `{approved:true}`.
+
+**Claimed files (owned):** `src/integrations/connect/revit-write-approval.js`,
+`src/integrations/connect/client.js`, `src/integrations/revit/revit-nodes.js`,
+`src/enterprise/api-dispatch.mjs`, `src/enterprise/validation.mjs`,
+`src/enterprise/cloud-client.js`, `src/main.js` (hot file, minimal touch),
+`docs/architecture/revit-connect.md`, `docs/NOVA.md`, SEC-013 ticket + INDEX, tests.
+
 ## 2026-06-04 - M4-T2: C# Revit add-in handlers for the round-trip
 
 **Agent/branch:** Connect/Revit Engineer — `feat/m4-revit-addin-handlers` (off `develop` @ 25763c7)

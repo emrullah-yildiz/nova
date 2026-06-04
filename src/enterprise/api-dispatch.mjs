@@ -21,6 +21,7 @@ import {
   validateDevLoginBody,
   validateGraphRunBody,
   validateHostOperationBody,
+  validateHostWriteApprovalBody,
   validateLoginBody,
   validateObjectArtifactBody,
   validateOidcCallbackBody,
@@ -117,7 +118,16 @@ export function matchRoute(method, path, options = {}) {
       const page = store.listAuditEvents(context, parsePaginationParams(url));
       return { events: page.items, pagination: page.pagination };
     }],
-    ['POST', /^\/api\/host-operations$/, false, 201, ({ store, context, body }) => store.recordHostOperation(context, validateHostOperationBody(body || {}))]
+    // SEC-013: issue a server-side, single-use write-approval token. The browser
+    // must obtain one (after project-write authz) BEFORE a write can reach Revit.
+    ['POST', /^\/api\/host-write-approvals$/, false, 201, ({ store, context, body }) => store.issueHostWriteApproval(context, validateHostWriteApprovalBody(body || {}))],
+    // SEC-013: a reported host write is the authoritative consume point. The
+    // body MUST carry the issued token; consumeHostWriteApproval verifies +
+    // burns it and writes the audit row as a precondition (accepted →
+    // host.operation, denied → host.write.denied). recordHostOperation (the old
+    // unauthenticated audit-only call) is no longer routable — every reported
+    // write now passes through the consume gate.
+    ['POST', /^\/api\/host-operations$/, false, 201, handleRecordHostOperation]
   ];
 
   for (const [routeMethod, pattern, isPublic, status, handler] of routes) {
@@ -212,6 +222,26 @@ export function createApiDispatcher({ store, authService, aiProvider, objectStor
     }
     return { status: route.status || 200, body: result };
   };
+}
+
+// SEC-013: the authoritative consume point for a reported host write. The
+// browser reports a completed write here, carrying the server-issued token it
+// obtained from POST /api/host-write-approvals. consumeHostWriteApproval is the
+// gate: it requires + burns the token (single-use), re-checks project-write
+// access, and writes the audit row as a PRECONDITION — an accepted write as
+// `host.operation`, a missing/invalid/expired/replayed/scope-mismatch one as
+// `host.write.denied` (then throws 403). There is no path here that records a
+// write without consuming a valid token.
+async function handleRecordHostOperation({ store, context, body }) {
+  const payload = validateHostOperationBody(body || {});
+  return store.consumeHostWriteApproval(context, payload.token || '', {
+    projectId: payload.projectId || '',
+    host: payload.host || 'revit',
+    operation: payload.operation,
+    graphVersion: payload.graphVersion || '',
+    ok: payload.ok !== false,
+    metadata: payload.metadata || {}
+  });
 }
 
 async function handleCreateObjectArtifact({ store, context, params, body, objectStorage }) {
