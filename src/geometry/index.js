@@ -15,6 +15,10 @@ import {
   frameAtUV as t4FrameAtUV,
   divideSurface as t4DivideSurface
 } from './surface-eval.js';
+import {
+  panelFrames as m5PanelFrames,
+  panelPlanarity as m5PanelPlanarity
+} from './panel-frames.js';
 import { GEOMETRY_LEVELS, createGeometryRef, geometryCacheKey } from './GeometryRef.js';
 import { GeometryCache } from './GeometryCache.js';
 import { GeometryStore, geometryStore } from './GeometryStore.js';
@@ -49,6 +53,18 @@ Geo.pointAtUV = t4PointAtUV;
 Geo.normalAtUV = t4NormalAtUV;
 Geo.frameAtUV = t4FrameAtUV;
 Geo.divideSurface = t4DivideSurface;
+
+// ──────────────────────────────────────────────────────────────────────────
+// M5 panel-frame recovery (panel-frames.js). The paneling nodes emit bare quad
+// meshes and discard the per-panel frame; these helpers recover it so panels
+// feed Geometry.Orient (M1) and the Revit placement nodes (M4). `panelFrames`
+// returns the SAME Geo.Plane shape M1/M2 produce. Both names verified
+// collision-free against geometry-lib.js / geo-advanced.js / nurbs-math.js —
+// neither shadows an existing global — so node codegen (Pattern.Panel*) that
+// emits `Geo.<name>(...)` resolves at runtime against the assembled global Geo.
+// ──────────────────────────────────────────────────────────────────────────
+Geo.panelFrames = m5PanelFrames;
+Geo.panelPlanarity = m5PanelPlanarity;
 
 if (typeof window !== 'undefined') {
   window.Geo = Geo;
