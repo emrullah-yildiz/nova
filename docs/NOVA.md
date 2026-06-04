@@ -148,6 +148,30 @@ like the code around it. (Each links to the decision that owns the detail.)
   duplicating the existing `Revit.GetParameterValues`/`Revit.SetParameterValues` —
   exactly this trap; the type-collision check passed because the `type` strings
   differed.) Reviewers must check for functional duplicates, not just collisions.
+- **Adding a node — the fit gate (run BEFORE writing any node; the reviewer
+  re-checks every point).** A node earns its place only if it passes ALL of these:
+  1. **Valuable workflow.** It unlocks a real workflow users want — not a thin,
+     rarely-used API wrapper added for completeness. If you can't name the workflow
+     it enables, don't add it.
+  2. **Not a duplicate.** No existing library node already does it (see "No duplicate
+     nodes" above). Fold into / upgrade the existing node instead of shipping a
+     parallel one.
+  3. **Usable inputs, with real producers.** Each input is a type other nodes can
+     actually produce — confirm existing node(s) emit it, so a user can wire it up.
+     An input nothing can feed is a dead port.
+  4. **Usable outputs, with real consumers.** Each output is a type other nodes can
+     actually consume — confirm existing node(s) take it, so the result flows
+     onward. An output nothing can read is a dead end.
+  5. **Working, meaningful sample.** Its `help.example` is a complete
+     producer → focal node → consumer graph that RUNS and produces a defined,
+     readable, correct result — never `[object Object]`, `NaN`, or undefined.
+     Verify it, don't assume it.
+  6. **Naming & presentation.** Name `ParentName.NodeName` (e.g. `Wall.ByCurve`);
+     creation nodes use `By` + the input names (`Surface.ByPatch`,
+     `AdaptiveComponent.ByPoints`). Fold into the EXISTING category it belongs to
+     (no parallel categories). Icons are Unicode glyphs/symbols, never text
+     abbreviations (`max`, `1st`). Describe the node on its own terms — never "like
+     Dynamo/Grasshopper".
 - **Code-driven Custom.Python ports.** The Python cell's code is the source of
   truth for its ports (inferred free vars in, last assignment out); codegen tracks
   *live* ports, not the static def.
@@ -242,3 +266,5 @@ Consolidated forward view. Detail lives in the linked specs — don't duplicate 
 - **`agent-workboard.md`** — claim/release your owned paths as you start/finish.
 
 If two of these ever disagree, NOVA.md + decisions.md win; fix the others.
+
+
