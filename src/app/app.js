@@ -1761,7 +1761,9 @@ const app = {
 
 
 
-  formatValue(val) {
+  formatValue(val, depth) {
+
+    depth = depth || 0;
 
     if (val === undefined) return '<span style="color:var(--text-muted)">—</span>';
 
@@ -1777,13 +1779,12 @@ const app = {
 
     }
 
-    if (typeof val === 'string') return `<span style="color:var(--accent-yellow)">"${val}"</span>`;
+    if (typeof val === 'string') return `<span style="color:var(--accent-yellow)">"${this.escapeHtml(val)}"</span>`;
 
     if (Array.isArray(val)) {
 
       const items = val.map((v, i) => {
-        const display = typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(2)) : String(v);
-        return `<div class="data-list-row"><span class="data-list-index">${i}</span><span class="data-list-item" style="color:var(--accent-peach)">${display}</span></div>`;
+        return `<div class="data-list-row"><span class="data-list-index">${i}</span><span class="data-list-item" style="color:var(--accent-peach)">${this._formatItemInline(v)}</span></div>`;
       }).join('');
 
 
@@ -1791,8 +1792,87 @@ const app = {
 
     }
 
-    return `<span style="color:var(--text-secondary)">${val}</span>`;
+    // DataTree ({ _type:'DataTree', branches:Map, paths:[] }) — render as a
+    // path → items tree view so it never coerces to "[object Object]".
+    if (val && val._type === 'DataTree' && val.branches instanceof Map) {
 
+      const paths = Array.isArray(val.paths) ? val.paths : Array.from(val.branches.keys());
+      const rows = paths.map(pathKey => {
+        const branch = val.branches.get(pathKey);
+        const branchItems = Array.isArray(branch) ? branch : [];
+        const itemsHtml = branchItems.map((v, i) => {
+          return `<div class="data-list-row"><span class="data-list-index">${i}</span><span class="data-list-item" style="color:var(--accent-peach)">${this._formatItemInline(v)}</span></div>`;
+        }).join('');
+        return `<div class="data-obj-row"><span class="data-obj-key">${this.escapeHtml(pathKey)}</span><div class="data-obj-val">${itemsHtml || '<span style="color:var(--text-muted)">—</span>'}</div></div>`;
+      }).join('');
+
+      return `<div class="data-list-view"><div class="data-list-header"><span style="font-size:8px;color:var(--text-muted)">Tree</span><span style="font-size:8px;color:var(--accent-peach)">(${paths.length})</span></div><div class="data-list-body">${rows}</div></div>`;
+
+    }
+
+    // A non-array object whose String() is meaningful (e.g. Geo types define a
+    // useful toString) — keep using it.
+    if (typeof val === 'object') {
+
+      const str = this._safeToString(val);
+      if (str !== null && str !== '[object Object]') return `<span style="color:var(--text-secondary)">${this.escapeHtml(str)}</span>`;
+
+      // Plain record/row object → expandable keyed view. Rows from the data
+      // parser are null-prototype objects, so enumerate with Object.keys (do
+      // NOT call obj.hasOwnProperty — it doesn't exist on null-proto objects).
+      const keys = Object.keys(val);
+      if (depth >= 3) return `<span style="color:var(--text-secondary)">Object(${keys.length})</span>`;
+
+      const rows = keys.map(k => {
+        return `<div class="data-obj-row"><span class="data-obj-key">${this.escapeHtml(k)}</span><span class="data-obj-arrow">→</span><span class="data-obj-val">${this.formatValue(val[k], depth + 1)}</span></div>`;
+      }).join('');
+
+      return `<div class="data-list-view"><div class="data-list-header"><span style="font-size:8px;color:var(--text-muted)">Object</span><span style="font-size:8px;color:var(--accent-peach)">(${keys.length})</span></div><div class="data-list-body">${rows}</div></div>`;
+
+    }
+
+    const fallback = String(val);
+    if (fallback === '[object Object]') return '<span style="color:var(--text-muted)">{…}</span>';
+    return `<span style="color:var(--text-secondary)">${this.escapeHtml(fallback)}</span>`;
+
+  },
+
+  // Compact inline rendering of a single value inside a list/tree branch row.
+  _formatItemInline(v) {
+    if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(2);
+    if (typeof v === 'string') return this.escapeHtml(v);
+    if (v === null) return 'null';
+    if (v === undefined) return '—';
+    if (typeof v === 'object') {
+      if (v._type === 'DataTree' && v.branches instanceof Map) {
+        return 'Tree(' + (Array.isArray(v.paths) ? v.paths.length : v.branches.size) + ')';
+      }
+      const str = this._safeToString(v);
+      // Geo types and anything with a meaningful toString.
+      if (str !== null && str !== '[object Object]') return this.escapeHtml(str);
+      if (Array.isArray(v)) return 'List(' + v.length + ')';
+      const keys = Object.keys(v);
+      if (!keys.length) return 'Object(0)';
+      const preview = keys.slice(0, 3).map(k => {
+        const kv = v[k];
+        const kvStr = (kv !== null && typeof kv === 'object') ? '…' : String(kv);
+        return this.escapeHtml(k) + ': ' + this.escapeHtml(kvStr);
+      }).join(', ');
+      const more = keys.length > 3 ? ', …' : '';
+      return '{' + preview + more + '}';
+    }
+    return this.escapeHtml(String(v));
+  },
+
+  // String(obj) throws on a null-prototype object (no Symbol.toPrimitive /
+  // toString). Return null when no meaningful string conversion exists so the
+  // caller falls through to the keyed-object rendering.
+  _safeToString(v) {
+    try {
+      return String(v);
+    } catch (e) {
+      return null;
+    }
   },
 
 
