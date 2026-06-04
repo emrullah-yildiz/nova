@@ -71,11 +71,11 @@ NOVA_HSTS = "0"
 # fail-safe.
 [[env.dev.kv_namespaces]]
 binding = "SESSION_KV"
-id = "REPLACE_WITH_DEV_SESSION_KV_ID"
+id = "7939bb17960c4de8a9e149c91c89300d"
 
 [[env.dev.kv_namespaces]]
 binding = "RATE_KV"
-id = "REPLACE_WITH_DEV_RATE_KV_ID"
+id = "1a2391f8e5ea41c9855d0ff12d3c943d"
 
 [[env.dev.durable_objects.bindings]]
 name = "PROJECT_ROOM"
