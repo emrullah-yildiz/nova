@@ -29,7 +29,7 @@ carries version/effective-date/owner metadata and numbered sections.
 - Primary personal-data store: **Neon Postgres in Ireland (EU)**.
 - Sessions / email-verification tokens / rate-limit buckets: **Cloudflare KV** (global edge), now **isolated per environment** (dev ≠ prod).
 - Compute & static assets: **Cloudflare Workers** (global edge); production domain `hi-nova.work` is HTTPS-only (HSTS).
-- AI assistant sends prompts + graph context to **third-party AI providers (US)** — see data-handling.md §AI.
+- AI assistant is **bring-your-own-key only** (no Nova free tier, no Nova-held AI key): the user's browser calls their chosen provider **directly**; Nova's servers aren't in the path, so AI providers are **not** Nova sub-processors — see data-handling.md §3.
 
 ## Publishing
 These are the content source of truth in Markdown. To surface them in-app, render

@@ -34,44 +34,52 @@ SCCs with each before relying on this list publicly.]`
 |---|---|---|---|
 | **Cloudflare, Inc.** | Hosting (Workers), session/token/rate store (KV), real-time rooms (Durable Objects), CDN, DNS | Account & session identifiers; all request traffic; KV-stored session/verification/rate data | Global edge (HQ US) |
 | **Neon, Inc.** | Serverless Postgres database | Account, projects, collaboration, audit, encrypted AI key | **EU — Ireland** |
-| **Google LLC** | (a) "Sign in with Google" (OIDC); (b) Gemini AI *if you use it* | (a) email, name, Google account id; (b) your prompt + graph context | US |
-| **Groq, Inc.** | Shared free-tier AI assistant proxy | Your prompt + graph context (only when you use free-tier AI) | US |
-| **Resend** | Transactional email (verification, invitations) | Recipient email address + email content | US |
-| **OpenAI / Anthropic / OpenRouter** | AI assistant — **only if you supply your own API key (BYOK)** | Your prompt + graph context, sent under your own provider account | US |
+| **Google LLC** | "Sign in with Google" (OIDC) **only** | email, name, Google account id | US |
+| **Resend** | Transactional email (verification, invitations) — *if email sending is configured* | Recipient email address + email content | US |
 
 `[Keep this table current; adding/removing a sub-processor is a notify-users event.]`
 
-## 3. AI assistant — what leaves Nova (important)
-Nova has an optional AI assistant. **When you use it, the text of your prompt and the
-relevant parts of your node graph/design are sent to a third-party AI provider** so it
-can generate a response:
-- **Free tier:** sent via our Worker to **Groq** and/or **Google Gemini** (US).
-- **Bring your own key (BYOK):** sent **directly to the provider you configured**
-  (OpenAI, Anthropic, OpenRouter, Google, or Groq) under **your own** account and that
-  provider's terms; your key is stored encrypted and used only to make those calls.
+> **AI providers are NOT Nova sub-processors.** Nova operates no shared or free AI
+> service and stores no AI key of its own. The assistant is **bring-your-own-key only**:
+> your browser sends your prompt **directly** to the provider *you* configure (OpenAI,
+> Anthropic, OpenRouter, Google Gemini, or Groq) under *your* account — Nova's servers
+> never receive or relay it (see §3). Google appears in the table above for **sign-in
+> only**; using Google Gemini as your own AI key is the BYOK case in §3, not this table.
 
-Nova does **not** log your AI prompts by default, and does **not** use your content to
-train any model. Each AI provider processes the data under its own terms and retention
-policy — review theirs if your designs are sensitive. You can avoid AI processing
-entirely by not using the assistant. `[Counsel: confirm consent vs. contract basis and
-whether an in-app notice/consent is required before first AI use — tracked as SEC-003.]`
+## 3. AI assistant — what leaves Nova (important)
+Nova's AI assistant is **bring-your-own-key (BYOK) only.** Nova does **not** operate a
+shared or free AI service and stores no AI key of its own; AI is available only if
+**you** add your own API key for a provider (OpenAI, Anthropic, OpenRouter, Google
+Gemini, or Groq).
+
+When you use it, **your browser sends your prompt and the relevant parts of your node
+graph directly to the provider you configured**, using your own key. **Nova's servers
+(Cloudflare / Neon) are not in that path** — we neither receive, relay, nor log the AI
+request. We only store your API key (encrypted, in the EU) so the browser can make
+those calls, and you can wipe it any time via *Settings → Disconnect / Clear keys*.
+
+Because it's **your** key and **your** provider, that AI processing is between you and
+that provider, under their terms and retention policy — review theirs if your designs
+are sensitive. We do not use your content to train any model. You can avoid AI
+processing entirely by not adding a key.
 
 ## 4. International transfers
 Your **primary personal data (account, projects) is stored in the EU (Ireland)** via
-Neon. Two categories of processing occur outside the EEA/UK:
+Neon. Processing outside the EEA/UK is limited to these Nova-controlled transfers:
 1. **Cloudflare's global edge** may process request data and cache session/token/rate
    entries at the nearest location worldwide.
-2. **AI providers and email** (Groq, Google, OpenAI/Anthropic/OpenRouter, Resend)
-   process data in the **United States** when those features are used.
+2. **Resend** (US) when verification/invitation emails are sent.
+3. **Google** (US) for "Sign in with Google".
 
-For these, we rely on the providers' **Standard Contractual Clauses and
-data-processing agreements**. `[Counsel to confirm the transfer mechanism per provider
-and reflect it here.]`
+For these we rely on the providers' **Standard Contractual Clauses and data-processing
+agreements** `[counsel to confirm per provider]`. Separately, **BYOK AI** sends data
+from your browser to the provider *you* chose (often US) — that transfer is under
+*your* arrangement with that provider, not Nova's.
 
 ## 5. Security measures (technical & organizational — "TOMs" summary)
 - **In transit:** HTTPS/TLS everywhere; HSTS enforced on production (`hi-nova.work`).
 - **At rest:** passwords salted+hashed (PBKDF2, constant-time comparison); stored
-  "bring-your-own" AI keys encrypted (AES-GCM); database managed by Neon.
+  "bring-your-own" AI keys encrypted (AES-GCM); database managed by Neon (EU).
 - **Sessions/cookies:** session cookie is `HttpOnly`, `Secure`, `SameSite=Lax`; no
   third-party tracking cookies (see [Cookie Notice](cookie-notice.md)).
 - **Access & abuse controls:** per-account tenant scoping on the API; brute-force
@@ -80,8 +88,9 @@ and reflect it here.]`
 - **Sensitive operations:** writes back to a connected CAD host (e.g. Revit) require a
   **server-issued, single-use approval token** and are recorded in an audit log
   (audit is a precondition of the write).
-- **Isolation:** development and production use **separate** databases and separate
-  session/token/rate stores, so non-production activity cannot touch real user data.
+- **Isolation:** development and production use **separate** databases (Neon) and
+  **separate** Cloudflare KV namespaces, so non-production activity cannot touch real
+  user sessions or data.
 - **Erasure:** deleting your account purges your sessions and verification tokens and
   removes your projects; retained audit entries are anonymized.
 - **Supply chain:** dependencies are vulnerability-audited; secrets are kept in

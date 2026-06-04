@@ -53,29 +53,34 @@ advertising or analytics trackers.
   enable collaboration) — *performance of a contract* (GDPR Art. 6(1)(b)).
 - **To keep the service secure** (authentication, rate-limiting, audit logging, abuse
   prevention) — *legitimate interests* (Art. 6(1)(f)).
-- **Optional AI assistance** (sending your prompt/graph to an AI provider on your
-  request, or using your own provider key) — *consent / performance of contract* for
-  the feature you chose to use. See [Data Handling §AI](data-handling.md).
+- **Optional AI assistance (bring-your-own-key)** — the assistant works only if you add
+  your own AI provider key; your browser then sends your prompt/graph **directly** to
+  that provider. Nova's servers don't process or relay it, and we store only your
+  (encrypted) key. See [Data Handling §AI](data-handling.md).
 - **Transactional email** (verification, invitations) — *contract / legitimate
   interests*.
 - **Legal compliance** where a law requires it — *legal obligation* (Art. 6(1)(c)).
 
 ## 4. Who we share it with
 We do not sell your personal data. We share it only with the infrastructure and
-service providers ("sub-processors") needed to run Nova — hosting, database, email,
-sign-in, and (only when you use AI features) AI providers. The full, current list,
-their roles, and locations are in
-[Data Handling & Sub-processors §Sub-processors](data-handling.md). We may also
-disclose data if required by law, or to a successor in a merger/acquisition (with
-notice where required).
+service providers ("sub-processors") needed to run Nova — hosting (Cloudflare),
+database (Neon, EU), transactional email, and Google for "Sign in with Google". The
+full, current list, roles, and locations are in
+[Data Handling & Sub-processors](data-handling.md). **AI providers are not our
+sub-processors:** the AI assistant is bring-your-own-key, so your data goes from your
+browser straight to the provider *you* chose, under your own arrangement with them. We
+may also disclose data if required by law, or to a successor in a merger/acquisition
+(with notice where required).
 
 ## 5. Where your data is processed (international transfers)
 Your primary account and project data is stored in the **European Union (Ireland)**.
-Some processing happens on globally distributed infrastructure (Cloudflare's edge),
-and AI features, when you use them, send data to providers located in the **United
-States**. Where personal data leaves the EEA/UK, we rely on appropriate safeguards
-(such as Standard Contractual Clauses and our providers' data-processing terms).
-Details and the specific providers are in [Data Handling](data-handling.md).
+Some processing happens on globally distributed infrastructure (Cloudflare's edge), and
+sign-in (Google) and transactional email run in the **United States**. Where personal
+data leaves the EEA/UK for these Nova-controlled transfers, we rely on appropriate
+safeguards (Standard Contractual Clauses and our providers' data-processing terms).
+Separately, if you use the bring-your-own-key AI assistant, your browser sends data
+directly to the AI provider you chose (often in the US) under your own arrangement with
+them — that's not a Nova transfer. Details are in [Data Handling](data-handling.md).
 `[Counsel to confirm transfer mechanism for each US provider.]`
 
 ## 6. How long we keep it
