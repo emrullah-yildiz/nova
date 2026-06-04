@@ -233,6 +233,13 @@ The canonical end-to-end gate for every task. Tick it.
 - [ ] Secrets/keys/tokens/private URLs absent; deps necessary and reviewed.
 - [ ] User/AI input treated as untrusted; API changes enforce auth + tenant scope.
 - [ ] Revit/Connect write paths require explicit approval + audit.
+- [ ] **Security run on every PR (mandatory).** The reviewer performs a security
+      pass on the diff; for changes touching auth/authz, input parsing, file
+      uploads, external integrations, or personal-data handling it runs
+      `/security-review` and files any new gaps as `docs/security/tickets/SEC-*`.
+      CI's `security` job (`npm audit` + Snyk) is the automated per-PR baseline.
+      Open security tickets are triaged by the **tech-lead** → fixed by the
+      **security-engineer** (or the owning lane) → gated by the **reviewer**.
 
 ### Validation
 - [ ] Ran the testing ladder (§4) appropriate to the risk; recorded results and
@@ -247,6 +254,8 @@ The canonical end-to-end gate for every task. Tick it.
 
 ### Merge blockers — do **not** merge if
 - Required checks fail.
+- The PR did not get its mandatory security pass (see Code & security), or it
+  introduced an unresolved `critical`/`high` security ticket.
 - Docs contradict implemented behavior (or NOVA.md is now stale).
 - A risky behavior change has no test or explicit reason.
 - Secrets or generated artifacts are present.
