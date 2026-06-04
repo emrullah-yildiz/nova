@@ -26,7 +26,7 @@ import { parseCSV, parseJSON, toTable, parseXLSX } from '../../data/spreadsheet-
 // NOT on the global `Geo` object the generated Python/C# runtime assembles. So
 // codegen MUST NOT emit Geo.<name> or any symbol that won't resolve at runtime.
 //   • GetColumn / MatchByKey are pure list/dict ops → emit NATIVE Python/C#
-//     (comprehension, dict lookup), exactly like the Tree.* nodes do.
+//     (comprehension, dict lookup) rather than any Geo.* call.
 //   • The Import* nodes have no real file API in the generated-code runtime, so
 //     their codegen emits only a clearly-commented placeholder that assigns an
 //     empty table — never a call to an undefined function. A guard test
@@ -49,10 +49,9 @@ function asArray(value) {
   return [value];
 }
 
-// String-normalize a key value for matching, consistent with how Tree.GroupByKey
-// buckets on String(key) — so 101 (number) and "101" (CSV string) match, which
-// is exactly what Excel↔parameter sync needs (CSV cells are strings, element
-// ids are often numbers).
+// String-normalize a key value for matching — so 101 (number) and "101" (CSV
+// string) match, which is exactly what Excel↔parameter sync needs (CSV cells are
+// strings, element ids are often numbers).
 function normKey(value) {
   if (value === undefined || value === null) return '';
   return String(value);
@@ -236,7 +235,7 @@ export const dataNodes = [
     description: 'Plucks a single column out of a table: for each row in Rows it reads row[Column], producing a flat Values list aligned 1:1 with the rows. A missing cell yields null. Column is the column name, given by the Column control or the Column input. Use it to extract the values you want to push to parameters after a Data.MatchByKey.',
     inputs: [
       // 'list' (not 'any') so the whole rows array is passed intact, not fanned
-      // per row by auto-lacing (see Tree.* LACING CONTRACT).
+      // per row by auto-lacing — this node consumes the table as a whole.
       { id: 'rows', name: 'Rows', type: 'list', description: 'Table (list of row objects) to read from' },
       { id: 'column', name: 'Column', type: 'string', description: 'Column name to pluck (overrides the control when wired)' }
     ],
@@ -299,7 +298,7 @@ export const dataNodes = [
     description: 'Joins a data table to a list of records/elements by a shared key — the core of Excel ↔ parameter sync. For each item in Items it finds the FIRST row in Rows whose row[RowKey] equals item[ItemKey], comparing keys by their string form (so a numeric element id matches a CSV string "101"). Outputs Matched, aligned 1:1 with Items (the matching row object, or null when no row matched), and Unmatched, the sublist of Items that found no row. Feed Matched into Data.GetColumn to pull the values you want to write back to each element.',
     inputs: [
       // All 'list' (not 'any') so the whole arrays pass intact, not fanned per
-      // item by auto-lacing (see Tree.* LACING CONTRACT).
+      // item by auto-lacing — this node joins the two tables as wholes.
       { id: 'rows', name: 'Rows', type: 'list', description: 'Data table to look rows up in (list of row objects)' },
       { id: 'items', name: 'Items', type: 'list', description: 'Records/elements to match (each carrying ItemKey)' },
       { id: 'rowKey', name: 'Row Key', type: 'string', description: 'Column name in Rows to match on' },
@@ -399,7 +398,7 @@ export const dataNodes = [
 
 // Resolve a key-name from an input wire (wins) falling back to a control,
 // returning '' when neither is set. Mirrors the input-overrides-control pattern
-// used by GetColumn / the Tree.* nodes.
+// used by GetColumn above.
 function resolveKeyName(inputValue, controlValue) {
   let v = inputValue;
   if (v === undefined || v === null || v === '') {

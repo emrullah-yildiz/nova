@@ -1,7 +1,6 @@
 import { NODE_LIBRARY, NODE_TYPE_MAP, NODE_VERSION_MAP } from '../core/nodes.js';
 import { addDefToVersionMap } from '../core/node-versions.js';
 import { curvesCategory, curvesNodes } from './categories/curves.js';
-import { evaluateCategory, evaluateNodes } from './categories/evaluate.js';
 import { geometryCategory, geometryNodes } from './categories/geometry.js';
 import { inputCategory, inputNodes } from './categories/input.js';
 import { listCategory, listNodes } from './categories/list.js';
@@ -16,8 +15,6 @@ import { pointCategory, pointNodes } from './categories/point.js';
 import { solidsCategory, solidsNodes } from './categories/solids.js';
 import { surfacesCategory, surfacesNodes } from './categories/surfaces.js';
 import { testingCategory, testingNodes } from './categories/testing.js';
-import { transformCategory, transformNodes } from './categories/transform.js';
-import { treeCategory, treeNodes } from './categories/tree.js';
 import { vectorCategory, vectorNodes } from './categories/vector.js';
 import { legacyCoreCategories, legacyCoreNodes } from './legacyCoreNodes.js';
 import { createNodeRegistry, toLegacyNodeDefinition } from './registry.js';
@@ -26,7 +23,6 @@ const modernCategories = [
   curvesCategory,
   customCategory,
   dataCategory,
-  evaluateCategory,
   geometryCategory,
   inputCategory,
   listCategory,
@@ -39,8 +35,6 @@ const modernCategories = [
   solidsCategory,
   surfacesCategory,
   testingCategory,
-  transformCategory,
-  treeCategory,
   vectorCategory
 ];
 
@@ -55,7 +49,6 @@ export const coreNodes = [
   ...curvesNodes,
   ...customNodes,
   ...dataNodes,
-  ...evaluateNodes,
   ...geometryNodes,
   ...inputNodes,
   ...listNodes,
@@ -68,8 +61,6 @@ export const coreNodes = [
   ...solidsNodes,
   ...surfacesNodes,
   ...testingNodes,
-  ...transformNodes,
-  ...treeNodes,
   ...vectorNodes,
   ...legacyCoreNodes
 ];

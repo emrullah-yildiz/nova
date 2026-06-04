@@ -8,9 +8,62 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
-## 2026-06-04 - T1 Count-Based Arrays Coexist With Legacy Arrays On The Global Geo
+## 2026-06-04 - Node Library Taxonomy: Fold New Nodes Into Existing Categories (No Parallel Categories)
 
 **Status:** Accepted
+
+**Context:** Recent milestone work (T2 Transform, T5/M2 Evaluate, T6/M2 Tree)
+introduced three NEW top-level node categories — `transform`, `evaluate`, and
+`tree` — that ran parallel to, and fragmented, the existing library taxonomy.
+Several of their nodes were outright duplicates: `Geometry.ArrayLinear` /
+`Geometry.ArrayPolar` duplicated the existing `Geometry.LinearArray` /
+`Geometry.PolarArray`; the entire `tree` category (`Tree.Transpose`,
+`Tree.Flatten`, `Tree.GroupByKey`, `Tree.Partition`, plus `List.SortByKey`)
+duplicated existing `List.Transpose` / `List.Flatten` / `List.GroupBy` /
+`List.Chunk` / `List.Sort`. Many descriptions also referenced
+"Grasshopper"/"Dynamo" by name ("Mirrors Grasshopper …").
+
+**Decision:** New nodes fold into their EXISTING home category; we do not create
+parallel categories. Specifically:
+- `Geometry.Orient` → `geometry`; `Plane.ByOriginXAxisYAxis` → `plane`.
+- `Curve.PointAtParameter` / `TangentAtParameter` / `FrameAtParameter` /
+  `Divide` → `curves`; `Surface.PointAtUV` / `NormalAtUV` / `FrameAtUV` /
+  `Divide` → `surfaces`. These are kept because they are parameter/UV-based and
+  distinct from the existing point-based `Curve.TangentAtPoint` and the
+  patch-splitting `Surface.Subdivide`; their descriptions now state the
+  difference explicitly.
+- `Geometry.ArrayLinear` / `Geometry.ArrayPolar` are DELETED in favor of the
+  existing `Geometry.LinearArray` / `Geometry.PolarArray`. The orphaned
+  `Geo.arrayLinearByVector` / `Geo.arrayPolarByAngle` globals are removed from
+  `src/geometry/index.js` (this supersedes the array-globals half of the
+  2026-06-04 "T1 Count-Based Arrays Coexist…" entry below). `Geo.orient` and
+  `Geo.planeFromOriginXY` stay (the moved Orient / Plane nodes still use them).
+- The whole `tree` category is removed. The DataTree-only ops (`Tree.Graft`,
+  `Tree.Simplify`) had no tree-aware consumers yet, so DataTree NODE exposure is
+  deferred to a future milestone. The underlying infrastructure
+  (`src/core/data-tree.js`, `src/core/tree-ops.js`) and its tests are RETAINED.
+- The `transform.js`, `evaluate.js`, `tree.js` category files and their tests
+  are deleted; migrated coverage lives in `tests/library-reorg.test.js`.
+- Node descriptions must NOT reference Dynamo or Grasshopper by name; describe
+  what the node does on its own terms.
+
+**Rationale:** One node, one home. Parallel categories and duplicate nodes
+confuse discovery, split the AI's signature map, and create two ways to do the
+same thing. Product/vendor names in descriptions are noise and date the library.
+
+**Consequences:** Future node work adds to the existing category that owns the
+node's noun (Curve.*→curves, Surface.*→surfaces, Geometry.*→geometry, etc.).
+Re-exposing DataTree as nodes is a future milestone that must ship with
+tree-aware consumers, not standalone ops that duplicate List.*. The
+`tests/library-reorg.test.js` registration + codegen-resolve guard must stay
+green.
+
+## 2026-06-04 - T1 Count-Based Arrays Coexist With Legacy Arrays On The Global Geo
+
+**Status:** Superseded in part (2026-06-04 "Node Library Taxonomy" above) — the
+`Geo.arrayLinearByVector`/`Geo.arrayPolarByAngle` globals and the duplicate
+`Geometry.ArrayLinear`/`Geometry.ArrayPolar` nodes were removed; `Geo.orient`
+and `Geo.planeFromOriginXY` are retained.
 
 **Context:** The modern Transform nodes (`src/nodes/categories/transform.js`)
 execute() against the T1 ES-module kernel (`src/geometry/frames.js`,
