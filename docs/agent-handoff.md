@@ -31,6 +31,66 @@ READ-only on `src/integrations/connect/protocol.js`. NOT touching any `src/**` o
 
 **Merge status:** Open branch `feat/m4-revit-addin-handlers` — IN PROGRESS, do not merge.
 
+## 2026-06-04 - M4-T3: Browser-side RevitBridge to the M4 protocol
+
+**Agent/branch:** Connect/Revit Engineer — `feat/m4-browser-bridge` (off `develop` @ 25763c7)
+
+**Goal:** Browser bridge that builds M4-T1-contract envelopes and pushes them over
+NovaConnectClient for the Revit round-trip (selection.query / geometry.place /
+parameter.get / parameter.set), validating every request client-side.
+
+**Claimed files (owned):** NEW `src/integrations/revit/revit-bridge.js`, NEW
+`tests/m4-bridge.test.js`, EDIT `src/integrations/connect/client.js` (added FOUR new
+M4 send methods only). READ-only on `protocol.js` (M4-T1), `revit-nodes.js`
+(SEC-013/M4-T4), `connect-panel.js` (M4-T5), `integrations/revit-addin/**` (M4-T2),
+`src/core/nodes.js`. None of those were touched.
+
+**Bridge API surface (M4-T4/T5 pin to this):**
+- `requestSelection(opts, deps?) -> { elements: ContractElement[] }` — sends
+  `selection.query` ({ categories?, includeFaces? }); parses `selection.result` into
+  the contract element shape (id coerced to string, params flat-scalar, optional faces).
+- `placeInstance(spec, deps?) -> placeResultPayload` — sends `geometry.place`
+  ({ kind, familyType, points, hostFaceId?, params? }); normalizes {x,y,z}/single point
+  to [x,y,z] tuples; forwards optional `spec.approval` metadata (WRITE).
+- `getParameters(elementId, names, deps?) -> { elementId, params:{name:value} }` — sends
+  `parameter.get` with the NEW contract ({ elementId, params } mirror, null placeholders).
+- `setParameters(elementId, params, deps?) -> setResultPayload` — sends `parameter.set`
+  ({ elementId, params }); forwards optional `deps.approval` metadata (WRITE).
+- `BridgeValidationError` (carries `.type` + structured `.errors`) — thrown when a
+  request fails client-side `validateMessage`, BEFORE anything leaves the browser.
+- `deps.client` injects a client (tests); default is `window.NovaConnect`.
+
+**Legacy coexistence (reviewer flag from M4-T1) — how the legacy path stays intact:**
+- The M4 parameter contract `{ elementId, params:{name:value} }` DIVERGES from the
+  legacy client methods `getParameterValues/setParameterValues({elementIds,
+  parameterName, values})` that `revit-nodes.js` (RevitBridge.getLive/setLive…) still
+  calls. I did NOT remove or repurpose those legacy methods.
+- Added FOUR NEW, separate client methods instead — `sendSelectionQuery`,
+  `sendGeometryPlace`, `sendParameterGet`, `sendParameterSet` — each just sends the
+  typed envelope and returns the raw response payload. They are documented in-file as
+  intentionally separate from the legacy methods.
+- A test asserts the bridge never calls `client.getParameterValues/setParameterValues`.
+  Full suite (incl. `connect-panel.test.js` and the revit-nodes path) stays green.
+
+**Migration note (M4-T4's concern):** the legacy `{elementIds, parameterName, values}`
+parameter path (client.js `getParameterValues`/`setParameterValues` + revit-nodes.js
+`getLiveParameterValues`/`setLiveParameterValues`) should later migrate to the M4
+`{elementId, params}` contract — e.g. revit-nodes.js delegating per-element to the new
+bridge `getParameters`/`setParameters`, then the legacy client methods can be retired.
+That edit touches `revit-nodes.js` (SEC-013/M4-T4-owned), so it is deliberately out of
+scope here. Until then both shapes coexist.
+
+**Validation:** `node node_modules/eslint/bin/eslint.js .` → exit 0 (clean). Full
+`node node_modules/vitest/vitest.mjs run` → 125 files passed, 1 skipped; 1586 passed,
+1 skipped (the spurious invite-redeem-landing teardown error did not surface this run).
+New `tests/m4-bridge.test.js` → 21 passed. Fully testable without Revit (mock transport).
+
+**Known gaps:** No live Revit smoke test (the round-trip needs M4-T2's add-in + the
+hub's approval UI). Bridge passes approval METADATA through; the interactive approval
+dialog + approval_id are the hub's responsibility (server is the authority).
+
+**Merge status:** Open branch `feat/m4-browser-bridge` — committed, NOT merged/pushed.
+
 ## 2026-06-04 - M4-T1: Connect protocol/contract for the Revit round-trip
 
 **Agent/branch:** Connect/Revit Engineer — `feat/m4-connect-protocol` (off `develop` @ f9fae48)
