@@ -126,15 +126,15 @@ the hub-bundling / Model A↔B unification follow-ups — see §6 prerequisites)
 | `Element.Solids` | extract solids (not just display mesh) | `elements` → `solids`, `count` | out: `Solid.Boolean*`, `Element.Geometries` |
 | `Element.Faces` | faces of elements (for hosting/analysis) | `elements` → `faces`, `faceIds`, `count` | out: `Surface.*`, `Revit.PlaceFamilyInstance.hostFaceId` |
 | `Element.BoundingBox` | min/max box | `elements` → `min`(pts), `max`(pts) | out: `Point.*`, `Rectangle.*` |
-| `Element.LocationCurve` | location curve of walls/beams | `elements` → `curves`, `count` | out: `Curve.*`, `Wall.ByCurve` |
-| `Element.LocationPoint` | insertion point of point-based families | `elements` → `points`, `count` | out: `Point.*`, placement nodes |
+| `Element.Location` | element location — **curve** for line-based (walls/beams), **point** for point-based families; returns whichever applies | `elements` → `curves`, `points`, `count` | out: `Curve.*`, `Point.*`, `Wall.ByCurve`, placement nodes |
 
 ### 3.4 Element creation `[W]` — the high-value write surface
 All `[W]`: SEC-013 token + write prerequisites (§6). All take Nova-native curves/points
 already produced by the modern categories.
 | Node | Purpose | Inputs → Outputs | Feeds (producer) |
 |---|---|---|---|
-| `Wall.ByCurve` | wall from a curve + level + type | `curve`, `level`, `wallType`(str), `height` → `elementIds`, `success` | `Line.ByStartPointEndPoint`, `Polyline.ByPoints`, `Level.ByElevation` |
+| `Revit.FamilyTypes` `[R]` | **dropdown of the live document's family types & element types** (optionally filtered by category) — the producer that feeds every `*Type`/`familyType` input below, so creation nodes have real, valid types to pick (fit-gate rule 3) | `category`(opt) → `familyType`, `types`(list) | out: every creation node's type input, `Revit.PlaceFamilyInstance` |
+| `Wall.ByCurve` | wall from a curve + level + type | `curve`, `level`, `wallType`(from `Revit.FamilyTypes`), `height` → `elementIds`, `success` | `Line.ByStartPointEndPoint`, `Polyline.ByPoints`, `Level.ByElevation`, `Revit.FamilyTypes` |
 | `Wall.ByProfile` | wall from a closed profile | `profile`(closed curve), `wallType` → `elementIds` | `Polyline.ByPoints`, `Rectangle.ByCenterWidthDepth` |
 | `Floor.ByOutline` | floor slab from closed outline | `outline`(curve), `level`, `floorType` → `elementIds` | `Rectangle.*`, `Polyline.ByPoints` |
 | `Roof.ByOutline` | footprint roof | `outline`, `level`, `roofType` → `elementIds` | `Polyline.ByPoints` |
@@ -167,7 +167,8 @@ already produced by the modern categories.
 | Node | Purpose | Inputs → Outputs | Feeds / Consumes |
 |---|---|---|---|
 | `Material.Collect` `[R]` | list materials by name | — → `materials`, `names`, `count` | out: `Element.AssignMaterial`, output-watch |
-| `Element.AssignMaterial` `[W]` | set material on elements | `elements`, `material` → `success`, `count` | in: collectors + `Material.Collect` |
+| `Material.ByColor` `[W]` | **create a material** by name + color (the producer for `Element.AssignMaterial`, so a graph can make-then-assign in one workflow) | `name`, `color`, `transparency`(opt) → `material`, `success` | in: `Color.*`/`String.*`; out: `Element.AssignMaterial` |
+| `Element.AssignMaterial` `[W]` | set material on elements | `elements`, `material` → `success`, `count` | in: collectors + `Material.Collect` + `Material.ByColor` |
 | `Element.Phase` `[R]` | read created/demolished phase | `elements` → `created`, `demolished` | out: output-watch |
 | `Element.Workset` `[R]` | read workset name | `elements` → `worksets` | out: output-watch |
 
@@ -225,7 +226,7 @@ to `revit-bridge` (a `NovaFormaBridge` async handle) — to be designed, not bui
 |---|---|---|---|
 | `Forma.BuildingByFootprint` | create a building volume from footprint + height | `footprint`(curve), `height` → `path`, `success` | `Polyline.ByPoints`, `Rectangle.*` |
 | `Forma.UpdateBuilding` | update an existing volume's geometry | `path`, `mesh`/`height` → `success` | `Forma.GetBuildingElements`, `Solid.*` |
-| `Forma.AddMesh` | add a Nova mesh into the proposal | `mesh`, `name` → `path`, `success` | `Solid.*`, `Surface.*` |
+| `Forma.SendGeometry` | **send** a Nova mesh/solid/surface into the Forma proposal — the **Nova→Forma half of the geometry round-trip** (parity with `Revit.SendGeometry`) | `geometry`/`mesh`, `name` → `path`, `success` | in: `Solid.*`, `Surface.*`, `Mesh.*`, Revit `Element.Geometries` |
 
 ### 4.6 Metrics / Analysis `[R]`
 | Node | Purpose | Inputs → Outputs | Feeds / Consumes |
@@ -248,33 +249,34 @@ to `revit-bridge` (a `NovaFormaBridge` async handle) — to be designed, not bui
 
 ## 5. Phasing, milestones, lanes (Matrix codenames)
 
-Codenames: **Morpheus** (tech-lead), **Neo** (geometry-engineer), **Trinity**
-(connect-engineer), **Tank** (core-engineer), **Switch** (ui-engineer), **Dozer**
-(platform-engineer), **Oracle** (reviewer), **Link** (integrator), **Mouse** (ai-engineer).
+Codenames (per owner, 2026-06-04): **The Architect** (tech-lead), **Neo**
+(core-engineer), **Mouse** (geometry-engineer), **Trinity** (connect-engineer),
+**Switch** (ui-engineer), **Link** (platform-engineer), **Dozer** (integrator),
+**Oracle** (reviewer), **Tank** (ai-engineer).
 
 ### Revit track
 
 | Milestone | Scope | Owner lane(s) | New/changed nodes | Est. |
 |---|---|---|---|---|
-| **RV-M1** Read & Filter | §3.1 collectors/filters + §3.3 geometry extraction (read-only, no write gate) | **Tank** (node defs in `src/core/nodes.js`) + **Neo** (geometry mapping for Solids/Faces/BBox) | ~9 nodes | 2–3 dev-days |
-| **RV-M2** Params & Info | §3.2 Element.Info / BuiltIn / type params + §3.7 material/phase read | **Tank** (defs) + **Trinity** (bridge handlers for BIP + type params) | ~6 nodes | 2 dev-days |
-| **RV-M3** Datums & Creation core | §3.5 Level/Grid/RefPlane + §3.4 Wall/Floor/Roof/Column/Beam **[W]** | **Neo** (curve→Revit creation geometry) + **Trinity** (C# add-in create handlers + SEC-013 wiring) + **Tank** (defs) | ~10 nodes | 4–5 dev-days |
-| **RV-M4** Views/Sheets/Schedules | §3.6 (Schedule.Data read is the priority) | **Tank** (defs) + **Trinity** (schedule/view handlers) | ~4 nodes | 2 dev-days |
-| **RV-M5** Selection & misc write | §3.8 PickPoint + §3.7 AssignMaterial **[W]** | **Switch** (picker UX) + **Trinity** (handlers) + **Tank** (defs) | ~3 nodes | 1–2 dev-days |
+| **RV-M1** Read & Filter | §3.1 collectors/filters + §3.3 geometry extraction (read-only, no write gate) | **Neo** (node defs in `src/core/nodes.js`) + **Mouse** (geometry mapping for Solids/Faces/BBox) | ~9 nodes | 2–3 dev-days |
+| **RV-M2** Params & Info | §3.2 Element.Info / BuiltIn / type params + `Revit.FamilyTypes` + §3.7 material/phase read | **Neo** (defs) + **Trinity** (bridge handlers for BIP + type params + type enumeration) | ~7 nodes | 2 dev-days |
+| **RV-M3** Datums & Creation core | §3.5 Level/Grid/RefPlane + §3.4 Wall/Floor/Roof/Column/Beam **[W]** | **Mouse** (curve→Revit creation geometry) + **Trinity** (C# add-in create handlers + SEC-013 wiring) + **Neo** (defs) | ~10 nodes | 4–5 dev-days |
+| **RV-M4** Views/Sheets/Schedules | §3.6 (Schedule.Data read is the priority) | **Neo** (defs) + **Trinity** (schedule/view handlers) | ~4 nodes | 2 dev-days |
+| **RV-M5** Selection & misc write | §3.8 PickPoint + §3.7 `Material.ByColor`/AssignMaterial **[W]** | **Switch** (picker UX) + **Trinity** (handlers) + **Neo** (defs) | ~4 nodes | 1–2 dev-days |
 
 ### Forma track
 
 | Milestone | Scope | Owner lane(s) | New/changed nodes | Est. |
 |---|---|---|---|---|
-| **FM-M0** Integration-model decision + bridge skeleton | §7 design doc → decide extension-host + `NovaFormaBridge` shape (NO nodes) | **Morpheus** (decision) + **Trinity** (bridge skeleton) + **Dozer** (iframe/extension hosting) | 0 nodes (design) | 2–3 dev-days |
-| **FM-M1** Read: proposal/geometry/terrain | §4.1–4.4 read + selection | **Trinity** (SDK bridge) + **Tank** (`forma` category defs) + **Neo** (mesh/footprint mapping) | ~9 nodes | 4 dev-days |
-| **FM-M2** Metrics & analysis | §4.6 + §4.7 georeference/units | **Tank** (defs) + **Trinity** (analysis calls) | ~5 nodes | 2–3 dev-days |
-| **FM-M3** Write: building create/update | §4.5 **[W]** | **Neo** (geometry→Forma) + **Trinity** (write bridge) + **Tank** (defs) | ~3 nodes | 3 dev-days |
+| **FM-M0** Integration-model decision + bridge skeleton | §7 design doc → decide extension-host + `NovaFormaBridge` shape (NO nodes) | **The Architect** (decision) + **Trinity** (bridge skeleton) + **Link** (iframe/extension hosting) | 0 nodes (design) | 2–3 dev-days |
+| **FM-M1** Read: proposal/geometry/terrain | §4.1–4.4 read + selection | **Trinity** (SDK bridge) + **Neo** (`forma` category defs) + **Mouse** (mesh/footprint mapping) | ~9 nodes | 4 dev-days |
+| **FM-M2** Metrics & analysis | §4.6 + §4.7 georeference/units | **Neo** (defs) + **Trinity** (analysis calls) | ~5 nodes | 2–3 dev-days |
+| **FM-M3** Write: `Forma.SendGeometry` + building create/update | §4.5 **[W]** (no user-approval gate — see §6) | **Mouse** (geometry→Forma) + **Trinity** (write bridge) + **Neo** (defs) | ~3 nodes | 3 dev-days |
 | **FM-Mx** Pickers/panel | Forma connect panel + picker UI | **Switch** (panel/picker) | UI only | 2 dev-days |
 
 **Reviewer (Oracle)** gates every PR (per-PR security pass, ENGINEERING §7).
-**Integrator (Link)** merges branches into `develop`; lane engineers never self-merge.
-**Mouse (ai-engineer)** is consulted once nodes land, to add Revit/Forma nodes to the AI
+**Integrator (Dozer)** merges branches into `develop`; lane engineers never self-merge.
+**ai-engineer (Tank)** is consulted once nodes land, to add Revit/Forma nodes to the AI
 node-catalog prompt so the copilot can use them (separate follow-up, not in these milestones).
 
 ### Dependency sequence
@@ -304,9 +306,12 @@ FM-Mx (panel) runs parallel to FM-M1.
   - **Model A ↔ Model B unification** follow-up (one element/geometry data shape across
     the bridge so creation nodes round-trip cleanly).
 - **Forma integration-model decision (FM-M0) is an open design question** — Forma runs as
-  an embedded iframe SDK, NOT the localhost hub. Likely architecture: a **Forma extension
-  host** (the iframe app) + a **`NovaFormaBridge` SDK bridge** analogous to `revit-bridge`,
-  with the write-approval gate adapted to Forma's auth. Must be decided before FM-M1.
+  an embedded iframe SDK, NOT the localhost hub. Two options are weighed in §7
+  (Nova-as-extension vs thin-extension-bridge); must be decided before FM-M1.
+- **Forma writes need NO user-approval gate** (owner decision, 2026-06-04). Unlike Revit
+  (SEC-013), Forma write nodes (`Forma.SendGeometry`, building create/update) act inside
+  the user's own authenticated Forma session, so they require no Nova-side approval token.
+  They still flow through the bridge and remain auditable — they just don't prompt.
 - **Fit-gate risk:** several proposed nodes (analysis results, schedules) depend on the
   bridge actually returning usable, consumable shapes; if a getter can't produce a real,
   readable result it must be dropped, not shipped as a dead port (fit-gate 3/4/5).
@@ -315,20 +320,49 @@ FM-Mx (panel) runs parallel to FM-M1.
 
 ---
 
-## 7. Forma integration model — the open design question (flagged, not designed)
+## 7. Forma integration model — the FM-M0 decision (trade-offs)
 
-Revit Connect = browser ⇄ **localhost hub** ⇄ C# add-in. Forma is different: a Forma
-extension is a **web app loaded in an iframe** inside Forma, talking to Forma via the
-**Embedded View SDK** (async `Forma.*` calls), with **no localhost hub and no desktop
-add-in**. Open questions for FM-M0:
-1. Where does the Nova graph run relative to the Forma iframe — Nova *is* the extension,
-   or Nova embeds a Forma-SDK bridge panel?
-2. How does the SEC-013-style write approval map onto Forma's own permission model?
-3. What is the `NovaFormaBridge` surface (mirror `revit-bridge`'s async handle)?
+**Goal (owner, 2026-06-04):** let users **get and send geometry between Forma and Nova**
+to run analysis/evaluation in Nova and push results back — a Nova-centric geometry
+round-trip. No user-approval gate on Forma writes (§6).
 
-This plan only **flags** the question and proposes the likely shape (extension host +
-`NovaFormaBridge`). The full design is FM-M0's deliverable, owned by **Morpheus** +
-**Trinity** + **Dozer**.
+**Constraint:** Autodesk Forma has no public server-to-server REST API for mutating a
+proposal; the integration surface is the **Embedded View SDK**, which only runs inside a
+**Forma extension** (a web app Forma loads in an **iframe**, calling async `Forma.*` via
+postMessage to the Forma host). So *some* Nova-controlled code MUST run as a Forma
+extension. The decision is **where the Nova graph engine lives** relative to that iframe.
+
+### Option A — Nova runs **as** the Forma extension (embed Nova in Forma)
+Nova (a "Nova for Forma" build) is registered as a Forma extension and loads in Forma's
+iframe panel; the Forma SDK is directly in scope, so `Forma.*` nodes call it inline.
+
+| | |
+|---|---|
+| ➕ Pros | Direct SDK access (lowest latency, simplest data path, no relay); one auth context (Forma's session — dovetails with "no approval"); zero extra infra; fastest path to a working geometry round-trip. |
+| ➖ Cons | Nova runs inside Forma's iframe sandbox — panel-size/CSP constraints, the full editor feels cramped in a side panel; needs a separate Forma-extension manifest + deployment; the user works *inside Forma*, not standalone Nova; iframe lifecycle tied to Forma. |
+| Best when | The workflow is **Forma-centric** ("use Nova while in Forma"). |
+
+### Option B — **Thin** Forma extension + bridge to standalone Nova (the Revit-hub analogy)
+A minimal Forma extension iframe uses the SDK and **relays** geometry to/from the
+standalone Nova app (hi-nova.work) over a `NovaFormaBridge` (postMessage / small relay),
+mirroring Revit Connect's browser ⇄ hub ⇄ add-in shape.
+
+| | |
+|---|---|
+| ➕ Pros | Nova stays the **full standalone app** (full screen, full editor); reuses the proven Connect bridge pattern (architectural consistency with Revit); Nova evolves independently of the Forma panel. |
+| ➖ Cons | More moving parts — a relay/transport between the Forma iframe and the Nova tab (cross-origin postMessage or a hosted relay), added latency, two windows to manage, a new security surface; the extension is still non-trivial (SDK calls must originate there). |
+| Best when | The workflow is **Nova-centric** ("Nova is home base, Forma is one data source") — which matches the stated goal. |
+
+### Recommendation
+The stated goal is Nova-centric (pull Forma geometry → analyze/evaluate in Nova → push
+back), which favors **Option B** architecturally and keeps parity with Revit Connect.
+**But Option A ships a working round-trip far sooner** with the least infra. Pragmatic
+path: **prototype on Option A** (embed a minimal Nova-for-Forma panel to validate the SDK
++ the get/send-geometry nodes quickly), then graduate to **Option B**'s bridge once the
+node set proves out and a standalone-Nova flow is wanted. FM-M0 deliverable: pick A or B
+(or the A→B path), define the `NovaFormaBridge` surface (mirror `revit-bridge`'s async
+handle), and stand up the extension skeleton. Owners: **The Architect** + **Trinity** +
+**Link**. **Decision still needs the owner's pick before FM-M1.**
 
 ---
 
