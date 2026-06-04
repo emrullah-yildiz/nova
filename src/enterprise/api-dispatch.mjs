@@ -134,16 +134,65 @@ function bearerToken(authorization) {
   return header.startsWith('Bearer ') ? header.slice(7) : '';
 }
 
+// Maps a request path → the auth action + how to derive the per-account key so
+// the rate limiter (SEC-005) can throttle BEFORE the handler runs the expensive
+// PBKDF2 verify. accountKey is a normalised email so an attacker can be locked
+// out per-account, not just per-IP. Authenticated routes (change-password)
+// resolve the key from the session context. Returns null for non-auth routes.
+function authRateTarget(path, { body, context }) {
+  const email = (value) => (typeof value === 'string' ? value.trim().toLowerCase() : '');
+  switch (path) {
+    case '/api/auth/login':
+      return { action: 'login', accountKey: email(body && body.email) };
+    case '/api/auth/signup':
+      return { action: 'signup', accountKey: email(body && body.email) };
+    case '/api/auth/resend-verification':
+      return { action: 'resend-verification', accountKey: email(body && body.email) || (context && context.userId ? 'uid:' + context.userId : '') };
+    case '/api/auth/verify':
+      // Token guessing has no account; per-IP throttle only.
+      return { action: 'verify', accountKey: '' };
+    case '/api/me/password':
+      return { action: 'change-password', accountKey: context && context.userId ? 'uid:' + context.userId : '' };
+    default:
+      return null;
+  }
+}
+
+// Only the password-verifying routes clear their bucket on success, so a
+// legitimate user isn't punished for earlier typos. signup/verify/resend keep
+// counting — those caps are anti-abuse, not anti-typo.
+const RESET_ON_SUCCESS = new Set(['login', 'change-password']);
+
 // Builds the platform-agnostic request handler. `request` is a plain object:
-// { method, path, searchParams, authorization, body }. Returns { status, body }.
-export function createApiDispatcher({ store, authService, aiProvider, objectStorage, emailService = null, secretsService = null, issueService = null, appUrl = '', allowDevLogin = false }) {
+// { method, path, searchParams, authorization, body, ip }. Returns
+// { status, body }. `rateLimiter` (optional) is the SEC-005 auth throttle —
+// { check, reset } closures over the runtime env (the Worker injects a KV-backed
+// one; Node/tests without it simply skip throttling).
+export function createApiDispatcher({ store, authService, aiProvider, objectStorage, emailService = null, secretsService = null, issueService = null, appUrl = '', allowDevLogin = false, rateLimiter = null }) {
   return async function dispatch(request) {
-    const { method, path, searchParams, authorization, body, waitUntil } = request;
+    const { method, path, searchParams, authorization, body, waitUntil, ip } = request;
     const route = matchRoute(method, path, { allowDevLogin });
     if (!route) throw createHttpError(404, 'Route not found.');
     const context = route.public ? null : await store.authenticateAsync(bearerToken(authorization));
+    // SEC-005: throttle auth attempts BEFORE the handler (so PBKDF2 / email
+    // sends never run for an over-limit caller). Public routes throttle on the
+    // body email + IP; authenticated routes (change-password) on the user id.
+    const rateTarget = rateLimiter ? authRateTarget(path, { body: body || {}, context }) : null;
+    if (rateTarget) {
+      const decision = await rateLimiter.check({ ip, accountKey: rateTarget.accountKey, action: rateTarget.action });
+      if (decision && decision.ok === false) {
+        const error = createHttpError(429, 'Too many attempts. Please wait and try again.', 'RATE_LIMITED');
+        error.retryAfterMs = Math.max(0, Number(decision.retryAfterMs) || 0);
+        throw error;
+      }
+    }
     const url = { searchParams: searchParams instanceof URLSearchParams ? searchParams : new URLSearchParams(searchParams || '') };
     const result = await route.handler({ store, context, params: route.params, body: body || {}, url, aiProvider, authService, objectStorage, emailService, secretsService, issueService, appUrl: request.appUrl || appUrl });
+    // SEC-005: a successful login / password-change clears that account's
+    // failure bucket so a legitimate user isn't locked out by earlier typos.
+    if (rateTarget && rateLimiter.reset && RESET_ON_SUCCESS.has(rateTarget.action)) {
+      try { await rateLimiter.reset({ ip, accountKey: rateTarget.accountKey, action: rateTarget.action }); } catch { /* best effort */ }
+    }
     // Persistence flush. The write MUST complete, but the client shouldn't wait
     // for it. On Cloudflare we hand the promise to ctx.waitUntil (passed in as
     // `waitUntil`): the response returns immediately while the runtime keeps the

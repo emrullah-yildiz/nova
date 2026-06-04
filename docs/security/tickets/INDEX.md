@@ -9,7 +9,7 @@ Maintained by the `security-auditor` agent. One row per ticket; see each
 | SEC-002 | Disclose and lawfully cover third-party sub-processors (AI, email, hosting) | high | cross-border-transfer | open | legal |
 | SEC-003 | Disclose to users that AI prompts + graph data are sent to third-party AI providers | high | transparency-consent | open | mixed |
 | SEC-004 | Make account deletion purge all PII — sessions, verification tokens, audit, AI logs | high | data-protection | open | code |
-| SEC-005 | Add brute-force / rate-limiting protection to authentication endpoints | high | authn-authz | open | code |
+| SEC-005 | Add brute-force / rate-limiting protection to authentication endpoints | high | authn-authz | resolved | code |
 | SEC-006 | Make audit log tamper-resistant, retained, and PII-bounded (not a mutable snapshot) | medium | audit-logging | open | mixed |
 | SEC-007 | Provide data-subject access, portability, and rectification (DSAR) capability | medium | data-protection | open | mixed |
 | SEC-008 | Stop storing BYOK AI API keys in plaintext localStorage | medium | secrets | open | code |

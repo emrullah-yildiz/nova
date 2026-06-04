@@ -15,6 +15,7 @@ import { createGoogleOidcVerifier } from '../server/auth/oidc-verifier.mjs';
 import { createEmailService } from '../server/email/resend.mjs';
 import { NeonPersistence } from '../server/db/neon-persistence.mjs';
 import { createKvStateStore, createR2ObjectStorage } from './adapters.mjs';
+import { checkAuthRate, resetAuthRate } from './auth-rate-limit.mjs';
 import {
   clearSessionCookie, parseCookie,
   serializeSlotCookie, clearSlotCookie, serializeActivePointer, clearActivePointer,
@@ -51,6 +52,12 @@ async function getApi(env) {
   }
   // Optional in-app support tickets → GitHub issues (FEEDBACK_GITHUB_TOKEN).
   const issueService = createGithubIssueService({ token: env.FEEDBACK_GITHUB_TOKEN, repo: env.FEEDBACK_GITHUB_REPO });
+  // SEC-005: KV-backed brute-force throttle for the auth routes. Closes over the
+  // deployment env (RATE_KV is stable per deploy); no KV bound → fails open.
+  const rateLimiter = {
+    check: (args) => checkAuthRate(env, args),
+    reset: (args) => resetAuthRate(env, args)
+  };
   const dispatch = createApiDispatcher({
     store,
     authService,
@@ -60,7 +67,8 @@ async function getApi(env) {
     secretsService,
     issueService,
     appUrl: env.NOVA_PUBLIC_URL || '',
-    allowDevLogin: env.NOVA_ALLOW_DEV_LOGIN === 'true'
+    allowDevLogin: env.NOVA_ALLOW_DEV_LOGIN === 'true',
+    rateLimiter
   });
   cachedApi = { store, dispatch };
   return cachedApi;
@@ -163,6 +171,9 @@ export async function handleEnterpriseApi(request, env, ctx) {
   // response returns immediately while the isolate is kept alive until the Neon
   // write completes. Null in non-Worker contexts (the dispatcher then awaits).
   const waitUntil = ctx && typeof ctx.waitUntil === 'function' ? (p) => ctx.waitUntil(p) : null;
+  // Caller IP for the SEC-005 auth throttle — same resolution as the AI-proxy
+  // limiter in worker/index.mjs.
+  const ip = request.headers.get('cf-connecting-ip') || (request.headers.get('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
 
   // Public client config: lets the static SPA discover how to render sign-in
   // (Google client id is public; the secret never leaves the Worker).
@@ -213,6 +224,7 @@ export async function handleEnterpriseApi(request, env, ctx) {
       searchParams: url.searchParams,
       authorization: activeAuthorization(request, cookieHeader),
       body,
+      ip,
       appUrl: env.NOVA_PUBLIC_URL || url.origin,
       waitUntil
     });
@@ -247,9 +259,15 @@ export async function handleEnterpriseApi(request, env, ctx) {
     }
     return Response.json(payload, { status, headers: headersWith(env, cookies) });
   } catch (error) {
+    const headers = cors(env);
+    // SEC-005: surface the backoff as a standard Retry-After (seconds) so the
+    // client can wait the right amount before retrying.
+    if (error && error.status === 429 && Number(error.retryAfterMs) > 0) {
+      headers['Retry-After'] = String(Math.ceil(error.retryAfterMs / 1000));
+    }
     return Response.json(
       { ok: false, error: { message: error.message || 'Internal server error', code: error.code || 'NOVA_API_ERROR' } },
-      { status: error.status || 500, headers: cors(env) }
+      { status: error.status || 500, headers }
     );
   }
 }
