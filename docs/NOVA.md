@@ -130,6 +130,12 @@ like the code around it. (Each links to the decision that owns the detail.)
 - **Single value → one-item list.** A scalar wired into a `list` input is auto-
   promoted to a one-item list (Grasshopper/Dynamo parity); list-consuming nodes
   are not auto-laceable.
+- **Wire-boundary value coercion.** The port boundary normalizes a few value/type
+  mismatches so producers and consumers interoperate without a converter node —
+  same place + spirit as single→list (`resolveInputs`, `src/nodes/runtimeAdapter.js`):
+  a `number` into a `boolean` input → `0`=false / non-zero=true; a `boolean` into a
+  `number` input → `1`/`0`. `any` ports are never coerced; this is a value
+  normalization at the wire, **not** a language-level redefinition.
 - **Data is values + nested lists — there is no tree type.** Branching, grouping,
   and nesting are modeled as **lists of lists**, not a bespoke tree/`DataTree`
   object. Every "tree" operation is a `List.*` node on nested lists: `List.Chunk`
@@ -179,9 +185,17 @@ like the code around it. (Each links to the decision that owns the detail.)
   (a name→value map) and/or a companion `*.Properties`/`*.Info` getter, so the data is
   visible in the inspector and consumable downstream (`List.*`, watch, filters). A node
   whose output is an opaque handle nobody can read fails the "usable outputs" gate.
-- **Code-driven Custom.Python ports.** The Python cell's code is the source of
-  truth for its ports (inferred free vars in, last assignment out); codegen tracks
-  *live* ports, not the static def.
+- **Code-driven ports (Python / CodeBlock).** A code cell's code is the source of
+  truth for its ports. **`Custom.Python`** (full-script escape hatch): inferred free
+  vars in, **last** assignment out (`resolvePythonPorts`). **`Custom.CodeBlock`**
+  (lightweight inline block, v2 of the former `Custom.Code`): free vars in, **ALL**
+  top-level assignments out (`resolveCodeBlockPorts`), plus a `..`/`#` series
+  shorthand that **desugars** to a number-list literal (`desugarSeries`) — it is not
+  a `List.Range`/`List.Sequence` clone. The two share the inference engine
+  (`runtime/python-port-decl.js`) but stay distinct nodes with a capability boundary
+  (Python = imports/bridge/typed headers/terminal; CodeBlock = expressions/series/
+  literals/inline). Codegen tracks *live* ports, not the static def. `Custom.Formula`
+  was folded into CodeBlock (`Result = <expr>`) and retired.
 - **Server is the authority.** Realtime roles (viewer RO / editor RW) and Connect
   write approvals are enforced server-side; clients are never trusted. A Connect/
   Revit write must present a **single-use, server-issued approval token**: the

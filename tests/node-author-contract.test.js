@@ -13,13 +13,20 @@ function isModernNode(node) {
   return node && (!node.metadata || node.metadata.source !== 'legacy-node-library');
 }
 
+// Deprecated nodes are retired, hidden-from-library migration fallbacks (kept one
+// release so old graphs still resolve). They are not nodes users author or drop,
+// so they are exempt from the modern-author contract (example/description/etc.).
+function isDeprecated(node) {
+  return !!(node && node.metadata && node.metadata.deprecated);
+}
+
 function hasText(value, min = 1) {
   return typeof value === 'string' && value.trim().length >= min;
 }
 
 describe('node author contract', () => {
   const registry = createCoreNodeRegistry();
-  const modernNodes = registry.listNodes().filter(isModernNode);
+  const modernNodes = registry.listNodes().filter(isModernNode).filter((node) => !isDeprecated(node));
 
   it('every modern node uses the ParentName.NodeName type pattern', () => {
     const violations = modernNodes

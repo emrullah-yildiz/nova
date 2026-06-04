@@ -91,6 +91,19 @@ export function resolveInputs(nodeDefinition, nodeInstance, getInput, getVal, co
     if (input.type === 'list' && value !== undefined && value !== null && !Array.isArray(value)) {
       value = [value];
     }
+    // Numeric ↔ boolean wire-boundary coercion (same pattern as single→list
+    // above, applied at the port boundary — NOT a language change). A CodeBlock
+    // (or any node) commonly emits 1/0 for true/false; when that number flows
+    // into a boolean-typed input we coerce 0 → false and any other number → true.
+    // Symmetrically, a boolean flowing into a number-typed input becomes 1/0. This
+    // does NOT redefine Python's ==/is; it only normalizes the value crossing the
+    // wire so a boolean consumer reads 1 as true and a numeric consumer reads true
+    // as 1. Null/undefined are left as-is.
+    else if (input.type === 'boolean' && typeof value === 'number') {
+      value = value !== 0;
+    } else if (input.type === 'number' && typeof value === 'boolean') {
+      value = value ? 1 : 0;
+    }
     inputs[input.id] = value;
   });
 

@@ -19,6 +19,7 @@ import { fileToControlValue } from './file-control.js';
 import { isAutoLaceable } from '../core/lacing.js';
 import { NODE_VERSION_MAP } from '../core/nodes.js';
 import { availableVersions, getDefVersion } from '../core/node-versions.js';
+import { installCodeBlockNode } from './codeblock-node.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -97,6 +98,11 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
   if (targetApp.__nodeRendererInstalled) return true;
   targetApp.__nodeRendererInstalled = true;
   var app = targetApp;
+
+  // Install the Custom.CodeBlock inline-editor methods (enhanceCodeBlockNode /
+  // isCodeBlockNode / codeBlockCommit) onto app up front, so renderNode can call
+  // them on the very first render — no DOMContentLoaded race / load-order dependency.
+  installCodeBlockNode(app);
 
   app._disconnectControlInputWire = function(nodeId, controlId) {
     var result = removeControlInputWires(this.wires, nodeId, controlId);
@@ -744,7 +750,15 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
     // preview, double-click to edit in the terminal). Called directly here —
     // node-renderer owns the winning renderNode, so this is independent of
     // load-order (a separate renderNode wrapper could be clobbered).
-    if ((nd.type === 'custom-python' || nd.type === 'custom-code' ||
+    // Custom.CodeBlock (v2) gets the inline auto-grow editor (src/ui/codeblock-node.js).
+    // Checked BEFORE the Python branch so the shared `custom-code`/`Custom.Code`
+    // aliases route to the CodeBlock editor for v2 instances; v1 (legacy JS
+    // Custom.Code) is not a CodeBlock node and falls through to the Python branch's
+    // terminal-edit hint. Called directly here — node-renderer owns the winning
+    // renderNode, so this is independent of script load order.
+    if (app.enhanceCodeBlockNode && app.isCodeBlockNode && app.isCodeBlockNode(nd)) {
+      app.enhanceCodeBlockNode(nd, el);
+    } else if ((nd.type === 'custom-python' || nd.type === 'custom-code' ||
          nd.type === 'Custom.Python' || nd.type === 'Custom.Code') && app.enhancePythonNode) {
       app.enhancePythonNode(nd, el);
     }

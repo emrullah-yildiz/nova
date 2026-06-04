@@ -95,6 +95,74 @@ export function lastTopLevelAssignment(code) {
   return last;
 }
 
+// ALL top-level assignment target names, in first-appearance order (deduped).
+//
+// This is the CodeBlock counterpart to `lastTopLevelAssignment` (which returns
+// only the LAST top-level assignment). Dynamo-style Code Block exposes EVERY
+// assigned variable as an output (`a = 1; b = a + 2` → outputs `a`, `b`), so
+// CodeBlock port resolution needs all of them, not just the last. Custom.Python
+// keeps using `lastTopLevelAssignment` — its behavior is deliberately unchanged.
+//
+// "Top-level" means not inside an indented block (for / if / while / def body).
+// Augmented assignments (`+=`, `-=`, …) and comparisons (`==`) are NOT outputs.
+// Simple tuple unpacking (`a, b = ...`) yields each name. Names starting with `_`
+// are skipped (the "private, no port" convention the inference engine already
+// uses for free vars). Pure.
+export function topLevelAssignments(code) {
+  if (typeof code !== 'string' || !code) return [];
+  const out = [];
+  const seen = new Set();
+  for (const raw of code.split('\n')) {
+    // Skip indented lines — those are inside blocks.
+    if (/^\s/.test(raw) && raw.trim() !== '') continue;
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    // Match `lhs = expr` but not `==`, `<=`, `>=`, `!=` and not augmented
+    // assignments (`+=`, `-=`, `*=`, `/=`, `%=`, `**=`, `//=`). The lhs may be a
+    // comma list (tuple unpacking).
+    const m = trimmed.match(/^([A-Za-z_][A-Za-z0-9_,\s]*?)\s*=(?![=])\s*(.+)$/);
+    if (!m) continue;
+    // Reject augmented assignment: the char immediately before `=` is an operator.
+    const eqIdx = trimmed.indexOf('=');
+    const before = trimmed[eqIdx - 1];
+    if (before && '+-*/%&|^<>'.indexOf(before) >= 0) continue;
+
+    m[1].split(',').forEach((part) => {
+      const id = part.trim();
+      if (/^[A-Za-z_]\w*$/.test(id) && !id.startsWith('_') && !seen.has(id)) {
+        seen.add(id);
+        out.push(id);
+      }
+    });
+  }
+  return out;
+}
+
+// CodeBlock port-resolution contract — the function the on-node editor (Switch)
+// calls on edit-commit to (re)derive ports. Returns
+//   { inputs: [{ id, type }], outputs: [{ id, type }] }
+// where:
+//   • inputs  = free/unknown variables (via the existing `inferInputPorts`) —
+//               identifiers read but never bound, not keywords/builtins/bridge,
+//               not `_`-prefixed. Each typed `any`.
+//   • outputs = ALL top-level assignments (via `topLevelAssignments`). Each typed
+//               `any`. Falls back to a single `output0` when nothing is assigned
+//               (e.g. a bare expression).
+//
+// This intentionally differs from `resolvePythonPorts` (Custom.Python), which
+// emits only the LAST assignment as the output. CodeBlock = every assignment is a
+// port; Python = the script's last result. Both share `inferInputPorts` for
+// inputs. Pure — no DOM, no app state.
+export function resolveCodeBlockPorts(code) {
+  const freeVars = inferInputPorts(code);
+  const assigns = topLevelAssignments(code);
+  return {
+    inputs: freeVars.map((id) => ({ id, type: 'any' })),
+    outputs: assigns.length ? assigns.map((id) => ({ id, type: 'any' })) : [{ id: 'output0', type: 'any' }]
+  };
+}
+
 // Identifiers that are NOT input ports even when read free: Python keywords,
 // built-ins the runtime provides, and the injected bridge globals.
 const PY_KEYWORDS = new Set(['for', 'in', 'if', 'elif', 'else', 'while', 'def', 'return', 'and', 'or', 'not', 'is', 'None', 'True', 'False', 'import', 'from', 'as', 'with', 'try', 'except', 'finally', 'lambda', 'pass', 'break', 'continue', 'class', 'global', 'nonlocal', 'yield', 'raise', 'assert', 'del']);

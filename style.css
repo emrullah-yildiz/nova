@@ -2298,4 +2298,35 @@ input[type="number"] {
 #account-settings-overlay .account-settings-form button:disabled { opacity: 0.6; cursor: default; }
 #account-settings-overlay .account-settings-form button.danger { background: var(--accent-red, #f38ba8); }
 #account-settings-overlay .account-settings-message { display: none; margin-top: 9px; color: var(--accent-red, #f38ba8); font-size: 12px; }
+
+/* ── Custom.CodeBlock inline auto-grow editor ── */
+.cb-port-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.cb-editor-wrap { padding: 4px 10px 2px; }
+.cb-editor {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 20px;
+  margin: 0;
+  padding: 4px 8px;
+  resize: none;
+  /* No scrollbars in any state — height/width grow to fit (codeblock-node.js). */
+  overflow: hidden;
+  white-space: pre-wrap;       /* soft-wrap at MAX width, never a horizontal bar */
+  word-break: break-word;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-primary, #cdd6f4);
+  background: var(--bg-tertiary, #11111b);
+  border: 1px solid var(--border-color, #313244);
+  border-radius: var(--radius-sm, 6px);
+}
+.cb-editor:focus { outline: none; border-color: var(--accent-green, #a6e3a1); }
+.cb-editor::-webkit-scrollbar { width: 0; height: 0; }   /* belt-and-suspenders */
+.cb-node-toolbar { padding: 3px 12px 5px; display: flex; justify-content: flex-end; align-items: center; min-height: 12px; }
+.cb-node-status { font-size: 10px; color: var(--text-muted, #6c7086); }
+.cb-node-status.err { color: var(--accent-red, #f38ba8); }
+.cb-node-status.ok { color: var(--accent-green, #a6e3a1); }
+.cb-port-label { cursor: default; }
 #account-settings-overlay .account-settings-message.ok { color: var(--accent-green, #a6e3a1); }

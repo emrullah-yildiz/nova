@@ -147,5 +147,14 @@ function mergeRegistryIntoLegacyMaps(registry) {
     if (!NODE_TYPE_MAP[alias]) {
       NODE_TYPE_MAP[alias] = NODE_TYPE_MAP[canonical];
     }
+    // Mirror the version bucket under the alias too, so a graph saved with the
+    // OLD canonical type (e.g. `Custom.Code`, now an alias of `Custom.CodeBlock`)
+    // resolves its pinned version via resolveVersionedDef(map, savedType, …). The
+    // load path keys the version lookup by the SAVED type string, which for a
+    // renamed node IS the alias — without this, an old-typed instance can't reach
+    // its v1 def and would wrongly adopt the latest version's behavior.
+    if (NODE_VERSION_MAP[canonical] && !NODE_VERSION_MAP[alias]) {
+      NODE_VERSION_MAP[alias] = NODE_VERSION_MAP[canonical];
+    }
   });
 }

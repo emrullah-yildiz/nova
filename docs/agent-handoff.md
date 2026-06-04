@@ -13,6 +13,176 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-05 - CodeBlock UI half — on-node auto-grow editor + G-1/G-2 hooks (feat/codeblock-ui)
+
+**Agent/branch:** Switch (ui-engineer) — `feat/codeblock-ui` (off `develop` @ 9f0ca04;
+committed, NOT merged/pushed). Consumes Neo's CodeBlock CORE (entry below).
+
+**Goal:** The UI half of the Dynamo-style Code Block — inline auto-grow editor,
+dynamic ports on commit, and the export/load/hide/preset hooks Neo handed off.
+
+**Shipped (owned files):**
+- NEW `src/ui/codeblock-node.js` — `installCodeBlockNode(app)` installs
+  `app.enhanceCodeBlockNode` (inline `<textarea.cb-editor>` on the node body),
+  `isCodeBlockNode` (v2+ Custom.CodeBlock/custom-codeblock; v1 legacy JS excluded),
+  `codeBlockCommit` (re-derives ports via **resolveCodeBlockPorts** on commit, drops
+  wires to removed ports), `codeBlockSyncPortsFromCode`, and the preset helpers
+  `addCodeBlockPreset` / `addSeriesCodeBlock` (`nums = 0..10`) / `addBlankCodeBlock`.
+  **Auto-grow:** per-`input` keystroke → height = `scrollHeight` (+border under
+  border-box, no max), width = longest line clamped `CB_MIN_W..CB_MAX_W` (canvas
+  `measureText`, jsdom char-count fallback), soft-wrap at MAX. `overflow:hidden` →
+  NO scrollbars. Ports re-derive on **commit (blur/change)**, NOT per keystroke
+  (mirrors `pySyncPorts`). Pure exports (`codeBlockWidth`/`autoGrowCodeBlock`/
+  `isCodeBlockNode`) are unit-tested headlessly.
+- EDIT `src/ui/node-renderer.js` — `renderNode` calls `enhanceCodeBlockNode` for
+  CodeBlock v2 (checked BEFORE the Python branch so the shared `custom-code`/
+  `Custom.Code` aliases route to the inline editor for v2; v1 falls through to the
+  Python terminal hint). `installNodeRenderer` calls `installCodeBlockNode(app)` up
+  front so the first render has the methods — **no DOMContentLoaded/load-order race**.
+- EDIT `src/ui/node-library.js` — G-1 in the LIVE `generateNodeCode` override:
+  Custom.CodeBlock v2 emits `desugarSeries(code)` (valid Python list literal), not
+  raw `0..10` / `{{ctrl.code}}`. G-2b: skip `metadata.deprecated` in
+  `buildOutputTypeMap` / `getInputSuggestions` / the AI candidate list.
+- EDIT `src/ui/node-search-popup.js` — G-2b: `getAllNodes` skips deprecated; added a
+  synthetic **"Series (Code Block)"** preset entry (drops a CodeBlock with
+  `nums = 0..10`, not a new type).
+- EDIT `src/app/app.js` — import `desugarSeries`; G-1 short-circuit in the base
+  `generateNodeCode`; G-2b: `renderNodeLibrary` hides `metadata.deprecated` nodes
+  (count reflects visible only) + a "Series (Code Block)" palette item under Custom.
+- EDIT `src/app/save-load.js` — G-2a: `deserializeGraph` pre-pass runs
+  `migrateNodeType` for `isDeprecatedType` instances (Custom.Formula →
+  Custom.CodeBlock `Result = <expr>`, pins migrated type's version, drops stale
+  dyn-ports, remaps wires by `portMap` incl. `result→Result`). Deprecated defs still
+  RESOLVE, so an un-migratable instance falls through and keeps computing.
+- EDIT `style.css` — `.cb-editor` (overflow:hidden, pre-wrap, mono, existing tokens)
+  + `.cb-port-row`/`.cb-node-toolbar`/`.cb-node-status`.
+- NEW `tests/codeblock-ui.test.js` (jsdom, 19) + `tests/e2e/codeblock-node.spec.js`
+  (real DOM, 2: type → ports appear + no scrollbars; Series preset).
+
+**Found + worked around (NOT fixed — outside my lane):** `addNodeToCanvas`'s 4th
+`opts.controls` arg is DROPPED by two installed wrappers that re-bind it with a
+`(type,x,y)` signature — `src/app/logger-patch.js:26` and
+`src/runtime/ExecutionEngine.js:120`. So preset `controls` overrides don't stick.
+`addCodeBlockPreset` therefore sets `controlValues.code` + re-renders AFTER creation
+(the same post-create pattern the showcase templates use). Anyone relying on
+`addNodeToCanvas(...,{controls})` elsewhere will hit the same latent bug — worth a
+core/runtime follow-up to make the wrappers forward `opts`.
+
+**Validation:** `eslint .` clean; full `vitest run` 142 files / 1868 passed (1
+skipped); `vite build` OK; `playwright test` 10/10 (incl. the 2 new CodeBlock specs).
+
+**Merge status:** Open branch `feat/codeblock-ui` — committed, NOT merged/pushed.
+
+## 2026-06-05 - CodeBlock CORE (Python-first) → Switch (ui-engineer) for the on-node editor (feat/codeblock-core)
+
+**Agent/branch:** Neo (core-engineer) — `feat/codeblock-core` (off `develop`; committed, NOT merged/pushed)
+
+**Goal:** Build the CORE of the Dynamo-style Code Block node per
+`docs/architecture/codeblock-node-plan.md`. Owner decisions: Python-first (no C#
+this phase), series end **inclusive**, keep `Custom.Python` distinct/unchanged.
+This is everything EXCEPT the on-node editor UI (that's Switch — see "→ Switch").
+
+**Shipped (owned files):**
+- NEW `src/runtime/codeblock-syntax.js` — pure `desugarSeries(code)`. Rewrites the
+  `..`/`#` series shorthand to a Python list literal **end-inclusive**, only inside
+  non-string code spans. Forms: `0..10`→step1, `0..10..2`→step, `0..10..#5`→count
+  (evenly spaced incl. ends), `0..#5..2`→count+step. Negative step + single value
+  handled. `..`-free code is byte-identical (no collision with Python).
+- EDIT `src/runtime/python-port-decl.js` — added pure `topLevelAssignments(code)`
+  (ALL top-level assigned names, in order; aug-assign and `_`-prefixed excluded)
+  and **`resolveCodeBlockPorts(code)`** (the Switch contract — see below).
+  `lastTopLevelAssignment` / `resolvePythonPorts` (Custom.Python) UNCHANGED.
+- EDIT `src/nodes/categories/custom.js` — `Custom.CodeBlock` def (type
+  `Custom.CodeBlock`, v2, language=python in `metadata.language`, `{ }` icon).
+  `Custom.Code` renamed → it is the v1 `priorVersions[0]` (old JS, preserved) and
+  resolves as an alias (`aliases: ['custom-codeblock','custom-code','Custom.Code']`).
+  `Custom.Formula` REMOVED from the library — kept one release as a
+  `metadata.deprecated` hidden fallback carrying `metadata.migrateTo`
+  (`{ type:'Custom.CodeBlock', codeFromControls, portMap:{x,y,result→Result} }`).
+  Re-exports `resolveCodeBlockPorts` + `desugarSeries`.
+- EDIT `src/core/node-versions.js` — pure `migrateNodeType(oldDef, instance)`
+  (type→type migration plan `{ type, controlValues, portMap }`) + `isDeprecatedType`.
+- EDIT `src/core/engine.js` — routed `custom-codeblock`/`Custom.CodeBlock`
+  (+ `Custom.Code`) through the PythonRunner switch arm; applies `desugarSeries`
+  before execution for CodeBlock only (Custom.Python untouched). A v1-pinned
+  CodeBlock/Custom.Code instance runs the ORIGINAL JS def (`nd.def.execute`) — old
+  graphs keep old behavior; absent version ⇒ v1.
+- EDIT `src/nodes/runtimeAdapter.js` — `resolveInputs` now does the **numeric↔bool
+  wire-boundary coercion** (mirrors the single→list promotion): a `number` into a
+  `boolean` input → `0`=false / non-zero=true; a `boolean` into a `number` input →
+  `1`/`0`. NOT a language change; `any` ports are never coerced.
+- EDIT `src/nodes/coreNodes.js` — alias-merge now mirrors the **version bucket**
+  under the alias (`NODE_VERSION_MAP[alias] = NODE_VERSION_MAP[canonical]`) so a
+  graph saved as the OLD type (`Custom.Code`) resolves its pinned v1 def (the load
+  path keys the version lookup by the saved type string).
+- EDIT `src/core/nodes.js` — header comment only.
+- NEW `tests/codeblock-core.test.js` (42 tests). EDIT `tests/node-author-contract.test.js`
+  (exempt `metadata.deprecated` nodes from the modern-author contract).
+
+**resolveCodeBlockPorts CONTRACT (call this on edit-commit) — for Switch:**
+```
+import { resolveCodeBlockPorts } from 'src/runtime/python-port-decl.js';
+//   (also re-exported from src/nodes/categories/custom.js)
+resolveCodeBlockPorts(code) -> {
+  inputs:  [{ id, type:'any' }, …],   // free/unknown vars read (inferInputPorts)
+  outputs: [{ id, type:'any' }, …],   // ALL top-level assignments (topLevelAssignments),
+                                       // falls back to [{id:'output0'}] for a bare expr
+}
+```
+Re-derive ports on **commit** (blur/change), not per keystroke — same split as
+`pySyncPorts`. Set `nd._dynInputs`/`nd._dynOutputs` from the result; the engine
+keys `nd._pyResults` by those names. Use the existing `renamePythonPort`/wire-drop
+machinery for removed ports. NOTE: PythonRunner's `__out__` builder drops genuine
+**single-letter** output names (`a = 1`) as loop-temp guards — realistic CodeBlock
+names (Result, nums, width…) are fine; single-letter outputs are a known gap (do
+not "fix" it in PythonRunner without checking the Custom.Python output-key
+contract).
+
+**Series syntax + semantics (end INCLUSIVE):** `0..10`→[0..10] step1;
+`0..10..2`→[0,2,4,6,8,10]; `0..10..#5`→[0,2.5,5,7.5,10] (count, evenly spaced);
+`0..#5..2`→[0,2,4,6,8] (count+step). `#` marks a COUNT token; bare number is
+end/step by position. Divergence from `List.Range` (exclusive end) is intentional
+and documented in the plan.
+
+**Literal/bool coercion:** bare number→number, `"…"`→string, bare unquoted name→
+input port (Python semantics on the runtime). `1==True`/`0==False` is applied as a
+WIRE-BOUNDARY coercion in `resolveInputs` (NOT a redefinition of Python `==`).
+
+**Rename/alias/versioning:** canonical `Custom.CodeBlock` (v2 Python).
+`custom-codeblock`/`custom-code`/`Custom.Code` resolve as aliases. The old JS
+behavior is the v1 priorVersion; v1 graphs keep running JS, new nodes default v2,
+v2 shows in the version picker.
+
+**→ Switch (ui-engineer) — REMAINS TO BUILD (Phase-1 UI):**
+- Inline auto-grow editor ON the node body (no scrollbars; height=line count,
+  width=longest line capped then soft-wrap) for CodeBlock — plan §2. Keep the Code
+  Viewer terminal for full `Custom.Python` scripts.
+- Dynamic-port render: call `resolveCodeBlockPorts` on commit, set
+  `_dynInputs`/`_dynOutputs`, re-render ports (extend the `enhancePythonNode` path
+  in `src/runtime/pyrunner.js` / `src/ui/node-renderer.js` to the CodeBlock types).
+- Series library preset: a single library item "Series (Code Block)" that drops a
+  `Custom.CodeBlock` with `controls.code = 'nums = 0..10..#11'` (a PRESET of the
+  same type, not a new type) — plan §1.4; + the drop-blank/drop-series keyboard
+  shortcuts (pick free keys, plan §1.4/OPEN-5).
+- HIDE deprecated nodes (`metadata.deprecated === true`, i.e. `Custom.Formula`)
+  from the library panel + node-search + AI node-catalog (currently still listed).
+
+**→ Integration task (hot files, NOT done here — app.js is a hot file I avoided):**
+- `src/app/app.js` `generateNodeCode`: add `Custom.CodeBlock`/`custom-codeblock`
+  to the Python/Custom short-circuit AND emit `desugarSeries(nd.controlValues.code)`
+  so the exported Python round-trips the expanded series (engine already desugars
+  for live execution; export does not yet).
+- `src/app/save-load.js` load hook: run the `Custom.Formula → Custom.CodeBlock`
+  migration via `migrateNodeType` (rewrite type + controlValues + remap wires by
+  `portMap`) on graph load — currently Formula instances still run on the
+  deprecated fallback def (works, but not yet auto-migrated).
+
+**Validation:** `node node_modules/eslint/bin/eslint.js .` → clean (exit 0). Full
+`node node_modules/vitest/vitest.mjs run` → 141 files passed, 1 skipped; 1845
+passed, 1 skipped. New file → 42 passed.
+
+**Merge status:** Open branch `feat/codeblock-core` — committed, NOT merged/pushed.
+
 ## 2026-06-05 - Revit add-in rebuild + repackage + code-signing scaffold (feat/revit-addin-repackage)
 
 **Agent/branch:** Trinity (connect-engineer) — `feat/revit-addin-repackage` (off `develop`; committed, NOT merged/pushed)
