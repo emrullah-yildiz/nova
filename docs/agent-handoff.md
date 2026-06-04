@@ -13,6 +13,50 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-04 - FIX M4-T4: legacy→registry bridge dropped `execute` (F-001/F-002)
+
+**Agent/branch:** Core/Runtime Engineer — `feat/m4-host-node-defs` (fix in place, do not merge/push)
+
+**Bug (reviewer F-001/F-002):** The 6 M4 Revit host nodes in `src/core/nodes.js` define
+an async `execute`, but they reach the live engine only via the registry: the engine's
+`default:` branch runs `getLiveCoreRegistry().getNode(type)` and dispatches only when
+`typeof registryNode.execute === 'function'`. Legacy nodes flow into the registry through
+`legacyCoreNodes` → `legacyNodeToRegistryDefinition` (`src/nodes/legacyBridge.js`), which
+did NOT copy `execute`; `defineNode` then stored `execute: null`. So execute was reachable
+only via `NODE_TYPE_MAP` (what the unit tests called) — never via the engine. The nodes
+were inert in the app (output undefined).
+
+**Fix (in scope: legacyBridge + tests only):**
+- `src/nodes/legacyBridge.js`: `legacyNodeToRegistryDefinition` now carries
+  `execute: node.execute || undefined` through to the registry definition, mirroring how
+  `toLegacyNodeDefinition` (registry.js) already preserves execute. `defineNode` keeps its
+  `execute: definition.execute || null` rule, so pure-codegen legacy nodes (the vast
+  majority — `revit-element-geometries`, `host-get-elements`, `rhino-objects-by-layer`,
+  etc.) stay `execute: null`: ZERO behavior change for them. Only nodes that DEFINE an
+  execute (the 6 M4 nodes) become engine-reachable.
+- `tests/revit-host-nodes.test.js`: added an "engine registry path (F-001/F-002 wiring
+  guard)" block that asserts each M4 node's `execute` is a function on
+  `getLiveCoreRegistry().getNode(type)` (the exact predicate the engine gates on) AND on a
+  fresh `createCoreNodeRegistry()`, asserts pure-codegen legacy nodes still have NO execute,
+  and drives two nodes through `executeRegistryNodeUnlaced` (the engine's dispatch helper)
+  with a mocked bridge. This guard fails if the bridge ever drops execute again.
+
+**Registry execute is now reachable — proven by the new guard test.** Without this fix
+execute was never called by the engine; with it, the engine's `default:` branch invokes
+`executeRegistryNodeUnlaced(registryNode, …)`.
+
+**RESIDUAL — app/engine async pre-pass (NOT done here, out of scope):** the engine's
+`computeNodeValue` is SYNCHRONOUS. These M4 nodes' execute is `async`, so the registry-path
+dispatch returns an unresolved Promise; the sync compute path does not await it, so a LIVE
+round-trip still won't surface the resolved selection/place/param values yet. The OLDER
+legacy Revit nodes solve this with `app._prepareLiveRevitGeometries` (`src/core/engine.js`,
+awaited in `runGraph` before the sync compute) which resolves the bridge calls and caches
+results onto `nd._liveXxxResult`; a sync `case` then reads the cache. The 6 M4 nodes are
+NOT yet wired into that pre-pass. Completing the live round-trip needs either (a) extending
+the pre-pass to resolve these nodes' execute and cache the result, or (b) an
+await-aware compute for async registry nodes. That touches the app-layer run loop / pre-pass
+wiring beyond the legacyBridge fix and was intentionally left as a follow-up.
+
 ## 2026-06-04 - M4-T2: C# Revit add-in handlers for the round-trip
 
 **Agent/branch:** Connect/Revit Engineer — `feat/m4-revit-addin-handlers` (off `develop` @ 25763c7)

@@ -5,7 +5,8 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { NODE_TYPE_MAP, NODE_LIBRARY } from '../src/core/nodes.js';
-import { createCoreNodeRegistry } from '../src/nodes/coreNodes.js';
+import { createCoreNodeRegistry, getLiveCoreRegistry } from '../src/nodes/coreNodes.js';
+import { executeRegistryNodeUnlaced } from '../src/nodes/runtimeAdapter.js';
 
 const def = (type) => NODE_TYPE_MAP[type];
 
@@ -250,6 +251,98 @@ describe('element-id extraction (result.data.elementIds variants)', () => {
       );
       expect(out.elementIds).toEqual(expected);
     }
+  });
+});
+
+// ── Regression guard for F-001/F-002 (the legacy→registry bridge dropping
+// `execute`). The LIVE engine reaches a legacy node only through
+// getLiveCoreRegistry().getNode(type) (engine.js default branch), NOT through
+// NODE_TYPE_MAP (which the rest of this file uses). If legacyBridge.js stops
+// carrying `execute` through, these nodes become inert in the app even though
+// every NODE_TYPE_MAP-based test above still passes — so this block drives the
+// node the way the engine does. ──
+describe('engine registry path (F-001/F-002 wiring guard)', () => {
+  const types = [
+    'revit-select-elements',
+    'revit-select-faces',
+    'revit-place-family-instance',
+    'revit-place-adaptive-component',
+    'revit-get-parameters',
+    'revit-set-parameters'
+  ];
+
+  it('exposes each M4 node execute on the LIVE core registry (not just NODE_TYPE_MAP)', () => {
+    const registry = getLiveCoreRegistry();
+    types.forEach((t) => {
+      const node = registry.getNode(t);
+      expect(node, `registry should resolve ${t}`).toBeTruthy();
+      // This is the exact predicate engine.js gates dispatch on:
+      // `typeof registryNode.execute === 'function'`.
+      expect(typeof node.execute, `${t}.execute must be a function on the registry`).toBe('function');
+    });
+  });
+
+  it('a fresh registry (createCoreNodeRegistry) also carries execute through the bridge', () => {
+    const registry = createCoreNodeRegistry();
+    types.forEach((t) => {
+      expect(typeof registry.getNode(t).execute).toBe('function');
+    });
+  });
+
+  it('does NOT add an execute to pure-codegen legacy nodes (no behavior change for them)', () => {
+    const registry = getLiveCoreRegistry();
+    // These older legacy Revit/host nodes define NO execute — they must stay
+    // execute-less so they keep running via codegen / the app pre-pass cache.
+    ['revit-element-geometries', 'revit-get-parameter-values', 'host-get-elements', 'rhino-objects-by-layer'].forEach((t) => {
+      const node = registry.getNode(t);
+      expect(node).toBeTruthy();
+      expect(node.execute == null).toBe(true);
+    });
+  });
+
+  it('drives revit-select-elements through executeRegistryNodeUnlaced (the engine dispatch helper) with a mocked bridge', async () => {
+    const registry = getLiveCoreRegistry();
+    const node = registry.getNode('revit-select-elements');
+    const bridge = makeBridge({
+      requestSelection: vi.fn(async () => ({ elements: [{ id: '1001' }, { id: '1002' }] }))
+    });
+    // Mirror the engine: the registry node + getInput/getVal closures + a context.
+    // The node resolves the bridge from context.revitBridge.
+    const nodeInstance = { type: 'revit-select-elements', controlValues: { categories: 'Walls' } };
+    // The helper invokes execute (proving the registry-path dispatch reaches it).
+    // execute is async, so the helper hands back a thenable for the multi-output
+    // object; the engine's live round-trip resolves it via the async pre-pass
+    // (see residual note in docs/agent-handoff.md). Here we await the bridge work.
+    executeRegistryNodeUnlaced(node, nodeInstance, () => undefined, (id, def) => def, { revitBridge: bridge });
+    expect(bridge.requestSelection).toHaveBeenCalledWith({ categories: ['Walls'] });
+
+    // And the node's resolved output is the expected, correct shape.
+    const out = await node.execute({ revitBridge: bridge }, {}, { categories: 'Walls' });
+    expect(out.ids).toEqual(['1001', '1002']);
+    expect(out.count).toBe(2);
+  });
+
+  it('drives revit-set-parameters (a WRITE) through the dispatch helper and passes approval through', async () => {
+    const registry = getLiveCoreRegistry();
+    const node = registry.getNode('revit-set-parameters');
+    const bridge = makeBridge({ setParameters: vi.fn(async () => ({ ok: true, data: {} })) });
+    const nodeInstance = { type: 'revit-set-parameters', controlValues: { requireApproval: true } };
+    executeRegistryNodeUnlaced(
+      node,
+      nodeInstance,
+      (portId) => {
+        if (portId === 'element') return { id: 'e-9' };
+        if (portId === 'params') return { Comments: 'done' };
+        return undefined;
+      },
+      (id, def) => def,
+      { revitBridge: bridge }
+    );
+    // The registry node's execute ran with the engine-resolved inputs/controls.
+    const [elementId, params, deps] = bridge.setParameters.mock.calls[0];
+    expect(elementId).toBe('e-9');
+    expect(params).toEqual({ Comments: 'done' });
+    expect(deps.approval).toMatchObject({ required: true });
   });
 });
 
