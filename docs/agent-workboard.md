@@ -25,7 +25,7 @@ root `README.md` · `docs/NOVA.md` · `.github/workflows/ci.yml`
 
 | Branch | Agent | Task | Owned paths (globs) | Hot locks | Started | Status |
 |---|---|---|---|---|---|---|
-| _(none — board is clear)_ | | | | | | |
+| feat/geo-curve-surface-eval | geometry-engineer | T4 curve/surface frame-eval kernel (M2) | src/geometry/curve-eval.js, src/geometry/surface-eval.js, src/geometry/index.js (thin wire), tests/geometry/** | — | 2026-06-04 | active |
 
 <!--
 Example row (copy, fill in, remove this comment block's example when claiming):
