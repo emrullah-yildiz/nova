@@ -35,7 +35,7 @@ SCCs with each before relying on this list publicly.]`
 | **Cloudflare, Inc.** | Hosting (Workers), session/token/rate store (KV), real-time rooms (Durable Objects), CDN, DNS | Account & session identifiers; all request traffic; KV-stored session/verification/rate data | Global edge (HQ US) |
 | **Neon, Inc.** | Serverless Postgres database | Account, projects, collaboration, audit, encrypted AI key | **EU — Ireland** |
 | **Google LLC** | "Sign in with Google" (OIDC) **only** | email, name, Google account id | US |
-| **Resend** | Transactional email (verification, invitations) — *if email sending is configured* | Recipient email address + email content | US |
+| **Resend** | Transactional email (account verification, invitations) | Recipient email address + email content | US |
 
 `[Keep this table current; adding/removing a sub-processor is a notify-users event.]`
 
