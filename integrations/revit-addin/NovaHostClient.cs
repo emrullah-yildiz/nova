@@ -99,7 +99,7 @@ public class NovaHostClient : IDisposable
         {
             role = "host",
             pairingToken = _pairingToken,
-            capabilities = new[] { "project.snapshot", "elements.query", "geometry.get", "geometry.create", "parameter.get", "parameter.set" }
+            capabilities = new[] { "project.snapshot", "elements.query", "geometry.get", "geometry.create", "parameter.get", "parameter.set", "selection.query", "geometry.place" }
         });
         await SendAsync(hello, ct).ConfigureAwait(false);
 
@@ -195,6 +195,14 @@ public class NovaHostClient : IDisposable
 
                     case "geometry.create":
                         HandleGeometryCreate(requestId, root);
+                        break;
+
+                    case "geometry.place":
+                        HandleGeometryPlace(requestId, root);
+                        break;
+
+                    case "selection.query":
+                        HandleSelectionQuery(requestId, root);
                         break;
 
                     case "parameter.get":
@@ -490,6 +498,15 @@ public class NovaHostClient : IDisposable
             return;
         }
 
+        // M4-T1 contract shape: { elementId, params: { [name]: value } }.
+        // Detect it by the presence of a `params` object map and route to the
+        // contract handler; otherwise fall through to the legacy batch shape.
+        if (TryReadContractParameterPayload(request, out var contractElementId, out var contractNames))
+        {
+            HandleParameterGetContract(requestId, doc, contractElementId, contractNames);
+            return;
+        }
+
         var elementIds = ReadElementIds(request);
         var parameterName = ReadParameterName(request);
         if (string.IsNullOrWhiteSpace(parameterName))
@@ -548,6 +565,15 @@ public class NovaHostClient : IDisposable
                 code = "WRITE_APPROVAL_REQUIRED",
                 message = "Revit parameter writes require explicit user approval."
             });
+            return;
+        }
+
+        // M4-T1 contract shape: { elementId, params: { [name]: value } }.
+        // The approval gate above applies to both shapes; the contract path runs
+        // only after approval has been granted.
+        if (TryReadContractParameterPayload(request, out var contractElementId, out _))
+        {
+            HandleParameterSetContract(requestId, doc, payload, contractElementId);
             return;
         }
 
@@ -624,6 +650,628 @@ public class NovaHostClient : IDisposable
             count = successCount,
             ok = successCount == results.Count
         });
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // M4-T1 contract handlers (selection.query / geometry.place / parameter.*)
+    //
+    // These match the payload shapes documented in
+    // src/integrations/connect/protocol.js (MESSAGE_TYPES + the M4 validators).
+    // Element ids are strings on the wire; coordinates are emitted in Revit
+    // internal units (feet) with units metadata, matching the existing
+    // geometry.get envelope.
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// True when the request carries the M4-T1 parameter payload shape
+    /// ({ elementId: string, params: { ... } }). Returns the element id and the
+    /// parameter names (the keys of the `params` map).
+    /// </summary>
+    private static bool TryReadContractParameterPayload(JsonElement request, out long elementId, out List<string> parameterNames)
+    {
+        elementId = 0;
+        parameterNames = new List<string>();
+
+        JsonElement payload = default;
+        if (!request.TryGetProperty("payload", out payload) || payload.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        // Contract requires a singular `elementId` AND a `params` object map.
+        if (!payload.TryGetProperty("elementId", out var idProp) ||
+            !TryReadElementId(idProp, out elementId))
+        {
+            return false;
+        }
+        if (!payload.TryGetProperty("params", out var paramsProp) ||
+            paramsProp.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        foreach (var prop in paramsProp.EnumerateObject())
+        {
+            if (!string.IsNullOrEmpty(prop.Name)) parameterNames.Add(prop.Name);
+        }
+        return true;
+    }
+
+    private void HandleParameterGetContract(string? requestId, Document doc, long elementId, List<string> parameterNames)
+    {
+        var element = doc.GetElement(new ElementId(elementId));
+        if (element == null)
+        {
+            ReplyError(requestId, "Element " + elementId + " not found");
+            return;
+        }
+
+        // If no names were requested, report every readable parameter.
+        var resultParams = new Dictionary<string, object?>();
+        if (parameterNames.Count == 0)
+        {
+            foreach (var kvp in SerializeParameters(element))
+            {
+                resultParams[kvp.Key] = kvp.Value;
+            }
+        }
+        else
+        {
+            foreach (var name in parameterNames)
+            {
+                var param = element.LookupParameter(name);
+                resultParams[name] = param == null ? null : ReadParameterValue(doc, param);
+            }
+        }
+
+        Reply(requestId, "parameter.get.result", new
+        {
+            elementId = elementId.ToString(CultureInfo.InvariantCulture),
+            @params = resultParams,
+            ok = true
+        });
+    }
+
+    private void HandleParameterSetContract(string? requestId, Document doc, JsonElement payload, long elementId)
+    {
+        if (!payload.TryGetProperty("params", out var paramsProp) ||
+            paramsProp.ValueKind != JsonValueKind.Object)
+        {
+            ReplyError(requestId, "parameter.set requires a params object map");
+            return;
+        }
+
+        var element = doc.GetElement(new ElementId(elementId));
+        if (element == null)
+        {
+            ReplyError(requestId, "Element " + elementId + " not found");
+            return;
+        }
+
+        var results = new List<Dictionary<string, object?>>();
+        using (var tx = new Transaction(doc, "Nova Set Parameters"))
+        {
+            tx.Start();
+            foreach (var entry in paramsProp.EnumerateObject())
+            {
+                var name = entry.Name;
+                var param = element.LookupParameter(name);
+                if (param == null)
+                {
+                    results.Add(ParameterSetResult(elementId, name, false, "Parameter not found", null));
+                    continue;
+                }
+                if (param.IsReadOnly)
+                {
+                    results.Add(ParameterSetResult(elementId, name, false, "Parameter is read-only", ReadParameterValue(doc, param)));
+                    continue;
+                }
+                try
+                {
+                    if (TrySetParameterValue(param, entry.Value, out var normalized, out var message))
+                    {
+                        results.Add(ParameterSetResult(elementId, name, true, message, normalized));
+                    }
+                    else
+                    {
+                        results.Add(ParameterSetResult(elementId, name, false, message, ReadParameterValue(doc, param)));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    results.Add(ParameterSetResult(elementId, name, false, ex.Message, ReadParameterValue(doc, param)));
+                }
+            }
+            tx.Commit();
+        }
+
+        var successCount = results.Count(r => r.TryGetValue("ok", out var ok) && ok is bool b && b);
+        Reply(requestId, "parameter.set.result", new
+        {
+            elementId = elementId.ToString(CultureInfo.InvariantCulture),
+            results,
+            count = successCount,
+            ok = successCount == results.Count
+        });
+    }
+
+    /// <summary>
+    /// selection.query → selection.result. Enumerates the queried selection
+    /// (current selection by default), optionally filtered by category, and when
+    /// `includeFaces` is set, attaches a best-effort list of planar faces
+    /// (faceId + axis-aligned bbox) for each element.
+    /// </summary>
+    private void HandleSelectionQuery(string? requestId, JsonElement request)
+    {
+        var uiDoc = _uiApp.ActiveUIDocument;
+        var doc = uiDoc?.Document;
+        if (uiDoc == null || doc == null)
+        {
+            ReplyError(requestId, "No active Revit document");
+            return;
+        }
+
+        var categories = new List<string>();
+        var includeFaces = false;
+
+        JsonElement payload = default;
+        if (request.TryGetProperty("payload", out var p)) payload = p;
+        if (payload.ValueKind == JsonValueKind.Object)
+        {
+            if (payload.TryGetProperty("categories", out var catsProp) && catsProp.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var c in catsProp.EnumerateArray())
+                {
+                    var name = c.GetString();
+                    if (!string.IsNullOrEmpty(name)) categories.Add(name);
+                }
+            }
+            if (payload.TryGetProperty("includeFaces", out var facesProp) &&
+                (facesProp.ValueKind == JsonValueKind.True || facesProp.ValueKind == JsonValueKind.False))
+            {
+                includeFaces = facesProp.GetBoolean();
+            }
+        }
+
+        var selIds = uiDoc.Selection.GetElementIds();
+        var elements = new List<Dictionary<string, object?>>();
+        var truncatedFaces = false;
+
+        if (selIds != null)
+        {
+            foreach (var selId in selIds)
+            {
+                var el = doc.GetElement(selId);
+                if (el == null) continue;
+
+                var catName = el.Category?.Name ?? "Unknown";
+                if (categories.Count > 0 &&
+                    !categories.Any(c => string.Equals(c, catName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                var record = SerializeSelectionElement(el);
+                if (includeFaces)
+                {
+                    record["faces"] = ExtractPlanarFaces(el, out var capped);
+                    if (capped) truncatedFaces = true;
+                }
+                elements.Add(record);
+            }
+        }
+
+        var result = new Dictionary<string, object?>
+        {
+            ["elements"] = elements
+        };
+        if (includeFaces && truncatedFaces)
+        {
+            result["note"] = "Face list is best-effort: planar faces only, capped at "
+                + MaxFacesPerElement + " per element.";
+        }
+
+        Reply(requestId, "selection.result", result);
+    }
+
+    private const int MaxFacesPerElement = 64;
+
+    /// <summary>
+    /// Element record matching the selection.result contract: id is a STRING,
+    /// name/typeName/levelName are strings, params is a flat scalar map.
+    /// </summary>
+    private static Dictionary<string, object?> SerializeSelectionElement(Element element)
+    {
+        string levelName = "";
+        if (element.LevelId != ElementId.InvalidElementId)
+        {
+            if (element.Document.GetElement(element.LevelId) is Level levelEl) levelName = levelEl.Name;
+        }
+
+        string typeName = element.GetType().Name;
+        var typeId = element.GetTypeId();
+        if (typeId != ElementId.InvalidElementId)
+        {
+            var typeEl = element.Document.GetElement(typeId);
+            if (typeEl != null && !string.IsNullOrWhiteSpace(typeEl.Name)) typeName = typeEl.Name;
+        }
+
+        return new Dictionary<string, object?>
+        {
+            ["id"] = element.Id.Value.ToString(CultureInfo.InvariantCulture),
+            ["name"] = element.Name ?? "",
+            ["category"] = element.Category?.Name ?? "Unknown",
+            ["typeName"] = typeName,
+            ["levelName"] = levelName,
+            ["params"] = SerializeParameters(element)
+        };
+    }
+
+    /// <summary>
+    /// Best-effort planar-face extraction. Returns each planar face's stable
+    /// faceId (a Reference stable representation) and its axis-aligned bounding
+    /// box in Revit feet. Non-planar faces are skipped; the list is capped to
+    /// keep payloads bounded.
+    /// </summary>
+    private List<Dictionary<string, object?>> ExtractPlanarFaces(Element element, out bool capped)
+    {
+        capped = false;
+        var faces = new List<Dictionary<string, object?>>();
+
+        var opt = new Options
+        {
+            DetailLevel = ViewDetailLevel.Fine,
+            ComputeReferences = true
+        };
+
+        GeometryElement? geo;
+        try
+        {
+            geo = element.get_Geometry(opt);
+        }
+        catch
+        {
+            return faces;
+        }
+        if (geo == null) return faces;
+
+        // `capped` is an out parameter and so can't be captured by the local
+        // function below; track the cap with a local flag and copy it out at the
+        // end.
+        var localCapped = false;
+        var counter = 0;
+        void Walk(GeometryElement geometry)
+        {
+            foreach (var obj in geometry)
+            {
+                if (faces.Count >= MaxFacesPerElement) { localCapped = true; return; }
+
+                if (obj is Solid solid)
+                {
+                    foreach (Face face in solid.Faces)
+                    {
+                        if (faces.Count >= MaxFacesPerElement) { localCapped = true; return; }
+                        if (face is not PlanarFace) continue;
+
+                        var bbox = ComputeFaceBoundingBox(face);
+                        if (bbox == null) continue;
+
+                        var faceRef = face.Reference;
+                        var faceId = faceRef != null
+                            ? faceRef.ConvertToStableRepresentation(element.Document)
+                            : element.Id.Value.ToString(CultureInfo.InvariantCulture) + ":face:" + counter;
+                        counter++;
+
+                        faces.Add(new Dictionary<string, object?>
+                        {
+                            ["faceId"] = faceId,
+                            ["bbox"] = bbox
+                        });
+                    }
+                }
+                else if (obj is GeometryInstance instance)
+                {
+                    var instGeo = instance.GetInstanceGeometry();
+                    if (instGeo != null) Walk(instGeo);
+                }
+            }
+        }
+
+        Walk(geo);
+        capped = localCapped;
+        return faces;
+    }
+
+    /// <summary>
+    /// Axis-aligned bounding box of a face's tessellated mesh, as
+    /// { min: [x,y,z], max: [x,y,z] } in Revit feet. Returns null for a
+    /// degenerate face.
+    /// </summary>
+    private static Dictionary<string, object?>? ComputeFaceBoundingBox(Face face)
+    {
+        Mesh? mesh;
+        try
+        {
+            mesh = face.Triangulate();
+        }
+        catch
+        {
+            return null;
+        }
+        if (mesh == null || mesh.Vertices.Count == 0) return null;
+
+        double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue, maxZ = double.MinValue;
+        foreach (var v in mesh.Vertices)
+        {
+            if (v.X < minX) minX = v.X;
+            if (v.Y < minY) minY = v.Y;
+            if (v.Z < minZ) minZ = v.Z;
+            if (v.X > maxX) maxX = v.X;
+            if (v.Y > maxY) maxY = v.Y;
+            if (v.Z > maxZ) maxZ = v.Z;
+        }
+
+        return new Dictionary<string, object?>
+        {
+            ["min"] = new[] { Math.Round(minX, 6), Math.Round(minY, 6), Math.Round(minZ, 6) },
+            ["max"] = new[] { Math.Round(maxX, 6), Math.Round(maxY, 6), Math.Round(maxZ, 6) }
+        };
+    }
+
+    /// <summary>
+    /// geometry.place → place a FamilyInstance or AdaptiveComponent. Reuses the
+    /// same write-approval gate as HandleGeometryCreate: writes are rejected with
+    /// WRITE_APPROVAL_REQUIRED unless payload.approval.approved is true. Returns
+    /// the created element id(s).
+    /// </summary>
+    private void HandleGeometryPlace(string? requestId, JsonElement request)
+    {
+        var doc = _uiApp.ActiveUIDocument?.Document;
+        if (doc == null)
+        {
+            ReplyError(requestId, "No active Revit document");
+            return;
+        }
+
+        JsonElement payload = default;
+        if (request.TryGetProperty("payload", out var p)) payload = p;
+
+        // ── Write-approval gate (mirrors HandleGeometryCreate) ──
+        var approved = payload.ValueKind == JsonValueKind.Object &&
+            payload.TryGetProperty("approval", out var approval) &&
+            approval.TryGetProperty("approved", out var ap) &&
+            ap.GetBoolean();
+
+        if (!approved)
+        {
+            Reply(requestId, "geometry.place.result", new
+            {
+                ok = false,
+                code = "WRITE_APPROVAL_REQUIRED",
+                message = "Revit writes require explicit user approval."
+            });
+            return;
+        }
+
+        if (payload.ValueKind != JsonValueKind.Object)
+        {
+            ReplyError(requestId, "geometry.place payload must be an object");
+            return;
+        }
+
+        var kind = payload.TryGetProperty("kind", out var kindProp) ? kindProp.GetString() : null;
+        var familyType = payload.TryGetProperty("familyType", out var ftProp) ? ftProp.GetString() : null;
+        if (string.IsNullOrWhiteSpace(familyType))
+        {
+            ReplyError(requestId, "geometry.place familyType is required");
+            return;
+        }
+
+        // Points arrive as [[x,y,z], ...] in Revit feet (the same internal-unit
+        // system the host already emits for geometry.get).
+        var points = ReadPointList(payload);
+        if (points.Count == 0)
+        {
+            ReplyError(requestId, "geometry.place points must be a non-empty array of [x,y,z] tuples");
+            return;
+        }
+
+        var symbol = ResolveFamilySymbol(doc, familyType!);
+        if (symbol == null)
+        {
+            ReplyError(requestId, "Family type '" + familyType + "' not found in the active document");
+            return;
+        }
+
+        string? hostFaceId = payload.TryGetProperty("hostFaceId", out var hfProp) && hfProp.ValueKind == JsonValueKind.String
+            ? hfProp.GetString()
+            : null;
+
+        try
+        {
+            using var tx = new Transaction(doc, "Nova Place Family");
+            tx.Start();
+
+            if (!symbol.IsActive)
+            {
+                symbol.Activate();
+                doc.Regenerate();
+            }
+
+            var createdIds = new List<string>();
+
+            if (string.Equals(kind, "AdaptiveComponent", StringComparison.Ordinal))
+            {
+                var instance = AdaptiveComponentInstanceUtils.CreateAdaptiveComponentInstance(doc, symbol);
+                var placePoints = AdaptiveComponentInstanceUtils.GetInstancePlacementPointElementRefIds(instance);
+
+                var ordered = placePoints.ToList();
+                if (ordered.Count != points.Count)
+                {
+                    tx.RollBack();
+                    ReplyError(requestId,
+                        "AdaptiveComponent '" + familyType + "' expects " + ordered.Count +
+                        " placement points but received " + points.Count);
+                    return;
+                }
+
+                for (var i = 0; i < ordered.Count; i++)
+                {
+                    if (doc.GetElement(ordered[i]) is ReferencePoint rp)
+                    {
+                        rp.Position = points[i];
+                    }
+                }
+
+                ApplyPlacementParams(doc, instance, payload);
+                tx.Commit();
+                createdIds.Add(instance.Id.Value.ToString(CultureInfo.InvariantCulture));
+            }
+            else
+            {
+                // Default / FamilyInstance: place at the first point. When a
+                // hostFaceId is supplied, place onto that face; otherwise a
+                // free / level-hosted point instance.
+                FamilyInstance instance;
+                if (!string.IsNullOrWhiteSpace(hostFaceId))
+                {
+                    Reference? faceRef = null;
+                    try
+                    {
+                        faceRef = Reference.ParseFromStableRepresentation(doc, hostFaceId);
+                    }
+                    catch
+                    {
+                        faceRef = null;
+                    }
+                    if (faceRef == null)
+                    {
+                        tx.RollBack();
+                        ReplyError(requestId, "hostFaceId could not be resolved to a Revit face reference");
+                        return;
+                    }
+                    // Use the first point as the placement location, second point
+                    // (if any) to derive a reference direction on the face.
+                    var refDir = points.Count > 1 ? (points[1] - points[0]) : XYZ.BasisX;
+                    if (refDir.IsZeroLength()) refDir = XYZ.BasisX;
+                    instance = doc.Create.NewFamilyInstance(faceRef, points[0], refDir, symbol);
+                }
+                else
+                {
+                    var level = ResolvePlacementLevel(doc, payload);
+                    instance = level != null
+                        ? doc.Create.NewFamilyInstance(points[0], symbol, level, Autodesk.Revit.DB.Structure.StructuralType.NonStructural)
+                        : doc.Create.NewFamilyInstance(points[0], symbol, Autodesk.Revit.DB.Structure.StructuralType.NonStructural);
+                }
+
+                ApplyPlacementParams(doc, instance, payload);
+                tx.Commit();
+                createdIds.Add(instance.Id.Value.ToString(CultureInfo.InvariantCulture));
+            }
+
+            Reply(requestId, "geometry.place.result", new
+            {
+                ok = true,
+                data = new
+                {
+                    kind = kind ?? "FamilyInstance",
+                    familyType,
+                    elementIds = createdIds
+                },
+                message = "Placed " + createdIds.Count + " element(s)."
+            });
+        }
+        catch (Exception ex)
+        {
+            ReplyError(requestId, "geometry.place failed: " + ex.Message);
+        }
+    }
+
+    /// <summary>Reads the contract `points: [[x,y,z], ...]` array into XYZ (feet).</summary>
+    private static List<XYZ> ReadPointList(JsonElement payload)
+    {
+        var points = new List<XYZ>();
+        if (!payload.TryGetProperty("points", out var pointsProp) || pointsProp.ValueKind != JsonValueKind.Array)
+        {
+            return points;
+        }
+        foreach (var tuple in pointsProp.EnumerateArray())
+        {
+            if (tuple.ValueKind != JsonValueKind.Array) continue;
+            var coords = new double[3];
+            var idx = 0;
+            foreach (var c in tuple.EnumerateArray())
+            {
+                if (idx < 3 && c.ValueKind == JsonValueKind.Number) coords[idx] = c.GetDouble();
+                idx++;
+            }
+            if (idx >= 3) points.Add(new XYZ(coords[0], coords[1], coords[2]));
+        }
+        return points;
+    }
+
+    /// <summary>
+    /// Resolves a FamilySymbol (family type) by name. Matches on the type name
+    /// alone, or on the "Family : Type" combined form.
+    /// </summary>
+    private static FamilySymbol? ResolveFamilySymbol(Document doc, string familyType)
+    {
+        var symbols = new FilteredElementCollector(doc)
+            .OfClass(typeof(FamilySymbol))
+            .Cast<FamilySymbol>();
+
+        foreach (var symbol in symbols)
+        {
+            if (string.Equals(symbol.Name, familyType, StringComparison.Ordinal))
+            {
+                return symbol;
+            }
+            var combined = (symbol.Family?.Name ?? "") + " : " + symbol.Name;
+            if (string.Equals(combined, familyType, StringComparison.Ordinal))
+            {
+                return symbol;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Optional `level` name in the payload → matching Level element.</summary>
+    private static Level? ResolvePlacementLevel(Document doc, JsonElement payload)
+    {
+        if (!payload.TryGetProperty("level", out var levelProp) || levelProp.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+        var levelName = levelProp.GetString();
+        if (string.IsNullOrWhiteSpace(levelName)) return null;
+
+        return new FilteredElementCollector(doc)
+            .OfClass(typeof(Level))
+            .Cast<Level>()
+            .FirstOrDefault(l => string.Equals(l.Name, levelName, StringComparison.Ordinal));
+    }
+
+    /// <summary>Applies the optional `params` scalar map to the placed instance.</summary>
+    private static void ApplyPlacementParams(Document doc, Element instance, JsonElement payload)
+    {
+        if (!payload.TryGetProperty("params", out var paramsProp) || paramsProp.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+        foreach (var entry in paramsProp.EnumerateObject())
+        {
+            var param = instance.LookupParameter(entry.Name);
+            if (param == null || param.IsReadOnly) continue;
+            try
+            {
+                TrySetParameterValue(param, entry.Value, out _, out _);
+            }
+            catch
+            {
+                // Skip params that can't be applied; placement still succeeds.
+            }
+        }
     }
 
     private static JsonElement SelectParameterSetValue(JsonElement valuesProp, int index)
