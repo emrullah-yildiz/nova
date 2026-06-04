@@ -80,7 +80,7 @@ try
 
     Console.WriteLine();
     Ok("Nova Connect was installed successfully.");
-    Info($"Restart Autodesk Revit {RevitVersion}, then open Add-Ins > External Tools > Nova Connect.");
+    Info($"Restart Autodesk Revit {RevitVersion}, then use the Add-Ins tab > Nova Connect ribbon panel (Connect / Open Nova).");
     ExitPause(quiet);
     return 0;
 }

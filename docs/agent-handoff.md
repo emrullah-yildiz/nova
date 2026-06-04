@@ -13,6 +13,33 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-04 - Revit add-in ribbon: two-button On/Off + Open Nova (feat/revit-connect-ribbon)
+
+**Agent/branch:** Connect/Revit Engineer — `feat/revit-connect-ribbon` (off `develop`; do not merge/push)
+
+**Goal:** Replace the single "Add-Ins > External Tools > Nova Connect" command with a
+Revit ribbon panel ("Nova Connect" on the built-in Add-Ins tab) created by a new
+`IExternalApplication`. Two buttons: (1) a connection On/Off toggle (red dot →
+green dot) that starts the hub + `NovaHostClient`; (2) "Open Nova" that launches the
+PRODUCTION web app (https://hi-nova.work/) in the browser with the connect auto-params.
+
+**Claimed files (owned, EDIT/NEW only these):**
+- NEW `integrations/revit-addin/NovaConnectApp.cs` (IExternalApplication, ribbon)
+- NEW `integrations/revit-addin/ConnectionToggleCommand.cs` (toggle command)
+- NEW `integrations/revit-addin/DotIcons.cs` (programmatic red/green dot ImageSources)
+- EDIT `integrations/revit-addin/OpenNovaCommand.cs` (now just opens the prod site)
+- EDIT `integrations/revit-addin/NovaConnectSettings.cs` (DefaultNovaUrl → prod)
+- EDIT `integrations/revit-addin/Nova.addin.template` (register the Application)
+- EDIT `docs/architecture/revit-connect.md`, `docs/agent-handoff.md` (this entry)
+
+**Follow-up flagged (hub bundling):** the hub still requires a Nova git checkout + Node
+(via `NovaLocalPaths.FindRepoRoot` / `NOVA_REPO_ROOT`) until the installer bundles a
+self-contained hub — so the connection toggle only goes green on a dev machine (or with
+`NOVA_REPO_ROOT` set). The toggle fails gracefully (stays red + TaskDialog) otherwise.
+See the "Connection toggle and the hub-bundling follow-up" section in revit-connect.md.
+
+**Merge status:** Open branch `feat/revit-connect-ribbon` — IN PROGRESS, do not merge.
+
 ## 2026-06-04 - FIX: Revit parameter-node duplicates consolidated (fix/revit-node-dedup)
 
 **Agent/branch:** Core/Runtime Engineer — `fix/revit-node-dedup` (do not merge/push)
