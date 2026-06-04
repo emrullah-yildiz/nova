@@ -18,12 +18,25 @@ import { createKvStateStore, createR2ObjectStorage } from './adapters.mjs';
 import { checkAuthRate, resetAuthRate } from './auth-rate-limit.mjs';
 import {
   clearSessionCookie, parseCookie,
-  serializeSlotCookie, clearSlotCookie, serializeActivePointer, clearActivePointer,
+  serializeSlotCookie, clearSlotCookie, clearAllSlotCookies, serializeActivePointer, clearActivePointer,
   parseAllSlots, parseActiveSlot, clampSlot, MAX_ACCOUNT_SLOTS
 } from './cookies.mjs';
 import { hashToken } from '../src/enterprise/state-hash.mjs';
 
 let cachedApi = null;
+
+// Test-only: the module-level cache binds the first env's store for the isolate
+// lifetime (correct in the Worker — one env per isolate). Tests that drive
+// handleEnterpriseApi with different envs/KVs must reset it between cases.
+export function __resetApiCacheForTests() {
+  cachedApi = null;
+}
+
+// Test-only: boot (or reuse) the cached store for an env so tests can inspect or
+// mutate store state (e.g. simulate a cold-isolate empty KV index for SEC-004).
+export async function __getStoreForTests(env) {
+  return (await getApi(env)).store;
+}
 
 async function getApi(env) {
   if (cachedApi) return cachedApi;
@@ -185,7 +198,10 @@ export async function handleEnterpriseApi(request, env, ctx) {
   }
 
   let body = {};
-  if (['POST', 'PUT', 'PATCH'].includes(request.method)) {
+  // DELETE carries a body too — `DELETE /api/me` ships { confirmEmail, password }
+  // (SEC-004). Without parsing it the delete dispatcher 400s on a missing
+  // confirmEmail, so account deletion could never complete on the Worker.
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) {
     try { body = await request.json(); } catch { body = {}; }
   }
 
@@ -218,6 +234,22 @@ export async function handleEnterpriseApi(request, env, ctx) {
       return Response.json({ ok: true, user: map[slot].user }, { status: 200, headers: headersWith(env, [serializeActivePointer(slot, null)]) });
     }
 
+    // SEC-004 / F-001: for DELETE /api/me we MUST capture the cookie-derived
+    // slot→token map and the active user's id BEFORE dispatch runs, because
+    // dispatch deletes the user row. After deletion resolveSlots() can no longer
+    // authenticate this browser's cookies (requireUser throws 404), so the
+    // active session's `session:<hash>` key would never be purged. Capturing it
+    // up front guarantees the deleting browser's live session is always dropped.
+    const isDeleteMe = url.pathname === '/api/me' && request.method === 'DELETE';
+    let preDeleteMap = null;
+    let preDeleteActive = null;
+    let capturedSlotTokens = null;
+    if (isDeleteMe) {
+      preDeleteMap = await resolveSlots(store, cookieHeader);
+      preDeleteActive = resolveActiveSlot(cookieHeader, preDeleteMap);
+      capturedSlotTokens = parseAllSlots(cookieHeader);
+    }
+
     const { status, body: payload } = await dispatch({
       method: request.method,
       path: url.pathname,
@@ -243,14 +275,49 @@ export async function handleEnterpriseApi(request, env, ctx) {
       cookies.push(serializeActivePointer(slot, cookieMaxAge));
       if (parseCookie(cookieHeader)) cookies.push(clearSessionCookie()); // migrate legacy → slotted
     }
-    if (status < 400 && url.pathname === '/api/me' && request.method === 'DELETE') {
-      const map = await resolveSlots(store, cookieHeader);
-      const active = parseActiveSlot(cookieHeader);
-      if (active !== null) {
-        cookies.push(clearSlotCookie(active));
-        delete map[active];
+    if (status < 400 && isDeleteMe) {
+      // SEC-004: a deleted account must leave NO working credential behind.
+      // The slot map + active slot were captured from this browser's cookies
+      // BEFORE dispatch deleted the user (F-001): re-resolving here would fail
+      // auth (the user row is gone), so we rely on the pre-delete snapshot. The
+      // active slot's user is the one just deleted. Drop the KV session for
+      // EVERY slot owned by that user (not just the active one) plus every
+      // session:/emailverify: key the store enumerated for them, and clear all
+      // of their slot cookies — other signed-in accounts in this browser survive.
+      const map = preDeleteMap || {};
+      const active = preDeleteActive;
+      const deletedUserId = active !== null && map[active] ? map[active].userId : null;
+      const dropKv = async (key) => {
+        if (store.stateStore && key) { try { await store.stateStore.delete(key); } catch { /* ignore */ } }
+      };
+      // KV keys the store enumerated for the deleted user (session + emailverify).
+      // After a cold isolate the in-memory index is empty, so this can be sparse;
+      // the cookie-derived drop below is the always-on guarantee for the active
+      // browser's live session.
+      for (const key of (payload && Array.isArray(payload.kvKeys) ? payload.kvKeys : [])) await dropKv(key);
+      // Plus session keys derived from THIS request's slot cookies, captured
+      // up front. This is the security-critical path: even when the store's
+      // userKvKeys index is empty (cold isolate), the deleting browser's active
+      // `session:<hash>` key is ALWAYS dropped here.
+      const slotTokens = capturedSlotTokens || {};
+      const survivingSlots = {};
+      for (const [slotStr, entry] of Object.entries(map)) {
+        const slot = Number(slotStr);
+        if (deletedUserId !== null && entry.userId === deletedUserId) {
+          await dropKv('session:' + hashToken(entry.token));
+          cookies.push(clearSlotCookie(slot));
+        } else {
+          survivingSlots[slot] = entry;
+        }
       }
-      const next = Object.keys(map).map(Number).sort((a, b) => a - b)[0];
+      // Also clear any slot cookie whose token failed auth (not in map) — it may
+      // be a stale/expired token for the deleted user; safest to wipe it.
+      for (const slotStr of Object.keys(slotTokens)) {
+        const slot = Number(slotStr);
+        if (!(slot in map)) cookies.push(clearSlotCookie(slot));
+      }
+      // Re-point the active pointer to a surviving account, else clear it.
+      const next = Object.keys(survivingSlots).map(Number).sort((a, b) => a - b)[0];
       if (next !== undefined) cookies.push(serializeActivePointer(next));
       else {
         cookies.push(clearActivePointer());
@@ -284,7 +351,7 @@ async function handleLogout(env, store, cookieHeader, body) {
 
   if (scope === 'all') {
     // Clear every slot we can see (valid or not) + the pointer + legacy.
-    for (const s of Object.keys(parseAllSlots(cookieHeader)).map(Number)) cookies.push(clearSlotCookie(s));
+    for (const c of clearAllSlotCookies(cookieHeader)) cookies.push(c);
     for (const s of Object.keys(map).map(Number)) await dropKv(map[s].token);
     cookies.push(clearActivePointer());
     cookies.push(clearSessionCookie());
