@@ -13,6 +13,61 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+## 2026-06-04 - FIX: Revit parameter-node duplicates consolidated (fix/revit-node-dedup)
+
+**Agent/branch:** Core/Runtime Engineer — `fix/revit-node-dedup` (do not merge/push)
+
+**Bug (user-reported):** the Revit category shipped two functional duplicates that
+passed the type-collision check only because their `type` strings differed:
+- get-params: `revit-get-parameters` (Revit.GetParameters, M4) duplicated
+  `revit-get-parameter-values` (Revit.GetParameterValues).
+- set-params: `revit-set-parameters` (Revit.SetParameters, M4) duplicated
+  `revit-set-parameter-values` (Revit.SetParameterValues).
+
+**Which way we consolidated (and why it INVERTS the brief's recommendation):**
+kept the `*-parameter-values` nodes, removed the M4 `*-parameters` nodes. The brief
+guessed the M4 `execute()` nodes were the live/intended path, but the evidence is the
+opposite:
+- The M4 param nodes resolve `globalThis/window.NovaRevitBridge`, which is **never wired
+  into the running app** (`src/main.js` only installs `window.RevitBridge`). They worked
+  only in unit tests with an injected `context.revitBridge`.
+- The `*-parameter-values` nodes ARE the app-wired live path: `engine.js`
+  `_prepareLiveRevitGeometries()` runs them against `window.RevitBridge.getLiveParameterValues
+  / setLiveParameterValues`, and `setLiveParameterValues` carries the **full SEC-013
+  server-issued-token flow** (`acquireWriteApproval` + `reportHostWrite`) — strictly stronger
+  than the M4 node, which only passed approval *metadata* through.
+- They also take a **batch list** of elements (the more useful form), vs the M4
+  single-element contract.
+
+So the survivors satisfy the brief's required traits: codegen fallback (yes), SEC-013
+write gate (server-side, the authoritative form), batch/list API (yes), one clear
+canonical name each. The one trait they don't have is a def-level `execute()` — they run
+live via the engine async pre-pass instead (see architectural note below).
+
+**Edits (Core/Runtime owned only):**
+- `src/core/nodes.js`: removed `revit-get-parameters` + `revit-set-parameters` defs and the
+  now-unused `toElementId` helper; updated the header comment. Kept the M4 select/place
+  nodes (they share `resolveRevitBridge`/`buildApprovalMeta`/`splitNames`/`extractElementIds`).
+- `src/core/node-metadata.js`: added Revit NODE_META so the genuinely-distinct nodes don't
+  read as duplicates — interactive SelectElements/SelectFaces vs programmatic
+  AllElementsInActiveView/AllElementsOfCategory; family-instance/adaptive PLACE vs DirectShape
+  SendGeometry; plus canonical get/set-parameter-values entries.
+- `tests/revit-host-nodes.test.js`: trimmed the M4 node lists from six to four, removed the
+  GetParameters/SetParameters describe blocks, swapped the WRITE dispatch guard to
+  `revit-place-family-instance`, and added a dedup guard (removed types are undefined, exactly
+  one get/one set param node, full canonical Revit inventory asserted).
+
+**Architectural concern flagged (TWO execution models still coexist):** live Revit nodes run
+through two different bridges/dispatch paths — (1) the engine async pre-pass against
+`window.RevitBridge` (the app-wired, SEC-013-bearing path used by element-geometries,
+parameter-values, send-geometry), and (2) the registry `execute()` dispatch against
+`NovaRevitBridge` (used by select/place; NovaRevitBridge is not wired in the app yet). This
+dedup removed the duplicate param NODES but did not unify the two MODELS. Follow-up: either
+wire `NovaRevitBridge` into the app and migrate the pre-pass nodes to `execute()`, or retire
+the `execute()`/NovaRevitBridge path in favor of the pre-pass + `window.RevitBridge`. Until
+then, NEW live Revit nodes should follow the pre-pass + `window.RevitBridge` model (it is the
+one actually running in production and the one carrying the SEC-013 gate).
+
 ## 2026-06-04 - FIX M4-T4: legacy→registry bridge dropped `execute` (F-001/F-002)
 
 **Agent/branch:** Core/Runtime Engineer — `feat/m4-host-node-defs` (fix in place, do not merge/push)

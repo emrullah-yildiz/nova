@@ -8,6 +8,57 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-04 - Revit Parameter Nodes: Keep The Live-Bridge / Pre-Pass Model, Drop The M4 `execute()` Duplicates
+
+**Status:** Accepted
+
+**Context:** The Revit category shipped two functional-duplicate pairs that slipped past the
+type-collision check because their `type` strings differed:
+`revit-get-parameters` (Revit.GetParameters) vs `revit-get-parameter-values`
+(Revit.GetParameterValues), and `revit-set-parameters` (Revit.SetParameters) vs
+`revit-set-parameter-values` (Revit.SetParameterValues). Each pair does the same job through
+**two different execution models**:
+- **Model A — engine async pre-pass + `window.RevitBridge`** (the `*-parameter-values`,
+  `revit-element-geometries`, `revit-send-geometry` nodes). `engine.js`
+  `_prepareLiveRevitGeometries()` resolves `globalThis/window.RevitBridge` (installed by
+  `src/integrations/revit/revit-nodes.js` via `installRevitNodes()` in `src/main.js`),
+  awaits the host round-trip, caches the result on the node, and `computeNodeValue` reads
+  the cache. `RevitBridge.setLiveParameterValues`/`sendGeometry` carry the **full SEC-013
+  flow**: server-issued single-use approval token (`acquireWriteApproval`) + authoritative
+  consume/audit (`reportHostWrite`). Takes a **batch list** of elements.
+- **Model B — registry `execute()` + `NovaRevitBridge`** (the M4 `revit-get-parameters`/
+  `revit-set-parameters`/`revit-select-*`/`revit-place-*` nodes). The def carries an async
+  `execute()` that resolves `context.revitBridge` ‖ `globalThis/window.NovaRevitBridge`.
+  But `NovaRevitBridge` is **never wired into the running app** — only injected in unit
+  tests — so the M4 param nodes were inert in production. The M4 write node only passed
+  approval *metadata* through (the hub/server was expected to enforce), not the full
+  client-side SEC-013 token acquisition.
+
+**Decision:** Consolidate each pair to **one** node, keeping the **Model A**
+`*-parameter-values` nodes (`revit-get-parameter-values`, `revit-set-parameter-values`) and
+removing the **Model B** M4 param duplicates (`revit-get-parameters`,
+`revit-set-parameters`). Rationale: Model A is the path actually wired and running in the
+app, carries the stronger (authoritative, client-acquired) SEC-013 token gate on writes,
+and exposes the more useful batch/list API. This **inverts** the original task's
+recommendation to keep the M4 `execute()` path, which was based on the assumption that the
+M4 bridge was live; it is not.
+
+The M4 **select/place** nodes (`revit-select-elements`, `revit-select-faces`,
+`revit-place-family-instance`, `revit-place-adaptive-component`) are NOT duplicates of
+anything and are kept; they still use Model B (`execute()` + `NovaRevitBridge`). To stop the
+genuinely-distinct acquisition/write nodes from *reading* as duplicates, `NODE_META`
+descriptions now spell out interactive-pick (SelectElements/SelectFaces) vs programmatic
+query (AllElementsInActiveView/AllElementsOfCategory), and family-instance/adaptive PLACE vs
+DirectShape SendGeometry.
+
+**Consequence / known residual:** two live-Revit execution models still coexist (pre-pass +
+`window.RevitBridge` for params/geometry; `execute()` + `NovaRevitBridge` for select/place).
+This decision removed the duplicate NODES, not the duplicate MODELS. Until they are unified,
+**new live Revit nodes follow Model A** (pre-pass + `window.RevitBridge`) — it is the path
+running in production and the one bearing the authoritative SEC-013 gate. Unifying the two
+models (either wiring `NovaRevitBridge` into the app and migrating pre-pass nodes to
+`execute()`, or retiring Model B) is a follow-up.
+
 ## 2026-06-04 - Branching/Grouping Is Nested Lists, Not A Tree Type (DataTree Infra Removed)
 
 **Status:** Accepted

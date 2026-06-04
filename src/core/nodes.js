@@ -54,12 +54,11 @@ export const TYPE_COLORS = {
 // ═══════════════════════════════════════
 // M4 round-trip host-node helpers (legacy Revit category)
 // ----------------------------------------------------------------------------
-// These legacy host nodes drive the live Revit round-trip through the M4-T3
-// browser bridge (src/integrations/revit/revit-bridge.js):
+// The interactive selection + placement host nodes drive the live Revit
+// round-trip through the M4-T3 browser bridge (src/integrations/revit/
+// revit-bridge.js):
 //   requestSelection(opts, deps?)            -> { elements: ContractElement[] }
 //   placeInstance(spec, deps?)               -> raw place result payload
-//   getParameters(elementId, names, deps?)   -> { elementId, params: {name:value} }
-//   setParameters(elementId, params, deps?)  -> raw set result payload
 //
 // core/ must not import integrations/ (the layering runs the other way: every
 // other module imports core), so the bridge is resolved at execute time:
@@ -69,7 +68,12 @@ export const TYPE_COLORS = {
 // A node throws a clear "connect first" error when no bridge is available, so a
 // graph run without a live session fails loud instead of silently no-op'ing.
 //
-// WRITES (place / set) only PASS approval metadata through to the bridge; the
+// PARAMETER get/set are NOT here — they are the batch, app-wired
+// Revit.GetParameterValues / Revit.SetParameterValues nodes (engine pre-pass +
+// window.RevitBridge, full SEC-013 token gate). The single-element M4 parameter
+// nodes were removed as duplicates (fix/revit-node-dedup, 2026-06-04 decision).
+//
+// WRITES (place) only PASS approval metadata through to the bridge; the
 // hub/server performs the interactive approval and is the authority (SEC-013).
 // These nodes never fabricate an approval.
 // ═══════════════════════════════════════
@@ -119,22 +123,6 @@ function splitNames(raw) {
   return String(raw).split(',').map(s => s.trim()).filter(Boolean);
 }
 
-// Coerce a port input that may carry RevitElement objects / records / raw ids
-// into a single element id string for the singular-elementId M4 contract.
-function toElementId(value) {
-  if (value === undefined || value === null) return '';
-  const el = Array.isArray(value) ? value[0] : value;
-  if (el === undefined || el === null) return '';
-  if (typeof el === 'object') {
-    if (el.identity && el.identity.sourceId != null) return String(el.identity.sourceId);
-    if (el.id != null) return String(el.id);
-    if (el.elementId != null) return String(el.elementId);
-    if (el.sourceId != null) return String(el.sourceId);
-    return '';
-  }
-  return String(el);
-}
-
 // ═══════════════════════════════════════
 // 13. HOSTS
 NODE_LIBRARY.categories.push({ id: 'host', name: 'Host', color: '#74c7ec', icon: 'H', nodes: [
@@ -155,18 +143,15 @@ NODE_LIBRARY.categories.push({ id: 'revit', name: 'Revit', color: '#89dceb', ico
   { type: 'revit-set-parameter-values', name: 'Revit.SetParameterValues', icon: 'P+', inputs: [{ id: 'elements', name: 'Elements', type: 'list' },{ id: 'parameterName', name: 'Parameter Name', type: 'string' },{ id: 'value', name: 'Value', type: 'any' }], outputs: [{ id: 'results', name: 'Results', type: 'list' },{ id: 'count', name: 'Count', type: 'number' },{ id: 'success', name: 'Success', type: 'boolean' }], controls: [{ id: 'parameterName', type: 'text', default: 'Comments', label: 'Parameter Name' },{ id: 'value', type: 'text', default: '', label: 'Value' }], preview: true, codegen: { python: '{{results}} = RevitBridge.setParameterValues({{elements}}, "{{ctrl.parameterName}}", "{{ctrl.value}}")\\n{{count}} = len([r for r in {{results}} if r.get("ok")])\\n{{success}} = {{count}} == len({{results}})' } },
   { type: 'revit-send-geometry', name: 'Revit.SendGeometry', icon: '⬆', inputs: [{ id: 'geometry', name: 'Geometry', type: 'any' },{ id: 'category', name: 'Category', type: 'string' },{ id: 'name', name: 'Name', type: 'string' }], outputs: [{ id: 'result', name: 'Result', type: 'any' },{ id: 'elementId', name: 'Element Id', type: 'string' },{ id: 'success', name: 'Success', type: 'boolean' }], controls: [{ id: 'category', type: 'dropdown', options: ['Generic Models','Mass','Furniture','Walls','Floors','Roofs','Ceilings','Columns','Structural Framing','Mechanical Equipment','Plumbing Fixtures','Electrical Fixtures','Electrical Equipment'], default: 'Generic Models', label: 'Category' },{ id: 'name', type: 'text', default: 'Nova Geometry', label: 'Name' }], preview: true, codegen: { python: '{{result}} = RevitBridge.sendGeometry({{geometry}}, {}, {"category": "{{ctrl.category}}", "name": "{{ctrl.name}}"})\\n{{elementId}} = {{result}}.get("data", {}).get("directShapeId")\\n{{success}} = {{result}}.get("ok") == True' } },
 
-  // ── M4 round-trip nodes — drive the live bridge (selection / place / params) ──
-  { type: 'revit-get-parameters', name: 'Revit.GetParameters', icon: '🔍', inputs: [{ id: 'element', name: 'Element', type: 'any' },{ id: 'names', name: 'Names', type: 'string' }], outputs: [{ id: 'elementId', name: 'Element Id', type: 'string' },{ id: 'params', name: 'Params', type: 'any' },{ id: 'values', name: 'Values', type: 'list' }], controls: [{ id: 'names', type: 'text', default: 'Comments', label: 'Names (comma-sep)' }], preview: true,
-    async execute(context, inputs, controls) {
-      const bridge = resolveRevitBridge(context);
-      const elementId = toElementId(inputs.element);
-      const names = splitNames(inputs.names !== undefined && inputs.names !== null ? inputs.names : controls.names);
-      const res = await bridge.getParameters(elementId, names);
-      const params = res && res.params && typeof res.params === 'object' ? res.params : {};
-      return { elementId: res && res.elementId !== undefined ? String(res.elementId) : elementId, params, values: names.map(n => (params[n] !== undefined ? params[n] : null)) };
-    },
-    codegen: { python: '{{_r}} = RevitBridge.getParameters("{{element}}", "{{ctrl.names}}".split(","))\\n{{elementId}} = {{_r}}.get("elementId")\\n{{params}} = {{_r}}.get("params", {})\\n{{values}} = list({{params}}.values())' } },
-
+  // ── M4 round-trip nodes — drive the live bridge (selection / placement) ──
+  // NOTE: the M4 single-element parameter nodes (revit-get-parameters /
+  // revit-set-parameters) were removed in fix/revit-node-dedup as functional
+  // duplicates of the batch, app-wired Revit.GetParameterValues /
+  // Revit.SetParameterValues above. The survivors run live through the engine
+  // pre-pass (window.RevitBridge.get/setLiveParameterValues) and carry the full
+  // SEC-013 server-issued-token write gate; the removed M4 nodes resolved a
+  // NovaRevitBridge that was never wired into the running app. See decisions.md
+  // (2026-06-04 "Revit parameter node consolidation").
   { type: 'revit-place-adaptive-component', name: 'Revit.PlaceAdaptiveComponent', icon: '◈', inputs: [{ id: 'familyType', name: 'Family Type', type: 'string' },{ id: 'points', name: 'Points', type: 'list' },{ id: 'params', name: 'Params', type: 'any' }], outputs: [{ id: 'elementIds', name: 'Element Ids', type: 'list' },{ id: 'count', name: 'Count', type: 'number' },{ id: 'success', name: 'Success', type: 'boolean' }], controls: [{ id: 'familyType', type: 'text', default: '', label: 'Family Type' },{ id: 'requireApproval', type: 'boolean', default: true, label: 'Require Approval' }], preview: true,
     async execute(context, inputs, controls) {
       const bridge = resolveRevitBridge(context);
@@ -228,20 +213,7 @@ NODE_LIBRARY.categories.push({ id: 'revit', name: 'Revit', color: '#89dceb', ico
       });
       return { elements, faceIds, count: faceIds.length };
     },
-    codegen: { python: '{{_r}} = RevitBridge.requestSelection({"includeFaces": True})\\n{{elements}} = {{_r}}.get("elements", [])\\n{{faceIds}} = [f.get("faceId") for e in {{elements}} for f in e.get("faces", [])]\\n{{count}} = len({{faceIds}})' } },
-
-  { type: 'revit-set-parameters', name: 'Revit.SetParameters', icon: '✎', inputs: [{ id: 'element', name: 'Element', type: 'any' },{ id: 'params', name: 'Params', type: 'any' }], outputs: [{ id: 'elementId', name: 'Element Id', type: 'string' },{ id: 'result', name: 'Result', type: 'any' },{ id: 'success', name: 'Success', type: 'boolean' }], controls: [{ id: 'requireApproval', type: 'boolean', default: true, label: 'Require Approval' }], preview: true,
-    async execute(context, inputs, controls) {
-      const bridge = resolveRevitBridge(context);
-      const elementId = toElementId(inputs.element);
-      const params = inputs.params && typeof inputs.params === 'object' && !Array.isArray(inputs.params) ? inputs.params : {};
-      const deps = {};
-      const approval = buildApprovalMeta(controls);
-      if (approval !== undefined) deps.approval = approval;
-      const res = await bridge.setParameters(elementId, params, deps);
-      return { elementId, result: res, success: isWriteOk(res) };
-    },
-    codegen: { python: '{{result}} = RevitBridge.setParameters("{{element}}", {{params}})\\n{{elementId}} = "{{element}}"\\n{{success}} = {{result}}.get("ok") == True' } }
+    codegen: { python: '{{_r}} = RevitBridge.requestSelection({"includeFaces": True})\\n{{elements}} = {{_r}}.get("elements", [])\\n{{faceIds}} = [f.get("faceId") for e in {{elements}} for f in e.get("faces", [])]\\n{{count}} = len({{faceIds}})' } }
 ] });
 
 // 15. RHINO
