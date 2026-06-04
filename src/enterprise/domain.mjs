@@ -36,6 +36,17 @@ export class EnterpriseStore {
     // In-memory fallback for email-verification tokens when no stateStore (KV)
     // is wired (node/dev). Keyed by 'emailverify:' + hashToken(token).
     this.emailVerifications = new Map();
+    // SEC-004: per-user index of the KV keys we minted for them — every
+    // 'session:<hash>' and 'emailverify:<hash>' issued while this isolate has
+    // been alive. KV has no list/prefix-scan, so account deletion uses this
+    // index to enumerate the user's tokens and drop them. Map<userId, Set<key>>.
+    // It is best-effort *within an isolate's lifetime*: it is NOT persisted to
+    // Neon (the snapshot schema has no place for it), so after a cold restart
+    // any not-yet-tracked tokens fall back to natural TTL expiry (sessions ~8h,
+    // email-verify 24h). The Worker DELETE branch ALSO derives session keys
+    // straight from the request's slot cookies, so the security-critical case —
+    // a deleted account's live sessions in the same browser — is always purged.
+    this.userKvKeys = new Map();
     this.auditEvents = [];
     this._persistenceReady = Promise.resolve();
     this._lastPersistPromise = Promise.resolve();
@@ -160,12 +171,14 @@ export class EnterpriseStore {
     if (this.stateStore) {
       const payload = this.authService ? await this.authService.verifySessionTokenAsync(token) : { sub: user.id, org: organizationId, role: membership.role };
       const ttlMs = payload.exp ? Math.max(1, payload.exp - this.now()) : 8 * 60 * 60 * 1000;
-      await this.stateStore.set('session:' + hashToken(token), {
+      const key = 'session:' + hashToken(token);
+      await this.stateStore.set(key, {
         userId: user.id,
         organizationId,
         role: membership.role,
         createdAt: this.now()
       }, ttlMs);
+      this.trackUserKvKey(user.id, key);
     }
     return session;
   }
@@ -248,18 +261,51 @@ export class EnterpriseStore {
     for (const [sessionId, session] of this.connectorSessions.entries()) {
       if (session.userId === user.id || deletedProjectIds.has(session.projectId)) this.connectorSessions.delete(sessionId);
     }
+    // SEC-004: enumerate every KV key (session: / emailverify:) we minted for
+    // this user so the caller can drop them from KV — a deleted account's other
+    // sessions must stop authenticating (access-control + erasure). KV has no
+    // prefix scan; this index is the source of truth for keys minted this
+    // isolate. Returned to the Worker, which also adds keys derived from the
+    // request's cookies (covering the cross-isolate case for live sessions).
+    const kvKeys = Array.from(this.userKvKeys.get(user.id) || []);
+    this.userKvKeys.delete(user.id);
+    // Drop in-memory email-verification records (node/dev path; KV path is
+    // covered by the returned kvKeys). Belt-and-suspenders: also sweep by userId
+    // in case any key escaped the index.
+    for (const [key, record] of this.emailVerifications.entries()) {
+      if (record && record.userId === user.id) this.emailVerifications.delete(key);
+    }
+    // SEC-004 / SEC-006: anonymize PII (userId + any email in metadata) in
+    // RETAINED audit rows for this user rather than keeping the link to a person
+    // whose account is erased. In-memory rows are anonymized here; note that the
+    // Neon audit table is append-only by id (snapshot writes ON CONFLICT DO
+    // NOTHING), so durable-store anonymization is a separate retention process
+    // tracked in SEC-006.
+    const deletedEmail = String(user.email || '').toLowerCase();
+    for (const event of this.auditEvents) {
+      if (event.userId === user.id) event.userId = '';
+      if (event.targetId === user.id) event.targetId = '';
+      if (event.metadata && typeof event.metadata === 'object') {
+        for (const [k, v] of Object.entries(event.metadata)) {
+          if (typeof v === 'string' && v.toLowerCase() === deletedEmail) event.metadata[k] = '';
+          if (v === user.id) event.metadata[k] = '';
+        }
+      }
+    }
+    // The deletion record itself carries no userId — it must not re-introduce
+    // the PII we just stripped (SEC-006). projectCount only.
     this.auditEvents.push({
       id: createId('aud'),
       organizationId: '',
-      userId: user.id,
+      userId: '',
       type: 'account.deleted',
-      targetId: user.id,
+      targetId: '',
       metadata: { projectCount: deletedProjectIds.size },
       createdAt: this.now()
     });
     this.users.delete(user.id);
     this.persist();
-    return { ok: true, deletedProjectCount: deletedProjectIds.size };
+    return { ok: true, deletedProjectCount: deletedProjectIds.size, kvKeys };
   }
 
   // Email-verification tokens. Stored hashed (never the raw token) in the
@@ -272,6 +318,7 @@ export class EnterpriseStore {
     const record = { userId, expiresAt: this.now() + ttlMs };
     if (this.stateStore) await this.stateStore.set(key, record, ttlMs);
     else this.emailVerifications.set(key, record);
+    this.trackUserKvKey(userId, key);
     return token;
   }
 
@@ -284,7 +331,25 @@ export class EnterpriseStore {
     }
     if (this.stateStore) await this.stateStore.delete(key);
     else this.emailVerifications.delete(key);
+    this.untrackUserKvKey(record.userId, key);
     return this.markEmailVerified(record.userId);
+  }
+
+  // SEC-004: KV-key index bookkeeping. trackUserKvKey records a key minted for a
+  // user so account deletion can enumerate + drop it; untrackUserKvKey forgets a
+  // key once it is consumed/expired so the set doesn't grow unbounded.
+  trackUserKvKey(userId, key) {
+    if (!userId || !key) return;
+    let set = this.userKvKeys.get(userId);
+    if (!set) { set = new Set(); this.userKvKeys.set(userId, set); }
+    set.add(key);
+  }
+
+  untrackUserKvKey(userId, key) {
+    const set = this.userKvKeys.get(userId);
+    if (!set) return;
+    set.delete(key);
+    if (set.size === 0) this.userKvKeys.delete(userId);
   }
 
   // Personal-workspace model: every user gets a private organization (their
