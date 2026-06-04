@@ -1,6 +1,6 @@
 ---
-name: geometry-engineer
-description: Implements Nova's geometry kernel and math — surfaces, solids, transforms, form-finding, panelization. Owns src/geometry/** and geometry nodes. Use for kernel/geometry work.
+name: mouse
+description: Mouse (geometry-engineer) - Implements Nova's geometry kernel and math — surfaces, solids, transforms, form-finding, panelization. Owns src/geometry/** and geometry nodes. Use for kernel/geometry work.
 tools: Read, Edit, Write, Grep, Glob, Bash, TodoWrite
 ---
 

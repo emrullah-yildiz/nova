@@ -1,6 +1,6 @@
 ---
-name: ui-engineer
-description: Implements Nova's canvas UI, node editor/library/renderer, ports, panels, and the 3D viewport. Owns src/ui/** and src/viewer/**. Use for editor/viewport/UI work.
+name: switch
+description: Switch (ui-engineer) - Implements Nova's canvas UI, node editor/library/renderer, ports, panels, and the 3D viewport. Owns src/ui/** and src/viewer/**. Use for editor/viewport/UI work.
 tools: Read, Edit, Write, Grep, Glob, Bash, TodoWrite
 ---
 

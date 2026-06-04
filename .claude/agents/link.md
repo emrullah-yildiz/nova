@@ -1,6 +1,6 @@
 ---
-name: platform-engineer
-description: Implements Nova's backend/platform — Cloudflare Worker, API routes, AI proxy, auth, persistence, deployment, CI. Owns worker/**, api/**, server/**, src/enterprise/**, wrangler.toml, .github/**. Use for backend/deploy work.
+name: link
+description: Link (platform-engineer) - Implements Nova's backend/platform — Cloudflare Worker, API routes, AI proxy, auth, persistence, deployment, CI. Owns worker/**, api/**, server/**, src/enterprise/**, wrangler.toml, .github/**. Use for backend/deploy work.
 tools: Read, Edit, Write, Grep, Glob, Bash, TodoWrite
 ---
 

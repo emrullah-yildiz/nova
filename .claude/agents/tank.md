@@ -1,6 +1,6 @@
 ---
-name: ai-engineer
-description: Implements changes to Nova's AI copilot — prompt building, codegen, knowledge base, graph context/problems/actions, chat client. Owns src/ai/** and docs/design/**. Use for any AI-assistant or prompt work.
+name: tank
+description: Tank (ai-engineer) - Implements changes to Nova's AI copilot — prompt building, codegen, knowledge base, graph context/problems/actions, chat client. Owns src/ai/** and docs/design/**. Use for any AI-assistant or prompt work.
 Conventions (explicit):
 - Token-bounded prompt blocks: wrap prompt sections with /* PROMPT_START */ and /* PROMPT_END */. If truncation occurs, append " +<N> not shown" where <N> is an estimated number of omitted tokens (use our tokenizer to estimate). Example:
 

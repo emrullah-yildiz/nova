@@ -1,6 +1,6 @@
 ---
-name: integrator
-description: Merges green, reviewed task branches into develop in dependency order, resolving conflicts and keeping develop releasable. Use to land finished branches — do not run several mergers at once.
+name: dozer
+description: Dozer (integrator) - Merges green, reviewed task branches into develop in dependency order, resolving conflicts and keeping develop releasable. Use to land finished branches — do not run several mergers at once.
 tools: Read, Grep, Glob, Bash, TodoWrite
 ---
 

@@ -207,8 +207,7 @@ to `revit-bridge` (a `NovaFormaBridge` async handle) — to be designed, not bui
 | Node | Purpose | Inputs → Outputs | Feeds / Consumes |
 |---|---|---|---|
 | `Forma.GetFootprints` | building/parcel footprints as polygons | `paths`(opt) → `curves`, `count` | out: `Curve.*`, `Surface.ByPatch`, `Floor.ByOutline`-style |
-| `Forma.GetBuildingElements` | building volumes as meshes | `paths` → `meshes`, `count` | out: `Element.Geometries`-style consumers, viewer |
-| `Forma.GetTriangleMesh` | triangulated mesh for a path | `path` → `mesh` | out: viewer, `Mesh.*` |
+| `Forma.GetGeometry` | **single consolidated geometry getter** (owner decision — replaces GetBuildingElements + GetTriangleMesh): triangulated mesh(es) for the given element path(s). Pass building paths (from `GetProposal`/`GetSelection`) for "all buildings"; pass one path for one element/terrain | `paths` → `meshes`, `count` | out: viewer, `Mesh.*`, `Element.Geometries`-style consumers |
 
 ### 4.3 Terrain / Site `[R]`
 | Node | Purpose | Inputs → Outputs | Feeds / Consumes |
