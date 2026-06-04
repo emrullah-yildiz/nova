@@ -80,18 +80,25 @@ describe('M4 Revit host node registration', () => {
       'revit-element-by-id',
       'revit-element-faces',
       'revit-element-geometries',
+      'revit-element-info',
       'revit-element-location',
+      'revit-element-phase',
       'revit-element-solids',
+      'revit-element-workset',
       'revit-elements-by-type',
+      'revit-family-types',
       'revit-filter-by-level',
       'revit-filter-by-parameter',
       'revit-get-parameter-values',
+      'revit-material-collect',
+      'revit-parameter-by-builtin',
       'revit-place-adaptive-component',
       'revit-place-family-instance',
       'revit-select-elements',
       'revit-select-faces',
       'revit-send-geometry',
-      'revit-set-parameter-values'
+      'revit-set-parameter-values',
+      'revit-type-parameters'
     ]);
   });
 

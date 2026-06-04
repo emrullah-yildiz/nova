@@ -192,6 +192,58 @@ NODE_LIBRARY.categories.push({ id: 'revit', name: 'Revit', color: '#89dceb', ico
   //   Revit.AllElementsOfCategory(Walls) → Element.Location → (.curves) →
   //   Curve.Divide / Line viewer; point-based families surface on (.points).
   { type: 'revit-element-location', name: 'Element.Location', icon: '⌖', inputs: [{ id: 'elements', name: 'Elements', type: 'list' }], outputs: [{ id: 'curves', name: 'Curves', type: 'list' },{ id: 'points', name: 'Points', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [], preview: true, codegen: { python: '{{_loc}} = RevitBridge.getLocations({{elements}})\\n{{curves}} = [l.get("curve") for l in {{_loc}} if l.get("curve") is not None]\\n{{points}} = [l.get("point") for l in {{_loc}} if l.get("point") is not None]\\n{{count}} = len({{_loc}})\\nprint(f"Read {{{count}}} element locations")' } },
+
+  // ── RV-M2 Parameters / Info / Types [R] ───────────────────────────────────
+  // Read-only param/info/type/material/phase/workset getters folded into the
+  // existing `revit` category. Codegen-only (no execute, no SEC-013 write gate),
+  // each emitting a RevitBridge.* read call — matching the RV-M1 pattern above.
+  // The C# bridge handlers (getElementInfo, getParameterByBuiltIn,
+  // getTypeParameters, getTypes, getMaterials, getPhase, getWorkset) are handed
+  // to Trinity (connect-engineer) in docs/agent-handoff.md (RV-M2) — read-only.
+  //
+  // These do NOT duplicate Revit.GetParameterValues (name-keyed value read):
+  //   • Element.ParameterByBuiltIn keys by the BuiltInParameter ENUM (a different
+  //     key space — robust across languages/renames),
+  //   • Element.TypeParameters reads the element's TYPE params (vs instance),
+  //   • Element.Info surfaces the readable attributes as a `properties` map
+  //     (NOVA.md "Expose Properties where it makes sense").
+
+  // Sample workflow (Element.Info):
+  //   Revit.AllElementsOfCategory(Walls) → Element.Info → (.properties) →
+  //   output-watch; or (.levels) / (.types) → List.* dashboards.
+  { type: 'revit-element-info', name: 'Element.Info', icon: 'ⓘ', inputs: [{ id: 'elements', name: 'Elements', type: 'list' }], outputs: [{ id: 'ids', name: 'Ids', type: 'list' },{ id: 'categories', name: 'Categories', type: 'list' },{ id: 'types', name: 'Type Names', type: 'list' },{ id: 'levels', name: 'Levels', type: 'list' },{ id: 'names', name: 'Names', type: 'list' },{ id: 'properties', name: 'Properties', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [], preview: true, codegen: { python: '{{_info}} = RevitBridge.getElementInfo({{elements}})\\n{{ids}} = [i.get("id") for i in {{_info}}]\\n{{categories}} = [i.get("category") for i in {{_info}}]\\n{{types}} = [i.get("typeName") for i in {{_info}}]\\n{{levels}} = [i.get("level") for i in {{_info}}]\\n{{names}} = [i.get("name") for i in {{_info}}]\\n{{properties}} = [i.get("properties", {}) for i in {{_info}}]\\n{{count}} = len({{_info}})\\nprint(f"Read info for {{{count}}} elements")' } },
+
+  // Sample workflow (Element.ParameterByBuiltIn):
+  //   Revit.AllElementsOfCategory(Walls) → Element.ParameterByBuiltIn(
+  //   bip="HOST_AREA_COMPUTED") → (.values) → output-watch / List.* metrics.
+  { type: 'revit-parameter-by-builtin', name: 'Element.ParameterByBuiltIn', icon: '⌗', inputs: [{ id: 'elements', name: 'Elements', type: 'list' }], outputs: [{ id: 'values', name: 'Values', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [{ id: 'bip', type: 'dropdown', options: ['ALL_MODEL_MARK','ALL_MODEL_INSTANCE_COMMENTS','ALL_MODEL_TYPE_COMMENTS','ALL_MODEL_TYPE_MARK','HOST_AREA_COMPUTED','HOST_VOLUME_COMPUTED','HOST_PERIMETER_COMPUTED','CURVE_ELEM_LENGTH','WALL_USER_HEIGHT_PARAM','WALL_BASE_OFFSET','LEVEL_ELEV','ROOM_AREA','ROOM_VOLUME','ROOM_NUMBER','ROOM_NAME','DOOR_HEIGHT','DOOR_WIDTH','WINDOW_HEIGHT','WINDOW_WIDTH','STRUCTURAL_MATERIAL_PARAM','FAMILY_LEVEL_PARAM'], default: 'ALL_MODEL_MARK', label: 'BuiltInParameter' }], preview: true, codegen: { python: '{{values}} = RevitBridge.getParameterByBuiltIn({{elements}}, "{{ctrl.bip}}")\\n{{count}} = len({{values}})\\nprint(f"Read {{{count}}} {{ctrl.bip}} values")' } },
+
+  // Sample workflow (Element.TypeParameters):
+  //   Revit.AllElementsOfCategory(Doors) → Element.TypeParameters →
+  //   (.properties) → output-watch; type-scoped params, distinct from instance.
+  { type: 'revit-type-parameters', name: 'Element.TypeParameters', icon: '⊟', inputs: [{ id: 'elements', name: 'Elements', type: 'list' }], outputs: [{ id: 'properties', name: 'Properties', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [], preview: true, codegen: { python: '{{_tp}} = RevitBridge.getTypeParameters({{elements}})\\n{{properties}} = [t.get("properties", {}) for t in {{_tp}}]\\n{{count}} = len({{_tp}})\\nprint(f"Read type parameters for {{{count}}} elements")' } },
+
+  // Sample workflow (Revit.FamilyTypes):
+  //   Revit.FamilyTypes(category="Walls") → (.names) → output-watch; (.types)
+  //   feeds creation-node type inputs (RV-M3). Live dropdown population is a
+  //   Switch UI follow-up (see docs/agent-handoff.md RV-M2).
+  { type: 'revit-family-types', name: 'Revit.FamilyTypes', icon: '⋔', inputs: [], outputs: [{ id: 'types', name: 'Types', type: 'list' },{ id: 'names', name: 'Names', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [{ id: 'category', type: 'text', default: '', label: 'Category (optional)' }], preview: true, codegen: { python: '{{types}} = RevitBridge.getTypes("{{ctrl.category}}")\\n{{names}} = [t.get("name") for t in {{types}}]\\n{{count}} = len({{types}})\\nprint(f"Found {{{count}}} family types")' } },
+
+  // Sample workflow (Material.Collect):
+  //   Material.Collect → (.names) → output-watch / List.* — the materials
+  //   producer for future assignment nodes (RV-M5).
+  { type: 'revit-material-collect', name: 'Material.Collect', icon: '◐', inputs: [], outputs: [{ id: 'materials', name: 'Materials', type: 'list' },{ id: 'names', name: 'Names', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [], preview: true, codegen: { python: '{{materials}} = RevitBridge.getMaterials()\\n{{names}} = [m.get("name") for m in {{materials}}]\\n{{count}} = len({{materials}})\\nprint(f"Found {{{count}}} materials")' } },
+
+  // Sample workflow (Element.Phase):
+  //   Revit.AllElementsOfCategory(Walls) → Element.Phase → (.created /
+  //   .demolished) → output-watch — phasing audit.
+  { type: 'revit-element-phase', name: 'Element.Phase', icon: '◷', inputs: [{ id: 'elements', name: 'Elements', type: 'list' }], outputs: [{ id: 'created', name: 'Created', type: 'list' },{ id: 'demolished', name: 'Demolished', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [], preview: true, codegen: { python: '{{_ph}} = RevitBridge.getPhase({{elements}})\\n{{created}} = [p.get("created") for p in {{_ph}}]\\n{{demolished}} = [p.get("demolished") for p in {{_ph}}]\\n{{count}} = len({{_ph}})\\nprint(f"Read phases for {{{count}}} elements")' } },
+
+  // Sample workflow (Element.Workset):
+  //   Revit.AllElementsOfCategory(Walls) → Element.Workset → (.worksets) →
+  //   output-watch / List.GroupBy — workset audit.
+  { type: 'revit-element-workset', name: 'Element.Workset', icon: '⊡', inputs: [{ id: 'elements', name: 'Elements', type: 'list' }], outputs: [{ id: 'worksets', name: 'Worksets', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [], preview: true, codegen: { python: '{{worksets}} = RevitBridge.getWorkset({{elements}})\\n{{count}} = len({{worksets}})\\nprint(f"Read worksets for {{{count}}} elements")' } },
+
   { type: 'revit-get-parameter-values', name: 'Revit.GetParameterValues', icon: 'P', inputs: [{ id: 'elements', name: 'Elements', type: 'list' },{ id: 'parameterName', name: 'Parameter Name', type: 'string' }], outputs: [{ id: 'values', name: 'Values', type: 'list' },{ id: 'count', name: 'Count', type: 'number' }], controls: [{ id: 'parameterName', type: 'text', default: 'Comments', label: 'Parameter Name' }], preview: true, codegen: { python: '{{values}} = RevitBridge.getParameterValues({{elements}}, "{{ctrl.parameterName}}")\\n{{count}} = len({{values}})' } },
   { type: 'revit-set-parameter-values', name: 'Revit.SetParameterValues', icon: 'P+', inputs: [{ id: 'elements', name: 'Elements', type: 'list' },{ id: 'parameterName', name: 'Parameter Name', type: 'string' },{ id: 'value', name: 'Value', type: 'any' }], outputs: [{ id: 'results', name: 'Results', type: 'list' },{ id: 'count', name: 'Count', type: 'number' },{ id: 'success', name: 'Success', type: 'boolean' }], controls: [{ id: 'parameterName', type: 'text', default: 'Comments', label: 'Parameter Name' },{ id: 'value', type: 'text', default: '', label: 'Value' }], preview: true, codegen: { python: '{{results}} = RevitBridge.setParameterValues({{elements}}, "{{ctrl.parameterName}}", "{{ctrl.value}}")\\n{{count}} = len([r for r in {{results}} if r.get("ok")])\\n{{success}} = {{count}} == len({{results}})' } },
   { type: 'revit-send-geometry', name: 'Revit.SendGeometry', icon: '⬆', inputs: [{ id: 'geometry', name: 'Geometry', type: 'any' },{ id: 'category', name: 'Category', type: 'string' },{ id: 'name', name: 'Name', type: 'string' }], outputs: [{ id: 'result', name: 'Result', type: 'any' },{ id: 'elementId', name: 'Element Id', type: 'string' },{ id: 'success', name: 'Success', type: 'boolean' }], controls: [{ id: 'category', type: 'dropdown', options: ['Generic Models','Mass','Furniture','Walls','Floors','Roofs','Ceilings','Columns','Structural Framing','Mechanical Equipment','Plumbing Fixtures','Electrical Fixtures','Electrical Equipment'], default: 'Generic Models', label: 'Category' },{ id: 'name', type: 'text', default: 'Nova Geometry', label: 'Name' }], preview: true, codegen: { python: '{{result}} = RevitBridge.sendGeometry({{geometry}}, {}, {"category": "{{ctrl.category}}", "name": "{{ctrl.name}}"})\\n{{elementId}} = {{result}}.get("data", {}).get("directShapeId")\\n{{success}} = {{result}}.get("ok") == True' } },
