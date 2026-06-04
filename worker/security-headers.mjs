@@ -8,9 +8,10 @@
 // Design note — this is the single extension point for header hardening:
 //  - SEC-010 (this ticket): CSP, X-Content-Type-Options, Referrer-Policy,
 //    X-Frame-Options + frame-ancestors.
-//  - SEC-015 (later): HSTS. The `{ hsts }` option is a wired stub below — set
-//    `hsts: true` (prod, behind HTTPS) to emit Strict-Transport-Security
-//    without touching the CSP or call sites.
+//  - SEC-015: HSTS. The `{ hsts }` option below emits Strict-Transport-Security
+//    when true; production enables it via `NOVA_HSTS=1` (wrangler.toml [vars]),
+//    wired in worker/index.mjs without touching the CSP or call sites. Dev/preview
+//    over plain HTTP leaves it off so they aren't pinned to HTTPS.
 
 // AI provider origins the BYOK client (src/ai/gpt-client.js) talks to directly
 // from the browser, plus the app's own origin ('self' covers /api on-origin).
@@ -95,7 +96,12 @@ export function securityHeaders(opts = {}) {
 
   if (opts.hsts) {
     const maxAge = Number.isFinite(opts.hstsMaxAge) ? opts.hstsMaxAge : 63072000; // 2y
-    headers.set('Strict-Transport-Security', `max-age=${maxAge}; includeSubDomains; preload`);
+    // SEC-015: pin HTTPS for the apex + subdomains. We deliberately OMIT `preload`:
+    // submitting to the browser HSTS preload list is a near-irreversible commitment
+    // that every current and future subdomain of hi-nova.work is HTTPS-only forever,
+    // which we cannot guarantee. max-age + includeSubDomains gives the downgrade/
+    // SSL-strip protection this ticket needs without that lock-in.
+    headers.set('Strict-Transport-Security', `max-age=${maxAge}; includeSubDomains`);
   }
   return headers;
 }
