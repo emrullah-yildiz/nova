@@ -36,6 +36,11 @@ NOVA_PUBLIC_URL = "https://hi-nova.work"
 # From-address for verification emails. The domain (hi-nova.work) is verified in
 # Resend; the API key itself is a SECRET — set it with `wrangler secret put RESEND_API_KEY`.
 NOVA_EMAIL_FROM = "Nova <noreply@hi-nova.work>"
+# SEC-015: enable HSTS on production asset responses (hi-nova.work is HTTPS-only via
+# the Cloudflare custom domain). worker/index.mjs reads NOVA_HSTS === '1' and emits
+# Strict-Transport-Security: max-age=63072000; includeSubDomains. PROD ONLY — dev
+# (workers.dev / may be http locally) leaves this off below so it isn't HTTPS-pinned.
+NOVA_HSTS = "1"
 
 [env.dev]
 name = "nova-dev"
@@ -48,6 +53,10 @@ NOVA_ALLOW_DEV_LOGIN = "false"
 GOOGLE_CLIENT_ID = "766511449312-a3f505pvirs8f5gjol9ntmu09rue37jl.apps.googleusercontent.com"
 NOVA_PUBLIC_URL = "https://nova-dev.ey-myacc.workers.dev"
 NOVA_EMAIL_FROM = "Nova Dev <noreply@hi-nova.work>"
+# SEC-015: dev MUST NOT send HSTS — it runs on workers.dev / may be served over
+# plain HTTP locally, and pinning a shared *.workers.dev apex to HTTPS would affect
+# unrelated workers. Explicitly off (env vars don't inherit from the top-level [vars]).
+NOVA_HSTS = "0"
 
 # SEC-012: dev MUST bind its OWN KV namespaces, distinct from production, so a
 # nova-dev deploy can never read/write/forge production session, email-verify,

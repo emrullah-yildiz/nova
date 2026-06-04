@@ -19,4 +19,4 @@ Maintained by the `security-auditor` agent. One row per ticket; see each
 | SEC-012 | Separate dev and production KV namespaces (shared SESSION_KV/RATE_KV id) | medium | secrets | in-progress | config |
 | SEC-013 | Enforce Revit/Connect write approval and audit server-side, not client-only | medium | approvals-governance | open | code |
 | SEC-014 | Enforce data-retention limits and project/version quotas (setting is unenforced) | low | data-protection | open | mixed |
-| SEC-015 | Add HSTS and security response headers on the production Worker | low | encryption | open | code |
+| SEC-015 | Add HSTS and security response headers on the production Worker | low | encryption | resolved | code |
