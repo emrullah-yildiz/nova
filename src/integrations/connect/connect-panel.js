@@ -1,3 +1,5 @@
+import * as revitBridge from '../revit/revit-bridge.js';
+
 function getRuntimeGlobal() {
   if (typeof window !== 'undefined') return window;
   return globalThis;
@@ -46,6 +48,86 @@ export function installNovaConnectPanel(targetApp = getRuntimeGlobal().app, runt
 function installAppMethods(app, runtimeGlobal) {
   app.novaConnectPanelOpen = false;
   app.novaConnectLastResult = null;
+
+  // M4-T5 picker state. One small state object drives the picker section:
+  //   phase: 'idle' | 'picking' | 'selected' | 'placing' | 'error'
+  //   elements: contract elements from the last successful requestSelection
+  //   message / detail: human-readable status for the current phase
+  //   placeResult: { ok, message } after a placement attempt (success or error)
+  app.novaConnectPicker = { phase: 'idle', elements: [], message: '', detail: '', placeResult: null };
+
+  // The M4 RevitBridge is injected via the runtime global so tests can mock the
+  // transport without a real hub. Falls back to the imported bridge in the app.
+  app._getRevitBridge = function() {
+    return runtimeGlobal.__novaRevitBridge || revitBridge;
+  };
+
+  app._setNovaConnectPicker = function(patch) {
+    this.novaConnectPicker = Object.assign({}, this.novaConnectPicker, patch);
+    this._renderNovaConnectPanel();
+  };
+
+  // Ask Revit (via the bridge) for the user's current selection. Walks the
+  // picker through picking -> selected, or picking -> error.
+  app.pickRevitSelection = async function() {
+    const bridge = this._getRevitBridge();
+    const client = this._getNovaConnect();
+    if (!bridge || typeof bridge.requestSelection !== 'function') {
+      return this._setNovaConnectPicker({ phase: 'error', message: 'Revit bridge is not available.', detail: '' });
+    }
+    this._setNovaConnectPicker({ phase: 'picking', message: 'Pick elements or faces in Revit...', detail: '', placeResult: null });
+    try {
+      const result = await bridge.requestSelection({ includeFaces: true }, { client });
+      const elements = (result && Array.isArray(result.elements)) ? result.elements : [];
+      if (elements.length === 0) {
+        return this._setNovaConnectPicker({ phase: 'idle', elements: [], message: 'No elements were selected in Revit.', detail: '' });
+      }
+      this._setNovaConnectPicker({ phase: 'selected', elements, message: '', detail: '' });
+    } catch (error) {
+      this._setNovaConnectPicker({
+        phase: 'error',
+        message: 'Selection failed.',
+        detail: (error && error.message) || String(error)
+      });
+    }
+  };
+
+  app.clearRevitSelection = function() {
+    this._setNovaConnectPicker({ phase: 'idle', elements: [], message: '', detail: '', placeResult: null });
+  };
+
+  // Place a family instance hosted on the first selected face (or at the first
+  // selected element's origin if no face is available). The hub gates the WRITE
+  // behind interactive approval; here we just surface success/error.
+  app.placeRevitInstance = async function() {
+    const bridge = this._getRevitBridge();
+    const client = this._getNovaConnect();
+    const elements = this.novaConnectPicker.elements || [];
+    if (elements.length === 0) {
+      return this._setNovaConnectPicker({ phase: 'error', message: 'Select elements before placing.', detail: '' });
+    }
+    if (!bridge || typeof bridge.placeInstance !== 'function') {
+      return this._setNovaConnectPicker({ phase: 'error', message: 'Revit bridge is not available.', detail: '' });
+    }
+    const spec = buildPlacementSpec(elements);
+    this._setNovaConnectPicker({ phase: 'placing', message: 'Placing instance in Revit...', placeResult: null });
+    try {
+      const out = await bridge.placeInstance(spec, { client });
+      const ok = !(out && out.ok === false);
+      this._setNovaConnectPicker({
+        phase: 'selected',
+        placeResult: ok
+          ? { ok: true, message: 'Placed ' + spec.familyType + (out && out.elementId ? ' (id ' + String(out.elementId) + ')' : '') + '.' }
+          : { ok: false, message: (out && out.message) || 'Placement was rejected by the host.' }
+      });
+    } catch (error) {
+      this._setNovaConnectPicker({
+        phase: 'error',
+        message: 'Placement failed.',
+        detail: (error && error.message) || String(error)
+      });
+    }
+  };
 
   app.toggleNovaConnectPanel = function() {
     this.novaConnectPanelOpen = !this.novaConnectPanelOpen;
@@ -156,6 +238,7 @@ function installAppMethods(app, runtimeGlobal) {
         '<button onclick="app.connectNovaConnect()">Connect</button>' +
         '<button onclick="app.disconnectNovaConnect()">Disconnect</button>' +
       '</div>' +
+      renderPickerSection(this.novaConnectPicker) +
       (pendingApprovals.length > 0 ? renderApprovalSection(pendingApprovals) : '') +
       (result ? '<div class="ncp-result ' + (result.ok === false ? 'ncp-result-error' : '') + '">' +
         '<strong>' + escapeHtml(result.message) + '</strong>' +
@@ -197,6 +280,96 @@ function renderApprovalSection(approvals) {
   return '<div class="ncp-approval-section">' +
     '<h4 class="ncp-approval-heading">Pending Write Approvals</h4>' +
     items +
+  '</div>';
+}
+
+// Pure: derive a contract placement spec from the picked elements. Hosts the
+// instance on the first available face; otherwise places at the origin. Kept
+// pure + module-scoped so the placement payload is easy to reason about/test.
+function buildPlacementSpec(elements) {
+  const first = (elements && elements[0]) || {};
+  const face = Array.isArray(first.faces) && first.faces.length > 0 ? first.faces[0] : null;
+  const spec = {
+    kind: 'FamilyInstance',
+    familyType: 'Furniture: Chair',
+    points: [[0, 0, 0]]
+  };
+  if (face && face.faceId) spec.hostFaceId = face.faceId;
+  return spec;
+}
+
+// Pure: render the picker section for the current picker state. Each phase
+// renders a distinct, testable surface: idle (pick button) -> picking (busy)
+// -> selected (summary + place) -> error (message + retry). placeResult is
+// surfaced inside the selected phase as a success/error banner.
+function renderPickerSection(picker) {
+  const state = picker || { phase: 'idle', elements: [], message: '', detail: '', placeResult: null };
+  const phase = state.phase || 'idle';
+  let body = '';
+
+  if (phase === 'picking' || phase === 'placing') {
+    body =
+      '<p class="ncp-picker-msg">' + escapeHtml(state.message || 'Working...') + '</p>' +
+      '<div class="ncp-picker-actions">' +
+        '<button class="ncp-picker-btn" disabled>' + (phase === 'placing' ? 'Placing…' : 'Picking…') + '</button>' +
+      '</div>';
+  } else if (phase === 'selected') {
+    body =
+      renderSelectionSummary(state.elements) +
+      (state.placeResult ? renderPlaceResult(state.placeResult) : '') +
+      '<div class="ncp-picker-actions">' +
+        '<button class="ncp-picker-btn ncp-picker-btn-primary" onclick="app.placeRevitInstance()">Place Instance</button>' +
+        '<button class="ncp-picker-btn" onclick="app.clearRevitSelection()">Clear</button>' +
+      '</div>';
+  } else if (phase === 'error') {
+    body =
+      '<div class="ncp-picker-error">' +
+        '<strong>' + escapeHtml(state.message || 'Something went wrong.') + '</strong>' +
+        (state.detail ? '<pre>' + escapeHtml(state.detail) + '</pre>' : '') +
+      '</div>' +
+      '<div class="ncp-picker-actions">' +
+        '<button class="ncp-picker-btn ncp-picker-btn-primary" onclick="app.pickRevitSelection()">Retry Pick</button>' +
+      '</div>';
+  } else {
+    // idle
+    body =
+      (state.message ? '<p class="ncp-picker-msg">' + escapeHtml(state.message) + '</p>' : '') +
+      '<p class="ncp-picker-hint">Pick elements or faces in Revit to start a placement.</p>' +
+      '<div class="ncp-picker-actions">' +
+        '<button class="ncp-picker-btn ncp-picker-btn-primary" onclick="app.pickRevitSelection()">Pick Elements / Faces</button>' +
+      '</div>';
+  }
+
+  return '<div class="ncp-picker-section" data-picker-phase="' + escapeHtml(phase) + '">' +
+    '<h4 class="ncp-picker-heading">Selection &amp; Placement</h4>' +
+    body +
+  '</div>';
+}
+
+// Pure: a compact summary of the selected contract elements.
+function renderSelectionSummary(elements) {
+  const list = Array.isArray(elements) ? elements : [];
+  const faceCount = list.reduce((n, el) => n + (Array.isArray(el.faces) ? el.faces.length : 0), 0);
+  const header = '<div class="ncp-picker-summary">' +
+    '<strong>' + list.length + '</strong> element' + (list.length === 1 ? '' : 's') + ' selected' +
+    (faceCount > 0 ? ' · <strong>' + faceCount + '</strong> face' + (faceCount === 1 ? '' : 's') : '') +
+  '</div>';
+  const rows = list.slice(0, 8).map(el => {
+    const label = el.name || el.typeName || ('Element ' + el.id);
+    return '<li class="ncp-picker-item">' +
+      '<span class="ncp-picker-item-name">' + escapeHtml(label) + '</span>' +
+      '<span class="ncp-picker-item-cat">' + escapeHtml(el.category || 'Unknown') + '</span>' +
+    '</li>';
+  }).join('');
+  const more = list.length > 8 ? '<li class="ncp-picker-more">+' + (list.length - 8) + ' more</li>' : '';
+  return header + '<ul class="ncp-picker-list">' + rows + more + '</ul>';
+}
+
+// Pure: success/error banner for a placement attempt.
+function renderPlaceResult(placeResult) {
+  const ok = placeResult.ok !== false;
+  return '<div class="ncp-picker-place ' + (ok ? 'ncp-picker-place-ok' : 'ncp-picker-place-error') + '">' +
+    escapeHtml(placeResult.message || (ok ? 'Placed.' : 'Placement failed.')) +
   '</div>';
 }
 
@@ -536,6 +709,123 @@ function injectStyles(document) {
       color: white;
     }
     .ncp-reject-btn:hover { opacity: 0.85; }
+    /* M4-T5 selection / placement picker */
+    .ncp-picker-section {
+      margin-top: 20px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: var(--bg-surface);
+      padding: 14px;
+    }
+    .ncp-picker-heading {
+      margin: 0 0 10px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .ncp-picker-hint, .ncp-picker-msg {
+      margin: 0 0 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+    .ncp-picker-summary {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+    .ncp-picker-summary strong { color: var(--text-primary); }
+    .ncp-picker-list {
+      list-style: none;
+      margin: 0 0 10px;
+      padding: 0;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .ncp-picker-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 8px;
+      border: 1px solid var(--border-color);
+      border-radius: 5px;
+      margin-bottom: 5px;
+      font-size: 12px;
+    }
+    .ncp-picker-item-name {
+      color: var(--text-primary);
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ncp-picker-item-cat {
+      color: var(--text-muted);
+      font-size: 11px;
+      flex: none;
+    }
+    .ncp-picker-more {
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 4px 8px;
+    }
+    .ncp-picker-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .ncp-picker-btn {
+      flex: 1;
+      min-height: 36px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 120ms ease;
+    }
+    .ncp-picker-btn:hover:not([disabled]) { transform: translateY(-1px); }
+    .ncp-picker-btn[disabled] { opacity: 0.6; cursor: default; }
+    .ncp-picker-btn-primary {
+      background: var(--accent-blue);
+      color: white;
+      border-color: var(--accent-blue);
+    }
+    .ncp-picker-error {
+      border: 1px solid rgba(243, 139, 168, 0.45);
+      background: rgba(243, 139, 168, 0.05);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      font-size: 12px;
+    }
+    .ncp-picker-error strong { color: var(--accent-red); display: block; }
+    .ncp-picker-error pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 8px 0 0;
+      font: 11px/1.4 "JetBrains Mono", monospace;
+      color: var(--text-muted);
+    }
+    .ncp-picker-place {
+      border-radius: 6px;
+      padding: 9px 12px;
+      margin-bottom: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .ncp-picker-place-ok {
+      border: 1px solid rgba(166, 227, 161, 0.45);
+      background: rgba(166, 227, 161, 0.08);
+      color: var(--accent-green, #a6e3a1);
+    }
+    .ncp-picker-place-error {
+      border: 1px solid rgba(243, 139, 168, 0.45);
+      background: rgba(243, 139, 168, 0.05);
+      color: var(--accent-red, #f38ba8);
+    }
   `;
   document.head.appendChild(style);
 }
