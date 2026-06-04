@@ -129,6 +129,10 @@
 
       <div class="menu-dropdown">
 
+        <button class="menu-dropdown-item" onclick="app.showLearning()">Nova Learning</button>
+
+        <div class="menu-separator"></div>
+
         <button class="menu-dropdown-item" onclick="app.showTicketDialog()">Submit a Ticket…</button>
 
         <button class="menu-dropdown-item" onclick="NFLogger.downloadLogs()">Download Session Logs</button>
@@ -175,6 +179,11 @@
 
         New Project
 
+      </button>
+
+      <button class="landing-learn-link slide-up" onclick="app.showLearning()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+        New to Nova? Take a quick tour
       </button>
 
       <div class="templates-section slide-up"><h3>Start from a Template</h3><div class="templates-grid" id="templates-grid"></div></div>
