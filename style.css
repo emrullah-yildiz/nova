@@ -1326,6 +1326,40 @@ input[type="number"] {
   white-space: nowrap;
 }
 
+/* Keyed object / DataTree branch rows in the data inspector & Output.Watch */
+.data-obj-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(49,50,68,0.15);
+}
+
+.data-obj-key {
+  color: var(--accent-blue, var(--text-secondary));
+  font-size: 8px;
+  flex: 0 0 auto;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-obj-arrow {
+  color: var(--text-disabled);
+  font-size: 8px;
+  flex: 0 0 auto;
+}
+
+.data-obj-val {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 
 
 /* ===== CHAT PANEL ===== */
