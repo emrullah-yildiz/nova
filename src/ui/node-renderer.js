@@ -17,8 +17,6 @@
 import { getWiredControlDisplay, removeControlInputWires } from './property-wire-controls.js';
 import { fileToControlValue } from './file-control.js';
 import { isAutoLaceable } from '../core/lacing.js';
-import { NODE_VERSION_MAP } from '../core/nodes.js';
-import { availableVersions, getDefVersion } from '../core/node-versions.js';
 import { installCodeBlockNode } from './codeblock-node.js';
 
 function getRuntimeApp() {
@@ -727,6 +725,28 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
 
     }
 
+    // ── SELECTION MODE BUTTON ──
+    // Nodes with def.meta.selectionMode get an interactive "Select" button that
+    // activates 3D geometry picking in the viewport. The button shows the current
+    // mode ('faces' / 'edges' / 'points') and the count of currently-selected items.
+    if ((def.metadata && def.metadata.selectionMode) || (def.meta && def.meta.selectionMode)) {
+      var selMode = (def.metadata && def.metadata.selectionMode) || def.meta.selectionMode;
+      var selLabelsRaw = nd.controlValues && nd.controlValues._selectedLabels ? nd.controlValues._selectedLabels : '';
+      var selCount = selLabelsRaw ? selLabelsRaw.split('||').filter(Boolean).length : 0;
+      var selBtnLabel = selCount > 0
+        ? (selCount + ' ' + selMode + ' selected')
+        : ('Select ' + (selMode === 'faces' ? 'Faces' : selMode === 'edges' ? 'Edges' : 'Points') + '…');
+
+      h += '<div class="node-control node-select-mode-ctrl">';
+      h += '<button class="node-select-btn" onclick="event.stopPropagation();app._activateNodeSelection(\'' + nd.id + '\',\'' + selMode + '\')">';
+      h += '<span class="node-select-btn-icon">☉</span> ' + selBtnLabel;
+      h += '</button>';
+      if (selCount > 0) {
+        h += '<button class="node-select-clear-btn" title="Clear selection" onclick="event.stopPropagation();app._clearNodeSelection(\'' + nd.id + '\')">&times;</button>';
+      }
+      h += '</div>';
+    }
+
     h += _warningPanel(nd);
 
     el.innerHTML = h;
@@ -782,6 +802,60 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
 
   // ── Legacy alias ──
   app.toggleDataPanel = function(id) { this.toggleInspector(id); };
+
+  // ── Interactive 3D selection — activate / clear ──
+
+  /**
+   * Activate 3D selection mode for a node that has def.meta.selectionMode.
+   * Opens the Approve/Cancel toolbar in the viewport. On Approve, stores the
+   * selected item labels in nd.controlValues._selectedLabels and re-renders
+   * the node so the button shows the count.
+   */
+  app._activateNodeSelection = function(nodeId, mode) {
+    var self = this;
+    var nd = this.nodes.find(function(n) { return n.id === nodeId; });
+    if (!nd) return;
+
+    // Lazy-import the selection-mode module (viewer context only)
+    var selMod = (typeof window !== 'undefined' && window.__selectionModeModule) || null;
+
+    // If the module is already loaded via a previous call, use it directly.
+    // The selection-mode module is also exported as a global during viewer init.
+    var activate = selMod && selMod.activateSelectionMode;
+    if (!activate && typeof window !== 'undefined') activate = window.activateSelectionMode;
+
+    if (typeof activate === 'function') {
+      // Switch to 3D viewport so the user can interact with geometry
+      if (typeof app.setView === 'function') app.setView('3d');
+      activate(nodeId, mode,
+        function (labels) {
+          // Approve: store result
+          if (!nd.controlValues) nd.controlValues = {};
+          nd.controlValues._selectedLabels = labels.join('||');
+          self.renderNode(nd);
+          self.runGraph();
+        },
+        function () {
+          // Cancel: nothing to do
+        }
+      );
+    } else {
+      // Fallback: viewer not available (e.g. 2D-only mode). Just log.
+      console.warn('[Nova] 3D selection not available — open the 3D viewport first.');
+    }
+  };
+
+  /**
+   * Clear the stored selection on a selection node and re-render it.
+   */
+  app._clearNodeSelection = function(nodeId) {
+    var nd = this.nodes.find(function(n) { return n.id === nodeId; });
+    if (!nd) return;
+    if (!nd.controlValues) nd.controlValues = {};
+    nd.controlValues._selectedLabels = '';
+    this.renderNode(nd);
+    this.runGraph();
+  };
 
   // ── Formula input handler ──
   app._onFormulaInput = function(nodeId, ctrlId, value, inputEl) {

@@ -19,6 +19,41 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/capture-test-results.mjs",
+            "timeout": 10,
+            "statusMessage": "Recording test result…"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/notify-priorities.mjs",
+            "timeout": 10,
+            "statusMessage": "Checking priorities update…"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/notify-priorities.mjs",
+            "timeout": 10,
+            "statusMessage": "Checking priorities update…"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

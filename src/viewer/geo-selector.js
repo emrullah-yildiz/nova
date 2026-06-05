@@ -1,6 +1,7 @@
 import { Geo } from '../geometry/index.js';
 import { setNodePreviewState, setPreviewItemVisibility, showAllPreviews } from './preview-sync.js';
 import { Viewer3D as RuntimeViewer3D } from './viewer3d.js';
+import { isSelectionModeActive, selectionModeClick } from './selection-mode.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -104,6 +105,48 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
   };
 
   // ══════════════════════════════════════
+  // 2b. PANEL-OBJECT LIST RENDERER
+  // Each panel in a { points, frame }[] list becomes its own scene item so
+  // the existing _selectItem / hover-dim logic gives per-panel highlighting.
+  // ══════════════════════════════════════
+
+  Viewer3D._addPanelObjectsAsSceneItems = function(panels, nodeId, baseLabel) {
+    if (!panels || panels.length === 0 || !this.geometryGroup) return;
+
+    // Delegate mesh construction to viewer3d.addPanelObjects which also
+    // updates window._novaSceneObjectCount and data-panel-count.
+    var meshes = Viewer3D.addPanelObjects(panels);
+
+    meshes.forEach(function(meshObj) {
+      var idx = meshObj.userData.panelId;
+      // Wrap each mesh in its own tagged group so _selectItem can dim/highlight
+      // it independently from all other panels.
+      var group = new THREE.Group();
+      group.userData = {
+        nodeId: nodeId,
+        varName: '',
+        label: baseLabel + '[' + idx + ']',
+        isGeoItem: true,
+        isPanelGroup: true,
+        panelId: idx
+      };
+      group.add(meshObj);
+      Viewer3D.geometryGroup.add(group);
+
+      var itemId = nodeId + ':panel:' + idx;
+      Viewer3D._sceneItems.push({
+        id: itemId,
+        nodeId: nodeId,
+        varName: '',
+        label: baseLabel + '[' + idx + ']',
+        group: group,
+        visible: true,
+        selected: false
+      });
+    });
+  };
+
+  // ══════════════════════════════════════
   // 3. PATCHED buildFromGraph
   // Uses tagged groups instead of flat addToScene
   // ══════════════════════════════════════
@@ -162,6 +205,16 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         // ── Visual Geo nodes: compute and add as single tagged group ──
         var val = computeFn(nd);
         if (val === undefined || val === null) return;
+
+        // ── Panel-object list: { points: Point[], frame: Plane }[] ──
+        // Detected before the generic isGeo path so each panel becomes its own
+        // independently-selectable scene item rather than a merged group.
+        // Format guard mirrors the T04b contract: Array.isArray(item.points).
+        if (Array.isArray(val) && val.length > 0 && Array.isArray(val[0] && val[0].points)) {
+          var panelLabel = (nd.def && nd.def.name) ? nd.def.name : nd.type;
+          Viewer3D._addPanelObjectsAsSceneItems(val, nd.id, panelLabel);
+          return;
+        }
 
         var isGeo = (val && val._type) ||
                     (Array.isArray(val) && val.length > 0 && val[0] && (val[0]._type || val[0] instanceof Geo.Point3));
@@ -259,18 +312,88 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         if (taggedGroup) {
           var item = self._sceneItems.find(function(it) { return it.group === taggedGroup; });
           if (item) {
-            self._selectItem(item);
+            // When selection mode is active, route to the selection accumulator
+            // instead of the normal single-select flow.
+            if (isSelectionModeActive()) {
+              selectionModeClick(item);
+            } else {
+              self._selectItem(item);
+            }
             return;
           }
         }
       }
-      // Clicked empty space — deselect
-      self._deselectAll();
+      // Clicked empty space — deselect (only in normal mode)
+      if (!isSelectionModeActive()) self._deselectAll();
     });
 
     // Track mousedown position to distinguish click from orbit
     this.renderer.domElement.addEventListener('mousedown', function(e) {
       self._lastMouseDown = { x: e.clientX, y: e.clientY };
+    });
+
+    // ── Per-panel hover highlight (AC-4) ──
+    // When the cursor moves over a panel mesh (userData.isPanelMesh), apply
+    // the accent-green highlight (#a6e3a1) to that panel only and restore all
+    // others. This is separate from the click-select path; it does not change
+    // _selectedItem so the user's click-selection is preserved.
+    this.renderer.domElement.addEventListener('mousemove', function(e) {
+      if (!self.isVisible) return;
+      var rect = self.renderer.domElement.getBoundingClientRect();
+      self._mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      self._mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      self._raycaster.setFromCamera(self._mouse, self.camera);
+
+      var panelMeshes = [];
+      self.geometryGroup.traverseVisible(function(obj) {
+        if (obj.isMesh && obj.userData && obj.userData.isPanelMesh) panelMeshes.push(obj);
+      });
+      if (panelMeshes.length === 0) {
+        // No panel meshes in scene — clear any stale hover state
+        if (self._hoveredPanelId !== undefined && self._hoveredPanelId !== null) {
+          self._clearPanelHover();
+        }
+        return;
+      }
+
+      var intersects = self._raycaster.intersectObjects(panelMeshes, false);
+      var hitId = intersects.length > 0 ? intersects[0].object.userData.panelId : null;
+
+      // Only update materials if the hovered panel changed
+      if (hitId === self._hoveredPanelId) return;
+      self._hoveredPanelId = hitId;
+
+      panelMeshes.forEach(function(m) {
+        if (!m.material) return;
+        if (hitId !== null && m.userData.panelId === hitId) {
+          // Hovered panel: use accent-green (0xa6e3a1) as per STYLE.md
+          m.material.color.setHex(0xa6e3a1);
+          m.material.emissive.setHex(0xa6e3a1);
+          m.material.emissiveIntensity = 0.45;
+          m.material.opacity = 1.0;
+        } else {
+          // Non-hovered panels: restore default colour
+          m.material.color.setHex(0xa6e3a1);
+          m.material.emissive.setHex(0x000000);
+          m.material.emissiveIntensity = 0.0;
+          m.material.opacity = 0.85;
+        }
+      });
+    });
+  };
+
+  // Clear panel hover state (called when mouse leaves canvas or hover moves off all panels)
+  Viewer3D._clearPanelHover = function() {
+    this._hoveredPanelId = null;
+    if (!this.geometryGroup) return;
+    this.geometryGroup.traverseVisible(function(obj) {
+      if (obj.isMesh && obj.userData && obj.userData.isPanelMesh && obj.material) {
+        obj.material.color.setHex(0xa6e3a1);
+        obj.material.emissive.setHex(0x000000);
+        obj.material.emissiveIntensity = 0.0;
+        obj.material.opacity = 0.85;
+      }
     });
   };
 
@@ -429,7 +552,7 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
     var html = '<div class="geolist-header">' +
       '<span class="geolist-title">\uD83C\uDFAD Geometry</span>' +
       '<span class="geolist-count">' + this._sceneItems.length + '</span>' +
-      '<button class="geolist-btn" onclick="Viewer3D._showAll()" title="Show All">\uD83D\uDC41</button>' +
+      '<button class="geolist-btn geolist-btn--showall" onclick="Viewer3D._showAll()" title="Preview All">\uD83D\uDC41 All</button>' +
       '</div>';
 
     html += '<div class="geolist-items">';

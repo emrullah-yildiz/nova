@@ -7,8 +7,30 @@
 // Public API:
 //   buildLearningHtml()       → pure string; the modal container HTML
 //   initLearning(overlay)     → sets up chapter rendering + quiz handlers
-//   attachLearningShots(doc)  → backward-compat; no-ops in the new design
+//   attachLearningShots(doc)  → wires data-shot-src PNGs into learn-shot imgs
 //   LEARNING_CHAPTERS         → the chapter data array (for tests)
+//
+// Screenshot slots — PNG filenames that go in public/learning/:
+//   intro-simple.png          Introduction › Simple example
+//   intro-advanced.png        Introduction › Advanced example
+//   interface-simple.png      Interface › Simple example
+//   interface-advanced.png    Interface › Advanced example
+//   node-layout-simple.png    Node Anatomy › Simple example
+//   node-layout-advanced.png  Node Anatomy › Advanced example
+//   data-types-simple.png     Data Types › Simple example
+//   data-types-advanced.png   Data Types › Advanced example
+//   math-simple.png           Math Operations › Simple example
+//   math-advanced.png         Math Operations › Advanced example
+//   geometry-simple.png       Geometry Operations › Simple example
+//   geometry-advanced.png     Geometry Operations › Advanced example
+//   lists-simple.png          List Operations › Simple example
+//   lists-advanced.png        List Operations › Advanced example
+//   python-simple.png         Python Node › Simple example
+//   python-advanced.png       Python Node › Advanced example
+//   code-terminal-simple.png  Code Terminal › Simple example
+//   code-terminal-advanced.png Code Terminal › Advanced example
+//   codeblock-simple.png      Code Block › Simple example
+//   codeblock-advanced.png    Code Block › Advanced example
 
 // ── Module state ──────────────────────────────────────────────────────────────
 let _learnChapter = 0;
@@ -553,6 +575,322 @@ export const LEARNING_CHAPTERS = [
   },
 ];
 
+// ── Chapter example data ──────────────────────────────────────────────────────
+// Each example carries { title, steps, slotId } where slotId is the key used
+// by attachLearningShots() to load the real PNG from public/learning/<slotId>.png.
+// Until a PNG is dropped into that folder the placeholder SVG shows instead.
+
+function _attachChapterExamples() {
+  const ex = [
+    // 0 — Introduction
+    {
+      simpleExample: {
+        title: 'Your first graph: double a number',
+        slotId: 'intro-simple',
+        steps: [
+          'Add an <strong>Input.Number</strong> node (set its value to <code>5</code>).',
+          'Add a <strong>Math.Multiply</strong> node.',
+          'Wire the <em>value</em> output of Input.Number to the <em>a</em> input of Math.Multiply.',
+          'Set the <em>b</em> control on Math.Multiply to <code>2</code>.',
+          'Add an <strong>Output.Watch</strong> node and wire Math.Multiply\'s <em>result</em> to it.',
+          'The Watch shows <code>10</code>. Change the number to <code>7</code> — it instantly shows <code>14</code>.',
+        ],
+      },
+      advancedExample: {
+        title: 'Parametric tower: floors drive total height',
+        slotId: 'intro-advanced',
+        steps: [
+          'Add <strong>Input.Number</strong> (floors = <code>10</code>) and another <strong>Input.Number</strong> (floorHeight = <code>3</code>).',
+          'Add <strong>Math.Multiply</strong> and wire both inputs: floors → a, floorHeight → b.',
+          'Add <strong>Input.Number</strong> (footprint = <code>20</code>).',
+          'Add <strong>Math.Multiply</strong> to compute <em>volume = totalHeight × footprint</em>.',
+          'Wire the first Multiply\'s <em>result</em> to the second\'s <em>a</em> input; footprint to <em>b</em>.',
+          'Add <strong>Output.Watch</strong> to inspect volume. Change floors to <code>15</code> — volume updates immediately.',
+        ],
+      },
+    },
+    // 1 — Interface
+    {
+      simpleExample: {
+        title: 'Explore the inspector: trace a value',
+        slotId: 'interface-simple',
+        steps: [
+          'Add a <strong>Math.Add</strong> node. Set <em>a</em> to <code>4</code> and <em>b</em> to <code>6</code>.',
+          'Add an <strong>Output.Watch</strong> and wire Add\'s <em>result</em> to it.',
+          'Click the Math.Add node — the <strong>Inspector Panel</strong> opens on the right.',
+          'Inspect the port values: you should see <em>a=4</em>, <em>b=6</em>, <em>result=10</em>.',
+          'Change <em>a</em> to <code>3.5</code>. The inspector updates live to show <em>result=9.5</em>.',
+        ],
+      },
+      advancedExample: {
+        title: 'Use Auto vs Manual mode with a heavy graph',
+        slotId: 'interface-advanced',
+        steps: [
+          'Switch the toolbar to <strong>Manual</strong> mode.',
+          'Add an <strong>Input.Number</strong> (n = <code>100</code>), a <strong>List.Range</strong>, and an <strong>Output.Watch</strong>.',
+          'Wire: Input.Number → List.Range\'s <em>end</em> input; List.Range\'s <em>list</em> → Watch.',
+          'Notice that changing <em>n</em> does <em>not</em> trigger a recalculation — the graph waits.',
+          'Press the ▶ <strong>Run</strong> button in the toolbar. The Watch shows the list of 100 numbers.',
+          'Switch back to <strong>Auto</strong> — now every value change re-runs instantly.',
+        ],
+      },
+    },
+    // 2 — Node Anatomy
+    {
+      simpleExample: {
+        title: 'Read every part of a node: Math.Add',
+        slotId: 'node-layout-simple',
+        steps: [
+          'Add a <strong>Math.Add</strong> node to the canvas.',
+          'Observe the coloured header bar — this is the <em>Math</em> category colour.',
+          'Hover over the left port circles to see <em>a</em> and <em>b</em> labels.',
+          'The right port circle is the <em>result</em> output.',
+          'Type <code>7</code> in the <em>a</em> control and <code>3</code> in <em>b</em>.',
+          'Add <strong>Output.Watch</strong> and wire result → Watch. Confirm it shows <code>10</code>.',
+        ],
+      },
+      advancedExample: {
+        title: 'Override a control with an upstream wire',
+        slotId: 'node-layout-advanced',
+        steps: [
+          'Add <strong>Input.Slider</strong> (min=0, max=10, value=5) and a <strong>Math.Multiply</strong> node.',
+          'Notice that Math.Multiply\'s <em>a</em> control shows a default number field.',
+          'Wire the Slider\'s <em>value</em> output to the <em>a</em> input of Math.Multiply.',
+          'Observe that the inline <em>a</em> control on the node is now greyed out — the wire overrides it.',
+          'Set <em>b</em> control to <code>3</code>. Drag the slider and watch the output triple the slider value live.',
+          'Disconnect the wire. The control becomes editable again — confirming the control/wire priority rule.',
+        ],
+      },
+    },
+    // 3 — Data Types
+    {
+      simpleExample: {
+        title: 'String + Number in one graph',
+        slotId: 'data-types-simple',
+        steps: [
+          'Add an <strong>Input.String</strong> node and type <code>Hello</code>.',
+          'Add an <strong>Input.Number</strong> node and set it to <code>42</code>.',
+          'Add two <strong>Output.Watch</strong> nodes — one for each input.',
+          'Wire Input.String → Watch 1, and Input.Number → Watch 2.',
+          'Notice Watch 1 shows <code>"Hello"</code> (string) while Watch 2 shows <code>42</code> (number).',
+          'Try wiring a string into a number port — you\'ll see a type-mismatch warning in the inspector.',
+        ],
+      },
+      advancedExample: {
+        title: 'Boolean gate: filter a list',
+        slotId: 'data-types-advanced',
+        steps: [
+          'Add <strong>List.Create</strong> with items <code>1, 2, 3, 4, 5</code>.',
+          'Add <strong>Math.GreaterThan</strong> — set <em>b</em> to <code>2</code>.',
+          'Wire List.Create\'s <em>list</em> → Math.GreaterThan\'s <em>a</em>. (Lacing applies the comparison to every item.)',
+          'The output is a boolean list: <code>[false, false, true, true, true]</code>.',
+          'Add <strong>List.Filter</strong>. Wire the original list to <em>list</em> and the boolean list to <em>mask</em>.',
+          'Output: <code>[3, 4, 5]</code> — only values greater than 2 pass through.',
+        ],
+      },
+    },
+    // 4 — Math Operations
+    {
+      simpleExample: {
+        title: 'Compute the hypotenuse',
+        slotId: 'math-simple',
+        steps: [
+          'Add two <strong>Input.Number</strong> nodes: set one to <code>3</code> (a), one to <code>4</code> (b).',
+          'Add two <strong>Math.Multiply</strong> nodes. Wire a → a×a, and b → b×b (set the second port to the same input).',
+          'Add <strong>Math.Add</strong>. Wire both squares into it.',
+          'Add <strong>Math.Sqrt</strong>. Wire the sum into it.',
+          'Add <strong>Output.Watch</strong> and wire Sqrt\'s result. You see <code>5</code> — the 3-4-5 hypotenuse.',
+        ],
+      },
+      advancedExample: {
+        title: 'Sine wave Y-coordinates for N points',
+        slotId: 'math-advanced',
+        steps: [
+          'Add <strong>Input.Number</strong> (n = <code>24</code>) and <strong>List.Range</strong>.',
+          'Wire n into List.Range\'s <em>count</em>; set start=<code>0</code>, end=<code>360</code>.',
+          'Add <strong>Math.Radians</strong> and wire the angle list into it.',
+          'Add <strong>Math.Sin</strong> and wire the radians list into it.',
+          'Add <strong>Output.Watch</strong> to see the 24 sine values ranging from -1 to 1.',
+          'Feed these values into a <strong>Geo.Point</strong> node with x = index/24, y = sin value to plot a sine curve.',
+        ],
+      },
+    },
+    // 5 — Geometry Operations
+    {
+      simpleExample: {
+        title: 'Draw a line between two points',
+        slotId: 'geometry-simple',
+        steps: [
+          'Add two <strong>Point.ByCoordinates</strong> nodes.',
+          'Set the first to x=<code>0</code>, y=<code>0</code>, z=<code>0</code>.',
+          'Set the second to x=<code>5</code>, y=<code>3</code>, z=<code>0</code>.',
+          'Add <strong>Line.ByStartPointEndPoint</strong>.',
+          'Wire point 1 → startPoint, point 2 → endPoint.',
+          'The 3D viewport shows a white line. The inspector reports its length as <code>~5.83</code>.',
+        ],
+      },
+      advancedExample: {
+        title: 'Extrude a rectangle into a box solid',
+        slotId: 'geometry-advanced',
+        steps: [
+          'Add four <strong>Point.ByCoordinates</strong> nodes at (0,0,0), (4,0,0), (4,3,0), (0,3,0).',
+          'Add <strong>List.Create</strong> — wire all four points as items.',
+          'Add <strong>PolyCurve.ByPoints</strong> (closed = true) to form a rectangle.',
+          'Add <strong>Vector.ByCoordinates</strong> (0, 0, 5) for the extrusion direction.',
+          'Add <strong>Solid.Extrude</strong>. Wire the closed curve → profile, vector → direction.',
+          'The viewport shows a 4×3×5 box. Adjust any coordinate to update the solid live.',
+        ],
+      },
+    },
+    // 6 — List Operations
+    {
+      simpleExample: {
+        title: 'Reverse a list of numbers',
+        slotId: 'lists-simple',
+        steps: [
+          'Add <strong>List.Create</strong> with three inputs: <code>10</code>, <code>20</code>, <code>30</code>.',
+          'Add <strong>List.Reverse</strong>.',
+          'Wire List.Create\'s <em>list</em> → List.Reverse.',
+          'Add <strong>Output.Watch</strong> and wire List.Reverse\'s result.',
+          'The Watch shows <code>[30, 20, 10]</code> — the list in reverse order.',
+        ],
+      },
+      advancedExample: {
+        title: 'Cross-product grid of points',
+        slotId: 'lists-advanced',
+        steps: [
+          'Add two <strong>List.Range</strong> nodes: one for X (0–4, step 1), one for Y (0–3, step 1).',
+          'Add a <strong>Point.ByCoordinates</strong> node.',
+          'Wire X range → x input, Y range → y input.',
+          'Right-click Point.ByCoordinates and set lacing to <strong>Cross Product</strong>.',
+          'The node now produces 5×4=20 points covering the full grid.',
+          'Connect to <strong>Output.Watch</strong> to inspect. The viewport renders all 20 points as dots.',
+        ],
+      },
+    },
+    // 7 — Python Node
+    {
+      simpleExample: {
+        title: 'Square every number in a list',
+        slotId: 'python-simple',
+        steps: [
+          'Add a <strong>Custom.Python</strong> node and open its code editor.',
+          'Write: <code>result = [x**2 for x in elements]</code>',
+          'Add <strong>List.Create</strong> with items <code>1, 2, 3, 4, 5</code>.',
+          'Wire List.Create\'s <em>list</em> → Python\'s <em>elements</em> input.',
+          'Add <strong>Output.Watch</strong> and wire Python\'s <em>result</em> to it.',
+          'The Watch shows <code>[1, 4, 9, 16, 25]</code>.',
+        ],
+      },
+      advancedExample: {
+        title: 'Read Revit wall widths via RevitBridge',
+        slotId: 'python-advanced',
+        steps: [
+          'Ensure Nova Connect is running and paired with your Revit session.',
+          'Add a <strong>Custom.Python</strong> node. Write:\n<code>walls = RevitBridge.getElements("Walls")\nresult = [RevitBridge.getParameter(w, "Width") for w in walls if w]</code>',
+          'Add <strong>Output.Watch</strong> and wire Python\'s <em>result</em> to it.',
+          'Run the graph. The Watch shows a list of wall widths from the active Revit model.',
+          'Feed the widths into <strong>Math.Max</strong> to find the thickest wall.',
+        ],
+      },
+    },
+    // 8 — Code Terminal
+    {
+      simpleExample: {
+        title: 'List all node types on the canvas',
+        slotId: 'code-terminal-simple',
+        steps: [
+          'Open the Code Terminal (Help menu or keyboard shortcut).',
+          'Type: <code>app.nodes.map(n => n.type)</code> and press Enter.',
+          'The terminal logs an array of all node type strings on the canvas.',
+          'Try: <code>app.nodes.length</code> to see how many nodes exist.',
+          'This is read-only — nothing on the canvas changes.',
+        ],
+      },
+      advancedExample: {
+        title: 'Programmatically add 5 Math.Add nodes in a column',
+        slotId: 'code-terminal-advanced',
+        steps: [
+          'Open the Code Terminal.',
+          'Type the following and press Enter:\n<code>for(let i=0;i<5;i++) app.addNodeToCanvas("Math.Add",200,i*80);</code>',
+          'Five <strong>Math.Add</strong> nodes appear on the canvas in a vertical column.',
+          'Now wire the first to the second: find the node IDs with <code>app.nodes.slice(-5).map(n=>n.id)</code>.',
+          'Use <code>app.connectNodes(id1, "result", id2, "a")</code> to wire them programmatically.',
+          'Run the graph (if in Manual mode) to compute the chain.',
+        ],
+      },
+    },
+    // 9 — Code Block
+    {
+      simpleExample: {
+        title: 'Rectangle area and diagonal from width and height',
+        slotId: 'codeblock-simple',
+        steps: [
+          'Add a <strong>Custom.CodeBlock</strong> node and type:\n<code>area = width * height\ndiagonal = sqrt(width^2 + height^2)</code>',
+          'Two output ports (<em>area</em> and <em>diagonal</em>) appear on the right; two input ports (<em>width</em>, <em>height</em>) appear on the left.',
+          'Set width = <code>3</code> and height = <code>4</code> via the inline controls.',
+          'Add two <strong>Output.Watch</strong> nodes — wire <em>area</em> and <em>diagonal</em> to each.',
+          'Confirm: area = <code>12</code>, diagonal = <code>5</code>.',
+        ],
+      },
+      advancedExample: {
+        title: 'Generate a circle of 24 points using series shorthand',
+        slotId: 'codeblock-advanced',
+        steps: [
+          'Add a <strong>Custom.CodeBlock</strong> and type:\n<code>angles = 0..360..#24\nxs = r * cos(rad(angles))\nys = r * sin(rad(angles))</code>',
+          'An input port <em>r</em> appears. Set r = <code>5</code>.',
+          'Wire <em>xs</em> and <em>ys</em> to a <strong>Point.ByCoordinates</strong> node (x → xs, y → ys).',
+          'The viewport renders 24 evenly-distributed points around a circle of radius 5.',
+          'Change <em>r</em> to <code>10</code> — the circle doubles instantly.',
+          'Add <strong>PolyCurve.ByPoints</strong> (closed=true) to connect the dots into a closed polygon.',
+        ],
+      },
+    },
+  ];
+
+  ex.forEach(function (data, i) {
+    if (!data) return;
+    if (data.simpleExample) LEARNING_CHAPTERS[i].simpleExample = data.simpleExample;
+    if (data.advancedExample) LEARNING_CHAPTERS[i].advancedExample = data.advancedExample;
+  });
+}
+
+// ── Example figure helper ─────────────────────────────────────────────────────
+
+/**
+ * Build the screenshot-slot figure HTML for one example.
+ * When a PNG is available at public/learning/<slotId>.png the real image is
+ * shown (wired by attachLearningShots). Until then a clean placeholder SVG
+ * renders: a dark canvas outline with the chapter icon centred.
+ *
+ * @param {string} slotId   e.g. "intro-simple"
+ * @param {string} icon     Chapter icon glyph (e.g. "⬡")
+ * @returns {string} HTML string
+ */
+function _screenshotFigureHtml(slotId, icon) {
+  const placeholder = '<svg xmlns="http://www.w3.org/2000/svg" width="560" height="180"'
+    + ' viewBox="0 0 560 180" role="img" aria-label="Nova canvas screenshot placeholder">'
+    + '<rect width="560" height="180" rx="8" fill="#11111b" stroke="#313244" stroke-width="1.5"/>'
+    + '<rect x="1" y="1" width="558" height="28" rx="8" fill="#181825"/>'
+    + '<rect x="1" y="17" width="558" height="12" fill="#181825"/>'
+    + '<circle cx="18" cy="15" r="5" fill="#45475a"/>'
+    + '<circle cx="36" cy="15" r="5" fill="#45475a"/>'
+    + '<circle cx="54" cy="15" r="5" fill="#45475a"/>'
+    + '<text x="280" y="106" text-anchor="middle" font-size="40" fill="#313244">'
+    + esc(icon)
+    + '</text>'
+    + '<text x="280" y="150" text-anchor="middle" font-size="11" fill="#45475a" font-family="system-ui,sans-serif">Screenshot coming soon</text>'
+    + '</svg>';
+
+  return '<figure class="learn-example-fig learn-figure" data-learn-shot="' + esc(slotId) + '">'
+    + '<div class="learn-illus" aria-hidden="true">' + placeholder + '</div>'
+    + '<img class="learn-shot" alt="" data-shot-src="learning/' + esc(slotId) + '.png" hidden>'
+    + '</figure>';
+}
+
+// Attach examples at module init.
+_attachChapterExamples();
+
 // ── Render helpers ─────────────────────────────────────────────────────────────
 
 function esc(s) {
@@ -603,6 +941,43 @@ function buildChapterHtml(ch, chIdx) {
     }
     html += '</div>';
   });
+
+  // ── Examples (simple + advanced) ────────────────────────────────────────────
+  // Rendered as learn-section siblings so they inherit the same visual rhythm as
+  // concept sections. Each example gets a left-border accent (blue = simple,
+  // purple = advanced) and a screenshot figure slot.
+  if (ch.simpleExample || ch.advancedExample) {
+    html += '<div class="learn-section learn-examples">'
+      + '<h2 class="learn-section-title">Try It</h2>';
+
+    [ch.simpleExample, ch.advancedExample].forEach(function (ex, exIdx) {
+      if (!ex) return;
+      const isSimple = exIdx === 0;
+      const levelLabel = isSimple ? 'Simple Example' : 'Advanced Example';
+      const modifier = isSimple ? 'simple' : 'advanced';
+
+      html += '<div class="learn-example learn-example--' + modifier + '">'
+        + '<span class="learn-example-label">' + levelLabel + '</span>'
+        + '<p class="learn-example-title">' + esc(ex.title) + '</p>';
+
+      // Screenshot figure slot — real PNG loaded by attachLearningShots()
+      if (ex.slotId) {
+        html += _screenshotFigureHtml(ex.slotId, ch.icon);
+      }
+
+      if (ex.steps && ex.steps.length > 0) {
+        html += '<ol class="learn-example-steps">';
+        ex.steps.forEach(function (step) {
+          html += '<li>' + step + '</li>';
+        });
+        html += '</ol>';
+      }
+
+      html += '</div>';
+    });
+
+    html += '</div>';
+  }
 
   if (ch.quiz && ch.quiz.length > 0) {
     html += '<div class="learn-quiz">'
@@ -750,12 +1125,32 @@ function _render(overlay) {
 }
 
 /**
- * Backward-compatible no-op — screenshot slots are not used in the chapter
- * layout; kept so existing app.js calls don't need updating.
- * @param {Document} _doc
+ * Wire up real PNG screenshots into the learn-figure slots inside `doc`.
+ * For every <figure data-learn-shot="SLOT_ID"> the companion
+ * <img data-shot-src="learning/SLOT_ID.png"> is shown (hidden attribute removed)
+ * when the image loads successfully; the placeholder SVG is hidden instead.
+ * If the PNG is absent or fails to load the placeholder remains visible.
+ *
+ * Called by app.js after showLearning() has inserted the overlay into the DOM.
+ * @param {Document} doc
  */
-export function attachLearningShots(_doc) {
-  // no-op — new design uses prose + code blocks, not screenshot overlays
+export function attachLearningShots(doc) {
+  const figures = (doc || document).querySelectorAll('.learn-figure[data-learn-shot]');
+  figures.forEach(function (fig) {
+    const img = fig.querySelector('.learn-shot[data-shot-src]');
+    const illus = fig.querySelector('.learn-illus');
+    if (!img) return;
+    const src = img.getAttribute('data-shot-src');
+    if (!src) return;
+    img.onload = function () {
+      img.removeAttribute('hidden');
+      if (illus) illus.setAttribute('hidden', '');
+    };
+    img.onerror = function () {
+      // Leave placeholder visible — PNG not yet available.
+    };
+    img.src = src;
+  });
 }
 
 // Keep LEARNING_STEPS as a backward-compat alias so any remaining import

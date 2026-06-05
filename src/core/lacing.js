@@ -15,7 +15,8 @@ const NON_LACEABLE_TYPES = {
   'custom-python': true,
   'Custom.Python': true,
   'custom-ai': true,
-  'Custom.AI': true
+  'Custom.AI': true,
+  'Surface.ByPatch': true
 };
 
 // Whether a node should implicitly map over an incoming list — running once per

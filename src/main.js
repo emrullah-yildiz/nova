@@ -56,6 +56,12 @@ import {
 } from './integrations/connect/aps-adapters.js';
 import { installNovaConnectPanel } from './integrations/connect/connect-panel.js';
 import { installGeoSelector } from './viewer/geo-selector.js';
+import {
+  activateSelectionMode as _activateSelectionMode,
+  deactivateSelectionMode as _deactivateSelectionMode,
+  isSelectionModeActive as _isSelectionModeActive,
+  selectionModeClick as _selectionModeClick,
+} from './viewer/selection-mode.js';
 import { RuntimeConfig, getRuntimeConfig } from './config/runtime-config.js';
 import { NovaCloudClient, createNovaCloudClient } from './enterprise/cloud-client.js';
 import { requestWriteApproval, resolveApproval, getPendingApprovals, getApprovalStatus, recordHostAuditEvent, issueWriteToken } from './integrations/connect/revit-write-approval.js';
@@ -163,6 +169,13 @@ if (typeof window !== 'undefined') {
   window.ApsDocsAdapter = ApsDocsAdapter;
   window.ApsDerivativeAdapter = ApsDerivativeAdapter;
   window.ApsDesignAutomationAdapter = ApsDesignAutomationAdapter;
+  window.activateSelectionMode = _activateSelectionMode;
+  window.__selectionModeModule = {
+    activateSelectionMode: _activateSelectionMode,
+    deactivateSelectionMode: _deactivateSelectionMode,
+    isSelectionModeActive: _isSelectionModeActive,
+    selectionModeClick: _selectionModeClick,
+  };
 }
 
 function installBeforeAppInit() {

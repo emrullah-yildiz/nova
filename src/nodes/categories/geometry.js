@@ -1,6 +1,7 @@
 import { Geo } from '../../geometry/index.js';
 import { orient } from '../../geometry/transforms.js';
 
+
 export const geometryCategory = {
   id: 'geometry',
   name: 'Geometry',
@@ -516,5 +517,139 @@ export const geometryNodes = [
       },
       sampleCode: '{{result}} = Geo.orient({{geometry}}, {{fromPlane}}, {{toPlane}})'
     }
-  }
+  },
+
+  // ─── Interactive Selection ─────────────────────────────────────────────────
+  //
+  // Select.Faces / Select.Edges / Select.Points — each presents a "Select"
+  // button in the node body. Clicking it activates 3D selection mode in the
+  // viewport (via selection-mode.js). The user clicks geometry in the 3D view
+  // to build a multi-item set; green ✓ Approve / red ✗ Cancel toolbar buttons
+  // confirm or discard. Works with Nova geometry only (scene items tracked by
+  // geo-selector.js). The node stores selected item labels in its controlValues
+  // and outputs them as a list so downstream nodes can consume the selection.
+
+  {
+    type: 'Select.Faces',
+    name: 'Select.Faces',
+    category: 'geometry',
+    subGroup: 'Selection',
+    icon: '⬡',
+    aliases: ['select-faces'],
+    description: 'Activates interactive face-selection mode in the 3D viewport. Click the Select button, then click surface or solid mesh geometry in the 3D view to build a selection set. Press Approve (green ✓) to confirm or Cancel (red ✗) to discard. Outputs the list of selected geometry labels. Works with Nova geometry only.',
+    inputs: [],
+    outputs: [
+      { id: 'selection', name: 'Selection', type: 'list', description: 'List of selected geometry item labels' }
+    ],
+    controls: [
+      { id: '_selectedLabels', type: 'hidden', default: '' }
+    ],
+    metadata: { selectionMode: 'faces' },
+    codegen: {
+      python: '{{selection}} = select_faces()',
+      csharp: 'var {{selection}} = SelectFaces();'
+    },
+    execute(context, inputs, controlValues) {
+      const raw = controlValues._selectedLabels || '';
+      const labels = raw ? raw.split('||').filter(Boolean) : [];
+      return { selection: labels };
+    },
+    help: {
+      inputs: [],
+      outputs: [{ name: 'Selection', description: 'List of selected geometry labels' }],
+      example: {
+        title: 'Select faces and inspect them',
+        nodes: [
+          { type: 'Select.Faces', x: 0, y: 0 },
+          { type: 'Output.Watch', x: 240, y: 0 }
+        ],
+        wires: [
+          [0, 'selection', 1, 'value']
+        ]
+      },
+      sampleCode: '{{selection}} = select_faces()'
+    }
+  },
+  {
+    type: 'Select.Edges',
+    name: 'Select.Edges',
+    category: 'geometry',
+    subGroup: 'Selection',
+    icon: '∕',
+    aliases: ['select-edges'],
+    description: 'Activates interactive edge-selection mode in the 3D viewport. Click the Select button, then click line or curve geometry in the 3D view. Press Approve (green ✓) to confirm. Works with Nova geometry only.',
+    inputs: [],
+    outputs: [
+      { id: 'selection', name: 'Selection', type: 'list', description: 'List of selected edge/curve geometry labels' }
+    ],
+    controls: [
+      { id: '_selectedLabels', type: 'hidden', default: '' }
+    ],
+    metadata: { selectionMode: 'edges' },
+    codegen: {
+      python: '{{selection}} = select_edges()',
+      csharp: 'var {{selection}} = SelectEdges();'
+    },
+    execute(context, inputs, controlValues) {
+      const raw = controlValues._selectedLabels || '';
+      const labels = raw ? raw.split('||').filter(Boolean) : [];
+      return { selection: labels };
+    },
+    help: {
+      inputs: [],
+      outputs: [{ name: 'Selection', description: 'List of selected edge/curve labels' }],
+      example: {
+        title: 'Select edges and inspect them',
+        nodes: [
+          { type: 'Select.Edges', x: 0, y: 0 },
+          { type: 'Output.Watch', x: 240, y: 0 }
+        ],
+        wires: [
+          [0, 'selection', 1, 'value']
+        ]
+      },
+      sampleCode: '{{selection}} = select_edges()'
+    }
+  },
+  {
+    type: 'Select.Points',
+    name: 'Select.Points',
+    category: 'geometry',
+    subGroup: 'Selection',
+    icon: '•',
+    aliases: ['select-points'],
+    description: 'Activates interactive point-selection mode in the 3D viewport. Click the Select button, then click point geometry in the 3D view. Press Approve (green ✓) to confirm. Works with Nova geometry only.',
+    inputs: [],
+    outputs: [
+      { id: 'selection', name: 'Selection', type: 'list', description: 'List of selected point geometry labels' }
+    ],
+    controls: [
+      { id: '_selectedLabels', type: 'hidden', default: '' }
+    ],
+    metadata: { selectionMode: 'points' },
+    codegen: {
+      python: '{{selection}} = select_points()',
+      csharp: 'var {{selection}} = SelectPoints();'
+    },
+    execute(context, inputs, controlValues) {
+      const raw = controlValues._selectedLabels || '';
+      const labels = raw ? raw.split('||').filter(Boolean) : [];
+      return { selection: labels };
+    },
+    help: {
+      inputs: [],
+      outputs: [{ name: 'Selection', description: 'List of selected point labels' }],
+      example: {
+        title: 'Select points and inspect them',
+        nodes: [
+          { type: 'Select.Points', x: 0, y: 0 },
+          { type: 'Output.Watch', x: 240, y: 0 }
+        ],
+        wires: [
+          [0, 'selection', 1, 'value']
+        ]
+      },
+      sampleCode: '{{selection}} = select_points()'
+    }
+  },
 ];

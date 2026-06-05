@@ -71,15 +71,8 @@ test.describe('Nova Learning Primer', () => {
 
     // Answer all quiz questions for chapter 0 correctly via JS
     await page.evaluate(() => {
-      const ch = window.LEARNING_CHAPTERS
-        ? window.LEARNING_CHAPTERS
-        : null;
-      // Use the exposed __learnAnswer function
       if (window.__learnAnswer) {
-        // Answer all questions correctly for chapter 0
-        const chapters = window.app && window.app._learningChapters;
-        // Fallback: call with known correct answer indices for intro chapter
-        // Q1 answer: 1, Q2 answer: 1
+        // Q1 answer: 1, Q2 answer: 1 (known correct indices for intro chapter)
         window.__learnAnswer(0, 0, 1);
         window.__learnAnswer(0, 1, 1);
       }
