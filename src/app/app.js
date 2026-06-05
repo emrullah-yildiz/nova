@@ -7,7 +7,7 @@ import { computeFitView } from '../core/graph-layout.js';
 import { CodeParser } from '../runtime/parser.js';
 import { Viewer3D } from '../viewer/viewer3d.js';
 import { LEGAL_DOCS, renderMarkdown } from '../ui/legal-viewer.js';
-import { buildLearningHtml, attachLearningShots } from '../ui/learning-page.js';
+import { buildLearningHtml, initLearning, attachLearningShots } from '../ui/learning-page.js';
 // Legal docs published in-app. docs/legal lives at the repo root, which is the
 // Vite project root, so `?raw` resolves at build time and the markdown text is
 // bundled as a string (no runtime fetch, no markdown dependency).
@@ -111,6 +111,12 @@ const app = {
     this.initAccount();
 
     this.initialized = true;
+
+    // Re-open learning page if the URL hash was set when the user navigated
+    // here (e.g. after a page refresh while the learning overlay was open).
+    if (typeof location !== 'undefined' && location.hash === '#learning') {
+      this.showLearning();
+    }
 
   },
 
@@ -2465,6 +2471,10 @@ const app = {
   // self-contained inline SVG (no external image dependency); each step also has
   // an optional screenshot slot that swaps in a real image only if it loads.
   showLearning() {
+    // Push hash so refreshing the page re-opens the learning overlay.
+    if (typeof location !== 'undefined' && location.hash !== '#learning') {
+      history.pushState(null, '', '#learning');
+    }
     let overlay = document.getElementById('learning-overlay');
     if (!overlay) {
       overlay = document.createElement('div');
@@ -2475,17 +2485,20 @@ const app = {
       document.body.appendChild(overlay);
       this._escLearning = (e) => { if (e.key === 'Escape') this.closeLearning(); };
       document.addEventListener('keydown', this._escLearning);
-      // Wire the optional screenshot slots (no-ops where no screenshot exists).
-      attachLearningShots(document);
     }
-    const scroll = document.getElementById('learn-scroll');
-    if (scroll) scroll.scrollTop = 0;
+    // initialise chapter nav and quiz interactivity
+    initLearning(overlay);
+    attachLearningShots(document);
   },
 
   closeLearning() {
     const overlay = document.getElementById('learning-overlay');
     if (overlay) overlay.remove();
     if (this._escLearning) { document.removeEventListener('keydown', this._escLearning); this._escLearning = null; }
+    // Remove the hash so the URL is clean after closing.
+    if (typeof location !== 'undefined' && location.hash === '#learning') {
+      history.replaceState(null, '', location.pathname + location.search);
+    }
   },
 
 

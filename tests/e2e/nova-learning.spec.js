@@ -1,62 +1,148 @@
 const { test, expect } = require('@playwright/test');
 
-// Verifies the Nova Learning page renders to the real DOM (canvas/SVG visuals
-// can't be checked in jsdom): Help → "Nova Learning" opens a scrollable page
-// with the hero, all step sections, inline-SVG illustrations (no broken <img>),
-// the Data Privacy link, and the "Start a new project" action.
+// Verifies the Nova Learning Primer renders in the real DOM: sidebar nav with
+// all 10 chapters, chapter content with sections and quiz questions, correct-
+// answer feedback, chapter navigation, and the Data Privacy / close actions.
 
 async function waitForApp(page) {
   await page.goto('/');
   await page.waitForFunction(() => window.app && window.app.initialized);
 }
 
-const STEP_HEADINGS = [
-  'What is Nova',
-  'The canvas & node library',
-  'Wiring nodes together',
-  'Live geometry & the 3D viewer',
-  'The AI assistant',
-  'Save & projects',
-  'Connect to Revit & Forma'
+const CHAPTER_TITLES = [
+  'Introduction',
+  'Interface',
+  'Node Anatomy',
+  'Data Types',
+  'Math Operations',
+  'Geometry Operations',
+  'List Operations',
+  'Python Node',
+  'Code Terminal',
+  'Code Block',
 ];
 
-test.describe('Nova Learning page', () => {
-  test('opens from Help → Nova Learning and renders hero + all steps', async ({ page }) => {
+test.describe('Nova Learning Primer', () => {
+  test('opens and renders sidebar nav with all 10 chapters', async ({ page }) => {
     await waitForApp(page);
-
-    // Open via the app method (the menu hover/click is covered by the menu wiring).
     await page.evaluate(() => window.app.showLearning());
 
     const overlay = page.locator('#learning-overlay');
     await expect(overlay).toBeVisible();
-    await expect(overlay.locator('.learn-hero-title')).toHaveText(/Build parametric design/i);
 
-    // All 7 designed step sections render with their headings.
-    for (const h of STEP_HEADINGS) {
-      await expect(overlay.getByRole('heading', { name: h })).toBeVisible();
+    // Sidebar nav is present
+    const nav = overlay.locator('#learn-nav');
+    await expect(nav).toBeVisible();
+
+    // All chapter titles appear in the nav
+    for (const title of CHAPTER_TITLES) {
+      await expect(nav.getByText(title, { exact: false })).toBeVisible();
     }
-    // The footer is the 8th section.
-    await expect(overlay.locator('.learn-footer-title')).toHaveText(/Ready to design/i);
-
-    // Inline SVG illustrations are present and visible — no external image dep.
-    const svgs = overlay.locator('svg');
-    expect(await svgs.count()).toBeGreaterThanOrEqual(STEP_HEADINGS.length);
-
-    // No broken/visible screenshot <img> (the optional shots aren't shipped).
-    const visibleShots = await overlay.locator('img.learn-shot:visible').count();
-    expect(visibleShots).toBe(0);
 
     await page.screenshot({ path: 'tests/e2e/__artifacts__/nova-learning.png', fullPage: false });
+  });
 
-    // The Data Privacy link is wired to the legal viewer.
-    const privacy = overlay.locator('.learn-privacy-link');
-    await expect(privacy).toBeVisible();
-    await privacy.click();
+  test('first chapter content renders sections and quiz', async ({ page }) => {
+    await waitForApp(page);
+    await page.evaluate(() => window.app.showLearning());
+
+    const content = page.locator('#learn-chapter-content');
+    await expect(content).toBeVisible();
+
+    // Chapter 1 heading
+    await expect(content.getByRole('heading', { level: 1 })).toContainText('Introduction');
+
+    // At least one concept section heading
+    const sectionHeadings = content.locator('.learn-section-title');
+    expect(await sectionHeadings.count()).toBeGreaterThan(0);
+
+    // Quiz section with options
+    const quizOpts = content.locator('.learn-quiz-opt');
+    expect(await quizOpts.count()).toBeGreaterThan(0);
+
+    // "Next Chapter" button disabled until quiz is answered
+    const nextBtn = content.locator('.learn-nav-btn--next');
+    await expect(nextBtn).toBeDisabled();
+  });
+
+  test('answering quiz correctly enables Next Chapter button', async ({ page }) => {
+    await waitForApp(page);
+    await page.evaluate(() => window.app.showLearning());
+
+    // Answer all quiz questions for chapter 0 correctly via JS
+    await page.evaluate(() => {
+      const ch = window.LEARNING_CHAPTERS
+        ? window.LEARNING_CHAPTERS
+        : null;
+      // Use the exposed __learnAnswer function
+      if (window.__learnAnswer) {
+        // Answer all questions correctly for chapter 0
+        const chapters = window.app && window.app._learningChapters;
+        // Fallback: call with known correct answer indices for intro chapter
+        // Q1 answer: 1, Q2 answer: 1
+        window.__learnAnswer(0, 0, 1);
+        window.__learnAnswer(0, 1, 1);
+      }
+    });
+
+    const nextBtn = page.locator('#learn-chapter-content .learn-nav-btn--next');
+    await expect(nextBtn).not.toBeDisabled();
+  });
+
+  test('chapter navigation moves between chapters', async ({ page }) => {
+    await waitForApp(page);
+    await page.evaluate(() => window.app.showLearning());
+
+    // Navigate to chapter 2 (Interface) via sidebar
+    await page.evaluate(() => window.__learnGo(1));
+    const content = page.locator('#learn-chapter-content');
+    await expect(content.getByRole('heading', { level: 1 })).toContainText('Interface');
+
+    // Nav shows chapter 2 as active
+    const activeChBtn = page.locator('#learn-nav .learn-nav-ch.active');
+    await expect(activeChBtn).toContainText('Interface');
+  });
+
+  test('Data Privacy link opens the legal overlay', async ({ page }) => {
+    await waitForApp(page);
+    await page.evaluate(() => window.app.showLearning());
+
+    const privacyLink = page.locator('#learning-overlay .learn-privacy-link');
+    await expect(privacyLink).toBeVisible();
+    await privacyLink.click();
     await expect(page.locator('#legal-overlay')).toBeVisible();
     await page.evaluate(() => window.app.closeLegal());
+  });
 
-    // "Start a new project" closes the page and enters the workspace.
-    await overlay.locator('.learn-btn--primary').click();
+  test('URL hash is #learning while open and cleared on close', async ({ page }) => {
+    await waitForApp(page);
+    await page.evaluate(() => window.app.showLearning());
+    await expect(page).toHaveURL(/#learning/);
+
+    await page.evaluate(() => window.app.closeLearning());
+    await expect(page.locator('#learning-overlay')).toHaveCount(0);
+    // Hash should be gone
+    const url = page.url();
+    expect(url).not.toContain('#learning');
+  });
+
+  test('page refreshes while learning is open and re-opens the overlay', async ({ page }) => {
+    await waitForApp(page);
+    await page.evaluate(() => window.app.showLearning());
+    await expect(page.locator('#learning-overlay')).toBeVisible();
+
+    // Reload — the #learning hash persists
+    await page.reload();
+    await page.waitForFunction(() => window.app && window.app.initialized);
+    await expect(page.locator('#learning-overlay')).toBeVisible();
+  });
+
+  test('closing the learning page removes the overlay', async ({ page }) => {
+    await waitForApp(page);
+    await page.evaluate(() => window.app.showLearning());
+    await expect(page.locator('#learning-overlay')).toBeVisible();
+
+    await page.evaluate(() => window.app.closeLearning());
     await expect(page.locator('#learning-overlay')).toHaveCount(0);
   });
 });

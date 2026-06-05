@@ -2168,59 +2168,94 @@ input[type="number"] {
    A full-page scrollable guide. Uses the legal-overlay backdrop pattern but a
    richer, wider scrolling panel with a hero + alternating step cards + footer.
    All illustrations are inline SVG using the app's color tokens. */
+/* ── Nova Learning Primer ─────────────────────────────────────────────────── */
 #learning-overlay { position: fixed; inset: 0; z-index: 10003; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; }
-#learning-overlay .learn-panel { position: relative; width: 1040px; max-width: 96vw; height: 90vh; background: var(--bg-secondary, #181825); border: 1px solid var(--border-color, #313244); border-radius: 14px; box-shadow: 0 16px 48px rgba(0,0,0,0.55); color: var(--text-primary, #cdd6f4); overflow: hidden; }
-#learning-overlay .learn-close { position: absolute; top: 12px; right: 16px; background: var(--bg-tertiary, #11111b); border: 1px solid var(--border-color, #313244); color: var(--text-muted, #6c7086); font-size: 22px; line-height: 1; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; z-index: 2; }
+
+/* Panel: sidebar + content side by side */
+#learning-overlay .learn-panel { display: flex; flex-direction: row; width: 1100px; max-width: 96vw; height: 90vh; background: var(--bg-secondary, #181825); border: 1px solid var(--border-color, #313244); border-radius: 14px; box-shadow: 0 16px 48px rgba(0,0,0,0.55); color: var(--text-primary, #cdd6f4); overflow: hidden; }
+
+/* Left sidebar nav */
+#learning-overlay .learn-nav { width: 220px; min-width: 220px; background: var(--bg-tertiary, #11111b); border-right: 1px solid var(--border-color, #313244); display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0; }
+#learning-overlay .learn-nav-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 14px 12px; border-bottom: 1px solid var(--border-color, #313244); flex-shrink: 0; }
+#learning-overlay .learn-nav-brand { font-size: 13px; font-weight: 700; color: var(--accent-purple, #cba6f7); letter-spacing: 0.08em; text-transform: uppercase; }
+#learning-overlay .learn-close { background: transparent; border: 1px solid var(--border-color, #313244); color: var(--text-muted, #6c7086); font-size: 18px; line-height: 1; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 #learning-overlay .learn-close:hover { color: var(--text-bright, #fff); border-color: var(--text-muted, #6c7086); }
+#learning-overlay .learn-nav-list { padding: 8px 0; flex: 1; }
+
+/* Chapter nav buttons */
+#learning-overlay .learn-nav-ch { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 14px; background: transparent; border: none; border-left: 3px solid transparent; color: var(--text-secondary, #a6adc8); font-size: 12.5px; text-align: left; cursor: pointer; transition: background 0.1s, color 0.1s; }
+#learning-overlay .learn-nav-ch:hover { background: var(--bg-surface, #252538); color: var(--text-primary, #cdd6f4); }
+#learning-overlay .learn-nav-ch.active { border-left-color: var(--accent-blue, #89b4fa); background: rgba(137,180,250,0.08); color: var(--text-bright, #fff); font-weight: 600; }
+#learning-overlay .learn-nav-ch.done { color: var(--text-muted, #6c7086); }
+#learning-overlay .learn-nav-ch-icon { font-size: 14px; min-width: 18px; text-align: center; }
+#learning-overlay .learn-nav-ch-title { flex: 1; }
+#learning-overlay .learn-nav-ch-check { color: var(--accent-green, #a6e3a1); font-size: 11px; font-weight: 700; }
+
+/* Main content area */
+#learning-overlay .learn-body { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
 #learning-overlay .learn-scroll { height: 100%; overflow-y: auto; scroll-behavior: smooth; }
+#learning-overlay .learn-chapter-content { padding: 40px 48px 60px; max-width: 720px; }
 
-/* Hero */
-#learning-overlay .learn-hero { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 28px; align-items: center; padding: 56px 56px 40px; background: linear-gradient(160deg, var(--bg-tertiary, #11111b), var(--bg-secondary, #181825)); border-bottom: 1px solid var(--border-color, #313244); }
-#learning-overlay .learn-kicker { display: inline-block; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-purple, #cba6f7); font-weight: 700; margin-bottom: 12px; }
-#learning-overlay .learn-hero-title { font-size: 34px; line-height: 1.12; font-weight: 800; color: var(--text-bright, #fff); margin: 0 0 14px; }
-#learning-overlay .learn-hero-sub { font-size: 15px; line-height: 1.6; color: var(--text-secondary, #a6adc8); margin: 0 0 22px; }
-#learning-overlay .learn-hero-cta { display: inline-block; background: var(--accent-blue, #89b4fa); color: #11111b; font-weight: 700; font-size: 14px; padding: 11px 20px; border-radius: 9px; text-decoration: none; }
-#learning-overlay .learn-hero-cta:hover { filter: brightness(1.08); }
-#learning-overlay .learn-hero-art { display: flex; justify-content: center; }
-#learning-overlay .learn-hero-art svg { max-width: 320px; }
+/* Chapter header */
+#learning-overlay .learn-ch-num { display: inline-block; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-teal, #94e2d5); font-weight: 700; margin-bottom: 8px; }
+#learning-overlay .learn-ch-title { font-size: 30px; font-weight: 800; color: var(--text-bright, #fff); margin: 0 0 14px; line-height: 1.15; }
+#learning-overlay .learn-ch-intro { font-size: 15px; line-height: 1.65; color: var(--text-secondary, #a6adc8); margin: 0 0 36px; padding-bottom: 28px; border-bottom: 1px solid var(--border-color, #313244); }
 
-/* Steps */
-#learning-overlay .learn-step { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; padding: 46px 56px; border-bottom: 1px solid var(--border-color, #313244); }
-#learning-overlay .learn-step--flip .learn-step-text { order: 2; }
-#learning-overlay .learn-step--flip .learn-figure { order: 1; }
-#learning-overlay .learn-step-num { display: inline-block; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-teal, #94e2d5); font-weight: 700; margin-bottom: 8px; }
-#learning-overlay .learn-step-title { font-size: 24px; font-weight: 800; color: var(--text-bright, #fff); margin: 0 0 8px; }
-#learning-overlay .learn-step-lead { font-size: 16px; font-weight: 600; color: var(--text-primary, #cdd6f4); margin: 0 0 10px; }
-#learning-overlay .learn-step-body { font-size: 14px; line-height: 1.65; color: var(--text-secondary, #a6adc8); margin: 0; }
+/* Concept sections */
+#learning-overlay .learn-section { margin-bottom: 32px; }
+#learning-overlay .learn-section-title { font-size: 17px; font-weight: 700; color: var(--text-primary, #cdd6f4); margin: 0 0 8px; }
+#learning-overlay .learn-section-body { font-size: 14px; line-height: 1.7; color: var(--text-secondary, #a6adc8); margin: 0; }
+#learning-overlay .learn-section-body code, #learning-overlay .learn-section-body kbd { font-family: var(--font-mono, monospace); font-size: 12.5px; background: var(--bg-surface, #252538); border: 1px solid var(--border-color, #313244); padding: 1px 5px; border-radius: 4px; color: var(--accent-blue, #89b4fa); }
+#learning-overlay .learn-section-body strong { color: var(--text-primary, #cdd6f4); font-weight: 600; }
+#learning-overlay .learn-section-body em { color: var(--accent-teal, #94e2d5); font-style: normal; }
 
-/* Figure: inline SVG poster + optional screenshot overlay */
-#learning-overlay .learn-figure { position: relative; margin: 0; border: 1px solid var(--border-color, #313244); border-radius: 12px; overflow: hidden; background: var(--bg-tertiary, #11111b); }
-#learning-overlay .learn-illus { display: block; padding: 18px; }
-#learning-overlay .learn-illus svg { display: block; }
-#learning-overlay .learn-shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* Inline code blocks */
+#learning-overlay .learn-code-block { background: var(--bg-tertiary, #11111b); border: 1px solid var(--border-color, #313244); border-radius: 8px; padding: 14px 18px; margin: 14px 0 0; overflow-x: auto; }
+#learning-overlay .learn-code-block code { font-family: var(--font-mono, monospace); font-size: 12.5px; color: var(--accent-green, #a6e3a1); white-space: pre; line-height: 1.6; }
 
-/* Footer */
-#learning-overlay .learn-footer { text-align: center; padding: 52px 56px 60px; background: linear-gradient(180deg, var(--bg-secondary, #181825), var(--bg-tertiary, #11111b)); }
-#learning-overlay .learn-footer-art { display: flex; justify-content: center; margin-bottom: 8px; }
-#learning-overlay .learn-footer-title { font-size: 26px; font-weight: 800; color: var(--text-bright, #fff); margin: 0 0 6px; }
-#learning-overlay .learn-footer-sub { font-size: 14px; color: var(--text-secondary, #a6adc8); margin: 0 0 22px; }
-#learning-overlay .learn-footer-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 18px; }
-#learning-overlay .learn-btn { font-size: 14px; font-weight: 700; padding: 11px 22px; border-radius: 9px; cursor: pointer; border: 1px solid transparent; }
+/* Quiz */
+#learning-overlay .learn-quiz { margin-top: 40px; padding-top: 28px; border-top: 1px solid var(--border-color, #313244); }
+#learning-overlay .learn-quiz-heading { font-size: 16px; font-weight: 700; color: var(--text-primary, #cdd6f4); margin: 0 0 22px; }
+#learning-overlay .learn-quiz-q { margin-bottom: 28px; }
+#learning-overlay .learn-quiz-question { font-size: 14px; color: var(--text-primary, #cdd6f4); margin: 0 0 12px; line-height: 1.5; }
+#learning-overlay .learn-quiz-qnum { display: inline-block; background: var(--accent-purple, #cba6f7); color: #11111b; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-right: 6px; }
+#learning-overlay .learn-quiz-options { display: flex; flex-direction: column; gap: 8px; }
+#learning-overlay .learn-quiz-opt { text-align: left; padding: 10px 14px; background: var(--bg-surface, #252538); border: 1px solid var(--border-color, #313244); border-radius: 8px; color: var(--text-secondary, #a6adc8); font-size: 13px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+#learning-overlay .learn-quiz-opt:hover { border-color: var(--accent-blue, #89b4fa); background: rgba(137,180,250,0.06); color: var(--text-primary, #cdd6f4); }
+#learning-overlay .learn-quiz-opt.correct { border-color: var(--accent-green, #a6e3a1); background: rgba(166,227,161,0.1); color: var(--accent-green, #a6e3a1); cursor: default; }
+#learning-overlay .learn-quiz-opt.wrong { border-color: var(--accent-red, #f38ba8); background: rgba(243,139,168,0.08); color: var(--accent-red, #f38ba8); }
+#learning-overlay .learn-quiz-opt.disabled { opacity: 0.45; cursor: default; pointer-events: none; }
+#learning-overlay .learn-quiz-feedback { font-size: 13px; margin: 10px 0 0; min-height: 18px; line-height: 1.5; }
+#learning-overlay .learn-quiz-feedback.correct { color: var(--accent-green, #a6e3a1); }
+#learning-overlay .learn-quiz-feedback.wrong { color: var(--accent-red, #f38ba8); }
+#learning-overlay .learn-quiz-tick { font-weight: 700; margin-right: 4px; }
+
+/* Chapter navigation bar */
+#learning-overlay .learn-ch-nav { display: flex; align-items: center; justify-content: space-between; margin-top: 44px; padding-top: 24px; border-top: 1px solid var(--border-color, #313244); }
+#learning-overlay .learn-nav-btn { font-size: 13px; font-weight: 600; padding: 10px 20px; border-radius: 8px; cursor: pointer; border: 1px solid var(--border-color, #313244); background: var(--bg-surface, #252538); color: var(--text-secondary, #a6adc8); transition: border-color 0.15s, color 0.15s; }
+#learning-overlay .learn-nav-btn:hover:not(:disabled) { border-color: var(--accent-blue, #89b4fa); color: var(--text-bright, #fff); }
+#learning-overlay .learn-nav-btn--next:not(:disabled) { background: var(--accent-blue, #89b4fa); color: #11111b; border-color: transparent; }
+#learning-overlay .learn-nav-btn--next:not(:disabled):hover { filter: brightness(1.08); }
+#learning-overlay .learn-nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Finish actions (last chapter) */
+#learning-overlay .learn-finish-actions { display: flex; gap: 10px; }
+#learning-overlay .learn-btn { font-size: 13px; font-weight: 700; padding: 10px 20px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
 #learning-overlay .learn-btn--primary { background: var(--accent-green, #a6e3a1); color: #11111b; }
 #learning-overlay .learn-btn--primary:hover { filter: brightness(1.08); }
 #learning-overlay .learn-btn--ghost { background: transparent; color: var(--text-secondary, #a6adc8); border-color: var(--border-color, #313244); }
 #learning-overlay .learn-btn--ghost:hover { color: var(--text-primary, #cdd6f4); border-color: var(--text-muted, #6c7086); }
-#learning-overlay .learn-footer-fine { font-size: 12px; color: var(--text-muted, #6c7086); margin: 0; }
+#learning-overlay .learn-footer-fine { font-size: 12px; color: var(--text-muted, #6c7086); margin: 22px 0 0; }
 #learning-overlay .learn-privacy-link { color: var(--accent-blue, #89b4fa); text-decoration: none; }
 #learning-overlay .learn-privacy-link:hover { text-decoration: underline; }
 
 @media (max-width: 820px) {
-  #learning-overlay .learn-hero,
-  #learning-overlay .learn-step { grid-template-columns: 1fr; gap: 24px; padding: 34px 26px; }
-  #learning-overlay .learn-step--flip .learn-step-text,
-  #learning-overlay .learn-step--flip .learn-figure { order: initial; }
-  #learning-overlay .learn-hero-title { font-size: 27px; }
-  #learning-overlay .learn-hero-art { order: -1; }
+  #learning-overlay .learn-panel { flex-direction: column; height: 95vh; }
+  #learning-overlay .learn-nav { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid var(--border-color, #313244); max-height: 200px; }
+  #learning-overlay .learn-nav-list { display: flex; flex-direction: row; flex-wrap: nowrap; overflow-x: auto; padding: 8px; gap: 4px; }
+  #learning-overlay .learn-nav-ch { flex-shrink: 0; border-left: none; border-bottom: 3px solid transparent; padding: 6px 10px; font-size: 11px; }
+  #learning-overlay .learn-nav-ch.active { border-left-color: transparent; border-bottom-color: var(--accent-blue, #89b4fa); }
+  #learning-overlay .learn-chapter-content { padding: 24px 22px 48px; }
 }
 
 /* Subtle landing-page entry point into the Learning tour */
