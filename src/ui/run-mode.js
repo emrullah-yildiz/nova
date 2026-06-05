@@ -95,6 +95,9 @@ export function installRunMode(targetApp = getRuntimeApp()) {
     btn.className = 'canvas-tool-btn';
     btn.style.fontSize = '11px';
     btn.style.fontWeight = '700';
+    btn.style.width = 'auto';
+    btn.style.minWidth = '32px';
+    btn.style.padding = '0 8px';
     btn.addEventListener('click', function () { app.toggleRunMode(); });
     // Place the toggle immediately before the Run button.
     runBtn.parentNode.insertBefore(btn, runBtn);

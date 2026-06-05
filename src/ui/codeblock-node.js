@@ -2,25 +2,17 @@
 // NOVA — Custom.CodeBlock on-node editor (UI half)
 // ============================================
 //
-// The UI surface for the Dynamo-style Code Block. Unlike Custom.Python (which is
-// edited in the shared Code Viewer terminal), Custom.CodeBlock is edited INLINE on
-// the node body in an auto-growing textarea:
+// Inline editor for the CodeBlock DSL node. Edited directly on the node body in
+// an auto-growing textarea (no terminal, no scrollbars):
 //
-//   • No scrollbars (overflow:hidden), ever — height grows per keystroke to fit
-//     all rows (scrollHeight), width grows to the longest line clamped MIN..MAX
-//     with soft-wrap at MAX. The node card enlarges with the content.
-//   • Ports re-derive on edit-COMMIT (change/blur), NOT per keystroke — mirroring
-//     the Custom.Python pySyncPorts decision so the editor keeps focus while
-//     typing. Free variables → input ports, every top-level assignment → output
-//     ports, via resolveCodeBlockPorts (the contract from python-port-decl.js).
-//
-// This file is owned by the UI lane (Switch). It consumes the core already on
-// develop (Custom.CodeBlock def + resolveCodeBlockPorts) and does NOT change the
-// runtime parser, the node defs, or Custom.Python's behavior. It self-registers on
-// DOMContentLoaded and the winning node-renderer calls app.enhanceCodeBlockNode
-// directly (load-order independent — no fragile renderNode-wrapper race).
+//   • Height grows per keystroke (scrollHeight); width grows to the longest line
+//     clamped MIN..MAX with soft-wrap at MAX.
+//   • Ports re-derive on edit-COMMIT (change/blur) via resolveCBPorts — free
+//     variables become input ports, assignments become output ports.
+//   • The DSL is plain JavaScript expressions (not Python): 0..10 series, math
+//     builtins (sin/cos/sqrt…), string literals, dual bool output for 0/1.
 
-import { resolveCodeBlockPorts } from '../runtime/python-port-decl.js';
+import { resolveCBPorts } from '../runtime/codeblock-eval.js';
 
 // The canonical CodeBlock type + its aliases. The on-node editor activates for any
 // of these spellings (the engine routes them all through PythonRunner).
@@ -122,9 +114,7 @@ export function installCodeBlockNode(targetApp) {
   // CodeBlock?" without importing this module (keeps the renderer load-order free).
   app.isCodeBlockNode = isCodeBlockNode;
 
-  // Seed the live ports (_dynInputs/_dynOutputs) from the code when they aren't set
-  // yet — e.g. a freshly dropped node or a graph loaded before the editor enhanced
-  // it. Code is the source of truth (resolveCodeBlockPorts).
+  // Seed the live ports (_dynInputs/_dynOutputs) from the code when not yet set.
   function seedPortsFromCode(nd) {
     if (nd._dynInputs && nd._dynOutputs) return;
     let code = (nd.controlValues && nd.controlValues.code);
@@ -142,7 +132,7 @@ export function installCodeBlockNode(targetApp) {
     const dropWires = !opts || opts.dropWires !== false;
     let resolved;
     try {
-      resolved = resolveCodeBlockPorts(code || '');
+      resolved = resolveCBPorts(code || '');
     } catch {
       resolved = { inputs: [], outputs: [{ id: 'output0', type: 'any' }] };
     }
@@ -211,13 +201,29 @@ export function installCodeBlockNode(targetApp) {
     h += '<textarea class="cb-editor" id="' + nd.id + '-cbcode" spellcheck="false" '
       + 'autocomplete="off" autocorrect="off" autocapitalize="off" wrap="soft">' + esc(code) + '</textarea>';
     h += '</div>';
-    h += '<div class="cb-node-toolbar"><span class="cb-node-status" id="' + nd.id + '-cbstatus"></span></div>';
+    h += '<div class="cb-node-toolbar">';
+    h += '<button class="cb-preset-btn" data-preset="series" title="Insert series: nums = 0..10">0..n</button>';
+    h += '<span class="cb-node-status" id="' + nd.id + '-cbstatus"></span></div>';
 
     body.innerHTML = h;
 
     el.querySelectorAll('.port-dot').forEach(d => {
       d.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); app.onPortDown(e, d.dataset.node, d.dataset.port, d.dataset.dir); });
     });
+
+    const seriesBtn = body.querySelector('.cb-preset-btn[data-preset="series"]');
+    if (seriesBtn) {
+      ['mousedown', 'click', 'dblclick'].forEach(ev => seriesBtn.addEventListener(ev, e => e.stopPropagation()));
+      seriesBtn.addEventListener('click', function() {
+        const ta = body.querySelector('.cb-editor');
+        if (!ta) return;
+        ta.value = 'nums = 0..10';
+        if (nd.controlValues) nd.controlValues.code = ta.value;
+        autoGrowCodeBlock(ta, el);
+        app.codeBlockCommit(nd.id, ta.value);
+        ta.focus();
+      });
+    }
 
     const ta = body.querySelector('.cb-editor');
     if (ta) {
@@ -288,15 +294,9 @@ export function installCodeBlockNode(targetApp) {
     nd.controlValues.code = code == null ? '' : String(code);
     delete nd._dynInputs; delete nd._dynOutputs;   // re-derive from the preset code
     const el = (typeof document !== 'undefined') && document.getElementById(nd.id);
-    if (el && typeof this.renderNode === 'function') this.renderNode(nd);
+    if (el && typeof this.enhanceCodeBlockNode === 'function') this.enhanceCodeBlockNode(nd, el);
     if (this.invalidateCompute) this.invalidateCompute();
     return nd;
-  };
-
-  // The "Series (Code Block)" shortcut — a CodeBlock pre-filled with the `0..10`
-  // series shorthand (desugars to [0,1,…,10], a number list consumable by List.*).
-  app.addSeriesCodeBlock = function(x, y) {
-    return this.addCodeBlockPreset('nums = 0..10', x, y);
   };
 
   // Quick blank CodeBlock drop.

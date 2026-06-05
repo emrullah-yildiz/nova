@@ -101,10 +101,6 @@ not Nova's.
 - **Supply chain:** dependencies are vulnerability-audited; secrets are kept in managed
   secret stores, never in source code.
 
-*(Still to formalize as the project matures: a written breach-detection & notification
-process (GDPR 72h) and backup/recovery using Neon point-in-time recovery — SEC-009;
-audit-log retention/tamper-resistance — SEC-006.)*
-
 ## 6. Retention
 See [Privacy Policy §6](privacy-policy.md). Sessions/tokens are short-lived;
 account/project data persists until deletion (or within 30 days of account closure);

@@ -33,6 +33,7 @@ import { getDefVersion } from './node-versions.js';
 import { getLiveCoreRegistry } from '../nodes/coreNodes.js';
 import { executeRegistryNodeUnlaced } from '../nodes/runtimeAdapter.js';
 import { desugarSeries } from '../runtime/codeblock-syntax.js';
+import { evalCodeBlock } from '../runtime/codeblock-eval.js';
 
 /* eslint-disable no-redeclare, no-inner-declarations, no-empty, no-unused-vars */
 
@@ -955,8 +956,10 @@ export function installEngine(targetApp = getRuntimeApp()) {
           });
 
           var __code = nd.controlValues.code || '';
-          if (__isCodeBlock) { try { __code = desugarSeries(__code); } catch (e) { /* leave raw on failure */ } }
-          var result = PythonRunner.execute(__code, inputs);
+          // CodeBlock uses the JS DSL evaluator; Custom.Python uses PythonRunner.
+          var result = __isCodeBlock
+            ? evalCodeBlock(__code, inputs)
+            : PythonRunner.execute(__code, inputs);
 
           if (!result.error) {
 

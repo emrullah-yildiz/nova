@@ -1,5 +1,5 @@
-import { resolveCodeBlockPorts } from '../../runtime/python-port-decl.js';
 import { desugarSeries } from '../../runtime/codeblock-syntax.js';
+import { resolveCBPorts } from '../../runtime/codeblock-eval.js';
 
 export const customCategory = {
   id: 'custom',
@@ -35,10 +35,9 @@ function safeJsFunction(body, argNames) {
   }
 }
 
-// Default code for a fresh CodeBlock — a self-contained example that produces a
-// port `Result` from two free-variable inputs `x`, `y` (no wiring required to run
-// once they are fed). Multi-statement and literal-friendly.
-export const DEFAULT_CODEBLOCK_CODE = 'Result = x + y';
+// Default code for a fresh CodeBlock. Uses the JS DSL (not Python):
+// free-variable inputs → ports, assignment → output port.
+export const DEFAULT_CODEBLOCK_CODE = 'result = x + y';
 
 // Custom.Code v1 — the ORIGINAL JavaScript single-input code block, preserved
 // verbatim as the version-1 predecessor of Custom.CodeBlock so a graph pinned to
@@ -78,16 +77,16 @@ const CUSTOM_CODEBLOCK_V1 = {
   }
 };
 
-// Custom.CodeBlock (v2) — the canonical lightweight, multi-statement, code-driven
-// inline block. Language = python (the only real runtime). Ports derive from the
-// code: free variables → inputs, ALL top-level assignments → outputs (via
-// resolveCodeBlockPorts). The `..`/`#` series shorthand desugars to a Python list
-// literal (desugarSeries) before execution. Outputs are raw values (numbers /
-// strings / lists), so it is Properties-rule friendly.
-//
-// `custom-codeblock` / `custom-code` / `Custom.Code` resolve here as aliases; the
-// engine's PythonRunner switch arm routes all of these spellings. The `language`
-// field is carried so a future C# language is a value change, not a new node type.
+// Custom.CodeBlock (v2) — a lightweight expression block with a pure-JavaScript
+// DSL (not Python). Each line is an expression or assignment:
+//   result = x + y      → named output, inputs x and y
+//   0..10               → list [0..10] (series shorthand)
+//   1                   → number 1 + companion bool port (true)
+//   0                   → number 0 + companion bool port (false)
+//   "hello"             → string
+//   sin(a) * r          → math formula; a, r → input ports
+// Ports derive from code: free variables → inputs, assignments → outputs (via
+// resolveCBPorts). Language is 'codeblock' (JS evaluator, not Python).
 const CUSTOM_CODEBLOCK_DEF = {
   type: 'Custom.CodeBlock',
   name: 'Custom.CodeBlock',
@@ -97,70 +96,51 @@ const CUSTOM_CODEBLOCK_DEF = {
   version: 2,
   aliases: ['custom-codeblock', 'custom-code', 'Custom.Code'],
   priorVersions: [CUSTOM_CODEBLOCK_V1],
-  description: 'A lightweight code block. Free variables read in the code become input ports; every top-level assignment becomes an output port. Supports a series shorthand (e.g. 0..10, 0..10..2, 0..10..#5) that expands to a number list. Outputs are plain values consumable by List, math, and watch nodes.',
-  // Static SEED ports that match the default code `Result = x + y`. At runtime the
-  // ports are code-driven (resolveCodeBlockPorts re-derives them on edit-commit
-  // via the on-node editor), but the def carries these so a freshly-dropped node
-  // renders with the right ports and the help sample validates — exactly how
-  // Custom.Python seeds `elements`/`options`/`result`.
+  description: 'An expression block. Each line is a formula or assignment: free variables become input ports, assignments become output ports. Supports number/bool/string literals, series shorthand (0..10, 0..2..10, 0..1..#5), math functions (sin, cos, sqrt…), and dual boolean output for 0/1 values.',
   inputs: [
-    { id: 'x', name: 'x', type: 'any', description: 'Free variable read in the default code → input port' },
-    { id: 'y', name: 'y', type: 'any', description: 'Free variable read in the default code → input port' }
+    { id: 'x', name: 'x', type: 'any', description: 'Free variable → input port' },
+    { id: 'y', name: 'y', type: 'any', description: 'Free variable → input port' }
   ],
   outputs: [
-    { id: 'Result', name: 'Result', type: 'any', description: 'Value of the top-level assignment Result' }
+    { id: 'result', name: 'result', type: 'any', description: 'Value of the assignment' }
   ],
   controls: [
     { id: 'code', type: 'text', default: DEFAULT_CODEBLOCK_CODE, label: 'Code' }
   ],
   metadata: {
-    // language = the execution runtime; carried so a future C# language is a value
-    // change, not a new node type. The on-node editor calls resolveCodeBlockPorts
-    // (python-port-decl.js) on commit to derive ports from the code.
-    language: 'python',
+    language: 'codeblock',
     codeDriven: true,
     skipSampleExecution: true
   },
-  execute() {
-    // Live execution is routed through PythonRunner by the engine (the
-    // custom-codeblock switch arm), which desugars the series syntax first. This
-    // stub keeps the registry def shape consistent.
-    return { output0: undefined };
-  },
+  execute() { return { out: undefined }; },
   codegen: {
-    // {{ctrl.code}} is substituted with the raw code at export; the engine
-    // desugars the series syntax for live execution. The exporter short-circuit
-    // (app.js generateNodeCode) emits the desugared code for a clean round-trip.
     python: '{{ctrl.code}}',
-    csharp: '/* CodeBlock (Python runtime) — not directly portable */'
+    csharp: '/* CodeBlock — expression DSL */'
   },
   help: {
     inputs: [
       { name: 'x', description: 'Free variable read in the code → input port' },
       { name: 'y', description: 'Free variable read in the code → input port' }
     ],
-    outputs: [{ name: 'Result', description: 'Top-level assignment → output port' }],
+    outputs: [{ name: 'result', description: 'Top-level assignment → output port' }],
     example: {
-      title: 'CodeBlock Result = x * 2 on 5 → 10',
+      title: 'CodeBlock result = x * 2 on 5 → 10',
       nodes: [
         { type: 'Input.Number', x: 0, y: 0, controls: { val: 5 } },
-        { type: 'Custom.CodeBlock', x: 240, y: 0, controls: { code: 'Result = x * 2' } },
+        { type: 'Custom.CodeBlock', x: 240, y: 0, controls: { code: 'result = x * 2' } },
         { type: 'Output.Watch', x: 480, y: 0 }
       ],
       wires: [
         [0, 'value', 1, 'x'],
-        [1, 'Result', 2, 'value']
+        [1, 'result', 2, 'value']
       ]
     },
-    sampleCode: 'Result = x * 2'
+    sampleCode: 'result = x * 2'
   }
 };
 
-// Re-export the CodeBlock primitives so consumers (engine, exporter, on-node
-// editor, tests) import them from one place alongside the node defs without
-// reaching into runtime internals. resolveCodeBlockPorts is the port-resolution
-// contract the on-node editor (Switch) calls on edit-commit.
-export { desugarSeries, resolveCodeBlockPorts };
+// Re-export CodeBlock primitives so consumers can import from one place.
+export { desugarSeries, resolveCBPorts };
 
 export const customNodes = [
   {
