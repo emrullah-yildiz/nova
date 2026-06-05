@@ -1,6 +1,7 @@
 import { Geo } from '../geometry/index.js';
 import { setNodePreviewState, setPreviewItemVisibility, showAllPreviews } from './preview-sync.js';
 import { Viewer3D as RuntimeViewer3D } from './viewer3d.js';
+import { isSelectionModeActive, selectionModeClick } from './selection-mode.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -259,13 +260,19 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         if (taggedGroup) {
           var item = self._sceneItems.find(function(it) { return it.group === taggedGroup; });
           if (item) {
-            self._selectItem(item);
+            // When selection mode is active, route to the selection accumulator
+            // instead of the normal single-select flow.
+            if (isSelectionModeActive()) {
+              selectionModeClick(item);
+            } else {
+              self._selectItem(item);
+            }
             return;
           }
         }
       }
-      // Clicked empty space — deselect
-      self._deselectAll();
+      // Clicked empty space — deselect (only in normal mode)
+      if (!isSelectionModeActive()) self._deselectAll();
     });
 
     // Track mousedown position to distinguish click from orbit
