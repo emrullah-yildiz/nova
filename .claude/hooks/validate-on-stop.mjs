@@ -125,13 +125,23 @@ function main() {
   }
 
   // ── (d) Ticket AC completeness ───────────────────────────────────────────────
-  // If a TICK-*.md file was changed, every acceptance-criteria checkbox must be checked.
+  // Only block on tickets that are `in-progress` or `done`.
+  // `draft` and `ready` tickets intentionally have unchecked ACs — work hasn't started yet.
   const tickets = allFiles.filter(
     (f) => /docs\/tickets\/TICK-[^/]+\.md$/.test(f) && fs.existsSync(f)
   );
   for (const t of tickets) {
     let content = '';
     try { content = fs.readFileSync(t, 'utf8'); } catch { continue; }
+
+    // Read status from YAML frontmatter.
+    const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (fmMatch) {
+      const statusMatch = fmMatch[1].match(/^status:\s*(.+)$/m);
+      const status = statusMatch ? statusMatch[1].trim().toLowerCase() : '';
+      // Skip tickets that haven't been picked up yet.
+      if (status === 'draft' || status === 'ready') continue;
+    }
 
     // Find the AC section and look for unchecked items.
     const acSection = content.match(/##\s+Acceptance Criteria([\s\S]*?)(?=\n##|\s*$)/i);
