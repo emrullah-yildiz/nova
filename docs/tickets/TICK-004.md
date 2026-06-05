@@ -1,7 +1,7 @@
 ---
 id: TICK-004
 title: Pattern nodes on surface — per-cell points + frame output compatible with Panel.ByPoints
-status: draft
+status: ready
 priority: high
 type: feature
 sprint: 2026-06-05
@@ -110,6 +110,9 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note:
 ## Task briefs
 
 Links added by morpheus after PM confirms AC.
+
+- [T04a](../task-briefs/T04a-pattern-geometry.md) — lane: geometry (mouse) — Kernel UV remapping, output format change, Panel.ByPoints node, PanelFrames compat, Vitest unit test, Playwright E2E spec (AC-1,2,5,6,7,8,9). No dependency; start immediately.
+- [T04b](../task-briefs/T04b-pattern-viewer.md) — lane: ui (switch) — Viewer: render panel-object list as per-item scene objects + individual hover highlight (AC-3, AC-4). No dependency; parallel with T04a against pre-agreed interface.
 
 ## Notes
 

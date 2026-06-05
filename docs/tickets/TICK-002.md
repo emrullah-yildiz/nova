@@ -1,7 +1,7 @@
 ---
 id: TICK-002
 title: Select Faces/Edges/Points — end-to-end browser verification + Playwright spec
-status: draft
+status: ready
 priority: high
 type: bug
 sprint: 2026-06-05
@@ -80,6 +80,8 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note:
 ## Task briefs
 
 Links added by morpheus after PM confirms AC.
+
+- [T02a](../task-briefs/T02a-selection-mode-e2e.md) — lane: ui (switch) — Playwright E2E spec for Select.Faces/Edges/Points pick-and-approve flow + any bug fixes the spec reveals
 
 ## Notes
 
