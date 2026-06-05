@@ -1,87 +1,77 @@
 using System;
-using System.Diagnostics;
-using System.IO;
 using System.Net.Sockets;
 
 namespace Nova.RevitAddin;
 
+/// <summary>
+/// Owns the lifecycle of the local Connect hub. As of Approach C (see
+/// docs/architecture/decisions.md "In-process C# WebSocket hub") this is an
+/// <see cref="NovaHub"/> running IN-PROCESS on a background thread — no external
+/// <c>nova-hub.exe</c>, no Node, and no Nova source checkout. The Connect toggle
+/// starts it (<see cref="EnsureStarted"/>) and stops it
+/// (<see cref="StopIfStarted"/>) on toggle-off / Revit shutdown.
+///
+/// The name is retained (it used to launch a Node child process) so the toggle
+/// wiring in <see cref="NovaConnectApp"/> is unchanged, but there is no longer a
+/// child process anywhere — the hub lives in the add-in's own AppDomain.
+/// </summary>
 internal static class NovaConnectHubProcess
 {
-    private static Process? _hubProcess;
+    private static NovaHub? _hub;
 
+    /// <summary>
+    /// Starts the in-process hub bound to <c>ws://127.0.0.1:8765</c> with the
+    /// given pairing token. If something is already listening on the port (e.g. a
+    /// dev <c>node scripts/connect-hub.cjs</c> the user started by hand), that is
+    /// left untouched and no in-process hub is started — the host client connects
+    /// to whatever is on the port. Throws if the in-process hub fails to bind.
+    /// </summary>
     public static void EnsureStarted(string pairingToken)
     {
+        if (_hub != null) return;
+
+        // Respect a hub already on the port (e.g. a manually-started dev hub).
         if (IsPortOpen("127.0.0.1", NovaConnectSettings.HubPort)) return;
 
-        var repoRoot = NovaLocalPaths.FindRepoRoot();
-        var hubScript = Path.Combine(repoRoot, "scripts", "connect-hub.cjs");
-        if (!File.Exists(hubScript))
+        var hub = new NovaHub(pairingToken, NovaConnectSettings.HubPort);
+        try
         {
-            throw new FileNotFoundException("Nova Connect hub script was not found.", hubScript);
+            hub.Start();
+        }
+        catch (Exception ex)
+        {
+            hub.Dispose();
+            throw new InvalidOperationException(
+                "Nova Connect could not start the local hub on " + NovaConnectSettings.HubUrl + ". " + ex.Message, ex);
         }
 
-        var nodeExe = NovaLocalPaths.FindNodeExecutable();
-        var args = "\"" + hubScript + "\" --port=" + NovaConnectSettings.HubPort + " --token=" + pairingToken;
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = nodeExe,
-            Arguments = args,
-            WorkingDirectory = repoRoot,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
-
-        _hubProcess = Process.Start(startInfo);
-        if (_hubProcess == null) throw new InvalidOperationException("Nova Connect hub process did not start.");
-
-        if (!WaitForHub())
-        {
-            var error = SafeRead(_hubProcess.StandardError);
-            throw new InvalidOperationException("Nova Connect hub did not become ready." + (string.IsNullOrWhiteSpace(error) ? "" : " " + error));
-        }
+        _hub = hub;
     }
 
     /// <summary>
-    /// Stops the hub process this add-in started, if any. A hub that was already
-    /// running before the add-in turned the connection on (detected via the open
-    /// port, so <see cref="_hubProcess"/> is null) is left untouched. Used on
-    /// shutdown; safe to call when no hub was started.
+    /// Stops and disposes the in-process hub this add-in started, if any. Safe to
+    /// call when no hub was started and idempotent. A hub the add-in did NOT start
+    /// (an external dev hub detected via the open port) is left untouched because
+    /// <see cref="_hub"/> is null in that case.
     /// </summary>
     public static void StopIfStarted()
     {
-        var process = _hubProcess;
-        _hubProcess = null;
-        if (process == null) return;
+        var hub = _hub;
+        _hub = null;
+        if (hub == null) return;
 
         try
         {
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-                process.WaitForExit(2000);
-            }
+            hub.Stop();
         }
         catch
         {
-            // Best-effort: the hub is a localhost dev process; ignore teardown races.
+            // Best-effort teardown; never throw on shutdown.
         }
         finally
         {
-            process.Dispose();
+            hub.Dispose();
         }
-    }
-
-    private static bool WaitForHub()
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(6);
-        while (DateTime.UtcNow < deadline)
-        {
-            if (IsPortOpen("127.0.0.1", NovaConnectSettings.HubPort)) return true;
-            System.Threading.Thread.Sleep(150);
-        }
-        return false;
     }
 
     private static bool IsPortOpen(string host, int port)
@@ -98,18 +88,6 @@ internal static class NovaConnectHubProcess
         catch
         {
             return false;
-        }
-    }
-
-    private static string SafeRead(StreamReader reader)
-    {
-        try
-        {
-            return reader.ReadToEnd();
-        }
-        catch
-        {
-            return "";
         }
     }
 }

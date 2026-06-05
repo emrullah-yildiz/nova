@@ -1,0 +1,86 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <!--
+    Nova Connect WiX MSI installer (Approach C — in-process C# hub).
+
+    Produces NovaConnect-Setup.msi: a per-user (no-admin) installer with a proper
+    WixUI wizard (Welcome -> License/accept-terms showing the Terms of Service ->
+    InstallDir -> Progress -> Finish). It deploys ONLY the Revit 2027 add-in DLL,
+    its deps.json, and the Nova.addin manifest into
+    %AppData%\Autodesk\Revit\Addins\2027\Nova\, and registers a per-user
+    Add/Remove Programs entry. Clean uninstall removes the files + manifest.
+
+    There is NO bundled hub exe: the hub runs in-process inside the add-in DLL, so
+    the MSI is a few MB (well under the 50MB git push limit).
+
+    Payload inputs (validated by EnsurePayload before build):
+      $(AddinOutDir)\Nova.RevitAddin.dll            (built add-in, Release)
+      $(AddinOutDir)\Nova.RevitAddin.deps.json
+      $(GeneratedDir)\Nova.addin                     (manifest, install-path resolved)
+      License.rtf                                    (ToS, generated from the .md)
+  -->
+
+  <PropertyGroup>
+    <OutputName>NovaConnect-Setup</OutputName>
+    <OutputType>Package</OutputType>
+    <!-- win-x64 MSI (the add-in is x64). -->
+    <Platform>x64</Platform>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Which add-in build to embed (Release by default). -->
+    <AddinConfiguration Condition="'$(AddinConfiguration)' == ''">Release</AddinConfiguration>
+    <AddinOutDir>$(MSBuildThisFileDirectory)..\..\integrations\revit-addin\bin\$(AddinConfiguration)\net10.0-windows</AddinOutDir>
+    <GeneratedDir>$(MSBuildThisFileDirectory)obj\generated</GeneratedDir>
+    <AddinTemplate>$(MSBuildThisFileDirectory)..\..\integrations\revit-addin\Nova.addin.template</AddinTemplate>
+    <AddinDepsPresent Condition="Exists('$(AddinOutDir)\Nova.RevitAddin.deps.json')">yes</AddinDepsPresent>
+    <AddinDepsPresent Condition="'$(AddinDepsPresent)' == ''">no</AddinDepsPresent>
+  </PropertyGroup>
+
+  <!-- Pass payload paths to the WiX authoring as preprocessor variables (-d). -->
+  <PropertyGroup>
+    <DefineConstants>AddinDll=$(AddinOutDir)\Nova.RevitAddin.dll;AddinDeps=$(AddinOutDir)\Nova.RevitAddin.deps.json;AddinManifest=$(GeneratedDir)\Nova.addin;LicenseRtf=$(MSBuildThisFileDirectory)License.rtf;AddinDepsPresent=$(AddinDepsPresent)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WixUI standard dialog sets (InstallDir wizard + license page). -->
+    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
+  </ItemGroup>
+
+  <!--
+    Generate the install-path-resolved Nova.addin from the shared template before
+    the WiX build harvests it. The add-in always loads from the per-user install
+    dir, so the manifest's <Assembly> is the absolute installed DLL path.
+  -->
+  <Target Name="GenerateAddinManifest" BeforeTargets="EnsurePayload;BeforeBuild">
+    <MakeDir Directories="$(GeneratedDir)" />
+    <PropertyGroup>
+      <_InstalledDllPath>%25APPDATA%25\Autodesk\Revit\Addins\2027\Nova\Nova.RevitAddin.dll</_InstalledDllPath>
+    </PropertyGroup>
+    <ReadLinesFromFile File="$(AddinTemplate)">
+      <Output TaskParameter="Lines" ItemName="_TemplateLines" />
+    </ReadLinesFromFile>
+    <WriteLinesToFile
+      File="$(GeneratedDir)\Nova.addin"
+      Lines="@(_TemplateLines->Replace('{{ASSEMBLY_PATH}}','$(_InstalledDllPath)'))"
+      Overwrite="true"
+      Encoding="UTF-8" />
+  </Target>
+
+  <!-- Fail fast with an actionable hint if any payload is missing. -->
+  <Target Name="EnsurePayload" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('$(AddinOutDir)\Nova.RevitAddin.dll')"
+           Text="Add-in payload not found at $(AddinOutDir)\Nova.RevitAddin.dll. Build it first: dotnet build integrations/revit-addin/Nova.RevitAddin.csproj -c $(AddinConfiguration)" />
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)License.rtf')"
+           Text="License.rtf not found. Generate it first: pwsh scripts/build-license-rtf.ps1" />
+  </Target>
+
+  <!--
+    Code-signing scaffold (shared with the add-in). No-op unless /p:Sign=true with
+    NOVA_SIGN_METHOD set. The imported SignNovaArtifact target signs $(TargetPath),
+    which for a WiX project is the produced NovaConnect-Setup.msi. The add-in DLL
+    is signed earlier, by its own build.
+  -->
+  <Import Project="..\..\integrations\revit-addin\NovaSigning.targets" />
+
+</Project>

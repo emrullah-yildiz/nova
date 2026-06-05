@@ -1,20 +1,22 @@
-# Builds the downloadable Nova Connect installer EXE.
+# Builds the downloadable Nova Connect installer (WiX MSI).
 #
-# Publishes a single-file, self-contained Windows installer executable to
-# public/downloads/NovaConnect-Setup.exe. Vite copies public/ into dist/ at
-# build time, so the result is served at /downloads/NovaConnect-Setup.exe.
+# Approach C (in-process C# hub): the Connect hub runs INSIDE the add-in DLL, so
+# the MSI ships only the add-in DLL + deps.json + Nova.addin manifest — a few MB,
+# no bundled hub exe, no Node. It is served at /downloads/NovaConnect-Setup.msi
+# (Vite copies public/ into dist/ at build time).
 #
-# It builds the C# add-in in Release first, so the installer always embeds a
-# fresh Payload.Nova.RevitAddin.dll (not a stale copy), then publishes the
-# single-file installer.
+# Steps:
+#   1. Build the C# add-in in Release (so the MSI embeds a fresh DLL).
+#   2. Generate License.rtf from docs/legal/terms-of-service.md.
+#   3. Restore the pinned WiX tool (.config/dotnet-tools.json).
+#   4. Build the MSI (WiX) and publish it + its .sha256 to public/downloads/.
 #
 # Run from the repo root (Windows):  pwsh scripts/build-connect-installer.ps1
 # or:  npm run build:connect-installer
 #
 # Code signing (optional): set NOVA_SIGN_METHOD=trusted-signing|pfx (plus the
 # matching env vars -- see scripts/sign-revit-addin.ps1 / docs/revit-addin-build.md)
-# to sign the add-in DLL and the installer EXE. Without it the build is a clean
-# unsigned no-op.
+# to sign the add-in DLL and the MSI. Without it the build is a clean unsigned no-op.
 
 $ErrorActionPreference = 'Stop'
 
@@ -23,17 +25,16 @@ $installer  = Join-Path $repoRoot 'installer\nova-connect'
 $addinDir   = Join-Path $repoRoot 'integrations\revit-addin'
 $addinProj  = Join-Path $addinDir 'Nova.RevitAddin.csproj'
 $buildOut   = Join-Path $addinDir 'bin\Release\net10.0-windows'
-$template   = Join-Path $addinDir 'Nova.addin.template'
-$project    = Join-Path $installer 'NovaConnect.Installer.csproj'
+$wixProj    = Join-Path $installer 'NovaConnect.Installer.wixproj'
+$licenseScript = Join-Path $repoRoot 'scripts\build-license-rtf.ps1'
 $outDir     = Join-Path $repoRoot 'public\downloads'
-$exePath    = Join-Path $outDir 'NovaConnect-Setup.exe'
-$hashPath   = Join-Path $outDir 'NovaConnect-Setup.exe.sha256'
+$msiPath    = Join-Path $outDir 'NovaConnect-Setup.msi'
+$hashPath   = Join-Path $outDir 'NovaConnect-Setup.msi.sha256'
 
-$dll  = Join-Path $buildOut 'Nova.RevitAddin.dll'
-$deps = Join-Path $buildOut 'Nova.RevitAddin.deps.json'
+$dll = Join-Path $buildOut 'Nova.RevitAddin.dll'
 
-# Signing flags forwarded to dotnet build/publish (no-op unless NOVA_SIGN_METHOD
-# is set or -p:Sign=true is already in the environment).
+# Signing flags forwarded to dotnet build (no-op unless NOVA_SIGN_METHOD is set
+# or -p:Sign=true is already in the environment).
 $signProps = @()
 if ($env:NOVA_SIGN_METHOD) { $signProps += '-p:Sign=true' }
 if ($env:NOVA_SIGN_DRYRUN -and $env:NOVA_SIGN_DRYRUN -ne '0') { $signProps += '-p:SignDryRun=true' }
@@ -44,64 +45,65 @@ if ($LASTEXITCODE -ne 0) {
   Write-Host "ERROR: add-in build failed (exit $LASTEXITCODE)." -ForegroundColor Red
   exit $LASTEXITCODE
 }
-
-Write-Host "Building Nova Connect installer EXE..." -ForegroundColor Cyan
-
 if (-not (Test-Path $dll)) {
-  Write-Host "ERROR: $dll not found." -ForegroundColor Red
-  Write-Host "Build the add-in first: dotnet build integrations/revit-addin/Nova.RevitAddin.csproj -c Release" -ForegroundColor Yellow
+  Write-Host "ERROR: $dll not found after build." -ForegroundColor Red
   exit 1
 }
-if (-not (Test-Path $template)) {
-  Write-Host "ERROR: manifest template not found at $template" -ForegroundColor Red
-  exit 1
+
+Write-Host "Generating License.rtf from the Terms of Service..." -ForegroundColor Cyan
+& $licenseScript
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "ERROR: License.rtf generation failed (exit $LASTEXITCODE)." -ForegroundColor Red
+  exit $LASTEXITCODE
 }
-if (-not (Test-Path $project)) {
-  Write-Host "ERROR: installer project not found at $project" -ForegroundColor Red
-  exit 1
+
+Write-Host "Restoring the pinned WiX tool..." -ForegroundColor Cyan
+Push-Location $repoRoot
+try {
+  dotnet tool restore
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: 'dotnet tool restore' failed (exit $LASTEXITCODE)." -ForegroundColor Red
+    exit $LASTEXITCODE
+  }
+}
+finally {
+  Pop-Location
 }
 
 New-Item -ItemType Directory -Path $outDir -Force | Out-Null
-if (Test-Path $exePath) { Remove-Item $exePath -Force }
+if (Test-Path $msiPath) { Remove-Item $msiPath -Force }
 if (Test-Path $hashPath) { Remove-Item $hashPath -Force }
 
-$publishDir = Join-Path ([System.IO.Path]::GetTempPath()) ("nova-connect-publish-" + [System.Guid]::NewGuid().ToString('N'))
+$publishDir = Join-Path ([System.IO.Path]::GetTempPath()) ("nova-connect-msi-" + [System.Guid]::NewGuid().ToString('N'))
 try {
-  # Signing (if configured) happens inside the installer project's
-  # SignNovaArtifactAfterPublish MSBuild target, so the published EXE is already
-  # signed before we copy + checksum it.
-  dotnet publish $project `
-    -c Release `
-    -r win-x64 `
-    --self-contained true `
-    -p:PublishSingleFile=true `
-    -p:PublishTrimmed=true `
-    -p:TrimMode=full `
-    -p:EnableCompressionInSingleFile=true `
-    -p:DebugType=None `
-    -p:DebugSymbols=false `
-    @signProps `
-    -o $publishDir
+  Write-Host "Building Nova Connect MSI (WiX)..." -ForegroundColor Cyan
+  # Signing (if configured) happens inside the WiX project's SignNovaArtifact
+  # MSBuild target, so the produced MSI is already signed before we copy it.
+  dotnet build $wixProj -c Release -o $publishDir @signProps
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: MSI build failed (exit $LASTEXITCODE)." -ForegroundColor Red
+    exit $LASTEXITCODE
+  }
 
-  $publishedExe = Join-Path $publishDir 'NovaConnect-Setup.exe'
-  if (-not (Test-Path $publishedExe)) {
-    Write-Host "ERROR: dotnet publish did not produce $publishedExe" -ForegroundColor Red
+  $publishedMsi = Join-Path $publishDir 'NovaConnect-Setup.msi'
+  if (-not (Test-Path $publishedMsi)) {
+    Write-Host "ERROR: MSI build did not produce $publishedMsi" -ForegroundColor Red
     exit 1
   }
 
-  Copy-Item $publishedExe $exePath -Force
+  Copy-Item $publishedMsi $msiPath -Force
 
   if (-not $env:NOVA_SIGN_METHOD) {
     Write-Host "Code signing skipped. Set NOVA_SIGN_METHOD=trusted-signing|pfx to sign (see docs/revit-addin-build.md)." -ForegroundColor Yellow
   }
 
-  $hash = (Get-FileHash -Path $exePath -Algorithm SHA256).Hash.ToLowerInvariant()
-  Set-Content -Path $hashPath -Value "$hash  NovaConnect-Setup.exe" -Encoding ascii
+  $hash = (Get-FileHash -Path $msiPath -Algorithm SHA256).Hash.ToLowerInvariant()
+  Set-Content -Path $hashPath -Value "$hash  NovaConnect-Setup.msi" -Encoding ascii
 
-  $sizeMb = [math]::Round((Get-Item $exePath).Length / 1MB, 2)
-  Write-Host "Wrote $exePath ($sizeMb MB)" -ForegroundColor Green
+  $sizeMb = [math]::Round((Get-Item $msiPath).Length / 1MB, 2)
+  Write-Host "Wrote $msiPath ($sizeMb MB)" -ForegroundColor Green
   Write-Host "Wrote $hashPath" -ForegroundColor Green
-  Write-Host "It will be served at /downloads/NovaConnect-Setup.exe after a build/deploy." -ForegroundColor White
+  Write-Host "It will be served at /downloads/NovaConnect-Setup.msi after a build/deploy." -ForegroundColor White
 }
 finally {
   Remove-Item $publishDir -Recurse -Force -ErrorAction SilentlyContinue

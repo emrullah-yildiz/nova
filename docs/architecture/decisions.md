@@ -8,6 +8,55 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-05 - In-process C# WebSocket hub (Approach C) — supersedes the bundled Node SEA hub
+
+**Status:** Accepted (supersedes the never-merged SEA approach on `feat/installer-msi-hub`, commit 5055c72)
+
+**Context:** On a clean end-user install the Connect toggle could not go green: the
+local hub was launched as `node scripts/connect-hub.cjs` and needed a Nova checkout
++ Node.js (`NovaLocalPaths.FindRepoRoot`/`FindNodeExecutable`). The
+hub-bundling plan picked **Approach A** — bundle a self-contained Node Single
+Executable Application (SEA), `nova-hub.exe`, inside the installer. That shipped on
+`feat/installer-msi-hub` but produced a **~115MB MSI** (a self-contained Node
+runtime embedded in the exe, embedded again in the cab), which **broke the git
+push** (>50MB), plus carried Node-22/SEA build caveats and a *second* binary to
+code-sign / clear Smart App Control.
+
+**Decision — Approach C: run the hub IN-PROCESS in C#.** A new Revit-free
+`NovaHub` class (`integrations/revit-addin/NovaHub.cs`) runs a WebSocket server on
+`ws://127.0.0.1:8765` **inside the add-in's own process**, on a background thread,
+using `System.Net.HttpListener` (the WS upgrade) + `System.Net.WebSockets`. It
+replicates the wire protocol of `scripts/connect-hub.cjs` faithfully: the JSON
+envelope shape, the pairing-token check (reject with `INVALID_PAIRING_TOKEN`, only
+enforced when a token is configured), `hello` → `connection.established`, the
+host↔viewer peer relay (+ `peer.connected`/`peer.disconnected`), and `ping` →
+`pong`. The `NovaConnectHubProcess.EnsureStarted`/`StopIfStarted` API is kept (so
+the toggle wiring is unchanged) but now starts/stops the in-process `NovaHub` —
+**no child process, no Node, no `FindRepoRoot`**. A hub already on the port (a
+hand-started dev `node` hub) is respected and left alone.
+
+**Consequences:**
+- **Tiny MSI.** The WiX MSI installs ONLY `Nova.RevitAddin.dll` + `deps.json` +
+  `Nova.addin` → **~0.44 MB**, commits cleanly, no >50MB push break. (The WiX
+  wizard, per-user scope, ToS/License page, and ARP entry are reused verbatim from
+  5055c72; only the bundled-hub component was dropped.)
+- **One artifact to sign** — the DLL + MSI via `NovaSigning.targets` (no-op without
+  creds). No separate hub exe.
+- **Node 22 / SEA caveats are moot** — there is no SEA, no esbuild/postject step,
+  no pinned Node runtime.
+- **`NOVA_REPO_ROOT` is now dev-only** for the optional "Open Nova against a
+  localhost dev server" path (`NovaWebProcess`); the Connect toggle no longer
+  depends on it. `FindNodeExecutable` (hub-only) was removed.
+- **SEC-013 unchanged.** The hub remains a pure transport; the add-in's
+  write-approval token-presence check (`HasWriteApprovalToken`) and the
+  server-issued single-use approval token flow are untouched.
+
+**Validation:** `dotnet build … -c Release` = 0 errors; xUnit hub-protocol tests
+(right/wrong token, ping→pong, host↔viewer relay, no-token-accepts,
+invalid-envelope) pass; WiX MSI builds (0 errors); eslint clean; full vitest
+1899 passed / 1 skipped. Revit smoke test not runnable on the build box — a
+maintainer must run it before merge (checklist in the PR).
+
 ## 2026-06-05 - Graph Run Modes (Automatic | Manual)
 
 **Status:** Accepted

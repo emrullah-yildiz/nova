@@ -6,7 +6,7 @@ namespace Nova.RevitAddin;
 /// <summary>
 /// Nova Connect ribbon entry point. Replaces the old single
 /// "Add-Ins &gt; External Tools &gt; Nova Connect" command: on startup it builds a
-/// "Nova Connect" ribbon panel (on the built-in Add-Ins tab) with two buttons —
+/// dedicated "Nova" ribbon tab with a "Nova Connect" panel holding two buttons —
 /// a connection On/Off toggle and an "Open Nova" launcher.
 ///
 /// This class also owns the shared connection state and the
@@ -15,6 +15,7 @@ namespace Nova.RevitAddin;
 /// </summary>
 public class NovaConnectApp : IExternalApplication
 {
+    private const string TabName = "Nova";
     private const string PanelName = "Nova Connect";
 
     /// <summary>The toggle's PushButton, captured at startup so the toggle
@@ -32,7 +33,10 @@ public class NovaConnectApp : IExternalApplication
         {
             var assemblyPath = typeof(NovaConnectApp).Assembly.Location;
 
-            var panel = application.CreateRibbonPanel(PanelName);
+            // ── Dedicated "Nova" ribbon tab (top-level, not under the Add-Ins tab) ──
+            try { application.CreateRibbonTab(TabName); }
+            catch (Autodesk.Revit.Exceptions.ArgumentException) { /* tab already exists on re-init */ }
+            var panel = application.CreateRibbonPanel(TabName, PanelName);
 
             // ── Button 1: connection On/Off toggle (starts red / disconnected) ──
             var toggleData = new PushButtonData(
@@ -102,10 +106,11 @@ public class NovaConnectApp : IExternalApplication
     // ──────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Starts the local hub and a <see cref="NovaHostClient"/> against it. On
-    /// success the connection flips on and the toggle button turns green.
-    /// Throws on failure (e.g. no hub/repo on this machine) so the caller can
-    /// keep the button red and report the reason; the connection stays off.
+    /// Starts the in-process hub (<see cref="NovaHub"/>, no Node/repo) and a
+    /// <see cref="NovaHostClient"/> against it. On success the connection flips on
+    /// and the toggle button turns green. Throws on failure (e.g. the port is
+    /// busy) so the caller can keep the button red and report the reason; the
+    /// connection stays off.
     /// </summary>
     internal static void TurnOn(UIApplication uiApp)
     {
