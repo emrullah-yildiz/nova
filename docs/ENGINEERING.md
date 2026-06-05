@@ -238,6 +238,7 @@ Every non-trivial task originates from a ticket in [`tickets/INDEX.md`](tickets/
 - [ ] Stale references searched after renames/deletions.
 
 ### Code & security
+- [ ] **UI/CSS work:** all colors, fonts, spacing, and icons follow [`docs/STYLE.md`](STYLE.md). No raw hex values that duplicate an existing token; no new icon text-abbreviations.
 - [ ] Secrets/keys/tokens/private URLs absent; deps necessary and reviewed.
 - [ ] User/AI input treated as untrusted; API changes enforce auth + tenant scope.
 - [ ] Revit/Connect write paths require explicit approval + audit.
