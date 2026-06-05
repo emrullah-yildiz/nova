@@ -17,7 +17,7 @@ import { Geo } from './geometry-lib.js';
     n = n || 48;
     if (!curve) return [];
     if (curve._type === 'Polyline3') return curve.points;
-    if (curve._type === 'Circle3' || curve._type === 'Arc3' || curve._type === 'Ellipse3') return curve.toPoints(n);
+    if (curve._type === 'Circle3' || curve._type === 'Arc3' || curve._type === 'Ellipse3' || curve._type === 'NurbsCurve') return curve.toPoints(n);
     if (curve._type === 'Line3') {
       const pts = [];
       for (let i = 0; i <= n; i++) pts.push(curve.pointAt(i / n));
@@ -708,14 +708,8 @@ import { Geo } from './geometry-lib.js';
   // ── Patch from a single closed boundary (fan triangulation) ──
   G.surfaceByPatch = function(closedBoundary, segments) {
     segments = segments || 32;
-    let pts;
-    if (Array.isArray(closedBoundary)) {
-      pts = closedBoundary.filter(function(p) { return p && typeof p === 'object' && p.x !== undefined; });
-    } else if (closedBoundary && typeof G._curvePoints === 'function') {
-      pts = G._curvePoints(closedBoundary, segments);
-    } else {
-      return undefined;
-    }
+    if (!closedBoundary || typeof G._curvePoints !== 'function') return undefined;
+    let pts = G._curvePoints(closedBoundary, segments);
     if (!pts || pts.length < 3) return undefined;
 
     // Drop a trailing duplicate if the curve closes back to its start.
