@@ -11,14 +11,19 @@ Nova Connect ships as two C# artifacts:
   ribbon** (Add-Ins tab) with two buttons: **Connect** (the On/Off connection
   toggle, `ConnectionToggleCommand`) and **Open Nova** (`OpenNovaCommand`, opens
   `https://hi-nova.work/`). Entry point: `NovaConnectApp` (`IExternalApplication`).
-- **`NovaConnect-Setup.exe`** — a single-file, self-contained installer
-  (`installer/nova-connect/`) that **embeds** the add-in DLL, its `deps.json`, and
-  the `.addin` manifest template as `Payload.*` resources, then copies them into
-  `%APPDATA%\Autodesk\Revit\Addins\2027\Nova\` for the current user.
+  The local Connect hub runs **in-process** in this DLL (`NovaHub`, Approach C) —
+  no Node, no separate hub exe.
+- **`NovaConnect-Setup.msi`** — a per-user (no-admin) WiX v5 MSI
+  (`installer/nova-connect/`, `NovaConnect.Installer.wixproj` + `Package.wxs`) with
+  a `WixUI_InstallDir` wizard (Welcome → License/accept-ToS → InstallDir → Progress
+  → Finish). It installs the add-in DLL, its `deps.json`, and the resolved
+  `Nova.addin` manifest into `%APPDATA%\Autodesk\Revit\Addins\2027\Nova\` for the
+  current user, and registers a per-user Add/Remove Programs entry. It is a few MB
+  (≈ 0.44 MB) — there is no bundled hub.
 
 The downloadable artifact the web app serves lives at
-`public/downloads/NovaConnect-Setup.exe` (Vite copies `public/` into `dist/`, so
-it is served at `/downloads/NovaConnect-Setup.exe`). The Connect panel's
+`public/downloads/NovaConnect-Setup.msi` (Vite copies `public/` into `dist/`, so
+it is served at `/downloads/NovaConnect-Setup.msi`). The Connect panel's
 **Download Nova Connect** button points there.
 
 ## Prerequisites
@@ -44,38 +49,41 @@ Expect `0 Error(s)` and the two `MSB3277` Revit-ref warnings.
 
 ## Rebuild the installer (and refresh the served artifact)
 
-Use the helper — it builds the add-in in **Release** first (so the installer
-always embeds a **fresh** `Payload.Nova.RevitAddin.dll`, never a stale copy),
-then publishes the single-file installer to `public/downloads/`:
+Use the helper — it builds the add-in in **Release** first (so the MSI always
+embeds a **fresh** `Nova.RevitAddin.dll`, never a stale copy), then builds the WiX
+MSI to `public/downloads/`:
 
 ```powershell
 npm run build:connect-installer
 # == powershell -NoProfile -File scripts/build-connect-installer.ps1
-# -> public/downloads/NovaConnect-Setup.exe (+ .sha256)
+# -> public/downloads/NovaConnect-Setup.msi (+ .sha256)
 ```
 
 What it does:
 
 1. `dotnet build integrations/revit-addin/Nova.RevitAddin.csproj -c Release`.
-2. `dotnet publish installer/nova-connect/NovaConnect.Installer.csproj -c Release
-   -r win-x64 --self-contained` (single-file, trimmed, compressed).
-3. Copies the published EXE to `public/downloads/NovaConnect-Setup.exe` and
-   writes the SHA-256 sidecar.
+2. Generates `installer/nova-connect/License.rtf` from
+   `docs/legal/terms-of-service.md` (`scripts/build-license-rtf.ps1`).
+3. `dotnet tool restore` (the WiX tool is pinned in `.config/dotnet-tools.json`).
+4. `dotnet build installer/nova-connect/NovaConnect.Installer.wixproj -c Release`
+   (the WiX project resolves `Nova.addin` from the template, harvests the
+   Release add-in DLL + `deps.json`, and emits the MSI).
+5. Copies the built MSI to `public/downloads/NovaConnect-Setup.msi` and writes the
+   SHA-256 sidecar.
 
-The installer project embeds the **Release** add-in output by default
-(`AddinConfiguration=Release` in `NovaConnect.Installer.csproj`); override with
-`/p:AddinConfiguration=Debug` for a debug payload. An `EnsureAddinPayload`
-MSBuild target fails fast with an actionable message if the add-in DLL hasn't
-been built yet, so the installer can never silently embed a missing/old DLL.
+The WiX project embeds the **Release** add-in output by default
+(`AddinConfiguration=Release` in the `.wixproj`); override with
+`/p:AddinConfiguration=Debug` for a debug payload. An `EnsurePayload` MSBuild
+target fails fast with an actionable message if the add-in DLL or `License.rtf`
+hasn't been produced yet, so the MSI can never silently embed a missing/old DLL.
 
-To verify the embedded payload matches the just-built DLL, hash-compare the
-`Payload.Nova.RevitAddin.dll` resource in
-`installer/nova-connect/bin/Release/net10.0-windows/NovaConnect-Setup.dll`
-against `integrations/revit-addin/bin/Release/net10.0-windows/Nova.RevitAddin.dll`.
+> Building under a non-admin system policy emits one benign
+> `WIX1105: Validation could not run due to system policy` warning (ICE validation
+> is skipped). The MSI still builds with `0 Error(s)`.
 
-> **Commit note.** The regenerated `public/downloads/NovaConnect-Setup.exe` is a
-> large binary and is committed on purpose (it is what `hi-nova.work` serves).
-> The `bin/`/`obj/` build outputs under `integrations/revit-addin/` and
+> **Commit note.** The regenerated `public/downloads/NovaConnect-Setup.msi`
+> (≈ 0.44 MB) is committed on purpose (it is what `hi-nova.work` serves). The
+> `bin/`/`obj/` build outputs under `integrations/revit-addin/` and
 > `installer/nova-connect/` are gitignored and must never be committed.
 
 ## Code signing (optional, parameterized)
@@ -87,8 +95,9 @@ present in the environment.
 
 Signing logic lives in one helper, `scripts/sign-revit-addin.ps1`, invoked by
 the shared MSBuild target in `integrations/revit-addin/NovaSigning.targets`
-(imported by both the add-in and installer projects). It signs **both** the
-add-in DLL (after Build) and the installer EXE (after Publish).
+(imported by both the add-in and the WiX installer projects). It signs **both** the
+add-in DLL (after the add-in Build) and the **MSI** (after the WiX Build). There is
+no separate hub exe to sign.
 
 **Never commit a `.pfx`, a password, or any Azure secret.** All inputs are read
 from environment variables.
@@ -108,7 +117,7 @@ $env:NOVA_SIGN_TS_ACCOUNT  = '<trusted-signing-account-name>'
 $env:NOVA_SIGN_TS_PROFILE  = '<certificate-profile-name>'
 # Auth: az login, a managed identity, or AZURE_* service-principal env vars.
 
-npm run build:connect-installer        # signs DLL + EXE during build/publish
+npm run build:connect-installer        # signs DLL + MSI during build
 ```
 
 > Trusted Signing certificates require **identity validation** (individual or
@@ -147,9 +156,9 @@ npm run build:connect-installer
 ### MSBuild flags
 
 ```powershell
-# Sign during a project build/publish:
-dotnet build   integrations/revit-addin/Nova.RevitAddin.csproj -c Release -p:Sign=true
-dotnet publish installer/nova-connect/NovaConnect.Installer.csproj -c Release -p:Sign=true ...
+# Sign during a project build:
+dotnet build integrations/revit-addin/Nova.RevitAddin.csproj -c Release -p:Sign=true
+dotnet build installer/nova-connect/NovaConnect.Installer.wixproj -c Release -p:Sign=true ...
 
 # Prove the signing branch without a cert (echoes the exact command):
 dotnet build integrations/revit-addin/Nova.RevitAddin.csproj -c Release -p:Sign=true -p:SignDryRun=true
@@ -159,28 +168,28 @@ dotnet build integrations/revit-addin/Nova.RevitAddin.csproj -c Release -p:Sign=
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sign-revit-addin.ps1 `
-  path\to\Nova.RevitAddin.dll path\to\NovaConnect-Setup.exe [-DryRun]
+  path\to\Nova.RevitAddin.dll path\to\NovaConnect-Setup.msi [-DryRun]
 ```
 
 ## Installing (end user)
 
 1. Click **Download Nova Connect** in the Connect panel ->
-   `NovaConnect-Setup.exe`.
-2. Double-click it. It detects Revit 2027 (warns + confirms if absent), copies
-   the add-in to `%APPDATA%\Autodesk\Revit\Addins\2027\Nova\`, and writes
-   `Nova.addin`. It runs as the current user, needs no admin rights, and
-   registers a per-user uninstall entry.
+   `NovaConnect-Setup.msi`.
+2. Double-click it to run the wizard: Welcome → License (accept the Terms of
+   Service) → Install location → Progress → Finish. It is a **per-user** install
+   (no admin), copies the add-in to `%APPDATA%\Autodesk\Revit\Addins\2027\Nova\`,
+   writes `Nova.addin`, and registers a per-user Add/Remove Programs entry.
 3. Restart Revit -> **Add-Ins** tab -> **Nova Connect** panel (Connect / Open Nova).
-4. Uninstall: `NovaConnect-Setup.exe /uninstall`.
+4. Uninstall: Windows **Apps & features**, or `msiexec /x NovaConnect-Setup.msi`.
 
 ## Smart App Control / SmartScreen note
 
-Windows **Smart App Control (SAC)** and SmartScreen gate unknown executables:
+Windows **Smart App Control (SAC)** and SmartScreen gate unknown installers:
 
-- **Unsigned** `NovaConnect-Setup.exe`: SAC (when enforced) may **block** it
+- **Unsigned** `NovaConnect-Setup.msi`: SAC (when enforced) may **block** it
   outright, and SmartScreen shows an "unrecognized publisher" warning. This is
   expected for dev/unsigned builds.
-- **Signed via Azure Trusted Signing**: the EXE earns publisher **reputation**
+- **Signed via Azure Trusted Signing**: the MSI earns publisher **reputation**
   over time, which is what lets SAC/SmartScreen trust it without a warning. A
   fresh signature still needs to accrue reputation; a brand-new certificate is
   not instantly trusted.
@@ -188,7 +197,8 @@ Windows **Smart App Control (SAC)** and SmartScreen gate unknown executables:
   by itself clear SAC — reputation, not merely a signature, is what SAC checks.
 
 For public distribution, sign with **Trusted Signing** (individual or org
-validation) and allow reputation to build before announcing the download widely.
+validation) — the add-in DLL **and** the MSI — and allow reputation to build
+before announcing the download widely.
 
 ## What is NOT in this build (queued handoffs)
 

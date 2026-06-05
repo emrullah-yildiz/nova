@@ -16,9 +16,9 @@ namespace Nova.RevitAddin;
 ///
 /// The actual button-appearance update lives in <see cref="NovaConnectApp"/>,
 /// which holds the captured <see cref="PushButton"/> reference and the connection
-/// state. If turning on fails (no hub/repo/Node on this machine), the command
-/// leaves the connection off, keeps the red dot, and shows the reason plus the
-/// NOVA_REPO_ROOT hint — it never crashes Revit.
+/// state. The hub now runs IN-PROCESS (no Node, no repo), so the only realistic
+/// failure is the port being busy; if turning on fails the command leaves the
+/// connection off, keeps the red dot, and shows the reason — it never crashes Revit.
 /// </summary>
 [Transaction(TransactionMode.Manual)]
 public class ConnectionToggleCommand : IExternalCommand
@@ -64,10 +64,10 @@ public class ConnectionToggleCommand : IExternalCommand
             MainInstruction = "Could not start the Nova connection.",
             MainContent =
                 ex.Message + "\n\n" +
-                "The local hub currently needs a Nova source checkout and Node.js on " +
-                "this machine. On a developer machine, set the NOVA_REPO_ROOT environment " +
-                "variable to your Nova repository folder and try again. A self-contained " +
-                "bundled hub (no checkout required) is the next planned step.",
+                "The local hub runs inside Revit on " + NovaConnectSettings.HubUrl +
+                " — it needs no Node.js or Nova checkout. The most likely cause is " +
+                "another program already using that port, or that the connection was " +
+                "blocked. Close anything bound to the port and try again.",
             TitleAutoPrefix = false
         };
         dialog.Show();

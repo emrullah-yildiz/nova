@@ -13,6 +13,109 @@ longer useful.
 > (`docs/architecture-decisions.md`, `docs/deployment-guide.md`, etc.). Those docs
 > now live under `docs/architecture/` — see [`NOVA.md`](NOVA.md) §7 for the map.
 
+---
+
+## 2026-06-05 — In-process C# WebSocket hub (Approach C) supersedes the SEA hub (Trinity, connect-engineer)
+
+**Branch:** `feat/connect-csharp-hub` (off develop). Not merged/pushed.
+
+**Owned paths claimed/edited:** `integrations/revit-addin/**` (new `NovaHub.cs`,
+rewired `NovaConnectHubProcess.cs`, `NovaLocalPaths.cs`, `NovaConnectApp.cs`,
+`ConnectionToggleCommand.cs`), `installer/nova-connect/**` (WiX MSI authoring,
+removed the old console installer), `scripts/build-connect-installer.ps1` +
+`scripts/build-license-rtf.ps1`, `src/integrations/connect/connect-panel.js`
+(`.msi` URL), `tests/revit-addin/**` (xUnit hub-protocol test),
+`tests/connect-download.test.js`, `.config/dotnet-tools.json`, `package.json`
+(connect scripts only), `.gitignore` (drop SEA hub ignore), `public/downloads/`
+(small `.msi` replaces the old `.exe`).
+
+**What this changes:** the local Connect hub is now an **in-process C#
+WebSocket server** (`NovaHub`) that runs inside the Revit add-in on a background
+thread — no external `nova-hub.exe`, no Node, no Nova checkout. It speaks the
+SAME wire protocol as `scripts/connect-hub.cjs` (`hello`→`connection.established`,
+peer relay, `ping`→`pong`, `INVALID_PAIRING_TOKEN`). SEC-013 write-approval path
+is unchanged. The SEA approach (`scripts/build-connect-hub-exe.ps1`,
+`scripts/sea-config.json`, the 115MB MSI) is dropped; the new MSI is a few MB and
+ships only the add-in DLL + deps.json + `Nova.addin`. Node 22 / SEA caveats are
+now moot.
+
+## 2026-06-05 — L0 learning validator + lesson schema (Neo) → Switch (mini-canvas) & Tank (lessons)
+
+**Branch:** `feat/learning-validator` (off develop). Not merged/pushed.
+
+**What landed (new files only — no app.js/UI/nodes.js touched):**
+- `src/core/learning/validate-lesson.js` — the PURE, engine-backed validator.
+- `src/core/learning/lesson-schema.js` — lesson schema + `validateLessonShape`.
+- `src/core/learning/index.js` — public surface + lesson registry + solution guard.
+- `tests/learning-validate-lesson.test.js`, `tests/fixtures/learning-fixture-lesson.js`.
+
+### Contract for **Switch** (mini-canvas calls the validator)
+
+```js
+import { validateChecks } from '../../core/learning/validate-lesson.js';
+// or from the barrel: import { validateChecks } from '../../core/learning/index.js';
+
+const result = validateChecks(learnerGraph, step.checks);
+// learnerGraph = { nodes, wires } — the SAME shape the engine eats:
+//   node = { id, type, controlValues?, role?, x?, y?, _portValues? }
+//   wire = { fromNode, fromPort, toNode, toPort }
+// result = {
+//   pass: boolean,                         // all checks passed
+//   results: [{ check, pass, hint, reason?, actual? }],
+//   firstHint: string | null               // first failing check's authored hint
+// }
+```
+
+- Pure: no DOM, no global `app`. Builds its own compute context per call
+  (`createComputeContext` + `createRegistryComputeInner` over the real core registry),
+  so lacing / single→list / number↔boolean all match the live canvas.
+- `firstHint` is what to surface under the "Check" button on failure.
+- Node lookup is by `id` OR `role` — Switch may keep lesson-stable ids on instances,
+  or stamp a `role` field; either resolves.
+- Optional `validateChecks(graph, checks, { registry })` to inject a custom registry
+  (tests use this; the app doesn't need to).
+
+### Check kinds (what Tank authors)
+
+- `output` (preferred, solution-agnostic): `{ kind:'output', node, port?, expected, tolerance?, hint }`
+  — evaluates the learner graph and deep-compares the target node/port value to
+  `expected` (numeric `tolerance`, default `1e-9`; handles NaN + nested lists).
+  Omit `port` to read a sink/single-output value (e.g. Output.Watch); set `port`
+  to read a specific named output of a multi-output node.
+- `wiring`: `{ kind:'wiring', from, fromPort?, to, toPort?, hint }` — asserts a wire
+  exists from `from`(.fromPort) to `to`(.toPort). Ports optional (omit to match any).
+- `presence`: `{ kind:'presence', nodeType?, node?, control?, value?, hint }` —
+  node-of-type exists, OR a specific node's `control` equals `value` (omit `value`
+  to assert the control is merely set).
+- `choice` (MCQ): `{ kind:'choice', selected, answer, hint }` — `selected === answer`.
+
+Every check carries an authored `hint` (shown on failure). Prefer `output`.
+
+### Lesson schema (what Tank authors) + guard
+
+`{ id, track:'beginner'|'advanced', order, title, intro, palette:[nodeTypes],
+starter:{nodes,wires}, steps:[{prompt, checks:[]}], solution:{nodes,wires}, hints? }`
+
+- `validateLessonShape(lesson) -> { valid, errors }` is the authoring gate (structure
+  only — ids, palette covers starter types, check shapes, solution present when any
+  graph check is used).
+- **Solution guard (CI):** register lessons via `registerLesson(lesson)` from
+  `src/core/learning/index.js`; the guard test iterates `listLessons()` and asserts
+  `verifyLessonSolution(lesson).pass` for each — the learn-system analog of the node
+  "working sample" gate. `choice` checks are satisfied by their own `answer`. Tank's
+  lesson suite should add the same guard over the real manifest.
+
+### Worked fixture lesson (proves it end-to-end on real develop nodes)
+
+`tests/fixtures/learning-fixture-lesson.js`: Input.Number(3) + Input.Number(4) →
+Math.Add → Output.Watch, with an `output` check (expected 7), a `wiring` check
+(Add.result → Watch.value), and a `choice` MCQ. Real node port names verified:
+`Input.Number` control `val` / output port `value`; `Math.Add` inputs `a`/`b`,
+output `result`; `Output.Watch` input `value` (sink, returns the value).
+
+**Validation:** `node node_modules/eslint/bin/eslint.js .` clean; full vitest
+1895 passed / 1 skipped (incl. 27 new learning tests).
+
 ## 2026-06-05 - CodeBlock UI half — on-node auto-grow editor + G-1/G-2 hooks (feat/codeblock-ui)
 
 **Agent/branch:** Switch (ui-engineer) — `feat/codeblock-ui` (off `develop` @ 9f0ca04;

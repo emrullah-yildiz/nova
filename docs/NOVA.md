@@ -93,7 +93,7 @@ This map is also the **ownership partition** for parallel agents
 | `api/` | shared provider/feedback helpers (imported by Worker + tests) | Platform/Backend |
 | `server/` | jwks verifier, postgres persistence | Platform/Backend |
 | `integrations/revit-addin/` | C# Revit add-in | Connect/Revit |
-| `installer/nova-connect/` | C# installer | Connect/Revit |
+| `installer/nova-connect/` | WiX MSI installer (Connect add-in) | Connect/Revit |
 | `tests/` | Vitest + Playwright | QA (or each owner for their slice) |
 | `docs/` | documentation | Orchestrator (NOVA.md) / any (their spec) |
 
@@ -196,6 +196,14 @@ like the code around it. (Each links to the decision that owns the detail.)
   (Python = imports/bridge/typed headers/terminal; CodeBlock = expressions/series/
   literals/inline). Codegen tracks *live* ports, not the static def. `Custom.Formula`
   was folded into CodeBlock (`Result = <expr>`) and retired.
+- **Graph run modes are app-level policy over the engine mechanism.** The graph
+  recomputes per `app.runMode`: **Automatic** (default — recompute on every edit,
+  the legacy behavior) or **Manual** (defer to an explicit Run). The *mechanism*
+  lives in the engine (`_manualRunMode` gates `computeNodeValue` to the last-Run
+  snapshot; `runGraph()` is the single on-demand recompute); the *policy* (mode
+  state, toggle, Run-button stale affordance, persistence in the saved graph,
+  Manual→Automatic catch-up) lives in the owned UI module `src/ui/run-mode.js` —
+  don't fold run-mode policy back into `src/core`. Old graphs default to Automatic.
 - **Server is the authority.** Realtime roles (viewer RO / editor RW) and Connect
   write approvals are enforced server-side; clients are never trusted. A Connect/
   Revit write must present a **single-use, server-issued approval token**: the
@@ -224,7 +232,9 @@ like the code around it. (Each links to the decision that owns the detail.)
   Stop/Copy/Retry, attachments + images, expert geometry prompt + golden examples.
 - Auto-bug-reporter (unhandled errors → GitHub issue, consented).
 - Node versioning infrastructure (`Math.Round` is the reference v1/v2).
-- Nova Connect prototype + downloadable Revit 2027 add-in installer.
+- Nova Connect prototype + downloadable Revit 2027 add-in installer (per-user WiX
+  MSI). The local hub runs **in-process** in the C# add-in (`NovaHub`) — no Node,
+  no checkout, no separate hub exe — so a clean install can Connect.
 
 **In-flight / not started:**
 - **Accounts & collaboration: Phase 0 not started** — the `src/enterprise/` domain

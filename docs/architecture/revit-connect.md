@@ -262,18 +262,19 @@ installed machine.
 
 **Button 1 — connection On/Off toggle (`ConnectionToggleCommand`).**
 - **OFF (default):** a **red dot** icon, label "Connect".
-- Click to turn **ON:** starts the local hub (`NovaConnectHubProcess.EnsureStarted`)
-  and a `NovaHostClient` against `ws://127.0.0.1:8765`. On success the button flips to
+- Click to turn **ON:** starts the **in-process** hub
+  (`NovaConnectHubProcess.EnsureStarted` → `NovaHub`, see below) and a
+  `NovaHostClient` against `ws://127.0.0.1:8765`. On success the button flips to
   a **green dot**, label "Connected", tooltip "Connected to Nova".
 - Click again to turn **OFF:** disposes the host client and reverts to the red dot.
 - The command updates **its own** button: `NovaConnectApp` captures the created
   `PushButton` at startup (`NovaConnectApp.ToggleButton`) and sets `.LargeImage` /
   `.Image` / `.ItemText` on each toggle. Connection state and the `NovaHostClient`
   lifecycle live in `NovaConnectApp` (static) so `OnShutdown` can dispose the client
-  and stop the hub process the add-in started.
-- If turning on fails (no hub/Node/repo on this machine — see follow-up below), the
-  command does **not** crash: it stays OFF (red dot) and shows a `TaskDialog` with the
-  reason and the `NOVA_REPO_ROOT` hint.
+  and stop the in-process hub the add-in started.
+- If turning on fails (e.g. the port is already in use), the command does **not**
+  crash: it stays OFF (red dot) and shows a `TaskDialog` with the reason. The hub
+  needs no Node.js / Nova checkout, so the old `NOVA_REPO_ROOT` failure mode is gone.
 
 **Button 2 — Open Nova (`OpenNovaCommand`).** Opens the **production** web app
 `https://hi-nova.work/` (`NovaConnectSettings.DefaultNovaUrl`, overridable via the
@@ -292,70 +293,94 @@ dots programmatically as frozen `BitmapSource`es (a filled circle via `DrawingVi
 `RenderTargetBitmap`) at 32x32 (`LargeImage`) and 16x16 (`Image`), so no image assets
 are committed to the repo. The toggle swaps the dot color visibly on each On/Off.
 
-### Connection toggle and the hub-bundling follow-up (next step for distribution)
+### The in-process C# hub (`NovaHub`) — Approach C
 
-The connection toggle's "On" path depends on `NovaConnectHubProcess` +
-`NovaLocalPaths.FindRepoRoot`, which still require a **Nova git checkout and Node.js** on
-the machine (the hub is launched as `node scripts/connect-hub.cjs`). So on a clean
-end-user install the toggle will fail to go green and show the red-dot TaskDialog with
-the `NOVA_REPO_ROOT` hint. It works today on a developer machine, or anywhere
-`NOVA_REPO_ROOT` points at a Nova repo with Node available.
+The connection toggle's "On" path runs the hub **in-process**, inside the Revit
+add-in's own process (no external `nova-hub.exe`, no Node, no Nova checkout). This
+fixed the clean-install failure where the toggle could not go green because the
+old path launched `node scripts/connect-hub.cjs` from a git checkout.
 
-**Next step for true distribution:** bundle a self-contained hub with the installer (e.g.
-a packaged single-file hub executable, or shipping `connect-hub.cjs` + a pinned Node
-runtime inside `%APPDATA%\...\Nova\`) and have `NovaConnectHubProcess` prefer that bundled
-hub over `FindRepoRoot`. Until then the "Open Nova" button works unconditionally on any
-install (it just opens the production site), but the live Revit↔hub connection is
-dev-machine-only. This is tracked in `docs/agent-handoff.md`.
+`NovaHub` (`integrations/revit-addin/NovaHub.cs`) is a deliberately **Revit-free**
+WebSocket server bound to `ws://127.0.0.1:8765` via `System.Net.HttpListener` (the
+WS upgrade) + `System.Net.WebSockets`, running on a background thread so it never
+blocks the Revit UI thread. It is a faithful port of `scripts/connect-hub.cjs`:
 
-## Installing the add-in (downloadable installer)
+- same JSON envelope shape (`version`, `id`, `type`, `source`, `target`,
+  `sessionId`, `projectId`, `timestamp`, `payload`, `error`, `replyTo`);
+- `hello` → `connection.established` (with `pairingTokenRequired` + `peerConnected`);
+- the host↔viewer **peer relay**, with `peer.connected` / `peer.disconnected`;
+- `ping` → `pong` (clone, flip type, `source=nova-connect-hub`, `replyTo=id`);
+- the **pairing-token check** — only enforced when a token is configured; a
+  mismatch is rejected with `operation.error` / `INVALID_PAIRING_TOKEN` (compared
+  in constant time);
+- the same envelope-validation rejections (`INVALID_JSON`, `INVALID_ENVELOPE`,
+  `NO_HOST`, `UNKNOWN_TARGET`).
 
-The Connect panel has a **Download Nova Connect** button that serves a packaged
-installer at `/downloads/NovaConnect-Setup.exe`. It targets **Autodesk Revit
-2027** (the version the add-in is built against - see
+`NovaConnectHubProcess.EnsureStarted`/`StopIfStarted` keep their names (so the
+toggle wiring in `NovaConnectApp` is unchanged) but now start/stop the in-process
+`NovaHub`. A hub already listening on the port (a hand-started dev `node` hub) is
+detected and left untouched. Clean shutdown on `OnShutdown` / toggle-off aborts the
+listener and closes every open socket. SEC-013 (the server-issued write-approval
+token + the add-in's token-presence check) is unchanged — the hub is still a pure
+transport.
+
+The headless xUnit suite (`tests/revit-addin/NovaHubTests.cs`) compiles `NovaHub.cs`
+directly (no Revit API) and exercises the protocol: right/wrong token, ping→pong,
+host↔viewer relay between two live WebSocket clients, no-token-accepts-any, and
+invalid-envelope rejection.
+
+## Installing the add-in (downloadable WiX MSI)
+
+The Connect panel has a **Download Nova Connect** button that serves a WiX **MSI**
+at `/downloads/NovaConnect-Setup.msi`. It targets **Autodesk Revit 2027** (the
+version the add-in is built against - see
 `integrations/revit-addin/Nova.RevitAddin.csproj`) and is **Windows-only**.
+Because the hub runs in-process (Approach C), the MSI ships only the add-in DLL +
+`deps.json` + `Nova.addin` — **no bundled hub exe, no Node** — so it is just a few
+**MB** (≈ 0.44 MB) and commits cleanly (no >50MB push break).
 
 End-user flow:
 
-1. Click **Download Nova Connect** in the Connect panel -> `NovaConnect-Setup.exe`.
-2. Double-click **`NovaConnect-Setup.exe`**.
-3. The installer detects Revit 2027 (Program Files install or the per-user
-   `%APPDATA%\Autodesk\Revit\Addins\2027` folder) and **warns + asks to confirm**
-   if it isn't found.
-4. It copies `Nova.RevitAddin.dll` into `%APPDATA%\Autodesk\Revit\Addins\2027\Nova\`
-   and writes `Nova.addin` (from `Nova.addin.template`, filling `{{ASSEMBLY_PATH}}`).
-5. Restart Revit -> the **Add-Ins** tab shows a **Nova Connect** ribbon panel with two
+1. Click **Download Nova Connect** in the Connect panel -> `NovaConnect-Setup.msi`.
+2. Double-click **`NovaConnect-Setup.msi`** to launch the wizard:
+   Welcome -> License (accept the **Terms of Service**) -> Install location ->
+   Progress -> Finish. It is a **per-user** install (no admin / no elevation).
+3. The MSI deploys `Nova.RevitAddin.dll` (+ `deps.json`) into
+   `%APPDATA%\Autodesk\Revit\Addins\2027\Nova\` and writes `Nova.addin` (from
+   `Nova.addin.template`, with `{{ASSEMBLY_PATH}}` resolved to the installed DLL) in
+   `%APPDATA%\Autodesk\Revit\Addins\2027\`, and registers a per-user Add/Remove
+   Programs (Apps & features) entry.
+4. Restart Revit -> the **Add-Ins** tab shows a **Nova Connect** ribbon panel with two
    buttons: **Connect** (the On/Off connection toggle) and **Open Nova**.
 
-Run `NovaConnect-Setup.exe /uninstall` to remove it.
+Uninstall via Windows **Apps & features**, or `msiexec /x NovaConnect-Setup.msi`;
+uninstall removes all installed files + the manifest.
 
 Building/refreshing the installer (maintainers): see the full runbook in
 [`../revit-addin-build.md`](../revit-addin-build.md). In short, `npm run
 build:connect-installer` (PowerShell; runs `scripts/build-connect-installer.ps1`)
-builds the add-in in **Release** first — so the installer always embeds a
-**fresh** `Payload.Nova.RevitAddin.dll`, not a stale copy — then publishes the
-single-file installer and writes `public/downloads/NovaConnect-Setup.exe` +
-`.exe.sha256`, which Vite copies into `dist/` on `npm run build`. Commit the
-regenerated files so the download stays current.
+builds the add-in in **Release** first — so the MSI always embeds a **fresh**
+`Nova.RevitAddin.dll`, not a stale copy — generates `License.rtf` from
+`docs/legal/terms-of-service.md` (`scripts/build-license-rtf.ps1`), restores the
+pinned WiX tool (`.config/dotnet-tools.json`), then builds the MSI and writes
+`public/downloads/NovaConnect-Setup.msi` + `.msi.sha256`, which Vite copies into
+`dist/` on `npm run build`. Commit the regenerated files so the download stays
+current.
 
-The installer is a single-file, self-contained `.exe` built from
-`installer/nova-connect/NovaConnect.Installer.csproj`. It runs as the current
-user, writes only to Revit's per-user Addins folder, does not request admin
-rights, and does not use `.bat` files or PowerShell execution-policy bypasses.
-It also copies a stable uninstaller to
-`%LOCALAPPDATA%\Programs\Nova Connect\NovaConnect-Setup.exe` and registers a
-per-user Windows uninstall entry under HKCU for Apps & features / endpoint
-inventory.
+The installer is a per-user (`Scope="perUser"`, no admin) WiX v5 MSI built from
+`installer/nova-connect/NovaConnect.Installer.wixproj` + `Package.wxs`, with a
+`WixUI_InstallDir` wizard whose license page shows the Terms of Service. It writes
+only to Revit's per-user Addins folder.
 
 Code signing is parameterized and **opt-in** (a clean no-op for unsigned dev
 builds). Set `NOVA_SIGN_METHOD=trusted-signing|pfx` (plus the matching env vars)
-to sign **both** `Nova.RevitAddin.dll` and the installer EXE via the shared
-MSBuild target (`integrations/revit-addin/NovaSigning.targets`) +
-`scripts/sign-revit-addin.ps1`. Azure Trusted Signing is preferred (builds Smart
-App Control / SmartScreen reputation); a PFX + `signtool.exe` fallback is
-supported. No certs/secrets are committed — all inputs come from the
-environment. Full details, env-var table, and the Smart App Control note are in
-[`../revit-addin-build.md`](../revit-addin-build.md). Without a signing cert,
-Windows SmartScreen / Smart App Control may warn or block the unsigned EXE. To
-target another Revit release, update `RevitVersion` in the installer program and
+to sign **both** `Nova.RevitAddin.dll` and the **MSI** via the shared MSBuild
+target (`integrations/revit-addin/NovaSigning.targets`) +
+`scripts/sign-revit-addin.ps1`. (There is no separate hub exe to sign now.) Azure
+Trusted Signing is preferred (builds Smart App Control / SmartScreen reputation); a
+PFX + `signtool.exe` fallback is supported. No certs/secrets are committed — all
+inputs come from the environment. Full details, env-var table, and the Smart App
+Control note are in [`../revit-addin-build.md`](../revit-addin-build.md). Without a
+signing cert, Windows SmartScreen / Smart App Control may warn on the unsigned MSI.
+To target another Revit release, update the `2027` folder name in `Package.wxs` and
 rebuild the add-in against that Revit's API.

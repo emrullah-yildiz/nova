@@ -17,6 +17,9 @@
     <!-- Revit-free source under test, pulled in by file rather than by assembly
          reference so we never need to load the Revit API to test it. -->
     <Compile Include="..\..\integrations\revit-addin\NovaWebUrl.cs" />
+    <!-- The in-process hub is deliberately Revit-free so it can run headlessly
+         here (right/wrong token, ping->pong, relay between two ws clients). -->
+    <Compile Include="..\..\integrations\revit-addin\NovaHub.cs" />
   </ItemGroup>
 
   <ItemGroup>
