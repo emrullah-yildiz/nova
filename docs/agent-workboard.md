@@ -25,11 +25,11 @@ root `README.md` · `docs/NOVA.md` · `.github/workflows/ci.yml`
 
 | Branch | Agent | Task | Owned paths (globs) | Hot locks | Started | Status |
 |---|---|---|---|---|---|---|
-| chore/git-hooks | platform-engineer | Install Husky + lint-staged; pre-commit ESLint, pre-push vitest | `package.json`, `.husky/**`, `tests/` (only unclaimed test files), `src/app/**`, `src/ai/**`, `src/enterprise/**`, `src/integrations/**` (lint fixes only — never src/nodes/**, src/geometry/**, src/runtime/**, src/ui/**, src/viewer/** which are owned by other T branches) | — | 2026-06-05 | active |
+| chore/git-hooks | platform-engineer | Install Husky + lint-staged; pre-commit ESLint, pre-push vitest | `package.json`, `.husky/**`, `tests/` (only unclaimed test files), `src/app/**`, `src/ai/**`, `src/enterprise/**`, `src/integrations/**` (lint fixes only — never src/nodes/**, src/geometry/**, src/runtime/**, src/ui/**, src/viewer/** which are owned by other T branches) | — | 2026-06-05 | **merged** |
 | fix/codeblock-series | core-engineer | Fix CodeBlock DSL series shorthand bug + test | `src/runtime/codeblock-eval.js`, `src/runtime/codeblock-syntax.js`, `tests/codeblock-series.test.js` | — | 2026-06-05 | **merged** |
 | fix/curve-point-extrapolate | geometry-engineer | Curve.PointAtParameter extrapolation beyond [0,1] + test | `src/nodes/categories/curves.js`, `src/geometry/curve-eval.js`, `tests/curves-node-results.test.js` | — | 2026-06-05 | **merged** |
-| feat/geometry-selection | ui-engineer | Add Select.Faces/Edges/Points nodes with 3D selection mode + Approve/Cancel toolbar | `src/nodes/categories/geometry.js`, `src/viewer/geo-selector.js`, `src/viewer/selection-mode.js` (new), `src/viewer/viewer3d.js`, `src/ui/node-renderer.js`, `src/ui/node-library.js`, `tests/geometry-selection.test.js` | `src/ui/node-renderer.js` | 2026-06-05 | active |
-| feat/learning-examples | ui-engineer | Add simple+advanced examples with SVG illustrations to all 10 learning-page chapters | `src/ui/learning-page.js`, `tests/learning-page.test.js` | — | 2026-06-05 | active |
+| feat/geometry-selection | ui-engineer | Add Select.Faces/Edges/Points nodes with 3D selection mode + Approve/Cancel toolbar | `src/nodes/categories/geometry.js`, `src/viewer/geo-selector.js`, `src/viewer/selection-mode.js` (new), `src/viewer/viewer3d.js`, `src/ui/node-renderer.js`, `src/ui/node-library.js`, `tests/geometry-selection.test.js` | `src/ui/node-renderer.js` | 2026-06-05 | **merged** |
+| feat/learning-examples | ui-engineer | Add simple+advanced examples with SVG illustrations to all 10 learning-page chapters | `src/ui/learning-page.js`, `tests/learning-page.test.js` | — | 2026-06-05 | **merged** |
 
 <!--
 Example row (copy, fill in, remove this comment block's example when claiming):
