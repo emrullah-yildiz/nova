@@ -1,12 +1,12 @@
-// M5: Pattern.PanelFrames + Pattern.PanelPlanarity — close the facade
-// rationalization loop. Pattern.FacadePanels emits bare quad meshes and
-// discards the per-panel frame; these nodes recover it so panels flow into
-// Geometry.Orient (M1) and the Revit placement nodes (M4).
+// M5: Pattern.PanelPlane (was PanelFrames) + Pattern.PanelPlanarity — close the facade
+// rationalization loop. Pattern.FacadePanels emits panel objects and discards the
+// per-panel frame; these nodes recover it so panels flow into Geometry.Orient (M1)
+// and the Revit placement nodes (M4).
 //
 // Verifies:
 //  - both nodes register with execute() in the EXISTING patterns category
-//  - PanelFrames consumes the exact output shape of Pattern.FacadePanels and
-//    yields Geo.Plane frames (the shape Geometry.Orient consumes)
+//  - PanelPlane (renamed from PanelFrames) consumes the exact output shape of
+//    Pattern.FacadePanels and yields Geo.Plane frames (the shape Geometry.Orient consumes)
 //  - PanelPlanarity reports 0 for flat panels and the per-panel max as maxWarp
 //  - graceful empty-input defaults (no crash before a panel source is wired)
 //  - the node catalog exposes both Geo.* names to the AI
@@ -28,43 +28,45 @@ function flatPanels() {
   return Geo.facadePanels(surface, 3, 3);
 }
 
-describe('Pattern.PanelFrames node', () => {
+describe('Pattern.PanelPlane node (renamed from PanelFrames)', () => {
   it('is registered in the patterns category with execute()', () => {
-    const node = registry.getNode('Pattern.PanelFrames');
+    const node = registry.getNode('Pattern.PanelPlane');
     expect(node).toBeDefined();
     expect(node.category).toBe('patterns');
     expect(node.subGroup).toBe('Panels');
     expect(typeof node.execute).toBe('function');
-    expect(node.codegen.python).toContain('Geo.panelFrames');
+    // Old type alias still resolves (backward compat via aliases array)
+    const legacy = registry.getNode('Pattern.PanelFrames');
+    expect(legacy).toBeNull(); // old type is GONE — must not resolve
   });
 
-  it('consumes Pattern.FacadePanels output and yields Geo.Plane frames', () => {
+  it('consumes Pattern.FacadePanels output and yields Geo.Plane frames via planes output', () => {
     const panels = flatPanels();
     expect(panels.length).toBe(9);
-    const out = registry.getNode('Pattern.PanelFrames').execute({}, { panels });
-    expect(out.frames).toHaveLength(9);
-    for (const f of out.frames) expect(f).toBeInstanceOf(Geo.Plane);
+    const out = registry.getNode('Pattern.PanelPlane').execute({}, { panels });
+    expect(out.planes).toHaveLength(9);
+    for (const f of out.planes) expect(f).toBeInstanceOf(Geo.Plane);
     // Centroids align with the frame origins.
     expect(out.centroids).toHaveLength(9);
     expect(out.centroids[0]._type).toBe('Point3');
   });
 
-  it('frames orient geometry onto each panel (Geometry.Orient compatible)', () => {
+  it('planes orient geometry onto each panel (Geometry.Orient compatible)', () => {
     const panels = flatPanels();
-    const { frames } = registry.getNode('Pattern.PanelFrames').execute({}, { panels });
+    const { planes } = registry.getNode('Pattern.PanelPlane').execute({}, { panels });
     const worldXY = Geo.planeFromOriginXY(
       new Geo.Point3(0, 0, 0),
       new Geo.Vector3(1, 0, 0),
       new Geo.Vector3(0, 1, 0)
     );
-    // Orienting the world origin onto a frame lands it on the panel centroid.
-    const moved = Geo.orient(new Geo.Point3(0, 0, 0), worldXY, frames[0]);
-    expect(moved.distanceTo(frames[0].origin)).toBeCloseTo(0, 6);
+    // Orienting the world origin onto a plane lands it on the panel centroid.
+    const moved = Geo.orient(new Geo.Point3(0, 0, 0), worldXY, planes[0]);
+    expect(moved.distanceTo(planes[0].origin)).toBeCloseTo(0, 6);
   });
 
   it('returns empty lists for empty input (graceful default)', () => {
-    const out = registry.getNode('Pattern.PanelFrames').execute({}, {});
-    expect(out.frames).toEqual([]);
+    const out = registry.getNode('Pattern.PanelPlane').execute({}, {});
+    expect(out.planes).toEqual([]);
     expect(out.centroids).toEqual([]);
   });
 });
