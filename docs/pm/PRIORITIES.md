@@ -16,11 +16,12 @@
 1. **Ticket + PM architecture** — Morpheus writes and tracks tickets. I give goals, agents deliver.
 2. **Select Faces/Edges/Points — full verification** — Confirm the wiring fix works end-to-end in the browser; add Playwright spec.
 3. **Testing infrastructure** — Every UI feature must have a Playwright E2E spec before merge.
+4. Make sure that Pattern nodes can work with given surface. The output is showing every panel, voronoi cell individually with their points and surface
 
 ## Next sprint
 
 - Learning page screenshots — real Nova canvas screenshots in the 20 screenshot slots.
-- AI codegen — structured node-list output instead of free Python (retire parser fragility).
+- Learning page interactive exercises — mini-canvas inside learning overlay. Create puzzled nodes and ask users to combine them on the mini canvas and submit the solution to be approved. 
 
 ## Backlog
 
