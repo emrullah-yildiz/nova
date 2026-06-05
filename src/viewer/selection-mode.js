@@ -138,13 +138,13 @@ function _showToolbar() {
     + '&#10007; Cancel'
     + '</button>';
 
-  const viewport = document.getElementById('viewport-3d');
-  if (viewport) {
-    viewport.style.position = 'relative';
-    viewport.appendChild(toolbar);
-  } else {
-    document.body.appendChild(toolbar);
-  }
+  // Append the toolbar to canvas-area (the shared parent of #viewport-3d and
+  // .canvas-toolbar). This keeps the toolbar outside the #viewport-3d stacking
+  // context (z-index: 5), so the toolbar's own z-index: 200 wins over the
+  // canvas-toolbar's z-index: 20 and pointer events reach the buttons.
+  // Falls back to document.body if canvas-area is absent (e.g. unit tests).
+  const canvasArea = document.getElementById('canvas-area') || document.getElementById('viewport-3d') || document.body;
+  canvasArea.appendChild(toolbar);
 
   if (typeof window !== 'undefined') {
     window.__selectionApprove = function () { approveSelection(); };
