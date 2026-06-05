@@ -50,7 +50,7 @@ export const surfacesNodes = [
     aliases: ['surf-patch'],
     description: 'Fills the interior of a single closed boundary (a closed curve or an ordered list of points) by fan-triangulating from the centroid. Produces a mesh suitable for shading, intersection, and downstream patch operations.',
     inputs: [
-      { id: 'boundary', name: 'Boundary', type: 'list', description: 'Closed curve or ordered list of points forming the patch outline' }
+      { id: 'boundary', name: 'Boundary', type: 'any', description: 'Closed curve or ordered list of points forming the patch outline' }
     ],
     outputs: [{ id: 'surface', name: 'Surface', type: 'mesh', description: 'Triangulated patch mesh' }],
     controls: [
