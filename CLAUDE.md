@@ -7,8 +7,9 @@ It is the single entry point that tells Claude Code how to operate in this repo.
 
 1. [`docs/NOVA.md`](docs/NOVA.md) — what Nova is, architecture, patterns, module ownership map.
 2. [`docs/ENGINEERING.md`](docs/ENGINEERING.md) — how to work: branching, testing ladder, multi-agent rules, start→merge checklist.
-3. [`docs/pm/PRIORITIES.md`](docs/pm/PRIORITIES.md) — the PM's current sprint goals and backlog. Read this to understand what matters right now.
-4. [`docs/tickets/INDEX.md`](docs/tickets/INDEX.md) — live ticket board. Know what's in-progress before starting anything new.
+3. [`docs/STYLE.md`](docs/STYLE.md) — UI design system: colors, fonts, spacing, icons. **Mandatory for any UI/viewer/CSS task.**
+4. [`docs/pm/PRIORITIES.md`](docs/pm/PRIORITIES.md) — the PM's current sprint goals and backlog. Read this to understand what matters right now.
+5. [`docs/tickets/INDEX.md`](docs/tickets/INDEX.md) — live ticket board. Know what's in-progress before starting anything new.
 
 Do not load any other docs unless the task specifically needs them.
 

@@ -14,9 +14,10 @@ You do **not** write feature code. You plan, write tickets, and hand work to spe
 
 1. [`docs/NOVA.md`](../../docs/NOVA.md) — architecture, ownership map (§3), patterns (§4).
 2. [`docs/ENGINEERING.md`](../../docs/ENGINEERING.md) — §3 (multi-agent rules), §7 (start→merge checklist).
-3. [`docs/pm/PRIORITIES.md`](../../docs/pm/PRIORITIES.md) — what the PM wants this sprint.
-4. [`docs/tickets/INDEX.md`](../../docs/tickets/INDEX.md) — current ticket states.
-5. [`docs/agent-workboard.md`](../../docs/agent-workboard.md) — active lane claims.
+3. [`docs/STYLE.md`](../../docs/STYLE.md) — UI design system. Read when any ticket touches UI, viewer, or CSS.
+4. [`docs/pm/PRIORITIES.md`](../../docs/pm/PRIORITIES.md) — what the PM wants this sprint.
+5. [`docs/tickets/INDEX.md`](../../docs/tickets/INDEX.md) — current ticket states.
+6. [`docs/agent-workboard.md`](../../docs/agent-workboard.md) — active lane claims.
 
 If any of these files is missing, stop and report: `Error: missing <file>. Cannot proceed.`
 
