@@ -11,6 +11,10 @@ function main() {
   try { data = JSON.parse(input || '{}'); } catch { process.exit(0); }
 
   const cmd = (data.tool_input && data.tool_input.command) || '';
+  // Skip echo/print commands that contain test-related strings but aren't actual test runs.
+  // Also skip commands where the "command" itself looks like piped JSON (subagent debug artifacts).
+  const trimmed = cmd.trimStart();
+  if (/^echo\b/.test(trimmed) || /^printf\b/.test(trimmed) || /^\{/.test(trimmed)) process.exit(0);
   const isTestRun =
     /\bvitest\b.*\brun\b/.test(cmd) ||
     /\bnpm(?:\.cmd)?\s+(?:run\s+)?test\b/.test(cmd) ||
@@ -26,7 +30,9 @@ function main() {
   const passed = passedMatch ? parseInt(passedMatch[1], 10) : null;
   const failed = failedMatch ? parseInt(failedMatch[1], 10) : 0;
 
-  const result = (exitCode === 0 && failed === 0) ? 'passed' : 'failed';
+  // Prefer parsed output over exit_code — exit_code is often undefined in the Bash tool response.
+  // Only record 'passed' when we actually parsed a "Tests N passed" line from real vitest output.
+  const result = (passed !== null && failed === 0) ? 'passed' : 'failed';
 
   const record = {
     ran_at: new Date().toISOString(),
