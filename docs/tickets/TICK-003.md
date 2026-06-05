@@ -1,7 +1,7 @@
 ---
 id: TICK-003
 title: Testing infrastructure — Playwright E2E coverage gate for all UI features
-status: draft
+status: ready
 priority: high
 type: chore
 sprint: 2026-06-05
@@ -82,6 +82,9 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note:
 ## Task briefs
 
 Links added by morpheus after PM confirms AC.
+
+- [T03a](../task-briefs/T03a-e2e-infra.md) — lane: platform (link) — playwright.config.js + CI e2e job + pre-push hook + README Testing section (AC-1, AC-2, AC-3, AC-5). No dependency; start immediately.
+- [T03b](../task-briefs/T03b-e2e-spec-audit.md) — lane: platform (link) — Audit pass: confirm all 5 E2E specs pass and record results (AC-4). BLOCKED until TICK-002 + T03a both merged.
 
 ## Notes
 
