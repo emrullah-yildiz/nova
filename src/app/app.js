@@ -1316,13 +1316,6 @@ const app = {
         }
       });
 
-      // PRESET — "Series (Code Block)": a Custom.CodeBlock pre-filled with the
-      // `0..10` series shorthand. A preset of the SAME type (not a new node type),
-      // so it never violates no-duplicate. Surfaced under the Custom / AI category.
-      if (cat.id === 'custom') {
-        html += `<button class="node-lib-item" data-preset="series-codeblock" draggable="false" onclick="app.addSeriesCodeBlock()"><span class="nli-icon" style="color:${cat.color}">{ }</span>Series (Code Block)</button>`;
-      }
-
       html += `</div></div>`;
     });
     document.getElementById('node-categories').innerHTML = html;
