@@ -86,6 +86,9 @@ jobs:
   e2e:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     # Run only on pull requests that touch src/ or tests/ — no point running
     # E2E on docs-only or config-only changes.
     if: github.event_name == 'pull_request'
