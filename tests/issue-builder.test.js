@@ -19,8 +19,8 @@ describe('issue builder — buildCompositeRequestIssue', () => {
     userPrompt: 'Build a voronoi-driven roof tile pattern with attractor influence',
     refusalReason: "Nova lacks a single node for attractor-influenced voronoi tiles.",
     suggestions: [
-      'Use Pattern.VoronoiMesh with uniform sites',
-      'Try Pattern.HexGrid for simpler tiles'
+      'Use Surface.WavyGrid for organic tile patterns',
+      'Try Geometry.LinearArray for simpler tile arrangements'
     ],
     context: {
       novaVersion: '0.1.0-dev',

@@ -99,10 +99,6 @@ describe('Geo composite helpers', () => {
 
 describe('composite node definitions', () => {
   const composites = [
-    'Pattern.TwistedEllipsePlates',
-    'Pattern.OrganicProfileStack',
-    'Pattern.HelicalCurve',
-    'Pattern.DiagridFacade',
     'Surface.WavyGrid'
   ];
 
@@ -139,15 +135,4 @@ describe('composite node definitions', () => {
       }
     });
   }
-
-  it('Pattern.TwistedEllipsePlates output feeds Solid.ByLoft (shape compatibility)', () => {
-    // The composite emits point[][] which loft accepts as a list of
-    // profile curves. This is the key downstream connection the spike
-    // depends on; if it ever stops working, no Tower prompt resolves.
-    const node = registry.getNode('Pattern.TwistedEllipsePlates');
-    const result = node.execute({}, {});
-    expect(Array.isArray(result.profiles)).toBe(true);
-    expect(Array.isArray(result.profiles[0])).toBe(true);
-    expect(result.profiles[0][0]._type).toBe('Point3');
-  });
 });

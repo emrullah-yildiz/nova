@@ -11,10 +11,7 @@
 //  - the node definition exposes execute() that returns the same shape
 //  - defaults survive empty / partial input
 
-import { getLiveCoreRegistry } from '../src/nodes/coreNodes.js';
 import { Geo } from '../src/geometry/index.js';
-
-const registry = getLiveCoreRegistry();
 
 describe('Geo.hexPanelGrid math', () => {
   it('produces (rings - 1) × ringSize panels for the default skip', () => {
@@ -79,40 +76,3 @@ describe('Geo.hexPanelGrid math', () => {
   });
 });
 
-describe('Pattern.HexPanelGrid node integration', () => {
-  it('is registered and has single-line codegen.python', () => {
-    const node = registry.getNode('Pattern.HexPanelGrid');
-    expect(node).toBeDefined();
-    expect(typeof node.execute).toBe('function');
-    expect(node.codegen.python.indexOf('\n')).toBe(-1);
-    expect(node.codegen.python).toContain('Geo.hexPanelGrid');
-  });
-
-  it('execute consumes the exact output shape of Pattern.TwistedEllipsePlates', () => {
-    // The composition the user's "rotating tower with hex panels" prompt
-    // needs:  TwistedEllipsePlates → HexPanelGrid → List.Count → Watch
-    const twist = registry.getNode('Pattern.TwistedEllipsePlates').execute({}, {});
-    const hex = registry.getNode('Pattern.HexPanelGrid').execute({}, { profiles: twist.profiles });
-    expect(hex.panels).toBeDefined();
-    expect(hex.panels.length).toBeGreaterThan(0);
-    expect(hex.panels[0][0]._type).toBe('Point3');
-  });
-
-  it('execute returns panels even when inputs is empty (graceful default)', () => {
-    const node = registry.getNode('Pattern.HexPanelGrid');
-    // No profiles → empty list, not a crash. Lets the canvas render
-    // the node with zero output until a profile source is wired.
-    const out = node.execute({}, {});
-    expect(out.panels).toEqual([]);
-  });
-
-  it('node catalog exposes Geo.hexPanelGrid to the AI', () => {
-    // Phase 1's catalog reads codegen.python from every node to build
-    // the AI's tool inventory. If hexPanelGrid isn't in the catalog,
-    // plan-mode would refuse the rotating-tower prompt.
-    const { buildNodeCatalog, _clearCatalogCacheForTests } = require('../src/ai/node-catalog.js');
-    _clearCatalogCacheForTests();
-    const cat = buildNodeCatalog();
-    expect(cat).toContain('Geo.hexPanelGrid');
-  });
-});

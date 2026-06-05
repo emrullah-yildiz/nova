@@ -19,8 +19,6 @@ import {
   panelFrames as m5PanelFrames,
   panelPlanarity as m5PanelPlanarity
 } from './panel-frames.js';
-import { facadePanelsOnSurface as t04aFacadePanels } from './geo-facade-panels.js';
-import { voronoiCellObjects as t04aVoronoiCells } from './geo-voronoi.js';
 import { GEOMETRY_LEVELS, createGeometryRef, geometryCacheKey } from './GeometryRef.js';
 import { GeometryCache } from './GeometryCache.js';
 import { GeometryStore, geometryStore } from './GeometryStore.js';
@@ -67,18 +65,6 @@ Geo.divideSurface = t4DivideSurface;
 // ──────────────────────────────────────────────────────────────────────────
 Geo.panelFrames = m5PanelFrames;
 Geo.panelPlanarity = m5PanelPlanarity;
-
-// ──────────────────────────────────────────────────────────────────────────
-// T04a — Pattern-on-Surface: facade panel cell objects + Voronoi cell objects.
-// facadePanelsOnSurface: projects UV grid onto an actual curved Surface object
-// and returns panel objects { points, frame } instead of bare Mesh3 quads.
-// voronoiCellObjects: wraps voronoiOutlines output into panel objects { points, frame }.
-// Both names verified collision-free against geometry-lib.js / geo-advanced.js /
-// nurbs-math.js. Node codegen emitting Geo.<name>(...) resolves against this
-// assembled global Geo at runtime.
-// ──────────────────────────────────────────────────────────────────────────
-Geo.facadePanelsOnSurface = t04aFacadePanels;
-Geo.voronoiCellObjects = t04aVoronoiCells;
 
 if (typeof window !== 'undefined') {
   window.Geo = Geo;

@@ -149,7 +149,7 @@ export function buildNodeCatalog() {
   // Trailing rules — short, imperative.
   lines.push('## COMPOSITION RULES');
   lines.push('1. For every line of code you write, ask: "Is there a single Geo.* call above that does this?" If yes, USE IT.');
-  lines.push('2. If you find yourself writing a for-loop to generate points/curves, look in Patterns first (Geo.phyllotaxis, Geo.hexGrid, Geo.voronoiMesh, Geo.bezier, etc.) — there is almost always a single-call replacement.');
+  lines.push('2. If you find yourself writing a for-loop to generate points/curves, look for a single Geo.* call above first (e.g. Geo.bezier, Geo.wavyGrid, Geo.loft, etc.) — there is almost always a single-call replacement.');
   lines.push('3. Each Python assignment becomes one visual node. Decompose: `box = Geo.createBox(c, w, d, h)` is good; nesting calls is bad (`Geo.createBox(Geo.Point3(0,0,0), 1, 1, 1)` → one ugly node).');
   lines.push('4. Custom.Python is a LAST RESORT. If you must use it, add a comment `# fallback: <one-line reason>` on the first line so the user can see why no single node sufficed.');
   lines.push('5. End every code block with `print(<final_result>)` so the graph has a Watch node and renders something.');

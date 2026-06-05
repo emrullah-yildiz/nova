@@ -98,7 +98,7 @@ Approve when ready.`;
   });
 
   it('handles a response with no python block — no-op', () => {
-    const response = "I think you should try Pattern.Phyllotaxis followed by Solid.ByLoft instead.";
+    const response = "I think you should try Surface.WavyGrid followed by Solid.ByLoft instead.";
     const { text, rewrites } = rewriteGeoAliasesInResponse(response);
     expect(text).toBe(response);
     expect(rewrites).toHaveLength(0);

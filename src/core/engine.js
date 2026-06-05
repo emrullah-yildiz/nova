@@ -711,9 +711,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-      // ── Patterns ──
-
-      // Pattern.* nodes migrated to src/nodes/categories/patterns.js.
+      // ── Patterns ── (category removed in TICK-005)
 
 
 

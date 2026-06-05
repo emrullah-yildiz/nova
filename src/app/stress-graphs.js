@@ -68,18 +68,17 @@ export function buildNoGeometryGraph(count = 1000) {
   return envelope('Stress · ' + N + ' nodes (no geometry)', nodes, wires);
 }
 
-// 1000 nodes, ~10,000 geometry primitives: 1000 Pattern.HexGrid nodes, each a
-// rows×cols grid of hex-tile meshes. Terminal geometry (nothing consuming it
-// downstream) previews by default, so all of it renders with no wiring. Radius
-// cycles so the rings nest at varied sizes instead of perfectly overlapping.
+// 1000 nodes, each a Box.ByCenterWidthDepthHeight. Terminal geometry (nothing
+// consuming it downstream) previews by default, so all of it renders with no
+// wiring. Size cycles so boxes are at varied sizes instead of perfectly stacked.
 export function buildGeometryGraph(count = 1000, rows = 2, cols = 5) {
   const nodes = [];
   for (let i = 0; i < count; i++) {
     const p = pos(i);
-    const radius = (1 + (i % 12) * 0.5).toFixed(1); // 1.0 … 6.5
-    nodes.push(node('node-' + (i + 1), 'Pattern.HexGrid', p.x, p.y, 10 + i, {
-      radius, rows: String(rows), cols: String(cols)
+    const size = (1 + (i % 12) * 0.5).toFixed(1); // 1.0 … 6.5
+    nodes.push(node('node-' + (i + 1), 'Box.ByCenterWidthDepthHeight', p.x, p.y, 10 + i, {
+      width: size, depth: size, height: size
     }));
   }
-  return envelope('Stress · ' + count + ' nodes (' + (count * rows * cols) + ' geometry)', nodes, []);
+  return envelope('Stress · ' + count + ' nodes (' + count + ' geometry)', nodes, []);
 }

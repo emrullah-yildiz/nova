@@ -51,7 +51,7 @@ export const TYPE_COLORS = {
 //  Surface.HyperbolicParaboloid, Surface.Hyperboloid, Surface.KleinBottle,
 //  Surface.MobiusStrip, Surface.Seashell).
 //
-// Patterns category migrated to src/nodes/categories/patterns.js.
+// Patterns category removed in TICK-005.
 
 
 // ═══════════════════════════════════════

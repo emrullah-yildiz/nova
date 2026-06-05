@@ -9,7 +9,6 @@ import { mathCategory, mathNodes } from './categories/math.js';
 import { outputCategory, outputNodes } from './categories/output.js';
 import { customCategory, customNodes } from './categories/custom.js';
 import { dataCategory, dataNodes } from './categories/data.js';
-import { patternsCategory, patternsNodes } from './categories/patterns.js';
 import { planeCategory, planeNodes } from './categories/plane.js';
 import { pointCategory, pointNodes } from './categories/point.js';
 import { solidsCategory, solidsNodes } from './categories/solids.js';
@@ -29,7 +28,6 @@ const modernCategories = [
   logicCategory,
   mathCategory,
   outputCategory,
-  patternsCategory,
   planeCategory,
   pointCategory,
   solidsCategory,
@@ -55,7 +53,6 @@ export const coreNodes = [
   ...logicNodes,
   ...mathNodes,
   ...outputNodes,
-  ...patternsNodes,
   ...planeNodes,
   ...pointNodes,
   ...solidsNodes,

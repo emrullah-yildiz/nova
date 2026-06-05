@@ -18,19 +18,16 @@ describe('node catalog for AI system prompt', () => {
     expect(cat).toContain('## Solids');
     expect(cat).toContain('## Surfaces');
     expect(cat).toContain('## Curves');
-    expect(cat).toContain('## Patterns');
     expect(cat).toContain('## Point construction');
   });
 
   it('includes the Geo.* calls the AI hallucinated around in real testing', () => {
     // Specific regressions: the AI used Geo.combineAll(points) (wrong
-    // input type) and wrote a manual for-loop for circle points instead
-    // of Geo.phyllotaxis. Both should now be visible in the inventory.
+    // input type). Both should now be visible in the inventory.
     expect(cat).toContain('Geo.createBox');
     expect(cat).toContain('Geo.createSphere');
     expect(cat).toContain('Geo.loft(');
     expect(cat).toContain('Geo.combineAll');
-    expect(cat).toContain('Geo.phyllotaxis');
   });
 
   it('annotates output types so the AI can reason about composition', () => {
@@ -41,7 +38,6 @@ describe('node catalog for AI system prompt', () => {
     // anything up to the arrow.
     expect(cat).toMatch(/Geo\.createBox\([\s\S]+?\) → Mesh3/);
     expect(cat).toMatch(/Geo\.Circle3\([\s\S]+?\) → Circle3/);
-    expect(cat).toMatch(/Geo\.phyllotaxis\([\s\S]+?\) → list/);
   });
 
   it('drops noisy multi-line codegen so the catalog stays a clean signature list', () => {
@@ -54,7 +50,7 @@ describe('node catalog for AI system prompt', () => {
 
   it('ends with composition rules that frame the AI\'s behavior', () => {
     expect(cat).toContain('## COMPOSITION RULES');
-    expect(cat).toContain('Patterns first');
+    expect(cat).toContain('single-call replacement');
     expect(cat).toContain('# fallback:');
     expect(cat).toContain('LAST RESORT');
     // Rule 5: AI should always print() the final result so the graph has

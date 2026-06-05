@@ -22,19 +22,13 @@ describe('composition cookbook in the system prompt', () => {
     // If the AI doesn't see these chains spelled out it falls back to
     // "I don't know a single node for X, I refuse". The cookbook is
     // what teaches it that compositions exist.
-    expect(sys).toMatch(/twisted tower.*Pattern\.TwistedEllipsePlates.*Solid\.ByLoft/is);
-    expect(sys).toMatch(/organic pavilion.*Pattern\.OrganicProfileStack.*Solid\.ByLoft/is);
     expect(sys).toMatch(/wavy roof.*Surface\.WavyGrid/is);
-    expect(sys).toMatch(/diagrid facade.*Pattern\.DiagridFacade/is);
-    expect(sys).toMatch(/spiral staircase.*helix.*Pattern\.HelicalCurve/is);
+    expect(sys).toMatch(/geodesic dome.*Sphere\.ByCenterRadius/is);
+    expect(sys).toMatch(/box with a hole.*Solid\.BooleanSubtract/is);
   });
 
-  it('shows the tower-with-hex-panels chain — the exact production failure that motivated Phase 13', () => {
-    // Specific regression: the AI was refusing "rotating tower with hex
-    // panels" because it didn't see how to chain TwistedEllipsePlates +
-    // HexPanelGrid. The cookbook now spells it out as example B.
-    expect(sys).toContain('Pattern.HexPanelGrid');
-    expect(sys).toMatch(/Pattern\.TwistedEllipsePlates.*Pattern\.HexPanelGrid/is);
+  it('shows Surface.WavyGrid as a canonical surface node', () => {
+    expect(sys).toContain('Surface.WavyGrid');
   });
 
   it('softens the refusal contract from "refuse if no single node" to "refusal is the LAST resort"', () => {
@@ -69,7 +63,7 @@ describe('composition cookbook in the system prompt', () => {
     expect(sys).toContain('X with a hole');
     expect(sys).toContain('Solid.BooleanSubtract');
     expect(sys).toContain('X arrayed N times');
-    expect(sys).toContain('Pattern.ArrayLinear');
+    expect(sys).toContain('Geometry.LinearArray');
   });
 
   it('stays under a reasonable size budget for the build-intent prompt', () => {

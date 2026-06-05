@@ -76,7 +76,7 @@ ${sugList}
 The maintainer should consider whether to add a new composite node that satisfies this pattern. Suggested shape:
 
 \`\`\`
-type:        Pattern.<NewName> or Surface.<NewName> or Solid.<NewName>
+type:        Surface.<NewName> or Solid.<NewName> or Geometry.<NewName>
 inputs:      <numbers/points/curves the user wants to parameterise>
 outputs:     <list of points / mesh / curves — whatever the next node expects>
 codegen.py:  {{output}} = Geo.<newGeoHelper>(<params>)

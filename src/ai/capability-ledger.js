@@ -36,11 +36,7 @@ const GROUPS = [
       { name: 'multiAttractor', sig: 'Geo.multiAttractor(pt, attractors[], radius, falloff) → 0..1', note: 'panel size / inset / height from proximity; falloff 1 = hard, 2 = soft bloom' },
       { name: 'pointAttractor', sig: 'Geo.pointAttractor(pt, pos, radius, falloff) → 0..1', note: 'single-attractor influence' },
       { name: 'fbm', sig: 'Geo.fbm(x, y, z, octaves, lacunarity, gain) → -1..1', note: 'layered organic variation (octaves = detail layers)' },
-      { name: 'perlin3', sig: 'Geo.perlin3(x, y, z) → -1..1', note: 'single-octave noise' },
-      { name: 'phyllotaxis', note: 'golden-angle seed distribution (sunflower)' },
-      { name: 'fibonacciSphere', note: 'even point spread on a sphere' },
-      { name: 'attractorDeform', note: 'pull mesh vertices toward attractors' },
-      { name: 'noiseDeform', note: 'Perlin displacement of mesh vertices' }
+      { name: 'perlin3', sig: 'Geo.perlin3(x, y, z) → -1..1', note: 'single-octave noise' }
     ]
   },
   {
@@ -53,17 +49,6 @@ const GROUPS = [
       { name: 'createNurbsSurface', note: 'freeform control-grid surface (degree 3 = C² smooth)' },
       { name: 'wavyGrid', note: 'sin/cos doubly-curved canopy in one call' },
       { name: 'surfaceByPatch', note: 'fill a closed boundary' }
-    ]
-  },
-  {
-    title: 'Panelization — host ON a surface, then vary by a field',
-    methods: [
-      { name: 'facadePanelsOnSurface', sig: 'Geo.facadePanelsOnSurface(surface, uPanels, vPanels) → {points, frame}[]', note: 'rectangular panels projected onto a curved surface — returns panel objects {points, frame} for Panel.ByPoints' },
-      { name: 'voronoiCellObjects', sig: 'Geo.voronoiCellObjects(sites, bounds, resolution) → {points, frame}[]', flag: 'approx', note: 'Voronoi boundary polygon objects — grid-sampled, not true Voronoi; each cell is {points, frame}' },
-      { name: 'hexPanelGrid', note: 'hex / diamond panels wrapping a profile stack' },
-      { name: 'diagridPattern', note: 'structural diagonal grid' },
-      { name: 'hexGrid', note: 'planar honeycomb tiling' },
-      { name: 'diamondGrid', note: 'planar diamond tiling' }
     ]
   },
   {

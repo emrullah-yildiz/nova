@@ -21,7 +21,7 @@ function portIds(arr) {
 describe('stress-test .nodeflow files', () => {
   beforeAll(() => {
     // Populate NODE_TYPE_MAP with the modern node defs (Input.Number, Math.Add,
-    // Pattern.HexGrid, Output.Watch) the way the app does at boot.
+    // Box.ByCenterWidthDepthHeight, Output.Watch) the way the app does at boot.
     getLiveCoreRegistry();
   });
 
@@ -64,16 +64,12 @@ describe('stress-test .nodeflow files', () => {
     expect(g.nodes.filter((n) => n.type === 'Math.Add').length).toBe(998);
   });
 
-  it('geometry file: 1000 loadable HexGrid nodes emitting 10,000 meshes', () => {
+  it('geometry file: 1000 loadable box nodes emitting geometry', () => {
     const g = load('stress-1000-nodes-10k-geometry.nodeflow');
     expect(g.nodes.length).toBe(1000);
     assertLoadable(g);
-    const hex = g.nodes.filter((n) => n.type === 'Pattern.HexGrid');
-    expect(hex.length).toBe(1000);
-    // rows × cols summed across all grids = total mesh primitives.
-    const totalGeometry = hex.reduce((sum, n) =>
-      sum + parseInt(n.controlValues.rows, 10) * parseInt(n.controlValues.cols, 10), 0);
-    expect(totalGeometry).toBe(10000);
+    const boxes = g.nodes.filter((n) => n.type === 'Box.ByCenterWidthDepthHeight');
+    expect(boxes.length).toBe(1000);
   });
 
   // The landing-page template cards (node-library.js) feed these exact builder
@@ -87,8 +83,8 @@ describe('stress-test .nodeflow files', () => {
     const geo = buildGeometryGraph(1000, 2, 5);
     expect(geo.nodes.length).toBe(1000);
     assertLoadable(geo);
-    const totalGeometry = geo.nodes.reduce((sum, n) =>
-      sum + parseInt(n.controlValues.rows, 10) * parseInt(n.controlValues.cols, 10), 0);
-    expect(totalGeometry).toBe(10000);
+    // All nodes should be box nodes in the geometry stress graph.
+    const boxes = geo.nodes.filter((n) => n.type === 'Box.ByCenterWidthDepthHeight');
+    expect(boxes.length).toBe(1000);
   });
 });

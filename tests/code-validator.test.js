@@ -19,7 +19,6 @@ describe('AI code validator', () => {
       expect(known.has('createSphere')).toBe(true);
       expect(known.has('combineAll')).toBe(true);
       expect(known.has('loft')).toBe(true);
-      expect(known.has('phyllotaxis')).toBe(true);
     });
 
     it('includes Geo namespaces that live in the prompt but not in node codegen', () => {

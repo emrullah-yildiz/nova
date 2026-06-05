@@ -680,66 +680,6 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
     return h.finish('🗼 **Hyperboloid Tower** loaded. Tweak Radius, Waist and Height to morph the cooling-tower silhouette; the Subdivide node smooths the tessellation.');
   };
 
-  // ── 2. Catenary Pavilion (HyPar saddle with façade panels) ──
-  app._templateCatenaryPavilion = function() {
-    this.newProject();
-    var h = makeTemplateHelpers(this);
-    var span    = h.num(40, 60, 20);
-    var height  = h.num(40, 160, 10);
-    var shell   = h.add('Surface.CatenaryShell', 320, 110);
-    var uPanels = h.intInput(320, 280, 8);
-    var vPanels = h.intInput(320, 380, 8);
-    var panels  = h.add('Pattern.FacadePanels', 600, 220);
-    var watch   = h.add('Output.Watch', 880, 220);
-    h.wire(span,    'value', shell, 'span');
-    h.wire(height,  'value', shell, 'height');
-    h.wire(shell,   'surface', panels, 'mesh');
-    h.wire(uPanels, 'value', panels, 'uPanels');
-    h.wire(vPanels, 'value', panels, 'vPanels');
-    h.wire(panels,  'panels', watch, 'value');
-    return h.finish('⛺ **Catenary Pavilion** loaded. The Catenary Shell drives a U×V grid of façade panels — change Span / Height for a stretched vault, U/V for tile density.');
-  };
-
-  // ── 3. Voronoi Crater (Phyllotaxis sites → Voronoi mesh) ──
-  app._templateVoronoiCrater = function() {
-    this.newProject();
-    var h = makeTemplateHelpers(this);
-    var count  = h.intInput(40, 60, 80);
-    var radius = h.num(40, 160, 10);
-    var sites  = h.add('Pattern.Phyllotaxis', 320, 110);
-    var depth  = h.num(320, 280, 2);
-    var gap    = h.num(320, 380, 0.15);
-    var cells  = h.add('Pattern.VoronoiMesh', 600, 220);
-    var watch  = h.add('Output.Watch', 880, 220);
-    h.wire(count,  'value', sites, 'count');
-    h.wire(radius, 'value', sites, 'radius');
-    h.wire(sites,  'points', cells, 'sites');
-    h.wire(depth,  'value', cells, 'height');
-    h.wire(gap,    'value', cells, 'gap');
-    h.wire(cells,  'meshes', watch, 'value');
-    return h.finish('⬢ **Voronoi Crater** loaded. Phyllotaxis seeds an organic 2D point cloud; Voronoi Mesh extrudes each cell into a faceted crater.');
-  };
-
-  // ── 4. Möbius Sculpture (Möbius strip + noise deform) ──
-  app._templateMobiusSculpture = function() {
-    this.newProject();
-    var h = makeTemplateHelpers(this);
-    var radius = h.num(40, 60, 5);
-    var width  = h.num(40, 160, 2);
-    var strip  = h.add('Surface.MobiusStrip', 320, 110);
-    var amp    = h.num(320, 280, 0.2);
-    var freq   = h.num(320, 380, 1);
-    var deform = h.add('Pattern.NoiseDeform', 600, 220);
-    var watch  = h.add('Output.Watch', 880, 220);
-    h.wire(radius, 'value', strip, 'radius');
-    h.wire(width,  'value', strip, 'width');
-    h.wire(strip,  'surface', deform, 'mesh');
-    h.wire(amp,    'value', deform, 'amplitude');
-    h.wire(freq,   'value', deform, 'frequency');
-    h.wire(deform, 'result', watch, 'value');
-    return h.finish('∞ **Möbius Sculpture** loaded. A Möbius strip wrapped in a Perlin-noise displacement field — sweep Amplitude and Frequency for organic variations.');
-  };
-
   // ── 5. Large Mesh Geometry (10k mesh refs, kept as a performance test) ──
   app._templateLargeMesh = function() {
     this.newProject();
@@ -859,7 +799,7 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
   app._templateStressGeometry = function() {
     this.newProject();
     var ok = this.deserializeGraph(buildGeometryGraph(1000, 2, 5));
-    if (ok) this.addAIMessage('workspace', '⬢ **1000 Nodes · 10k Meshes** loaded — 1000 Pattern.HexGrid nodes emitting 10,000 hex-tile meshes. A geometry + 3D-viewer stress. Switch to **3D** and hit **Run** (expect a heavy load).');
+    if (ok) this.addAIMessage('workspace', '⬢ **1000 Nodes · Geometry** loaded — 1000 box nodes, each emitting a mesh. A geometry + 3D-viewer stress. Switch to **3D** and hit **Run** (expect a heavy load).');
     return '1000 nodes / 10,000 meshes loaded';
   };
 
@@ -870,12 +810,9 @@ export function installNodeLibrary(targetApp = getRuntimeApp()) {
     var grid = document.getElementById('templates-grid'); if (!grid) return;
     var templates = [
       { fn: '_templateHyperboloidTower', color: 'var(--accent-teal)',   icon: '⧘', name: 'Hyperboloid Tower',  desc: 'Cooling-tower silhouette, smoothed via Subdivide' },
-      { fn: '_templateCatenaryPavilion', color: 'var(--accent-peach)',  icon: '⌓', name: 'Catenary Pavilion',  desc: 'Catenary shell paneled into an 8×8 façade grid' },
-      { fn: '_templateVoronoiCrater',    color: 'var(--accent-red)',    icon: '⬢', name: 'Voronoi Crater',     desc: 'Phyllotaxis seeds an extruded Voronoi mesh' },
-      { fn: '_templateMobiusSculpture',  color: 'var(--accent-green)',  icon: '∞', name: 'Möbius Sculpture',   desc: 'Möbius strip warped by a Perlin-noise field' },
       { fn: '_templateLargeMesh',        color: 'var(--accent-blue)',   icon: '⚡', name: 'Large Mesh Stress',  desc: '10 000 mesh refs — performance test for the engine' },
       { fn: '_templateStressNoGeometry', color: 'var(--accent-yellow)', icon: '▦', name: '1000 Nodes · No Geometry', desc: '1000 value/math nodes, 1997 wires — node/wire/eval stress' },
-      { fn: '_templateStressGeometry',   color: 'var(--accent-pink)',   icon: '⬢', name: '1000 Nodes · 10k Meshes', desc: '1000 HexGrid nodes emitting 10,000 meshes — geometry stress' }
+      { fn: '_templateStressGeometry',   color: 'var(--accent-pink)',   icon: '⬢', name: '1000 Nodes · Geometry', desc: '1000 box nodes emitting meshes — geometry stress' }
     ];
     templates.forEach(function(t) {
       var card = document.createElement('div'); card.className = 'template-card'; card.style.setProperty('--card-accent', t.color);

@@ -14,7 +14,6 @@ describe('capability ledger', () => {
     // Intent groups present.
     expect(text).toContain('Mathematical surfaces');
     expect(text).toContain('Form-finding fields');
-    expect(text).toContain('Panelization');
     // Honesty flags surfaced for the weak ops.
     expect(text).toContain('booleanSubtract');
     expect(text).toContain('[stub]');

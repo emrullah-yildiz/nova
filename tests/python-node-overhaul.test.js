@@ -485,68 +485,7 @@ describe('wrapPythonNodeCode — codegen binds wired inputs/outputs to the live 
   });
 });
 
-describe('parser auto-registration: new composites map to their real nodes (not Custom.Python)', () => {
-  it('Geo.twistedEllipsePlates parses to Pattern.TwistedEllipsePlates with the expected input ports', () => {
-    // This is the EXACT production failure shown in the user screenshot.
-    // Before the fix: this expression became a Custom.Python node with
-    // generic input0/output0 ports, and downstream wires expecting
-    // `profiles` pointed at non-existent ports → red warnings.
-    _resetAutoGeoMapForTests();
-    const code = `profiles = Geo.twistedEllipsePlates(floors, height, baseWidth, baseDepth, twistDeg, taper, resolution)`;
-    const g = CodeParser.parseToGraph(code);
-    const tep = g.nodes.find(n => n.type === 'Pattern.TwistedEllipsePlates');
-    expect(tep).toBeDefined();
-    expect(Object.keys(tep.inputRefs)).toEqual(expect.arrayContaining([
-      'floors', 'height', 'baseWidth', 'baseDepth', 'twistDeg', 'taper', 'resolution'
-    ]));
-  });
-
-  it('Geo.hexPanelGrid parses to Pattern.HexPanelGrid with the expected input ports', () => {
-    _resetAutoGeoMapForTests();
-    const code = `panels = Geo.hexPanelGrid(profiles, True, 1)`;
-    const g = CodeParser.parseToGraph(code);
-    const hpg = g.nodes.find(n => n.type === 'Pattern.HexPanelGrid');
-    expect(hpg).toBeDefined();
-    expect(Object.keys(hpg.inputRefs)).toEqual(expect.arrayContaining(['profiles', 'stagger', 'skipRings']));
-  });
-
-  it('the rotating-tower full chain produces real Pattern + Solid + Output nodes (no Custom.Python)', () => {
-    // End-to-end: simulates the canonical Python that plan-builder would
-    // emit from a nova-plan with TwistedEllipsePlates → HexPanelGrid +
-    // ByLoft → Watch. Every line must land on its proper node type.
-    _resetAutoGeoMapForTests();
-    const code = `floors = 20
-height = 100
-base_w = 18
-base_d = 12
-twist = 60
-profiles = Geo.twistedEllipsePlates(floors, height, base_w, base_d, twist, 0.2, 48)
-tower = Geo.loft(profiles)
-panels = Geo.hexPanelGrid(profiles, True, 1)
-print(tower)`;
-    const g = CodeParser.parseToGraph(code);
-    const types = g.nodes.map(n => n.type);
-    expect(types).toContain('Pattern.TwistedEllipsePlates');
-    expect(types).toContain('Pattern.HexPanelGrid');
-    expect(types).toContain('Solid.ByLoft');
-    // No Custom.Python fallback should fire for these well-known calls.
-    expect(types).not.toContain('custom-python');
-    expect(types).not.toContain('Custom.Python');
-  });
-
-  it('wires from the new composites connect to the right downstream input port', () => {
-    _resetAutoGeoMapForTests();
-    const code = `profiles = Geo.twistedEllipsePlates(20, 100, 18, 12, 60, 0.2, 48)
-tower = Geo.loft(profiles)`;
-    const g = CodeParser.parseToGraph(code);
-    const tep = g.nodes.find(n => n.type === 'Pattern.TwistedEllipsePlates');
-    const loft = g.nodes.find(n => n.type === 'Solid.ByLoft');
-    const wire = g.wires.find(w => w.fromNode === tep.id && w.toNode === loft.id);
-    expect(wire).toBeDefined();
-    expect(wire.fromPort).toBe('profiles');
-    expect(wire.toPort).toBe('profiles');
-  });
-
+describe('parser auto-registration: Geo.* calls fall back to Custom.Python when no registry match', () => {
   it('falls back to Custom.Python only when no Geo.* call matches the registry', () => {
     _resetAutoGeoMapForTests();
     // A genuine for-loop with no single-call equivalent must still
