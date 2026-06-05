@@ -580,6 +580,9 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
 
   wrapper.appendChild(submitBtn);
 
+  // ── Mount into the container ──────────────────────────────────────────────
+  containerEl.appendChild(wrapper);
+
   // ── Initial render ────────────────────────────────────────────────────────
   _redrawWires();
 

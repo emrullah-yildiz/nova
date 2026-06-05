@@ -1151,6 +1151,10 @@ function _render(overlay) {
   const content = overlay.querySelector('#learn-chapter-content');
   if (nav) nav.innerHTML = buildNavHtml(_learnChapter);
   if (content) {
+    // Clear the inited flag so the mini-canvas is re-created after the innerHTML
+    // wipe. Without this, a quiz-answer re-render would leave the exercise canvas
+    // empty (the old wrapper was removed with the old innerHTML).
+    _miniCanvasInited[_learnChapter] = false;
     content.innerHTML = buildChapterHtml(LEARNING_CHAPTERS[_learnChapter], _learnChapter);
     _initExerciseForChapter(_learnChapter, overlay);
   }

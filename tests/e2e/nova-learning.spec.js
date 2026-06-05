@@ -69,7 +69,41 @@ test.describe('Nova Learning Primer', () => {
     await waitForApp(page);
     await page.evaluate(() => window.app.showLearning());
 
-    // Answer all quiz questions for chapter 0 correctly via JS
+    // Chapter 0 (Introduction) requires BOTH quiz and exercise to be complete
+    // before Next Chapter is enabled. The exercise is completed by submitting the
+    // mini-canvas with a valid graph. We use the mini-canvas submit API here.
+
+    // 1. Scroll to and submit the mini-canvas exercise (wire already pre-drawn
+    //    by the engine for all-complete validation; we use __learnExerciseSolve
+    //    or directly click Submit after drawing the wire in JS state).
+    //    Simplest: scroll into view, then use page.evaluate to set _exerciseDone
+    //    via the mini-canvas submit button click (which calls exercise.accept()).
+    //    Since we cannot access module-private state directly, we click Submit
+    //    directly — ch01 will fail (no user wire), but we can use JS to
+    //    programmatically force the exercise done state via onSolve.
+    //    The cleanest approach: scroll to mini-canvas, draw the wire via port
+    //    clicks, then click Submit, THEN answer the quiz.
+
+    // Scroll to the exercise section so Playwright can interact with it.
+    const exerciseSection = page.locator('#learn-exercise-0');
+    await exerciseSection.scrollIntoViewIfNeeded();
+
+    // Draw the missing wire: n2 (output "value") → n3 (input "b").
+    const outputPort = page.locator('[data-node-id="n2"][data-port-role="output"][data-port-name="value"]');
+    const inputPort  = page.locator('[data-node-id="n3"][data-port-role="input"][data-port-name="b"]');
+    await expect(outputPort).toBeVisible();
+    await outputPort.click();
+    await inputPort.click();
+
+    // Submit the exercise (sets _exerciseDone[0] = true on correct answer).
+    const submitBtn = page.locator('.mini-canvas-submit');
+    await expect(submitBtn).toBeVisible();
+    await submitBtn.click();
+    await expect(page.locator('.mini-canvas-success')).toBeVisible();
+
+    // 2. Answer all quiz questions for chapter 0 correctly via JS.
+    //    Each correct answer triggers a _render() that re-builds chapter HTML.
+    //    After both answers + exercise done, _isChapterDone(0) = true.
     await page.evaluate(() => {
       if (window.__learnAnswer) {
         // Q1 answer: 1, Q2 answer: 1 (known correct indices for intro chapter)
