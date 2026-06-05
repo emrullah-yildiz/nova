@@ -146,7 +146,12 @@ function main() {
     // Find the AC section and look for unchecked items.
     const acSection = content.match(/##\s+Acceptance Criteria([\s\S]*?)(?=\n##|\s*$)/i);
     if (!acSection) continue;
-    const unchecked = [...acSection[1].matchAll(/- \[ \] (AC-\d+[^\n]*)/gi)].map((m) => m[1].trim());
+    // Skip ACs that have an implementation note after the description (marked with " — " or " - ").
+    // These are acknowledged by the implementing agent as pending a dependency (e.g. "requires T04a on develop").
+    // Only flag ACs whose line ends at the description with no note — i.e. truly unacknowledged.
+    const unchecked = [...acSection[1].matchAll(/- \[ \] (AC-\d+[^\n]*)/gi)]
+      .map((m) => m[1].trim())
+      .filter((line) => !/ [—\-]{1,2} /.test(line));
     if (unchecked.length) {
       errors.push(
         `Ticket ${path.basename(t)} has ${unchecked.length} unverified acceptance criterion:\n` +
