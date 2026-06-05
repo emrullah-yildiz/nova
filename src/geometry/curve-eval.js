@@ -72,6 +72,67 @@ export function pointAtT(curve, t) {
 }
 
 /**
+ * Point on a curve at an UNBOUNDED normalized parameter t.
+ *
+ * When t ∈ [0,1] behaves identically to pointAtT (no clamping, no overhead).
+ * When t < 0 or t > 1 the result is a LINEAR EXTRAPOLATION beyond the curve
+ * endpoint using the boundary tangent and the arc-speed near that boundary:
+ *
+ *   boundary speed = ‖p(t_inner) – p(t_boundary)‖ / Δt_inner   (finite diff)
+ *   extrapolated = p(t_boundary) + tangent * speed * Δt_outer
+ *
+ * This lets `Curve.PointAtParameter` behave like a parametric ray — useful when
+ * driving t from an expression that intentionally overshoots the [0,1] domain
+ * (e.g. animated t or a domain that maps a larger range onto the curve axis).
+ *
+ * For a Line3 the extrapolation is exact (linear by definition). For curves the
+ * tangent at the endpoint is used, so the extrapolated segment is always tangent-
+ * continuous with the curve at the boundary.
+ *
+ * @param {object} curve  a kernel curve
+ * @param {number} t      any real number
+ * @returns {Geo.Point3}
+ */
+export function pointAtTExtrapolated(curve, t) {
+  if (!curve) throw new Error('pointAtTExtrapolated: curve is required');
+  if (t >= 0 && t <= 1) return pointAtT(curve, t);
+
+  const DT = 1e-3; // finite-difference step for speed estimation
+
+  if (t < 0) {
+    // Extrapolate before the start (t=0).
+    const p0 = pointAtT(curve, 0);
+    const pInner = pointAtT(curve, DT); // a point just inside the start
+    const dx = pInner.x - p0.x;
+    const dy = pInner.y - p0.y;
+    const dz = pInner.z - p0.z;
+    const speed = Math.sqrt(dx * dx + dy * dy + dz * dz) / DT; // arc-length per unit t near t=0
+    const tan = tangentAtT(curve, 0); // unit tangent at start, pointing forward
+    // t is negative: moving backward from p0
+    return new Geo.Point3(
+      p0.x + tan.x * speed * t,
+      p0.y + tan.y * speed * t,
+      p0.z + tan.z * speed * t
+    );
+  }
+
+  // t > 1: extrapolate beyond the end.
+  const p1 = pointAtT(curve, 1);
+  const pInner = pointAtT(curve, 1 - DT); // a point just inside the end
+  const dx = p1.x - pInner.x;
+  const dy = p1.y - pInner.y;
+  const dz = p1.z - pInner.z;
+  const speed = Math.sqrt(dx * dx + dy * dy + dz * dz) / DT; // arc-length per unit t near t=1
+  const tan = tangentAtT(curve, 1); // unit tangent at end, pointing forward
+  const excess = t - 1;
+  return new Geo.Point3(
+    p1.x + tan.x * speed * excess,
+    p1.y + tan.y * speed * excess,
+    p1.z + tan.z * speed * excess
+  );
+}
+
+/**
  * Unit tangent of a curve at a normalized parameter t ∈ [0,1]. Uses the curve's
  * own tangentAt when present (Line3 returns its constant chord direction,
  * NurbsCurve does a clamped finite difference), otherwise falls back to the

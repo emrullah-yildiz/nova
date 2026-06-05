@@ -1,6 +1,8 @@
+import { describe, it, expect, beforeAll } from 'vitest';
 import { FormulaEval } from '../src/core/formula-eval.js';
 import { NODE_LIBRARY, NODE_TYPE_MAP } from '../src/core/nodes.js';
 import { getLiveCoreRegistry } from '../src/nodes/coreNodes.js';
+import { pointAtTExtrapolated } from '../src/geometry/curve-eval.js';
 
 // Ensure modern category nodes and their aliases are registered into
 // NODE_TYPE_MAP so legacy NODE_HELP examples that reference aliases
@@ -197,5 +199,105 @@ describe('curves category node execution', () => {
     });
 
     expect(failures).toEqual([]);
+  });
+});
+
+// ─── Curve.PointAtParameter extrapolation ────────────────────────────────────
+//
+// pointAtTExtrapolated must return a point BEYOND the endpoint when t<0 or t>1,
+// not the clamped endpoint. We use a Line3 (from (0,0,0) to (10,0,0)) so the
+// expected extrapolated positions are trivially computable.
+//
+// A Line3 from start=(0,0,0) to end=(10,0,0) has:
+//   pointAt(0) = (0,0,0), pointAt(1) = (10,0,0), tangent = (1,0,0)
+//   arc-speed near t=0: distance(pointAt(DT) - pointAt(0)) / DT = 10/1 = 10
+//   so extrapolation: p0 + tangent * speed * t = (10*t, 0, 0)
+//   e.g. t=-0.5 → (-5, 0, 0), t=1.5 → (15, 0, 0)
+
+describe('Curve.PointAtParameter extrapolation beyond [0,1]', () => {
+  let Geo;
+
+  beforeAll(async () => {
+    const mod = await import('../src/geometry/index.js');
+    Geo = mod.Geo;
+    globalThis.Geo = Geo;
+  });
+
+  function makeLine(x0, y0, z0, x1, y1, z1) {
+    return new Geo.Line3(new Geo.Point3(x0, y0, z0), new Geo.Point3(x1, y1, z1));
+  }
+
+  it('t=0.5 (in-domain) returns the true midpoint — no regression', () => {
+    const line = makeLine(0, 0, 0, 10, 0, 0);
+    const p = pointAtTExtrapolated(line, 0.5);
+    expect(p.x).toBeCloseTo(5, 5);
+    expect(p.y).toBeCloseTo(0, 5);
+    expect(p.z).toBeCloseTo(0, 5);
+  });
+
+  it('t=0 returns the start point exactly', () => {
+    const line = makeLine(0, 0, 0, 10, 0, 0);
+    const p = pointAtTExtrapolated(line, 0);
+    expect(p.x).toBeCloseTo(0, 5);
+    expect(p.y).toBeCloseTo(0, 5);
+  });
+
+  it('t=1 returns the end point exactly', () => {
+    const line = makeLine(0, 0, 0, 10, 0, 0);
+    const p = pointAtTExtrapolated(line, 1);
+    expect(p.x).toBeCloseTo(10, 5);
+    expect(p.y).toBeCloseTo(0, 5);
+  });
+
+  it('t=1.5 extrapolates PAST the end — point is NOT the same as t=1', () => {
+    const line = makeLine(0, 0, 0, 10, 0, 0);
+    const pEnd = pointAtTExtrapolated(line, 1);
+    const pBeyond = pointAtTExtrapolated(line, 1.5);
+    // The extrapolated point must differ from the endpoint (old clamp behaviour returned pEnd).
+    expect(pBeyond.x).not.toBeCloseTo(pEnd.x, 1);
+    // And must be beyond: x > 10 for a rightward line.
+    expect(pBeyond.x).toBeGreaterThan(10);
+  });
+
+  it('t=-0.5 extrapolates BEFORE the start — point is NOT the same as t=0', () => {
+    const line = makeLine(0, 0, 0, 10, 0, 0);
+    const pStart = pointAtTExtrapolated(line, 0);
+    const pBefore = pointAtTExtrapolated(line, -0.5);
+    expect(pBefore.x).not.toBeCloseTo(pStart.x, 1);
+    // For a leftward line starting at 0: x < 0.
+    expect(pBefore.x).toBeLessThan(0);
+  });
+
+  it('t=1.5 on a unit-length line → point at x≈15 (speed=10 per unit t, excess=0.5)', () => {
+    // line from (0,0,0) to (10,0,0), length=10.  Speed per unit t = 10.
+    // Extrapolation: p1=(10,0,0) + tangent*(1,0,0) * 10 * 0.5 = (15, 0, 0).
+    const line = makeLine(0, 0, 0, 10, 0, 0);
+    const p = pointAtTExtrapolated(line, 1.5);
+    expect(p.x).toBeCloseTo(15, 2);
+    expect(p.y).toBeCloseTo(0, 5);
+  });
+
+  it('t=-0.5 on a unit-length line → point at x≈-5', () => {
+    const line = makeLine(0, 0, 0, 10, 0, 0);
+    const p = pointAtTExtrapolated(line, -0.5);
+    expect(p.x).toBeCloseTo(-5, 2);
+    expect(p.y).toBeCloseTo(0, 5);
+  });
+
+  it('extrapolation is monotone: t=-1 is farther from start than t=-0.5', () => {
+    const line = makeLine(0, 0, 0, 10, 0, 0);
+    const pFarther = pointAtTExtrapolated(line, -1);
+    const pCloser = pointAtTExtrapolated(line, -0.5);
+    expect(pFarther.x).toBeLessThan(pCloser.x);
+  });
+
+  it('Curve.PointAtParameter node execute returns extrapolated point for t=1.5', () => {
+    getLiveCoreRegistry();
+    const nodeDef = NODE_TYPE_MAP['Curve.PointAtParameter'];
+    expect(nodeDef).toBeTruthy();
+    const line = makeLine(0, 0, 0, 10, 0, 0);
+    const result = nodeDef.execute({}, { curve: line, t: 1.5 });
+    expect(result.point).toBeTruthy();
+    expect(result.point.x).toBeGreaterThan(10);
   });
 });
