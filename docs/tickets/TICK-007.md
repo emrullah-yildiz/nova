@@ -1,7 +1,7 @@
 ---
 id: TICK-007
 title: Learning page — interactive mini-canvas exercises
-status: ready
+status: in-progress
 priority: high
 type: feature
 sprint: 2026-06-05
@@ -22,16 +22,16 @@ The mini-canvas must be self-contained — no global app state mutation. It comm
 
 ## Acceptance criteria
 
-- [ ] AC-1  All 10 chapters display an interactive exercise section (below the existing quiz), containing a mini-canvas with 4–5 pre-placed nodes and at least 1 unwired input port.
-- [ ] AC-2  The user can draw a wire by clicking an output port then a compatible input port. The wire appears as a visible connector between the two ports.
-- [ ] AC-3  Clicking an incompatible port (type mismatch) does nothing — no wire is started or partially drawn.
-- [ ] AC-4  Submitting a correctly completed exercise shows a green success message and enables the "Next chapter" button.
-- [ ] AC-5  Submitting an incomplete or incorrectly wired exercise shows a red feedback message describing what was expected. The user can adjust and resubmit.
-- [ ] AC-6  Validation runs the mini-canvas graph through the Nova compute engine (`src/core/`). The acceptance function checks the actual computed output value — not just that wires exist.
-- [ ] AC-7  10 exercise definitions live in `src/ui/learning-exercises.js`. Each definition declares: node list, pre-drawn wires, expected output, and an acceptance function. A Vitest unit test confirms each acceptance function returns `true` for a correct solution and `false` for an incorrect one.
-- [ ] AC-8  The mini-canvas renders correctly inside the learning overlay at a 1280×800 viewport — no overflow, no clipped ports, no invisible wires.
-- [ ] AC-9  The mini-canvas component does not import from `src/app/app.js` or mutate any global `window.app` state. It communicates only through its `onSolve` callback.
-- [ ] AC-10  A Playwright E2E spec `tests/e2e/learning-interactive.spec.js` covers: open learning overlay → chapter 1 → draw the required wire → Submit → assert green success message and "Next chapter" button is enabled.
+- [ ] AC-1  All 10 chapters display an interactive exercise section (below the existing quiz), containing a mini-canvas with 4–5 pre-placed nodes and at least 1 unwired input port. — manual browser verification pending
+- [ ] AC-2  The user can draw a wire by clicking an output port then a compatible input port. The wire appears as a visible connector between the two ports. — manual browser verification pending
+- [ ] AC-3  Clicking an incompatible port (type mismatch) does nothing — no wire is started or partially drawn. — manual browser verification pending
+- [ ] AC-4  Submitting a correctly completed exercise shows a green success message and enables the "Next chapter" button. — manual browser verification pending
+- [ ] AC-5  Submitting an incomplete or incorrectly wired exercise shows a red feedback message describing what was expected. The user can adjust and resubmit. — manual browser verification pending
+- [x] AC-6  Validation runs the mini-canvas graph through the Nova compute engine (`src/core/`). The acceptance function checks the actual computed output value — not just that wires exist. — uses createLessonComputeContext + computeNodeValue from src/core/; 2026-06-06
+- [x] AC-7  10 exercise definitions live in `src/ui/learning-exercises.js`. Each definition declares: node list, pre-drawn wires, expected output, and an acceptance function. A Vitest unit test confirms each acceptance function returns `true` for a correct solution and `false` for an incorrect one. — 20 Vitest tests, all pass 2026-06-06
+- [ ] AC-8  The mini-canvas renders correctly inside the learning overlay at a 1280×800 viewport — no overflow, no clipped ports, no invisible wires. — manual browser verification pending
+- [x] AC-9  The mini-canvas component does not import from `src/app/app.js` or mutate any global `window.app` state. It communicates only through its `onSolve` callback. — grep confirmed 0 results 2026-06-06
+- [x] AC-10  A Playwright E2E spec `tests/e2e/learning-interactive.spec.js` covers: open learning overlay → chapter 1 → draw the required wire → Submit → assert green success message and "Next chapter" button is enabled. — 31/31 E2E tests pass 2026-06-06
 
 ## Testing gate
 

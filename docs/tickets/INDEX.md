@@ -17,14 +17,14 @@
 | ID | Title | Status | Priority | Sprint | Lane(s) | Branch |
 |---|---|---|---|---|---|---|
 | TICK-002 | Select Faces/Edges/Points — E2E verification + Playwright spec | 🟡 in-progress | high | 2026-06-05 | ui | fix/selection-mode-e2e |
-| TICK-005 | Remove Pattern nodes category | 🔵 ready | high | 2026-06-05 | geometry, core | chore/remove-pattern-nodes |
 | TICK-006 | Learning page screenshots | 🔵 ready | high | 2026-06-05 | ui | feat/learning-screenshots |
-| TICK-007 | Learning page interactive exercises | 🔵 ready | high | 2026-06-05 | ui, core | feat/learning-exercises |
+| TICK-007 | Learning page interactive exercises | 🟡 in-progress | high | 2026-06-05 | ui, core | feat/learning-exercises |
 
 ## Done (last 30 days)
 
 | ID | Title | Completed | Notes |
 |---|---|---|---|
+| TICK-005 | Remove Pattern nodes category | 2026-06-06 | All 8 ACs verified; merged to develop |
 | TICK-004 | Pattern nodes on surface | 2026-06-05 | Superseded by TICK-005 (remove Pattern category); archived |
 | TICK-003 | Testing infrastructure — Playwright E2E coverage gate | 2026-06-05 | Oracle APPROVE; archived |
 | TICK-001 | PM + ticket architecture | 2026-06-05 | Pre-ticket era; chore/agent-pm-architecture |
