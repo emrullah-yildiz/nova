@@ -17,7 +17,6 @@
 | ID | Title | Status | Priority | Sprint | Lane(s) | Branch |
 |---|---|---|---|---|---|---|
 | TICK-002 | Select Faces/Edges/Points — E2E verification + Playwright spec | 🟡 in-progress | high | 2026-06-05 | ui | fix/selection-mode-e2e |
-| TICK-004 | Pattern nodes on surface — Panel.Points + PanelPlane + VoronoiMesh fix | 🟡 in-progress | high | 2026-06-05 | geometry, core | feat/pattern-on-surface-geo, feat/pattern-on-surface-registry |
 | TICK-005 | Remove Pattern nodes category | ⬜ draft | high | 2026-06-05 | geometry, core | — |
 | TICK-006 | Learning page screenshots | ⬜ draft | high | 2026-06-05 | ui | — |
 | TICK-007 | Learning page interactive exercises | ⬜ draft | high | 2026-06-05 | ui | — |
@@ -26,6 +25,7 @@
 
 | ID | Title | Completed | Notes |
 |---|---|---|---|
+| TICK-004 | Pattern nodes on surface | 2026-06-05 | Superseded by TICK-005 (remove Pattern category); archived |
 | TICK-003 | Testing infrastructure — Playwright E2E coverage gate | 2026-06-05 | Oracle APPROVE; archived |
 | TICK-001 | PM + ticket architecture | 2026-06-05 | Pre-ticket era; chore/agent-pm-architecture |
 | — | Select.Faces wiring | 2026-06-05 | Pre-ticket era; fix/selection-mode-wiring |
