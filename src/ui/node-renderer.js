@@ -825,6 +825,8 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
     if (!activate && typeof window !== 'undefined') activate = window.activateSelectionMode;
 
     if (typeof activate === 'function') {
+      // Switch to 3D viewport so the user can interact with geometry
+      if (typeof app.setView === 'function') app.setView('3d');
       activate(nodeId, mode,
         function (labels) {
           // Approve: store result
