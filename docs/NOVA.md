@@ -299,3 +299,9 @@ Consolidated forward view. Detail lives in the linked specs — don't duplicate 
 If two of these ever disagree, NOVA.md + decisions.md win; fix the others.
 
 
+## Rules for Agents
+
+- Before every merge, make sure that tests are passing
+- Think that multiple agents are working together and everything should be documented so that another agent can continue to the work from where it is left. 
+- Every new node is tested like a real user, meaningful results and usable actions.
+- The learning system must be as detailed and interactive as Dynamo Primer (https://primer2.dynamobim.org): each lesson has concept explanation, step-by-step exercises, and at least one interactive question the user must answer correctly before advancing.
