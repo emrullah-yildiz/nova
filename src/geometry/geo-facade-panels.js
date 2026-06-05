@@ -6,11 +6,10 @@
 //     any surface supported by surface-eval.js) is provided, panel corners are
 //     projected onto the actual curved surface via pointAtUV / frameAtUV — so
 //     panels physically sit on the surface rather than on a flat UV mesh.
-//  2. Structured panel-object output: each panel is returned as
-//       { points: Point3[], frame: Plane }
-//     where points = 4 corner points on the surface and frame = centroid origin +
-//     surface normal as Z-axis. This is the pre-agreed TICK-004 contract used by
-//     Pattern.PanelFrames, Panel.ByPoints, and the T04b viewer lane.
+//  2. Structured panel-object output: each panel is a Geo.Mesh3 quad with
+//     panel.points (Point3[4]) and panel.frame (Plane) as extra properties.
+//     Mesh3 gives the data inspector a _type to render; .points/.frame carry
+//     the TICK-004 contract consumed by Panel.ByPoints, PanelFrames, and T04b.
 //
 // When no surface is supplied the function falls back to the existing
 // Geo.evaluateSurface (bilinear mesh sampling) behaviour, so all existing callers
@@ -35,6 +34,43 @@ import { pointAtUV, frameAtUV } from './surface-eval.js';
  * @returns {{ samplePoint(u,v):Point3, sampleFrame(u,v):Plane }}
  */
 function buildSampler(surface, mesh) {
+  // Special case: Surface.ByPatch produces a fan-triangulated Mesh3 where
+  // vertices[0] is the centroid and vertices[1..n] are the boundary corners.
+  // Geo.evaluateSurface assumes a square grid layout, which is wrong for fan
+  // meshes. For the 4-corner case we bilinearly interpolate the boundary corners
+  // directly, which is exact and avoids the grid assumption.
+  if (
+    surface && surface._type === 'Mesh3' && surface._solidType === 'Patch' &&
+    surface.vertices && surface.vertices.length === 5
+  ) {
+    const v1 = surface.vertices[1]; // u=0, v=0
+    const v2 = surface.vertices[2]; // u=1, v=0
+    const v3 = surface.vertices[3]; // u=1, v=1
+    const v4 = surface.vertices[4]; // u=0, v=1
+    const bilerp = (u, v) => new Geo.Point3(
+      (1-u)*(1-v)*v1.x + u*(1-v)*v2.x + u*v*v3.x + (1-u)*v*v4.x,
+      (1-u)*(1-v)*v1.y + u*(1-v)*v2.y + u*v*v3.y + (1-u)*v*v4.y,
+      (1-u)*(1-v)*v1.z + u*(1-v)*v2.z + u*v*v3.z + (1-u)*v*v4.z
+    );
+    const bilerp3 = (u, v) => {
+      const eps = 1e-4;
+      const dx = bilerp(Math.min(u + eps, 1), v);
+      const dy = bilerp(u, Math.min(v + eps, 1));
+      const p  = bilerp(u, v);
+      const dxLen = Math.sqrt((dx.x-p.x)**2 + (dx.y-p.y)**2 + (dx.z-p.z)**2) || 1;
+      const dyLen = Math.sqrt((dy.x-p.x)**2 + (dy.y-p.y)**2 + (dy.z-p.z)**2) || 1;
+      const xa = new Geo.Vector3((dx.x-p.x)/dxLen, (dx.y-p.y)/dxLen, (dx.z-p.z)/dxLen);
+      const ya = new Geo.Vector3((dy.x-p.x)/dyLen, (dy.y-p.y)/dyLen, (dy.z-p.z)/dyLen);
+      const n  = new Geo.Vector3(
+        xa.y*ya.z - xa.z*ya.y,
+        xa.z*ya.x - xa.x*ya.z,
+        xa.x*ya.y - xa.y*ya.x
+      );
+      return { origin: p, xAxis: xa, yAxis: ya, normal: n };
+    };
+    return { samplePoint: bilerp, sampleFrame: bilerp3 };
+  }
+
   // Prefer the proper surface-eval path when a Surface object is provided.
   // Mesh3 is also a valid surface-eval target (bilinear grid evaluation), so we
   // route everything that resolveSurface supports through the same path.
@@ -143,17 +179,19 @@ function buildFrame(centroid, corners, sampleFrame, cu, cv) {
 /**
  * Divide a surface (or fallback mesh) into a uPanels×vPanels grid of panel objects.
  *
- * Each panel object is:
- *   { points: Point3[4], frame: { origin, xAxis, yAxis, normal } }
+ * Each panel is a Geo.Mesh3 quad (2 triangles) with two extra properties:
+ *   panel.points — Point3[4] corner points IN ORDER (p00, p10, p11, p01) on the surface
+ *   panel.frame  — { origin, xAxis, yAxis, normal } oriented frame at the centroid
  *
- * - points: 4 corner points IN ORDER (p00, p10, p11, p01) sampled on the surface
- * - frame:  centroid of the 4 corners as origin, surface normal at centroid as Z
+ * Returning Mesh3 (instead of a plain object) makes the data inspector display
+ * panel geometry correctly.  Panel.ByPoints, Pattern.PanelFrames, and the T04b
+ * viewer all read .points / .frame so the contract is preserved.
  *
  * @param {object|null} surface   A Surface/NurbsSurface/Mesh3 object, or null
  * @param {number}      uPanels   Number of panels along U (>= 1)
  * @param {number}      vPanels   Number of panels along V (>= 1)
  * @param {object|null} [mesh]    Legacy mesh fallback (only used when surface is null)
- * @returns {Array<{points:Geo.Point3[], frame:object}>}
+ * @returns {Geo.Mesh3[]}
  */
 export function facadePanelsOnSurface(surface, uPanels, vPanels, mesh) {
   const U = Math.max(1, Math.floor(uPanels || 4));
@@ -185,7 +223,15 @@ export function facadePanelsOnSurface(surface, uPanels, vPanels, mesh) {
 
       const frame = buildFrame(centroid, corners, sampler.sampleFrame, cu, cv);
 
-      panels.push({ points: corners, frame });
+      // Return a Mesh3 so the data inspector can render it (plain objects have no
+      // _type and show as List(0)). Extra .points and .frame carry the contract
+      // properties Panel.ByPoints, Pattern.PanelFrames, and the T04b viewer all
+      // consume. Faces split the quad into two CCW triangles.
+      const panel = new Geo.Mesh3(corners, [[0, 1, 2], [0, 2, 3]], 0xfab387);
+      panel._solidType = 'Panel';
+      panel.points = corners;
+      panel.frame = frame;
+      panels.push(panel);
     }
   }
 

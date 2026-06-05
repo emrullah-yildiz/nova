@@ -2,9 +2,8 @@
 // NOVA — Geometry Kernel: Voronoi Cell Objects (T04a)
 //
 // Wraps the existing Geo.voronoiMesh tessellation and converts its output to the
-// TICK-004 panel-object format:
-//   { points: Point3[], frame: { origin, xAxis, yAxis, normal } }
-//
+// TICK-004 panel-object format: Geo.Mesh3 with extra .points and .frame
+// properties so the data inspector shows real mesh data instead of List(0).
 // - points: boundary vertices of each Voronoi cell (the outline polygon corners)
 // - frame:  centroid of the boundary as origin; surface normal as Z.
 //           For flat (XY) input the normal is (0,0,1).
@@ -80,17 +79,14 @@ function buildFrame(centroid, normal, firstVertex) {
 /**
  * Convert Voronoi site list to a list of panel cell objects.
  *
- * Each cell object matches the TICK-004 panel-object contract:
- *   { points: Point3[], frame: { origin, xAxis, yAxis, normal } }
- *
- * - points: boundary vertices of the Voronoi cell polygon
- * - frame:  centroid origin + Newell normal (Z). For flat XY input the normal
- *           is always (0,0,1).
+ * Each cell is a Geo.Mesh3 (fan-triangulated polygon) with extra properties:
+ *   mesh.points — boundary vertices of the Voronoi cell polygon
+ *   mesh.frame  — { origin, xAxis, yAxis, normal } centroid + Newell normal
  *
  * @param {object[]} sites   List of Point3 seed points for Voronoi
  * @param {object|null} bounds  Optional bounding box (passed through to voronoiOutlines)
  * @param {number} resolution  Resolution hint for voronoiOutlines
- * @returns {Array<{points:Geo.Point3[], frame:object}>}
+ * @returns {Geo.Mesh3[]}
  */
 export function voronoiCellObjects(sites, bounds, resolution) {
   if (!Array.isArray(sites) || sites.length === 0) return [];
@@ -119,6 +115,13 @@ export function voronoiCellObjects(sites, bounds, resolution) {
     const normal = newellNormal(verts);
     const frame = buildFrame(centroid, normal, verts[0]);
 
-    return { points: verts, frame };
+    // Fan-triangulate the polygon so the data inspector can render it as a mesh.
+    const faces = [];
+    for (let i = 1; i < verts.length - 1; i++) faces.push([0, i, i + 1]);
+    const mesh = new Geo.Mesh3(verts, faces, 0xfab387);
+    mesh._solidType = 'Panel';
+    mesh.points = verts;
+    mesh.frame = frame;
+    return mesh;
   }).filter(Boolean);
 }
