@@ -70,7 +70,7 @@ test.describe('Custom.CodeBlock on-node editor', () => {
     await waitForApp(page);
     const code = await page.evaluate(() => {
       window.app.newProject();
-      const nd = window.app.addSeriesCodeBlock(200, 200);
+      const nd = window.app.addCodeBlockPreset('nums = 0..10', 200, 200);
       return nd && nd.controlValues.code;
     });
     expect(code).toBe('nums = 0..10');
