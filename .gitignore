@@ -38,3 +38,4 @@ tests/e2e/__artifacts__/
 
 # Hook proof files (agent test-run evidence, local only)
 .nova-last-test-run.json
+.nova-priorities-changed
