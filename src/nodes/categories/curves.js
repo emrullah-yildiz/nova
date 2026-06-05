@@ -1,6 +1,5 @@
 import { Geo } from '../../geometry/index.js';
 import {
-  pointAtT,
   pointAtTExtrapolated,
   tangentAtT,
   frameAtT,

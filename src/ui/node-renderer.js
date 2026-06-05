@@ -17,8 +17,6 @@
 import { getWiredControlDisplay, removeControlInputWires } from './property-wire-controls.js';
 import { fileToControlValue } from './file-control.js';
 import { isAutoLaceable } from '../core/lacing.js';
-import { NODE_VERSION_MAP } from '../core/nodes.js';
-import { availableVersions, getDefVersion } from '../core/node-versions.js';
 import { installCodeBlockNode } from './codeblock-node.js';
 
 function getRuntimeApp() {
@@ -819,11 +817,7 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
     if (!nd) return;
 
     // Lazy-import the selection-mode module (viewer context only)
-    var selMod = null;
-    try { selMod = window.__selectionModeModule; } catch (_) {}
-    if (!selMod && typeof window !== 'undefined' && window.__selectionModeModule) {
-      selMod = window.__selectionModeModule;
-    }
+    var selMod = (typeof window !== 'undefined' && window.__selectionModeModule) || null;
 
     // If the module is already loaded via a previous call, use it directly.
     // The selection-mode module is also exported as a global during viewer init.

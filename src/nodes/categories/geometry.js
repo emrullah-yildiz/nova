@@ -1,15 +1,6 @@
 import { Geo } from '../../geometry/index.js';
 import { orient } from '../../geometry/transforms.js';
-// Selection-mode integration: imported lazily so the node module works in test
-// environments where viewer modules are not available.
-let _selectionMode = null;
-async function _getSelectionMode() {
-  if (_selectionMode) return _selectionMode;
-  try {
-    _selectionMode = await import('../../viewer/selection-mode.js');
-  } catch (_) { /* viewer not available in tests */ }
-  return _selectionMode;
-}
+
 
 export const geometryCategory = {
   id: 'geometry',

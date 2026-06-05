@@ -32,7 +32,6 @@ import { NODE_TYPE_MAP } from './nodes.js';
 import { getDefVersion } from './node-versions.js';
 import { getLiveCoreRegistry } from '../nodes/coreNodes.js';
 import { executeRegistryNodeUnlaced } from '../nodes/runtimeAdapter.js';
-import { desugarSeries } from '../runtime/codeblock-syntax.js';
 import { evalCodeBlock } from '../runtime/codeblock-eval.js';
 
 /* eslint-disable no-redeclare, no-inner-declarations, no-empty, no-unused-vars */

@@ -143,11 +143,7 @@ describe('chapter examples — simpleExample and advancedExample', () => {
   });
 
   it('buildChapterHtml includes the "Try It" section when examples exist', () => {
-    // Use chapter 0 (Introduction) which has both examples.
-    const ch = LEARNING_CHAPTERS[0];
-    // Access the internal render via the observable: load the module and check html output.
-    // We can import buildLearningHtml and use initLearning, but the simplest test
-    // is to check the DOM after initLearning.
+    // Check the DOM after initLearning for chapter 0 (Introduction).
     const overlay = document.createElement('div');
     overlay.innerHTML = buildLearningHtml();
     document.body.appendChild(overlay);

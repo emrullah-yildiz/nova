@@ -133,8 +133,7 @@ describe('selection-mode state machine', () => {
   });
 
   it('activating while already active replaces the previous session', () => {
-    let cancelled1 = false;
-    activateSelectionMode('node-1', 'faces', () => {}, () => { cancelled1 = true; });
+    activateSelectionMode('node-1', 'faces', () => {}, () => {});
     activateSelectionMode('node-2', 'edges', () => {}, () => {});
     // The second activate replaces without calling the first's cancel
     expect(_internals._state.nodeId).toBe('node-2');
