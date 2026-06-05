@@ -39,6 +39,38 @@ Example:
 - Unit test: AC-3, AC-5
 - Manual browser: AC-6
 
+## How to test
+
+Step-by-step instructions an agent or reviewer can follow to verify the ticket is done.
+Each step must be reproducible from a clean `develop` branch with `npm run dev`.
+
+### Local dev verification (required before marking any AC done)
+
+1. `git switch develop && git pull --ff-only && git switch <branch-name>`
+2. `npm install && npm run dev` — confirm the dev server starts at `http://localhost:5173`
+3. Open `http://localhost:5173` in a browser.
+4. [Replace steps below with the specific actions for THIS ticket]
+   - Add the relevant node(s) from the library panel.
+   - Wire inputs as described in each AC.
+   - Observe the output in `Output.Watch` or the 3D viewport.
+   - Record: actual value / appearance / behaviour and whether it matches the AC.
+
+### Automated tests
+
+```bash
+npm run lint:all          # must be 0 errors
+npm run test              # all unit/integration tests must pass
+npm run test:e2e          # Playwright specs must pass (if E2E AC exist)
+```
+
+Record results as: `PASSED — N tests, 0 failures` or describe the failure.
+
+### How to mark an AC done
+
+In this file, change `- [ ] AC-N` to `- [x] AC-N` and append a note:
+- For automated: `— covered by tests/path/to/spec.js:line`
+- For manual: `— manual browser YYYY-MM-DD: [what you observed]`
+
 ## Definition of done
 
 - [ ] All AC above are checked `[x]`

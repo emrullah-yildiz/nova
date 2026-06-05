@@ -37,6 +37,39 @@ The Stop hook in ENGINEERING.md requires a Playwright E2E spec for every UI/view
 - Unit test: none required
 - Manual browser: none required for this ticket (it is pure infrastructure)
 
+## How to test
+
+### Local dev verification
+
+1. `git switch develop && git pull --ff-only && git switch chore/e2e-testing-gate`
+2. `npm install`
+3. **AC-5:** Confirm `playwright.config.js` exists at repo root with `timeout: 30000`.
+4. `npx playwright install chromium` — should complete without error.
+5. `npm run dev` in one terminal. In a second terminal:
+6. **AC-1:** `npm run test:e2e` — all specs in `tests/e2e/` must pass. Record pass/fail counts.
+7. **AC-4:** Confirm each named spec file exists and is included in the run output:
+   - `nova-workflows.spec.js` ✓/✗
+   - `nova-learning.spec.js` ✓/✗
+   - `codeblock-node.spec.js` ✓/✗
+   - `run-modes.spec.js` ✓/✗
+   - `geometry-selection.spec.js` ✓/✗ *(requires TICK-002 merged first)*
+8. **AC-2:** Open `.github/workflows/ci.yml`. Confirm an `e2e` or `playwright` job exists that runs on PRs touching `src/` or `tests/`. Verify the job has a `npx playwright install` step.
+9. **AC-3:** Stage a change to `src/ui/some-file.js` (do not stage any `tests/e2e/` file). Attempt `git push` — confirm a warning appears naming the src file with no spec, but the push is not hard-blocked.
+
+### Automated tests
+
+```bash
+npm run lint:all
+npm run test
+npm run test:e2e          # all specs must pass (self-validates AC-1 and AC-4)
+```
+
+### How to mark an AC done
+
+Change `- [ ] AC-N` → `- [x] AC-N` with a note:
+- Automated: `— npm run test:e2e PASSED YYYY-MM-DD`
+- Manual: `— manual verification YYYY-MM-DD: [what you observed]`
+
 ## Definition of done
 
 - [ ] All AC above are checked `[x]`

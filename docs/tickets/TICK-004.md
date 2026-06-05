@@ -53,6 +53,51 @@ Each cell must render as a visually distinct, individually selectable object in 
 - E2E (Playwright): AC-1, AC-5, AC-9
 - Manual browser verification: AC-2, AC-3, AC-4, AC-6, AC-7
 
+## How to test
+
+### Local dev verification
+
+1. `git switch develop && git pull --ff-only && git switch feat/pattern-on-surface`
+2. `npm install && npm run dev` — open `http://localhost:5173`
+3. Create a new workspace.
+
+**Facade panels on curved surface (AC-1 → AC-5, AC-7):**
+
+4. Add `Surface.ByPatch`. Set four corner points at different Z heights so the surface is visibly curved (e.g. `[0,0,0]`, `[10,0,0]`, `[10,10,5]`, `[0,10,2]`).
+5. Add `Pattern.FacadePanels`. Wire the `Surface.ByPatch` output into the `Surface` input. Set U=4, V=4.
+6. Wire `Output.Watch` to the `Panels` output. **AC-1:** Watch shows exactly 16 items.
+7. Click one item in the watch. **AC-2:** Confirm the item has `points` (list of 4 point objects) and `frame` (object with `origin`, `normal`). All `points[*].z` should differ across panels (not all equal — they follow the surface).
+8. Look at the 3D viewport. **AC-3:** 16 quads visible, each conforming to the curved surface — none lying flat on the XY plane.
+9. Hover over a single panel in the viewport. **AC-4:** Only that panel highlights; the others do not.
+
+**Panel.ByPoints (AC-5):**
+
+10. Add `Panel.ByPoints`. Wire the `Panels` output from step 5 into it.
+11. Wire `Output.Watch` to the `Panel.ByPoints` output. **AC-5:** 16 placed panel meshes appear, corners matching the input points.
+
+**Voronoi cell objects (AC-6):**
+
+12. Add `Pattern.Phyllotaxis` → `Pattern.VoronoiMesh` → `Output.Watch`.
+13. **AC-6:** Each item in watch has `points` and `frame` fields.
+
+**PanelFrames backwards compat (AC-7):**
+
+14. Wire the 16 panel objects from step 5 into `Pattern.PanelFrames`. Wire `List.Count` on the `frames` output → `Output.Watch`. **AC-7:** Count = 16.
+
+### Automated tests
+
+```bash
+npm run lint:all
+npm run test                # includes AC-8 Vitest unit test
+npm run test:e2e            # tests/e2e/pattern-on-surface.spec.js (AC-9)
+```
+
+### How to mark an AC done
+
+Change `- [ ] AC-N` → `- [x] AC-N` with a note:
+- Automated: `— covered by tests/path/file.js:line`
+- Manual: `— manual browser YYYY-MM-DD: [what you observed]`
+
 ## Definition of done
 
 - [ ] All AC above are checked `[x]`
