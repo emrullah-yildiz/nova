@@ -19,6 +19,19 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/capture-test-results.mjs",
+            "timeout": 10,
+            "statusMessage": "Recording test result…"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

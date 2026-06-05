@@ -35,3 +35,6 @@ tests/e2e/__artifacts__/
 
 # Agent worktrees (never commit; deep dotnet obj/ paths break Windows worktree checkout)
 .claude/worktrees/
+
+# Hook proof files (agent test-run evidence, local only)
+.nova-last-test-run.json
