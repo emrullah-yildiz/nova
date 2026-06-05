@@ -17,9 +17,9 @@
 | ID | Title | Status | Priority | Sprint | Lane(s) | Branch |
 |---|---|---|---|---|---|---|
 | TICK-002 | Select Faces/Edges/Points — E2E verification + Playwright spec | 🟡 in-progress | high | 2026-06-05 | ui | fix/selection-mode-e2e |
-| TICK-005 | Remove Pattern nodes category | ⬜ draft | high | 2026-06-05 | geometry, core | — |
-| TICK-006 | Learning page screenshots | ⬜ draft | high | 2026-06-05 | ui | — |
-| TICK-007 | Learning page interactive exercises | ⬜ draft | high | 2026-06-05 | ui | — |
+| TICK-005 | Remove Pattern nodes category | 🔵 ready | high | 2026-06-05 | geometry, core | chore/remove-pattern-nodes |
+| TICK-006 | Learning page screenshots | 🔵 ready | high | 2026-06-05 | ui | feat/learning-screenshots |
+| TICK-007 | Learning page interactive exercises | 🔵 ready | high | 2026-06-05 | ui, core | feat/learning-exercises |
 
 ## Done (last 30 days)
 

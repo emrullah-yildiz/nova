@@ -1,7 +1,7 @@
 ---
 id: TICK-006
 title: Learning page — real Nova canvas screenshots in all 20 example slots
-status: draft
+status: ready
 priority: high
 type: feature
 sprint: 2026-06-05
@@ -65,7 +65,7 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 
 ## Task briefs
 
-Links added by morpheus after PM confirms AC.
+- [T06a](../task-briefs/T06a-learning-screenshots.md) — lane: ui — Identify 20 slot IDs, take real Nova canvas screenshots at 1280×800 dark theme, save as public/learning/<slot-id>.png ≤400 KB each
 
 ## Notes
 

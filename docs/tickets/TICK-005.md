@@ -1,7 +1,7 @@
 ---
 id: TICK-005
 title: Remove Pattern nodes category, kernel files, tests, and docs
-status: draft
+status: ready
 priority: high
 type: chore
 sprint: 2026-06-05
@@ -68,7 +68,8 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 
 ## Task briefs
 
-Links added by morpheus after PM confirms AC.
+- [T05a](../task-briefs/T05a-remove-pattern-source.md) — lane: geometry + core — Delete Pattern source files (patterns.js, geo-facade-panels.js, geo-voronoi.js), remove imports from node-library.js, delete T04a/T04b/T04c briefs
+- [T05b](../task-briefs/T05b-remove-pattern-tests.md) — lane: core — Delete Pattern test files (unit + E2E); confirm npm run test + test:e2e pass
 
 ## Notes
 

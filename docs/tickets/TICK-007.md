@@ -1,7 +1,7 @@
 ---
 id: TICK-007
 title: Learning page — interactive mini-canvas exercises
-status: draft
+status: ready
 priority: high
 type: feature
 sprint: 2026-06-05
@@ -22,7 +22,7 @@ The mini-canvas must be self-contained — no global app state mutation. It comm
 
 ## Acceptance criteria
 
-- [ ] AC-1  All 10 chapters display an interactive exercise section (below the existing quiz), containing a mini-canvas with at least 2 pre-placed nodes and at least 1 unwired input port.
+- [ ] AC-1  All 10 chapters display an interactive exercise section (below the existing quiz), containing a mini-canvas with 4–5 pre-placed nodes and at least 1 unwired input port.
 - [ ] AC-2  The user can draw a wire by clicking an output port then a compatible input port. The wire appears as a visible connector between the two ports.
 - [ ] AC-3  Clicking an incompatible port (type mismatch) does nothing — no wire is started or partially drawn.
 - [ ] AC-4  Submitting a correctly completed exercise shows a green success message and enables the "Next chapter" button.
@@ -75,7 +75,9 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 
 ## Task briefs
 
-Links added by morpheus after PM confirms AC.
+- [T07a](../task-briefs/T07a-learning-exercise-engine.md) — lane: core — Create src/ui/learning-exercises.js with 10 exercise definitions + acceptance functions; Vitest unit tests (≥20 cases). Independent, unblocked.
+- [T07b](../task-briefs/T07b-learning-mini-canvas.md) — lane: ui — Build src/ui/mini-canvas.js component (wire drawing, submit, pass/fail feedback); integrate into learning-page.js. Depends on T07a merge.
+- [T07c](../task-briefs/T07c-learning-exercises-e2e.md) — lane: ui — Write tests/e2e/learning-interactive.spec.js (open overlay → ch01 → draw wire → Submit → assert success). Depends on T07a + T07b merge.
 
 ## Notes
 
