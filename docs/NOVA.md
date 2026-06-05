@@ -196,6 +196,14 @@ like the code around it. (Each links to the decision that owns the detail.)
   (Python = imports/bridge/typed headers/terminal; CodeBlock = expressions/series/
   literals/inline). Codegen tracks *live* ports, not the static def. `Custom.Formula`
   was folded into CodeBlock (`Result = <expr>`) and retired.
+- **Graph run modes are app-level policy over the engine mechanism.** The graph
+  recomputes per `app.runMode`: **Automatic** (default — recompute on every edit,
+  the legacy behavior) or **Manual** (defer to an explicit Run). The *mechanism*
+  lives in the engine (`_manualRunMode` gates `computeNodeValue` to the last-Run
+  snapshot; `runGraph()` is the single on-demand recompute); the *policy* (mode
+  state, toggle, Run-button stale affordance, persistence in the saved graph,
+  Manual→Automatic catch-up) lives in the owned UI module `src/ui/run-mode.js` —
+  don't fold run-mode policy back into `src/core`. Old graphs default to Automatic.
 - **Server is the authority.** Realtime roles (viewer RO / editor RW) and Connect
   write approvals are enforced server-side; clients are never trusted. A Connect/
   Revit write must present a **single-use, server-issued approval token**: the

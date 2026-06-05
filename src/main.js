@@ -34,6 +34,7 @@ import * as NodeLibraryUtils from './ui/node-library-utils.js';
 import { installLineRenderPatch } from './ui/line-render-patch.js';
 import { installNodeLibrary } from './ui/node-library.js';
 import { installNodeRenderer } from './ui/node-renderer.js';
+import { installRunMode } from './ui/run-mode.js';
 import { installNodeSearchPopup } from './ui/node-search-popup.js';
 import { installWirePortalPatch } from './ui/wire-portal-patch.js';
 import { installUiEnhancements } from './ui/ui-enhancements.js';
@@ -100,6 +101,7 @@ const NodeFlow = {
   installLineRenderPatch,
   installNodeLibrary,
   installNodeRenderer,
+  installRunMode,
   installNodeSearchPopup,
   installWirePortalPatch,
   installUiEnhancements,
@@ -223,6 +225,12 @@ function installAfterAppInit() {
   } catch (err) {
     console.warn('[ExecutionEngine] Could not mount v2 engine (non-critical):', err);
   }
+
+  // Run modes (Automatic | Manual). Installed LAST so its UI/persistence
+  // wrappers sit outermost over the engine's (and v2 engine's) runGraph /
+  // invalidateCompute / serializeGraph patches. Defaults the graph to
+  // Automatic, overriding the engine's DOM-present manual default.
+  installRunMode(app);
 }
 
 function startAppShell() {

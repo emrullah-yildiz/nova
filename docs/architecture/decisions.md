@@ -8,6 +8,38 @@ looks the way it does without reconstructing the original conversation.
 
 Newest decisions go first.
 
+## 2026-06-05 - Graph Run Modes (Automatic | Manual)
+
+**Status:** Accepted
+
+**Context:** Nova needed a user-selectable recompute policy (like Dynamo's
+Automatic/Manual): keep the live "recompute on every edit" behavior, but also let
+users defer computation to an explicit Run for heavy graphs. The engine
+(`src/core/engine.js`) already had the *mechanism* for deferred compute —
+`app._manualRunMode` gates `computeNodeValue` to the last-Run snapshot
+(`getLastRunNodeValue` / `_commitRunSnapshot`), and `app.runGraph()` is the single
+on-demand recompute path — but it was **hardcoded on** whenever a DOM was present,
+with no Automatic mode, no toggle, and no persistence.
+
+**Decisions:**
+- **App/UI-level policy, not an engine change.** A new owned module
+  `src/ui/run-mode.js` (`installRunMode(app)`) owns the *policy*: `app.runMode`
+  (`'auto'` default | `'manual'`), `setRunMode` / `toggleRunMode`, the toolbar
+  toggle, and the Run-button stale affordance. It sets `app._manualRunMode` from
+  `app.runMode`; it does **not** reimplement compute gating. `src/core/engine.js`
+  is untouched (the engine's DOM-present manual default is overridden at install).
+- **Automatic is the default** — recompute on any graph change (the legacy
+  behavior). Old graphs with no saved `runMode` load as Automatic.
+- **Manual stops auto-recompute;** edits set `_graphDirty`, the Run button
+  highlights (stale/pending affordance), and only `runGraph()` recomputes (clearing
+  `_graphDirty`). **Manual→Automatic triggers a catch-up `runGraph()`.**
+- **Persisted in the project graph.** `runMode` is serialized/deserialized
+  (wrapping `serializeGraph`/`deserializeGraph` from the run-mode module), defaulting
+  to `'auto'` for graphs saved before this change.
+- **Install order matters:** `installRunMode` runs LAST (after the v2
+  ExecutionEngine attaches) so its UI/persistence wrappers sit outermost over the
+  engine's `runGraph`/`invalidateCompute`/`serializeGraph` patches.
+
 ## 2026-06-05 - CodeBlock Node (Python-First): Rename Custom.Code → Custom.CodeBlock, Retire Custom.Formula, Inclusive Series, Wire-Boundary Bool Coercion
 
 **Status:** Accepted (CORE landed; on-node editor UI + hot-file integration are follow-ups)
