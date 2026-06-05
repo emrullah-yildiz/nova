@@ -706,13 +706,13 @@ export const patternsNodes = [
     subGroup: 'Panels',
     icon: '▦',
     aliases: ['pat-facade-panels'],
-    description: 'Divides a surface mesh into a U×V grid of rectangular facade panels. Returns the panels as a list of mesh quads, useful for cladding studies, paneling counts and rationalisation.',
+    description: 'Divides a surface into a U×V grid of rectangular facade panels. When a curved Surface is wired in, corners are projected onto the actual surface so each panel sits on it. Returns a list of panel objects — each with corner points and an orientation frame — ready for Panel.ByPoints or Pattern.PanelFrames.',
     inputs: [
-      { id: 'mesh', name: 'Surface', type: 'mesh', description: 'Surface mesh to panelize' },
+      { id: 'mesh', name: 'Surface', type: 'any', description: 'Surface or surface mesh to panelize. Accepts Surface.ByPatch output (curved surface) or a flat mesh.' },
       { id: 'uPanels', name: 'U Panels', type: 'number', description: 'Number of panels along U' },
       { id: 'vPanels', name: 'V Panels', type: 'number', description: 'Number of panels along V' }
     ],
-    outputs: [{ id: 'panels', name: 'Panels', type: 'list', description: 'Panel mesh list' }],
+    outputs: [{ id: 'panels', name: 'Panels', type: 'list', description: 'List of panel objects { points: Point[], frame: { origin, xAxis, yAxis, normal } }' }],
     controls: [
       { id: 'uPanels', type: 'formula', default: '4', label: 'U Panels' },
       { id: 'vPanels', type: 'formula', default: '4', label: 'V Panels' }
@@ -720,7 +720,7 @@ export const patternsNodes = [
     execute(context, inputs) {
       if (inputs.mesh == null) return { panels: [] };
       return {
-        panels: Geo.facadePanels(
+        panels: Geo.facadePanelsOnSurface(
           inputs.mesh,
           toInteger(inputs.uPanels, 4),
           toInteger(inputs.vPanels, 4)
@@ -728,29 +728,29 @@ export const patternsNodes = [
       };
     },
     codegen: {
-      python: '{{panels}} = Geo.facadePanels({{mesh}}, int({{uPanels}}), int({{vPanels}}))',
-      csharp: 'var {{panels}} = Geo.facadePanels({{mesh}}, (int){{uPanels}}, (int){{vPanels}});'
+      python: '{{panels}} = Geo.facadePanelsOnSurface({{mesh}}, int({{uPanels}}), int({{vPanels}}))',
+      csharp: 'var {{panels}} = Geo.facadePanelsOnSurface({{mesh}}, (int){{uPanels}}, (int){{vPanels}});'
     },
     help: {
       inputs: [
-        { name: 'Surface', description: 'Surface mesh' },
+        { name: 'Surface', description: 'Surface or mesh to panelize (accepts Surface.ByPatch curved surfaces)' },
         { name: 'U Panels', description: 'U panel count' },
         { name: 'V Panels', description: 'V panel count' }
       ],
-      outputs: [{ name: 'Panels', description: 'Panel mesh list' }],
+      outputs: [{ name: 'Panels', description: 'List of panel objects (points + frame)' }],
       example: {
-        title: '2×2 panels on a unit-square patch — 4 panels',
+        title: '4×4 panels on a curved surface — 16 panel objects ready for Panel.ByPoints',
         nodes: [
           { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
-          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
-          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 1, y: 1, z: 0 } },
-          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 0, y: 1, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 10, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 10, y: 10, z: 5 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 0, y: 10, z: 2 } },
           { type: 'List.Create', x: 240, y: 90 },
           { type: 'Surface.ByPatch', x: 460, y: 90 },
-          { type: 'Input.Integer', x: 460, y: 230, controls: { val: 2 } },
-          { type: 'Input.Integer', x: 460, y: 300, controls: { val: 2 } },
+          { type: 'Input.Integer', x: 460, y: 230, controls: { val: 4 } },
+          { type: 'Input.Integer', x: 460, y: 300, controls: { val: 4 } },
           { type: 'Pattern.FacadePanels', x: 700, y: 170 },
-          { type: 'List.Count', x: 940, y: 170 },
+          { type: 'Panel.ByPoints', x: 940, y: 170 },
           { type: 'Output.Watch', x: 1140, y: 170 }
         ],
         wires: [
@@ -762,11 +762,11 @@ export const patternsNodes = [
           [5, 'surface', 8, 'mesh'],
           [6, 'value', 8, 'uPanels'],
           [7, 'value', 8, 'vPanels'],
-          [8, 'panels', 9, 'list'],
-          [9, 'count', 10, 'value']
+          [8, 'panels', 9, 'panels'],
+          [9, 'meshes', 10, 'value']
         ]
       },
-      sampleCode: '{{panels}} = Geo.facadePanels({{mesh}}, {{uPanels}}, {{vPanels}})'
+      sampleCode: '{{panels}} = Geo.facadePanelsOnSurface({{mesh}}, {{uPanels}}, {{vPanels}})'
     }
   },
 
@@ -789,13 +789,20 @@ export const patternsNodes = [
     execute(context, inputs) {
       const panels = toList(inputs.panels);
       if (panels.length === 0) return { frames: [], centroids: [] };
-      const frames = Geo.panelFrames(panels);
+      // Backwards-compatible: if items have a `frame` property (new panel-object
+      // format from facadePanelsOnSurface / voronoiCellObjects) use it directly;
+      // otherwise fall back to centroid computation on raw mesh (existing logic).
+      const frames = panels.map((panel) => {
+        if (panel && panel.frame) return panel.frame;
+        // Legacy path: compute frame from the raw mesh via panelFrames.
+        return Geo.panelFrames([panel])[0] || null;
+      });
       const centroids = frames.map((f) => (f && f.origin ? f.origin : null));
       return { frames, centroids };
     },
     codegen: {
-      python: '{{frames}} = Geo.panelFrames({{panels}})\n{{centroids}} = [f.origin for f in {{frames}}]',
-      csharp: 'var {{frames}} = Geo.panelFrames({{panels}});\nvar {{centroids}} = {{frames}}.Select(f => f.origin).ToList();'
+      python: '{{frames}} = [p["frame"] if hasattr(p, "frame") else Geo.panelFrames([p])[0] for p in {{panels}}]\n{{centroids}} = [f.origin for f in {{frames}}]',
+      csharp: 'var {{frames}} = {{panels}}.Select(p => p.frame ?? Geo.panelFrames(new[]{p})[0]).ToList();\nvar {{centroids}} = {{frames}}.Select(f => f.origin).ToList();'
     },
     help: {
       inputs: [
@@ -918,6 +925,86 @@ export const patternsNodes = [
     }
   },
 
+  // ─── Panel.ByPoints ──────────────────────────────────────
+  {
+    type: 'Panel.ByPoints',
+    name: 'Panel.ByPoints',
+    category: 'patterns',
+    subGroup: 'Panels',
+    icon: '⬚',
+    aliases: ['panel-by-points'],
+    description: 'Creates one quad mesh per panel object, with corners snapped to the panel\'s corner points and orientation following the panel frame. Consumes the panel-object list from Pattern.FacadePanels or Pattern.VoronoiMesh.',
+    inputs: [
+      { id: 'panels', name: 'Panels', type: 'list', description: 'List of panel objects with points + frame (from Pattern.FacadePanels or Pattern.VoronoiMesh)' }
+    ],
+    outputs: [{ id: 'meshes', name: 'Meshes', type: 'list', description: 'One placed quad mesh per input panel, corners snapped to panel.points' }],
+    controls: [],
+    execute(context, inputs) {
+      const panels = toList(inputs.panels);
+      if (panels.length === 0) return { meshes: [] };
+      const color = 0xfab387; // NovaPalette3D.extrusion — matches the facade panel family
+      const meshes = panels.map((panel) => {
+        if (!panel) return null;
+        const pts = Array.isArray(panel.points) ? panel.points : [];
+        if (pts.length < 3) return null;
+        // For quad panels (4 corners): triangulate as two triangles.
+        // For polygon panels (>4 corners): fan-triangulate from the first vertex.
+        let faces;
+        if (pts.length === 4) {
+          faces = [[0, 1, 2], [0, 2, 3]];
+        } else {
+          faces = [];
+          for (let k = 1; k < pts.length - 1; k++) {
+            faces.push([0, k, k + 1]);
+          }
+        }
+        const mesh = new Geo.Mesh3(pts, faces, color);
+        mesh._solidType = 'PanelMesh';
+        return mesh;
+      }).filter(Boolean);
+      return { meshes };
+    },
+    codegen: {
+      python: '{{meshes}} = [Geo.Mesh3(p["points"], [[0,1,2],[0,2,3]], 0xfab387) for p in {{panels}} if p and len(p.get("points", [])) >= 3]',
+      csharp: 'var {{meshes}} = {{panels}}.Where(p => p != null && p.points?.Count >= 3).Select(p => new Geo.Mesh3(p.points, new[]{new[]{0,1,2},new[]{0,2,3}}, 0xfab387)).ToList();'
+    },
+    help: {
+      inputs: [
+        { name: 'Panels', description: 'Panel object list from Pattern.FacadePanels (or Pattern.VoronoiMesh)' }
+      ],
+      outputs: [{ name: 'Meshes', description: 'One quad mesh per panel, corners snapped to panel points' }],
+      example: {
+        title: '4×4 panels on a curved surface — 16 placed quad meshes',
+        nodes: [
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 10, y: 0, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 10, y: 10, z: 5 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 0, y: 10, z: 2 } },
+          { type: 'List.Create', x: 240, y: 90 },
+          { type: 'Surface.ByPatch', x: 460, y: 90 },
+          { type: 'Input.Integer', x: 460, y: 230, controls: { val: 4 } },
+          { type: 'Input.Integer', x: 460, y: 300, controls: { val: 4 } },
+          { type: 'Pattern.FacadePanels', x: 700, y: 170 },
+          { type: 'Panel.ByPoints', x: 940, y: 170 },
+          { type: 'Output.Watch', x: 1180, y: 170 }
+        ],
+        wires: [
+          [0, 'point', 4, 'item0'],
+          [1, 'point', 4, 'item1'],
+          [2, 'point', 4, 'item2'],
+          [3, 'point', 4, 'item3'],
+          [4, 'list', 5, 'boundary'],
+          [5, 'surface', 8, 'mesh'],
+          [6, 'value', 8, 'uPanels'],
+          [7, 'value', 8, 'vPanels'],
+          [8, 'panels', 9, 'panels'],
+          [9, 'meshes', 10, 'value']
+        ]
+      },
+      sampleCode: '{{meshes}} = [Geo.Mesh3(p["points"], [[0,1,2],[0,2,3]]) for p in {{panels}}]'
+    }
+  },
+
   // ─── Voronoi ─────────────────────────────────────────────
   {
     type: 'Pattern.VoronoiMesh',
@@ -940,18 +1027,18 @@ export const patternsNodes = [
     execute(context, inputs) {
       const sites = toList(inputs.sites);
       if (sites.length === 0) return { meshes: [] };
+      // Return panel cell objects { points, frame } instead of raw extruded meshes.
+      // voronoiCellObjects re-uses the existing voronoiOutlines kernel and wraps
+      // each cell boundary as a panel object matching the TICK-004 contract.
+      // height/gap are preserved for backward compatibility but not applied to
+      // the flat cell objects (they affect the extruded mesh, not the boundary).
       return {
-        meshes: Geo.voronoiMesh(
-          sites,
-          null,
-          toNumber(inputs.height, 1),
-          toNumber(inputs.gap, 0.1)
-        )
+        meshes: Geo.voronoiCellObjects(sites, null, 0.5)
       };
     },
     codegen: {
-      python: '{{meshes}} = Geo.voronoiMesh({{sites}}, None, {{height}}, {{gap}})',
-      csharp: 'var {{meshes}} = Geo.voronoiMesh({{sites}}, null, {{height}}, {{gap}});'
+      python: '{{meshes}} = Geo.voronoiCellObjects({{sites}}, None, 0.5)',
+      csharp: 'var {{meshes}} = Geo.voronoiCellObjects({{sites}}, null, 0.5);'
     },
     help: {
       inputs: [
