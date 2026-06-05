@@ -118,27 +118,39 @@ describe('Geo.facadePanelsOnSurface — Surface.ByPatch bilinear interpolation',
   });
 });
 
-describe('Geo.facadePanelsOnSurface — Panel.ByPoints and PanelFrames compatibility', () => {
-  it('Panel.ByPoints node consumes the output and produces Mesh3 meshes', () => {
+describe('Geo.facadePanelsOnSurface — Panel.Points and PanelPlane compatibility', () => {
+  it('Panel.Points node extracts corner points from each panel (not Mesh3 meshes)', () => {
+    const { getLiveCoreRegistry } = require('../src/nodes/coreNodes.js');
+    const registry = getLiveCoreRegistry();
+    const node = registry.getNode('Panel.Points');
+    expect(node).toBeDefined();
+    const panels = Geo.facadePanelsOnSurface(flatPatch(), 2, 2);
+    // Panel.Points receives a list input and returns a list of point-lists
+    const out = node.execute({}, { panel: panels });
+    expect(out.points).toHaveLength(4); // 4 panels
+    for (const ptList of out.points) {
+      expect(Array.isArray(ptList)).toBe(true);
+      expect(ptList).toHaveLength(4); // each panel has 4 corner points
+      for (const pt of ptList) expect(pt._type).toBe('Point3');
+    }
+  });
+
+  it('Panel.ByPoints is no longer registered (removed in TICK-004 PM feedback)', () => {
     const { getLiveCoreRegistry } = require('../src/nodes/coreNodes.js');
     const registry = getLiveCoreRegistry();
     const node = registry.getNode('Panel.ByPoints');
-    const panels = Geo.facadePanelsOnSurface(flatPatch(), 2, 2);
-    const out = node.execute({}, { panels });
-    expect(out.meshes).toHaveLength(4);
-    // Use _type instead of instanceof to avoid cross-module identity issues.
-    for (const m of out.meshes) expect(m._type).toBe('Mesh3');
+    expect(node).toBeNull();
   });
 
-  it('Pattern.PanelFrames reads .frame directly and returns Plane frames', () => {
+  it('Pattern.PanelPlane reads .frame directly and returns Plane frames via planes output', () => {
     const { getLiveCoreRegistry } = require('../src/nodes/coreNodes.js');
     const registry = getLiveCoreRegistry();
-    const node = registry.getNode('Pattern.PanelFrames');
+    const node = registry.getNode('Pattern.PanelPlane');
     const panels = Geo.facadePanelsOnSurface(flatPatch(), 2, 2);
     const out = node.execute({}, { panels });
-    expect(out.frames).toHaveLength(4);
-    // All frames should have an origin Point3 and a normal.
-    for (const f of out.frames) {
+    expect(out.planes).toHaveLength(4);
+    // All planes should have an origin Point3 and a normal.
+    for (const f of out.planes) {
       expect(f).toBeDefined();
       expect(f.origin).toBeDefined();
     }

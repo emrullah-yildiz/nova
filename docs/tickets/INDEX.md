@@ -17,9 +17,9 @@
 | ID | Title | Status | Priority | Sprint | Lane(s) | Branch |
 |---|---|---|---|---|---|---|
 | TICK-001 | PM + ticket architecture | ✅ done | high | 2026-06-05 | platform | chore/agent-pm-architecture |
-| TICK-002 | Select Faces/Edges/Points — E2E verification + Playwright spec | ✅ done | high | 2026-06-05 | ui | fix/selection-mode-e2e |
-| TICK-003 | Testing infrastructure — Playwright E2E coverage gate | ✅ done | high | 2026-06-05 | platform | chore/e2e-infra, chore/e2e-spec-audit |
-| TICK-004 | Pattern nodes on surface — panels and Voronoi cells conform to surface | 🔵 ready | high | 2026-06-05 | geometry, ui | feat/pattern-on-surface-geo, feat/pattern-on-surface-viewer |
+| TICK-002 | Select Faces/Edges/Points — E2E verification + Playwright spec | 🟡 in-progress | high | 2026-06-05 | ui | fix/selection-mode-e2e |
+| TICK-003 | Testing infrastructure — Playwright E2E coverage gate | 🟡 in-progress | high | 2026-06-05 | platform | chore/e2e-testing-gate |
+| TICK-004 | Pattern nodes on surface — Panel.Points + PanelPlane + VoronoiMesh fix | 🟡 in-progress | high | 2026-06-05 | geometry, core | feat/pattern-on-surface-geo, feat/pattern-on-surface-registry |
 
 ## Done (last 30 days)
 

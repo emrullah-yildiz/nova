@@ -91,3 +91,7 @@ Links added by morpheus after PM confirms AC.
 - TICK-002 (geometry-selection spec) is a dependency of AC-4. TICK-003 should not be marked done until TICK-002's spec is merged.
 - AC-3 (pre-push hook warning) is a warn-only gate — it must not hard-block pushes for non-UI changes or for the first commit in a branch before the spec is written.
 - If `playwright.config.js` already exists, confirm it is correct rather than creating a second config.
+
+## Comments from PM
+
+- Looks OK to me. Check with Oracle. 
