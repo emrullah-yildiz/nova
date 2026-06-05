@@ -552,7 +552,7 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
     var html = '<div class="geolist-header">' +
       '<span class="geolist-title">\uD83C\uDFAD Geometry</span>' +
       '<span class="geolist-count">' + this._sceneItems.length + '</span>' +
-      '<button class="geolist-btn" onclick="Viewer3D._showAll()" title="Show All">\uD83D\uDC41</button>' +
+      '<button class="geolist-btn geolist-btn--showall" onclick="Viewer3D._showAll()" title="Preview All">\uD83D\uDC41 All</button>' +
       '</div>';
 
     html += '<div class="geolist-items">';
