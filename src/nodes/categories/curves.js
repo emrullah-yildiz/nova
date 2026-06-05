@@ -1,6 +1,7 @@
 import { Geo } from '../../geometry/index.js';
 import {
   pointAtT,
+  pointAtTExtrapolated,
   tangentAtT,
   frameAtT,
   divideCurve
@@ -21,6 +22,13 @@ function toParam(value, fallback = 0.5) {
   if (v < 0) return 0;
   if (v > 1) return 1;
   return v;
+}
+
+// Unbounded version: accepts any real number (used by Curve.PointAtParameter
+// which deliberately supports extrapolation beyond the [0,1] domain).
+function toParamUnbounded(value, fallback = 0.5) {
+  const n = Number(value ?? fallback);
+  return Number.isNaN(n) ? fallback : n;
 }
 
 function toEvalCount(value, fallback = 1) {
@@ -1254,16 +1262,16 @@ export const curvesNodes = [
     subGroup: 'Evaluate',
     icon: '•',
     aliases: ['curve-pointatparameter', 'curve-pointat'],
-    description: 'Evaluates the point on a curve at a normalized parameter t ∈ [0,1] (t=0 is the start, t=1 is the end). Works for lines, polylines, arcs, circles, ellipses and NURBS curves — the parameter is normalized arc-domain, not raw knot value, so 0.5 is always the parametric midpoint.',
+    description: 'Evaluates the point on a curve at a normalized parameter t (t=0 is the start, t=1 is the end). When t is outside [0,1] the result is linearly extrapolated beyond the curve endpoint using the boundary tangent — useful for animated or expression-driven parameters that intentionally overshoot the domain. Works for lines, polylines, arcs, circles, ellipses and NURBS curves.',
     inputs: [
       { id: 'curve', name: 'Curve', type: 'curve', description: 'Curve to evaluate' },
-      { id: 't', name: 't', type: 'number', description: 'Normalized parameter in [0,1]' }
+      { id: 't', name: 't', type: 'number', description: 'Normalized parameter (0=start, 1=end). Values outside [0,1] extrapolate beyond the endpoints.' }
     ],
-    outputs: [{ id: 'point', name: 'Point', type: 'point', description: 'Point on the curve at t' }],
+    outputs: [{ id: 'point', name: 'Point', type: 'point', description: 'Point on or beyond the curve at t' }],
     controls: [{ id: 't', type: 'formula', default: '0.5', label: 't' }],
     execute(context, inputs) {
       if (inputs.curve == null) return { point: undefined };
-      return { point: pointAtT(inputs.curve, toParam(inputs.t, 0.5)) };
+      return { point: pointAtTExtrapolated(inputs.curve, toParamUnbounded(inputs.t, 0.5)) };
     },
     codegen: {
       python: '{{point}} = Geo.pointAtT({{curve}}, {{t}})',
