@@ -282,10 +282,17 @@ public sealed class NovaHub : IDisposable
     private async Task RouteAsync(WebSocket sender, JsonElement envelope)
     {
         _clients.TryGetValue(sender, out var clientInfo);
+        var type = GetString(envelope, "type");
+        var target = GetString(envelope, "target");
+        if (clientInfo == null && !(target == "hub" && type == "hello"))
+        {
+            await SendErrorAsync(sender, envelope, "Send hello before any hub or peer operation", "HELLO_REQUIRED").ConfigureAwait(false);
+            return;
+        }
+
         var envSessionId = GetString(envelope, "sessionId");
         var session = GetOrCreateSession(!string.IsNullOrEmpty(envSessionId) ? envSessionId : clientInfo?.SessionId);
 
-        var target = GetString(envelope, "target");
         if (string.IsNullOrEmpty(target))
         {
             target = clientInfo?.Role == "host" ? "viewer" : "host";

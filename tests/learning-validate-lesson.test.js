@@ -6,6 +6,7 @@ import {
 import { validateLessonShape } from '../src/core/learning/lesson-schema.js';
 import {
   registerLesson,
+  registerBuiltInLessons,
   listLessons,
   verifyLessonSolution,
   _clearLessons
@@ -279,12 +280,22 @@ describe('lesson registry + solution guard', () => {
     expect(listLessons().map((l) => l.id)).toContain(fixtureLesson.id);
   });
 
+  it('registers the three built-in beginner lessons in order', () => {
+    registerBuiltInLessons();
+    expect(listLessons().map((l) => l.id)).toEqual([
+      'beginner-wiring-add',
+      'beginner-lists-sum',
+      'beginner-lacing-add'
+    ]);
+  });
+
   it('rejects a duplicate lesson id', () => {
     registerLesson(fixtureLesson);
     expect(() => registerLesson(fixtureLesson)).toThrow(/Duplicate lesson id/);
   });
 
   it('GUARD: every registered lesson solution passes its own checks', () => {
+    registerBuiltInLessons();
     registerLesson(fixtureLesson);
     for (const lesson of listLessons()) {
       const res = verifyLessonSolution(lesson);

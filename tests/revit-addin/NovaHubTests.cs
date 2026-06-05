@@ -163,6 +163,62 @@ public class NovaHubTests
     }
 
     [Fact]
+    public async Task PreHello_PingToHub_ReturnsHelloRequiredError()
+    {
+        var port = FreePort();
+        using var hub = new NovaHub(Token, port);
+        hub.Start();
+
+        using var ws = await ConnectAsync(port);
+        var pingId = Guid.NewGuid().ToString("N");
+        await SendAsync(ws, new
+        {
+            version = 1,
+            id = pingId,
+            type = "ping",
+            source = "browser-app",
+            target = "hub",
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            payload = new { }
+        });
+
+        using var reply = await ReceiveAsync(ws);
+        var root = reply.RootElement;
+
+        Assert.Equal("operation.error", root.GetProperty("type").GetString());
+        Assert.Equal("HELLO_REQUIRED", root.GetProperty("error").GetProperty("code").GetString());
+        Assert.Equal(pingId, root.GetProperty("replyTo").GetString());
+    }
+
+    [Fact]
+    public async Task PreHello_RelayToHost_ReturnsHelloRequiredBeforeRouting()
+    {
+        var port = FreePort();
+        using var hub = new NovaHub(Token, port);
+        hub.Start();
+
+        using var ws = await ConnectAsync(port);
+        var reqId = Guid.NewGuid().ToString("N");
+        await SendAsync(ws, new
+        {
+            version = 1,
+            id = reqId,
+            type = "project.snapshot",
+            source = "browser-app",
+            target = "host",
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            payload = new { }
+        });
+
+        using var reply = await ReceiveAsync(ws);
+        var root = reply.RootElement;
+
+        Assert.Equal("operation.error", root.GetProperty("type").GetString());
+        Assert.Equal("HELLO_REQUIRED", root.GetProperty("error").GetProperty("code").GetString());
+        Assert.Equal(reqId, root.GetProperty("replyTo").GetString());
+    }
+
+    [Fact]
     public async Task Relay_ViewerMessage_ReachesHost()
     {
         var port = FreePort();

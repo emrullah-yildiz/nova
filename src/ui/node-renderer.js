@@ -207,6 +207,9 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
 
     var canvas = document.getElementById('node-canvas');
 
+    var _old = document.getElementById(nd.id);
+    if (_old && _old.parentNode) _old.parentNode.removeChild(_old);
+
     var def = nd.def, cc = def.categoryColor || '#a6adc8';
 
     var controlIds = def.controls ? def.controls.map(function(c) { return c.id; }) : [];
