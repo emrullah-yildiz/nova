@@ -48,9 +48,9 @@ export const surfacesNodes = [
     subGroup: 'Creation',
     icon: '⏥',
     aliases: ['surf-patch'],
-    description: 'Fills the interior of a single closed boundary (a closed curve or an ordered list of points) by fan-triangulating from the centroid. Produces a mesh suitable for shading, intersection, and downstream patch operations.',
+    description: 'Fills the interior of a closed loop curve by fan-triangulating from the centroid. Accepts Circle, Polygon, Polyline (closed), Arc, Ellipse, or NURBS curves. Produces a mesh suitable for shading, intersection, and downstream patch operations.',
     inputs: [
-      { id: 'boundary', name: 'Boundary', type: 'any', description: 'Closed curve or ordered list of points forming the patch outline' }
+      { id: 'boundary', name: 'Boundary', type: 'any', description: 'Closed loop curve forming the patch outline (Circle, Polygon, closed Polyline, NURBS, etc.)' }
     ],
     outputs: [{ id: 'surface', name: 'Surface', type: 'mesh', description: 'Triangulated patch mesh' }],
     controls: [
@@ -66,26 +66,22 @@ export const surfacesNodes = [
       csharp: 'var {{surface}} = Geo.surfaceByPatch({{boundary}}, (int){{ctrl.segments}});'
     },
     help: {
-      inputs: [{ name: 'Boundary', description: 'Closed curve or point list' }],
+      inputs: [{ name: 'Boundary', description: 'Closed loop curve (Circle, Polygon, closed Polyline, NURBS, etc.)' }],
       outputs: [{ name: 'Surface', description: 'Patch mesh' }],
       example: {
-        title: 'Patch a unit-square boundary — 4 face triangles',
+        title: 'Patch a circle — fan-triangulated disk',
         nodes: [
-          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
-          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 1, y: 0, z: 0 } },
-          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 1, y: 1, z: 0 } },
-          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 0, y: 1, z: 0 } },
-          { type: 'List.Create', x: 240, y: 90 },
-          { type: 'Surface.ByPatch', x: 460, y: 90 },
-          { type: 'Output.Watch', x: 660, y: 90 }
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 5 } },
+          { type: 'Circle.ByCenterRadius', x: 240, y: 30 },
+          { type: 'Surface.ByPatch', x: 460, y: 30 },
+          { type: 'Output.Watch', x: 680, y: 30 }
         ],
         wires: [
-          [0, 'point', 4, 'item0'],
-          [1, 'point', 4, 'item1'],
-          [2, 'point', 4, 'item2'],
-          [3, 'point', 4, 'item3'],
-          [4, 'list', 5, 'boundary'],
-          [5, 'surface', 6, 'value']
+          [0, 'point', 2, 'center'],
+          [1, 'value', 2, 'radius'],
+          [2, 'circle', 3, 'boundary'],
+          [3, 'surface', 4, 'value']
         ]
       },
       sampleCode: '{{surface}} = Geo.surfaceByPatch({{boundary}})'
