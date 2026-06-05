@@ -102,10 +102,11 @@ public class NovaConnectApp : IExternalApplication
     // ──────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Starts the local hub and a <see cref="NovaHostClient"/> against it. On
-    /// success the connection flips on and the toggle button turns green.
-    /// Throws on failure (e.g. no hub/repo on this machine) so the caller can
-    /// keep the button red and report the reason; the connection stays off.
+    /// Starts the in-process hub (<see cref="NovaHub"/>, no Node/repo) and a
+    /// <see cref="NovaHostClient"/> against it. On success the connection flips on
+    /// and the toggle button turns green. Throws on failure (e.g. the port is
+    /// busy) so the caller can keep the button red and report the reason; the
+    /// connection stays off.
     /// </summary>
     internal static void TurnOn(UIApplication uiApp)
     {

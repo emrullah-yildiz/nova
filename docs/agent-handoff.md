@@ -15,6 +15,30 @@ longer useful.
 
 ---
 
+## 2026-06-05 — In-process C# WebSocket hub (Approach C) supersedes the SEA hub (Trinity, connect-engineer)
+
+**Branch:** `feat/connect-csharp-hub` (off develop). Not merged/pushed.
+
+**Owned paths claimed/edited:** `integrations/revit-addin/**` (new `NovaHub.cs`,
+rewired `NovaConnectHubProcess.cs`, `NovaLocalPaths.cs`, `NovaConnectApp.cs`,
+`ConnectionToggleCommand.cs`), `installer/nova-connect/**` (WiX MSI authoring,
+removed the old console installer), `scripts/build-connect-installer.ps1` +
+`scripts/build-license-rtf.ps1`, `src/integrations/connect/connect-panel.js`
+(`.msi` URL), `tests/revit-addin/**` (xUnit hub-protocol test),
+`tests/connect-download.test.js`, `.config/dotnet-tools.json`, `package.json`
+(connect scripts only), `.gitignore` (drop SEA hub ignore), `public/downloads/`
+(small `.msi` replaces the old `.exe`).
+
+**What this changes:** the local Connect hub is now an **in-process C#
+WebSocket server** (`NovaHub`) that runs inside the Revit add-in on a background
+thread — no external `nova-hub.exe`, no Node, no Nova checkout. It speaks the
+SAME wire protocol as `scripts/connect-hub.cjs` (`hello`→`connection.established`,
+peer relay, `ping`→`pong`, `INVALID_PAIRING_TOKEN`). SEC-013 write-approval path
+is unchanged. The SEA approach (`scripts/build-connect-hub-exe.ps1`,
+`scripts/sea-config.json`, the 115MB MSI) is dropped; the new MSI is a few MB and
+ships only the add-in DLL + deps.json + `Nova.addin`. Node 22 / SEA caveats are
+now moot.
+
 ## 2026-06-05 — L0 learning validator + lesson schema (Neo) → Switch (mini-canvas) & Tank (lessons)
 
 **Branch:** `feat/learning-validator` (off develop). Not merged/pushed.

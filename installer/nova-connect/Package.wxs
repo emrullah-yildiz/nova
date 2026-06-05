@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Nova Connect MSI package authoring (WiX v5).
+
+  Approach C (in-process C# hub): the local Connect hub now runs INSIDE the Revit
+  add-in (no external nova-hub.exe, no Node). So this MSI installs ONLY:
+    * Nova.RevitAddin.dll      (the add-in, which also IS the hub)
+    * Nova.RevitAddin.deps.json (optional)
+    * Nova.addin               (the manifest, install-path resolved)
+  → a few MB, well under the 50MB git push limit.
+
+  Per-user install (Scope="perUser" => no admin / no elevation) into
+  %AppData%\Autodesk\Revit\Addins\2027\Nova\, with a WixUI_InstallDir wizard
+  whose license page shows the Terms of Service. A per-user Add/Remove Programs
+  entry is registered; uninstall removes every installed file + the manifest.
+
+  Payload paths arrive as preprocessor variables (-d) from the .wixproj:
+    AddinDll, AddinDeps, AddinManifest, LicenseRtf, AddinDepsPresent.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <Package
+      Name="Nova Connect"
+      Manufacturer="Nova"
+      Version="1.0.0"
+      UpgradeCode="6E9D2B71-4C2E-4D3B-9F7A-2C0A1B5E8D44"
+      Scope="perUser"
+      Compressed="yes">
+
+    <!-- Allow in-place upgrades: a newer version replaces the older cleanly. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Nova Connect is already installed." />
+
+    <!-- Single embedded cab; the payload lives inside the MSI. -->
+    <MediaTemplate EmbedCab="yes" />
+
+    <!--
+      Per-user Add/Remove Programs metadata. Scope="perUser" already writes the
+      ARP entry under HKCU; these refine its display.
+    -->
+    <Property Id="ARPPRODUCTICON" Value="NovaConnectIcon" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+    <Property Id="ARPHELPLINK" Value="https://hi-nova.work/" />
+    <Property Id="ARPURLINFOABOUT" Value="https://hi-nova.work/" />
+
+    <!-- ARP icon: use the installed add-in DLL (no separate icon binary). -->
+    <Icon Id="NovaConnectIcon" SourceFile="$(var.AddinDll)" />
+
+    <!--
+      Install tree: %AppData%\Autodesk\Revit\Addins\2027\
+        Nova.addin                  (manifest, points at the installed DLL)
+        Nova\
+          Nova.RevitAddin.dll       (the add-in + in-process hub)
+          Nova.RevitAddin.deps.json (optional)
+    -->
+    <StandardDirectory Id="AppDataFolder">
+      <Directory Id="AutodeskFolder" Name="Autodesk">
+        <Directory Id="RevitFolder" Name="Revit">
+          <Directory Id="AddinsFolder" Name="Addins">
+            <Directory Id="RevitVersionFolder" Name="2027">
+              <Directory Id="INSTALLFOLDER" Name="Nova" />
+            </Directory>
+          </Directory>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- The add-in DLL + its deps, in the Nova\ subfolder. -->
+    <ComponentGroup Id="NovaConnectPayload" Directory="INSTALLFOLDER">
+      <Component Id="AddinDllComponent" Guid="A1F4C9E2-7B3D-4E18-8C6A-9D2E5F0B1A77">
+        <File Id="AddinDll" Source="$(var.AddinDll)" KeyPath="yes" />
+      </Component>
+
+<?if $(var.AddinDepsPresent) = "yes" ?>
+      <Component Id="AddinDepsComponent" Guid="B2E5DA13-8C4E-4F29-9D7B-0E3F6A1C2B88">
+        <File Id="AddinDeps" Source="$(var.AddinDeps)" KeyPath="yes" />
+      </Component>
+<?endif?>
+    </ComponentGroup>
+
+    <!-- The Nova.addin manifest sits in the Addins\2027\ folder (NOT in Nova\). -->
+    <ComponentGroup Id="NovaConnectManifest" Directory="RevitVersionFolder">
+      <Component Id="AddinManifestComponent" Guid="D4A7FC35-AE60-4B4B-BF9D-205B8C3E4DAA">
+        <File Id="AddinManifest" Source="$(var.AddinManifest)" Name="Nova.addin" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="Main" Title="Nova Connect" Level="1">
+      <ComponentGroupRef Id="NovaConnectPayload" />
+      <ComponentGroupRef Id="NovaConnectManifest" />
+    </Feature>
+
+    <!--
+      WixUI_InstallDir wizard:
+        Welcome -> License (accept terms) -> InstallDir -> Verify -> Progress -> Finish.
+      WIXUI_INSTALLDIR names the editable install directory on the InstallDir page.
+      The license page shows License.rtf (the Terms of Service).
+    -->
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
+  </Package>
+</Wix>

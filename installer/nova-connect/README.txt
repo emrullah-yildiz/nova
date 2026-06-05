@@ -1,8 +1,10 @@
-Nova Connect - Revit add-in
-===========================
+Nova Connect - Revit add-in (WiX MSI installer)
+===============================================
 
 This installs the Nova Connect add-in, which lets the Nova web app read from and
-write to Autodesk Revit on your computer.
+write to Autodesk Revit on your computer. The local Connect hub runs IN-PROCESS
+inside the add-in (Approach C), so Connect works with NO Nova source checkout,
+NO Node.js, and NO separate hub executable on the machine.
 
 REQUIREMENTS
 ------------
@@ -11,43 +13,47 @@ REQUIREMENTS
 
 INSTALL
 -------
-1. Download NovaConnect-Setup.exe.
-2. Double-click NovaConnect-Setup.exe.
-3. The installer checks for Revit 2027 and warns you if it is not found.
-   It then copies the add-in into Revit's per-user Addins folder and registers it.
-4. Restart Revit 2027. Open the Add-Ins tab -> External Tools -> Nova Connect.
-5. In the Nova web app, open Connect and click Connect.
+1. Download NovaConnect-Setup.msi.
+2. Double-click it to launch the wizard:
+     Welcome -> License (accept the Terms of Service) -> Install location ->
+     Install -> Finish.
+   It is a PER-USER install and needs NO administrator rights.
+3. Restart Revit 2027. Open the Add-Ins tab -> Nova Connect panel
+   (Connect / Open Nova).
+4. In the Nova web app, open Connect and click Connect.
 
 WHERE IT INSTALLS
 -----------------
 %APPDATA%\Autodesk\Revit\Addins\2027\Nova.addin
 %APPDATA%\Autodesk\Revit\Addins\2027\Nova\Nova.RevitAddin.dll
-%LOCALAPPDATA%\Programs\Nova Connect\NovaConnect-Setup.exe
+%APPDATA%\Autodesk\Revit\Addins\2027\Nova\Nova.RevitAddin.deps.json
 
-The installer also creates a per-user Windows uninstall entry under HKCU so
-Nova Connect appears in Apps & features / installed app inventory.
+The MSI registers a per-user Add/Remove Programs (Apps & features) entry, so
+Nova Connect appears in the installed-app inventory.
 
 UNINSTALL
 ---------
-Use Windows Apps & features, or run NovaConnect-Setup.exe /uninstall, then
-restart Revit.
+Use Windows Apps & features (Add/Remove Programs), or run:
+  msiexec /x NovaConnect-Setup.msi
+then restart Revit. Uninstall removes all installed files + the manifest.
 
 MAINTAINER NOTES
 ----------------
-The downloadable installer is a single-file .exe built from
-NovaConnect.Installer.csproj. It runs as the current user, does not request
-administrator rights, and does not use cmd.exe, .bat files, or PowerShell
-execution-policy bypasses.
+The installer is a WiX v5 MSI built from NovaConnect.Installer.wixproj +
+Package.wxs. The WiX tool is pinned in .config/dotnet-tools.json (dotnet tool
+restore). The wizard uses WixUI_InstallDir; the license page shows License.rtf,
+which is generated from docs/legal/terms-of-service.md by
+scripts/build-license-rtf.ps1.
 
-Build it from the repo root with:
+Build everything from the repo root with:
   npm run build:connect-installer
 
-The outputs are:
-  public\downloads\NovaConnect-Setup.exe
-  public\downloads\NovaConnect-Setup.exe.sha256
+That builds the add-in (Release), the License RTF, then the MSI, and publishes:
+  public\downloads\NovaConnect-Setup.msi
+  public\downloads\NovaConnect-Setup.msi.sha256
 
-To Authenticode-sign during packaging, install Windows SDK signtool.exe and set:
-  NOVA_CODESIGN_THUMBPRINT=<certificate thumbprint>
+There is NO bundled hub exe: the hub runs in-process in the add-in DLL, so the
+MSI is only a few MB.
 
-Optional timestamp override:
-  NOVA_CODESIGN_TIMESTAMP_URL=<RFC3161 timestamp URL>
+Code signing (optional): set NOVA_SIGN_METHOD=trusted-signing|pfx (+ the matching
+NOVA_SIGN_* vars) to sign the add-in DLL AND the MSI. See docs/revit-addin-build.md.

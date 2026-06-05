@@ -1,13 +1,19 @@
 # Nova Connect — Self-Contained Hub Bundling Plan
 
 > Tier-3 implementation plan for the Connect/Revit lane. Architecture context:
-> [`revit-connect.md`](revit-connect.md) (see "Connection toggle and the
-> hub-bundling follow-up"). Build/runbook: [`../revit-addin-build.md`](../revit-addin-build.md).
+> [`revit-connect.md`](revit-connect.md) (see "The in-process C# hub (`NovaHub`)").
+> Build/runbook: [`../revit-addin-build.md`](../revit-addin-build.md).
 >
-> Status: **plan — not yet implemented.** Owner of the implementation:
-> **Trinity (connect-engineer)**, with one build/signing step that may pull in
-> **Link (platform)**. This doc decides the approach and hands off the work; it
-> does **not** change any add-in/installer code.
+> Status: **SUPERSEDED (2026-06-05) by Approach C — the in-process C# WebSocket
+> hub.** This doc evaluated bundling a self-contained hub *next to* the add-in
+> (Approach A: a Node SEA `nova-hub.exe`); that shipped on `feat/installer-msi-hub`
+> but produced a ~115MB MSI that broke the git push and carried Node-22/SEA
+> caveats. The accepted resolution runs the hub **in-process inside the add-in
+> DLL** (`NovaHub`) — no separate exe, no Node, no checkout — making the MSI a few
+> MB. See the dated decision "In-process C# WebSocket hub (Approach C)" in
+> [`decisions.md`](decisions.md) and the `NovaHub` section in
+> [`revit-connect.md`](revit-connect.md). The analysis below is retained for
+> context only; the Node-22 / SEA caveats it raises are now moot.
 
 ---
 

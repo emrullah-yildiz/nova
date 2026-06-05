@@ -14,9 +14,9 @@ const STYLE_ID = 'nova-connect-panel-style';
 const STORAGE_KEY = 'nova_connect_settings';
 
 // The Revit release the downloadable add-in installer targets, and where the
-// installer EXE is served (public/downloads -> dist/downloads via Vite).
+// installer MSI is served (public/downloads -> dist/downloads via Vite).
 export const REVIT_TARGET_VERSION = '2027';
-export const NOVA_CONNECT_DOWNLOAD_URL = '/downloads/NovaConnect-Setup.exe';
+export const NOVA_CONNECT_DOWNLOAD_URL = '/downloads/NovaConnect-Setup.msi';
 
 // Pure: the "Download Nova Connect" section shown at the top of the Connect
 // panel. Kept separate + exported so the download wiring (URL + Revit version
@@ -26,7 +26,7 @@ export function novaConnectDownloadMarkup(version = REVIT_TARGET_VERSION) {
     '<h3 class="ncp-download-title">Nova Connect for Revit</h3>' +
     '<p class="ncp-download-note">Requires Autodesk Revit ' + escapeHtml(version) + ' · Windows.</p>' +
     '<a class="ncp-download-btn" href="' + NOVA_CONNECT_DOWNLOAD_URL + '" download>⬇ Download Nova Connect</a>' +
-    '<p class="ncp-download-sub">The installer checks for Revit and adds the plug-in automatically.</p>' +
+    '<p class="ncp-download-sub">The installer adds the plug-in for Revit automatically (per-user, no admin needed).</p>' +
   '</div>';
 }
 

@@ -93,7 +93,7 @@ This map is also the **ownership partition** for parallel agents
 | `api/` | shared provider/feedback helpers (imported by Worker + tests) | Platform/Backend |
 | `server/` | jwks verifier, postgres persistence | Platform/Backend |
 | `integrations/revit-addin/` | C# Revit add-in | Connect/Revit |
-| `installer/nova-connect/` | C# installer | Connect/Revit |
+| `installer/nova-connect/` | WiX MSI installer (Connect add-in) | Connect/Revit |
 | `tests/` | Vitest + Playwright | QA (or each owner for their slice) |
 | `docs/` | documentation | Orchestrator (NOVA.md) / any (their spec) |
 
@@ -232,7 +232,9 @@ like the code around it. (Each links to the decision that owns the detail.)
   Stop/Copy/Retry, attachments + images, expert geometry prompt + golden examples.
 - Auto-bug-reporter (unhandled errors → GitHub issue, consented).
 - Node versioning infrastructure (`Math.Round` is the reference v1/v2).
-- Nova Connect prototype + downloadable Revit 2027 add-in installer.
+- Nova Connect prototype + downloadable Revit 2027 add-in installer (per-user WiX
+  MSI). The local hub runs **in-process** in the C# add-in (`NovaHub`) — no Node,
+  no checkout, no separate hub exe — so a clean install can Connect.
 
 **In-flight / not started:**
 - **Accounts & collaboration: Phase 0 not started** — the `src/enterprise/` domain
