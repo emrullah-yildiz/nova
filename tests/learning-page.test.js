@@ -105,6 +105,95 @@ describe('initLearning + interactivity', () => {
   });
 });
 
+describe('chapter examples — simpleExample and advancedExample', () => {
+  it('every chapter has a simpleExample and an advancedExample', () => {
+    LEARNING_CHAPTERS.forEach((ch, i) => {
+      expect(ch.simpleExample, 'chapter ' + i + ' missing simpleExample').toBeTruthy();
+      expect(ch.advancedExample, 'chapter ' + i + ' missing advancedExample').toBeTruthy();
+    });
+  });
+
+  it('every simpleExample has a non-empty title and at least 3 numbered steps', () => {
+    LEARNING_CHAPTERS.forEach((ch, i) => {
+      const ex = ch.simpleExample;
+      expect(typeof ex.title, 'chapter ' + i + ' simpleExample.title type').toBe('string');
+      expect(ex.title.length, 'chapter ' + i + ' simpleExample.title length').toBeGreaterThan(0);
+      expect(Array.isArray(ex.steps), 'chapter ' + i + ' simpleExample.steps array').toBe(true);
+      expect(ex.steps.length, 'chapter ' + i + ' simpleExample.steps count').toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  it('every advancedExample has a non-empty title and at least 3 numbered steps', () => {
+    LEARNING_CHAPTERS.forEach((ch, i) => {
+      const ex = ch.advancedExample;
+      expect(typeof ex.title, 'chapter ' + i + ' advancedExample.title type').toBe('string');
+      expect(ex.title.length, 'chapter ' + i + ' advancedExample.title length').toBeGreaterThan(0);
+      expect(Array.isArray(ex.steps), 'chapter ' + i + ' advancedExample.steps array').toBe(true);
+      expect(ex.steps.length, 'chapter ' + i + ' advancedExample.steps count').toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  it('every example has a non-empty SVG illustration', () => {
+    LEARNING_CHAPTERS.forEach((ch, i) => {
+      expect(typeof ch.simpleExample.svg, 'chapter ' + i + ' simpleExample.svg type').toBe('string');
+      expect(ch.simpleExample.svg, 'chapter ' + i + ' simpleExample.svg content').toContain('<svg');
+      expect(typeof ch.advancedExample.svg, 'chapter ' + i + ' advancedExample.svg type').toBe('string');
+      expect(ch.advancedExample.svg, 'chapter ' + i + ' advancedExample.svg content').toContain('<svg');
+    });
+  });
+
+  it('buildChapterHtml includes the "Try It" section when examples exist', () => {
+    // Use chapter 0 (Introduction) which has both examples.
+    const ch = LEARNING_CHAPTERS[0];
+    // Access the internal render via the observable: load the module and check html output.
+    // We can import buildLearningHtml and use initLearning, but the simplest test
+    // is to check the DOM after initLearning.
+    const overlay = document.createElement('div');
+    overlay.innerHTML = buildLearningHtml();
+    document.body.appendChild(overlay);
+    initLearning(overlay);
+    const content = overlay.querySelector('#learn-chapter-content');
+    expect(content.innerHTML).toContain('Try It');
+    expect(content.innerHTML).toContain('Simple');
+    expect(content.innerHTML).toContain('Advanced');
+    overlay.remove();
+    delete window.__learnGo;
+    delete window.__learnAnswer;
+  });
+
+  it('example steps appear as an ordered list in the rendered chapter', () => {
+    const overlay = document.createElement('div');
+    overlay.innerHTML = buildLearningHtml();
+    document.body.appendChild(overlay);
+    initLearning(overlay);
+    const content = overlay.querySelector('#learn-chapter-content');
+    const ol = content.querySelectorAll('.learn-example-steps');
+    expect(ol.length).toBe(2); // simple + advanced
+    ol.forEach(function (list) {
+      expect(list.querySelectorAll('li').length).toBeGreaterThanOrEqual(3);
+    });
+    overlay.remove();
+    delete window.__learnGo;
+    delete window.__learnAnswer;
+  });
+
+  it('SVG diagrams are embedded in the rendered chapter HTML', () => {
+    const overlay = document.createElement('div');
+    overlay.innerHTML = buildLearningHtml();
+    document.body.appendChild(overlay);
+    initLearning(overlay);
+    const content = overlay.querySelector('#learn-chapter-content');
+    const diagrams = content.querySelectorAll('.learn-example-diagram');
+    expect(diagrams.length).toBe(2);
+    diagrams.forEach(function (d) {
+      expect(d.innerHTML).toContain('<svg');
+    });
+    overlay.remove();
+    delete window.__learnGo;
+    delete window.__learnAnswer;
+  });
+});
+
 describe('app Nova Learning page', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
