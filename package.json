@@ -22,7 +22,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:postgres": "vitest run tests/postgres-persistence.integration.test.js",
-    "test:e2e": "node scripts/run-e2e.cjs",
+    "test:e2e": "playwright test --config=playwright.config.js",
     "migrate": "node scripts/run-migrations.mjs",
     "migrate:neon": "node scripts/migrate-neon.mjs",
     "db:migrate": "node scripts/run-migrations.mjs",

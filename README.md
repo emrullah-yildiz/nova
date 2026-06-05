@@ -72,6 +72,40 @@ npm run test:e2e
 - `scripts/connect-hub.cjs` - local Nova Connect WebSocket hub prototype
 - `tests/` - Vitest and Playwright tests
 
+## Testing
+
+Nova has two test layers. Run them locally before pushing any change.
+
+### Unit tests (Vitest)
+
+```bash
+npm run test
+```
+
+Runs all Vitest specs under `tests/`. No browser or dev server required.
+
+### E2E tests (Playwright)
+
+One-time browser setup (run once per machine):
+
+```bash
+npx playwright install chromium
+```
+
+Run the full E2E suite (starts the Vite dev server automatically):
+
+```bash
+npm run test:e2e
+```
+
+Specs live in `tests/e2e/`. The Playwright configuration is at `playwright.config.js`
+(timeout: 30 s per test, baseURL `http://localhost:5173`).
+
+CI runs `npm run test:e2e` automatically on every pull request that touches `src/`
+or `tests/`. A failing spec blocks the PR.
+
+---
+
 ## Documentation
 
 Two files are the entry points:

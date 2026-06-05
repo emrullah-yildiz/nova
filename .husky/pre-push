@@ -1,1 +1,45 @@
-npm run test
+#!/bin/sh
+# Nova pre-push hook — warn (never hard-block) when a src/ui or src/viewer file
+# has been changed but no corresponding tests/e2e/ file was also changed.
+#
+# Exit code is always 0 (warn-only). A hard block here would break non-UI PRs
+# and branches written before the spec existed.
+
+# Collect changed file names relative to upstream (fall back to HEAD diff for
+# first-push branches that have no upstream yet).
+CHANGED=$(git diff --name-only HEAD "@{upstream}" 2>/dev/null || git diff --name-only HEAD)
+
+# Extract src/ui/*.js and src/viewer/*.js paths that changed.
+UI_CHANGED=$(echo "$CHANGED" | grep -E '^src/(ui|viewer)/[^/]+\.js$' || true)
+
+if [ -z "$UI_CHANGED" ]; then
+  # Nothing in src/ui or src/viewer changed — nothing to warn about.
+  exit 0
+fi
+
+# Collect which tests/e2e/ files changed (any file in that directory).
+E2E_CHANGED=$(echo "$CHANGED" | grep -E '^tests/e2e/' || true)
+
+WARNED=0
+for src_file in $UI_CHANGED; do
+  # Derive a base name to look for a rough spec counterpart, e.g.
+  #   src/ui/node-renderer.js  → look for node-renderer in tests/e2e/
+  base=$(basename "$src_file" .js)
+  # Check whether any changed e2e file contains the base name.
+  match=$(echo "$E2E_CHANGED" | grep -F "$base" || true)
+  if [ -z "$match" ]; then
+    echo "WARNING [pre-push] No tests/e2e/ spec found for changed file: $src_file"
+    WARNED=1
+  fi
+done
+
+if [ "$WARNED" = "1" ]; then
+  echo ""
+  echo "  Add or update a Playwright spec in tests/e2e/ that covers the changed"
+  echo "  UI/viewer file(s) before merging. This push will proceed, but the CI"
+  echo "  E2E job will fail if the spec does not exist."
+  echo ""
+fi
+
+# Always exit 0 — this is a warning, not a block.
+exit 0
