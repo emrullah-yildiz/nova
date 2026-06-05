@@ -220,7 +220,7 @@ describe('Custom.Code → Custom.CodeBlock rename + alias + versioning', () => {
     expect(cb).toBeTruthy();
     expect(cb.name).toBe('Custom.CodeBlock');
     expect(getDefVersion(cb)).toBe(2);
-    expect(cb.metadata.language).toBe('python');
+    expect(cb.metadata.language).toBe('codeblock');
   });
 
   it('custom-code / Custom.Code resolve to the CodeBlock def (alias)', () => {
@@ -284,7 +284,7 @@ describe('F-001: metadata flows into the legacy NODE_TYPE_MAP def', () => {
     const cb = NODE_TYPE_MAP['Custom.CodeBlock'];
     expect(cb).toBeTruthy();
     expect(cb.metadata).toBeTruthy();
-    expect(cb.metadata.language).toBe('python');
+    expect(cb.metadata.language).toBe('codeblock');
   });
 
   it('isDeprecatedType works against the LIVE Custom.Formula def (not just the registry)', () => {

@@ -193,8 +193,8 @@ describe('Series preset + blank drop', () => {
     installCodeBlockNode(app);
   });
 
-  it('addSeriesCodeBlock drops a Custom.CodeBlock pre-filled with 0..10', () => {
-    const nd = app.addSeriesCodeBlock(0, 0);
+  it('addCodeBlockPreset drops a Custom.CodeBlock pre-filled with the series template', () => {
+    const nd = app.addCodeBlockPreset('nums = 0..10', 0, 0);
     expect(nd.type).toBe('Custom.CodeBlock');
     expect(nd.controlValues.code).toBe('nums = 0..10');
     // it desugars to the expected number list
