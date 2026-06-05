@@ -32,10 +32,19 @@
 //   codeblock-simple.png      Code Block › Simple example
 //   codeblock-advanced.png    Code Block › Advanced example
 
+import { createMiniCanvas } from './mini-canvas.js';
+import { exercises } from './learning-exercises.js';
+
 // ── Module state ──────────────────────────────────────────────────────────────
 let _learnChapter = 0;
 // _learnDone[chIdx][qIdx] = true once that quiz question is answered correctly
 let _learnDone = {};
+// _exerciseDone[chIdx] = true once the exercise for that chapter is solved
+let _exerciseDone = {};
+// _miniCanvasInited[chIdx] = true once createMiniCanvas has been called for that chapter
+let _miniCanvasInited = {};
+// Reference to the active overlay (set in initLearning, used by onSolve callbacks)
+let _activeOverlay = null;
 
 // ── Chapter data ──────────────────────────────────────────────────────────────
 export const LEARNING_CHAPTERS = [
@@ -1011,6 +1020,15 @@ function buildChapterHtml(ch, chIdx) {
     html += '</div>';
   }
 
+  // ── Exercise section (mini-canvas) ──────────────────────────────────────────
+  if (exercises[chIdx]) {
+    html += '<div class="learn-exercise-section" id="learn-exercise-' + chIdx + '">'
+      + '<h2 class="learn-section-title">Exercise</h2>'
+      + '<p class="learn-section-body">Wire the missing connection to complete the graph, then click Submit to check your answer.</p>'
+      + '<div class="learn-exercise-canvas" id="learn-exercise-canvas-' + chIdx + '"></div>'
+      + '</div>';
+  }
+
   // Navigation buttons
   const allDone = _isChapterDone(chIdx);
   const isFirst = chIdx === 0;
@@ -1043,9 +1061,17 @@ function buildChapterHtml(ch, chIdx) {
 
 function _isChapterDone(chIdx) {
   const ch = LEARNING_CHAPTERS[chIdx];
-  if (!ch || !ch.quiz || ch.quiz.length === 0) return true;
-  const done = _learnDone[chIdx] || {};
-  return ch.quiz.every(function (_, qi) { return done[qi] === true; });
+  // Quiz must be complete (if present).
+  if (ch && ch.quiz && ch.quiz.length > 0) {
+    const done = _learnDone[chIdx] || {};
+    const quizDone = ch.quiz.every(function (_, qi) { return done[qi] === true; });
+    if (!quizDone) return false;
+  }
+  // Exercise must be solved (if one exists for this chapter).
+  if (exercises[chIdx]) {
+    if (!_exerciseDone[chIdx]) return false;
+  }
+  return true;
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
@@ -1076,6 +1102,9 @@ export function initLearning(overlay) {
   // Reset state for fresh open
   _learnChapter = 0;
   _learnDone = {};
+  _exerciseDone = {};
+  _miniCanvasInited = {};
+  _activeOverlay = overlay;
 
   // Expose global handler functions that onclick attributes reference.
   window.__learnGo = function (idx) {
@@ -1121,7 +1150,45 @@ function _render(overlay) {
   const nav = overlay.querySelector('#learn-nav');
   const content = overlay.querySelector('#learn-chapter-content');
   if (nav) nav.innerHTML = buildNavHtml(_learnChapter);
-  if (content) content.innerHTML = buildChapterHtml(LEARNING_CHAPTERS[_learnChapter], _learnChapter);
+  if (content) {
+    content.innerHTML = buildChapterHtml(LEARNING_CHAPTERS[_learnChapter], _learnChapter);
+    _initExerciseForChapter(_learnChapter, overlay);
+  }
+}
+
+/**
+ * Lazy-initialize the mini-canvas exercise for a chapter if not already done.
+ * Called after the chapter HTML has been inserted into the DOM.
+ * @param {number}  chIdx
+ * @param {Element} overlay
+ */
+function _initExerciseForChapter(chIdx, overlay) {
+  if (_miniCanvasInited[chIdx]) return;
+  const exercise = exercises[chIdx];
+  if (!exercise) return;
+
+  const canvasContainer = overlay.querySelector('#learn-exercise-canvas-' + chIdx);
+  if (!canvasContainer) return;
+
+  _miniCanvasInited[chIdx] = true;
+
+  createMiniCanvas(canvasContainer, exercise, {
+    onSolve(passed) {
+      if (passed) {
+        _exerciseDone[chIdx] = true;
+        // Enable the Next chapter button by re-rendering the nav section.
+        const ov = _activeOverlay || overlay;
+        const nextBtn = ov.querySelector('.learn-nav-btn--next');
+        if (nextBtn && _isChapterDone(chIdx)) {
+          nextBtn.removeAttribute('disabled');
+          nextBtn.removeAttribute('title');
+        }
+        // Also refresh the nav sidebar done-state.
+        const navEl = ov.querySelector('#learn-nav');
+        if (navEl) navEl.innerHTML = buildNavHtml(chIdx);
+      }
+    }
+  });
 }
 
 /**

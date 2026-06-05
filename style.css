@@ -2284,6 +2284,29 @@ input[type="number"] {
 .landing-learn-link svg { width: 16px; height: 16px; }
 .landing-learn-link:hover { color: var(--accent-blue, #89b4fa); }
 
+/* ── Mini-canvas exercise component ── */
+#learning-overlay .learn-exercise-section { margin-top: 40px; padding-top: 28px; border-top: 1px solid var(--border-color, #313244); }
+.mini-canvas { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+.mini-canvas-area { position: relative; background: #11111b; border: 1px solid var(--border-color, #313244); border-radius: 8px; overflow: auto; cursor: default; user-select: none; }
+.mini-canvas-node { position: absolute; background: #313244; border: 1.5px solid #45475a; border-radius: 6px; box-sizing: border-box; font-size: 11px; color: var(--text-primary, #cdd6f4); }
+.mini-canvas-node-header { background: #3b3c52; border-bottom: 1px solid #45475a; border-radius: 5px 5px 0 0; padding: 4px 8px; font-size: 11px; font-weight: 600; color: var(--text-primary, #cdd6f4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini-canvas-ports { position: relative; }
+.mini-canvas-port { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #585b70; border: 2px solid #89b4fa; cursor: pointer; box-sizing: border-box; display: flex; align-items: center; }
+.mini-canvas-port:hover { border-color: #b4d0ff; background: #6c7086; }
+.mini-canvas-port.input { transform: translateY(-50%); }
+.mini-canvas-port.output { position: absolute; transform: translateY(-50%); }
+.mini-canvas-port.unwired { background: transparent; border-color: #585b70; }
+.mini-canvas-port.unwired:hover { border-color: #89b4fa; }
+.mini-canvas-port.pending { background: #89b4fa; border-color: #b4d0ff; box-shadow: 0 0 0 3px rgba(137,180,250,0.35); }
+.mini-canvas-port-label { position: absolute; font-size: 9.5px; color: var(--text-muted, #6c7086); white-space: nowrap; pointer-events: none; line-height: 1; }
+.mini-canvas-port-label--input { left: 14px; top: 50%; transform: translateY(-50%); }
+.mini-canvas-port-label--output { right: 14px; top: 50%; transform: translateY(-50%); }
+.mini-canvas-submit { align-self: flex-start; font-size: 13px; font-weight: 700; padding: 9px 22px; border-radius: 8px; cursor: pointer; background: var(--accent-blue, #89b4fa); color: #11111b; border: none; transition: filter 0.15s; }
+.mini-canvas-submit:hover { filter: brightness(1.1); }
+.mini-canvas-success { padding: 10px 14px; border-radius: 8px; background: rgba(166,227,161,0.15); border: 1px solid var(--accent-green, #a6e3a1); color: var(--accent-green, #a6e3a1); font-size: 13px; font-weight: 600; }
+.mini-canvas-error { padding: 10px 14px; border-radius: 8px; background: rgba(243,139,168,0.12); border: 1px solid var(--accent-red, #f38ba8); color: var(--accent-red, #f38ba8); font-size: 13px; font-weight: 600; }
+.mini-canvas-pending-wire { pointer-events: none; }
+
 /* ── Email verification banner (dismissible bottom pill) ── */
 .verify-banner { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; align-items: center; gap: 12px; padding: 10px 14px; font-size: 13px; background: #f9b34a; color: #2a1f00; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.45); max-width: 92vw; }
 .verify-banner.ok { background: var(--accent-green, #a6e3a1); color: #0b2010; }
