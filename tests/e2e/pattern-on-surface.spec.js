@@ -59,21 +59,20 @@ test.describe('Pattern on Surface — AC-1, AC-5, AC-9', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // AC-5: Panel.ByPoints node exists in the Patterns category
+  // AC-5: Panel.Points node exists in the Patterns category
+  // (Panel.ByPoints was removed in TICK-004 PM feedback; replaced by Panel.Points
+  //  which extracts corner point arrays from panel objects)
   // ─────────────────────────────────────────────────────────────────────────────
-  test('AC-5: Panel.ByPoints node exists in the Patterns category', async ({ page }) => {
+  test('AC-5: Panel.Points node exists in the Patterns category', async ({ page }) => {
     await waitForApp(page);
 
     const result = await page.evaluate(() => {
-      // NODE_TYPE_MAP is on window.NodeFlow. Category is stored as .categoryId
-      // (toLegacyNodeDefinition omits .category; coreNodes.js stamps .categoryId).
       const map = window.NodeFlow && window.NodeFlow.NODE_TYPE_MAP;
-      const def = map && map['Panel.ByPoints'];
+      const def = map && map['Panel.Points'];
       if (def) {
         return { exists: true, category: def.categoryId || def.category || null };
       }
-      // Fallback: add the node and check the registered definition.
-      const nd = window.app.addNodeToCanvas('Panel.ByPoints', 300, 200);
+      const nd = window.app.addNodeToCanvas('Panel.Points', 300, 200);
       if (!nd) return { exists: false, category: null };
       const nodeInList = window.app.nodes.find(n => n.id === nd.id);
       if (!nodeInList) return { exists: false, category: null };
@@ -88,13 +87,12 @@ test.describe('Pattern on Surface — AC-1, AC-5, AC-9', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // AC-5: Panel.ByPoints returns 16 meshes for 16 panel inputs
+  // AC-5: Panel.Points returns 16 corner-point arrays for 16 panel inputs
   // ─────────────────────────────────────────────────────────────────────────────
-  test('AC-5: Panel.ByPoints returns 16 quad meshes when fed 16 panel objects', async ({ page }) => {
+  test('AC-5: Panel.Points returns 16 corner-point arrays when fed 16 panel objects', async ({ page }) => {
     await waitForApp(page);
 
     const result = await page.evaluate(() => {
-      // Produce 16 panel objects via kernel (curved 4×4 grid).
       const surface = window.Geo.surfaceByPatch([
         new window.Geo.Point3(0, 0, 0),
         new window.Geo.Point3(10, 0, 0),
@@ -102,29 +100,29 @@ test.describe('Pattern on Surface — AC-1, AC-5, AC-9', () => {
         new window.Geo.Point3(0, 10, 2)
       ]);
       const panels = window.Geo.facadePanelsOnSurface(surface, 4, 4);
-      if (!panels || panels.length === 0) return { isArray: false, count: -1, firstHasVertices: false, reason: 'no panels' };
+      if (!panels || panels.length === 0) return { isArray: false, count: -1, firstHasPoints: false, reason: 'no panels' };
 
-      // Feed panels directly to Panel.ByPoints.execute — same as the engine does.
       const map = window.NodeFlow && window.NodeFlow.NODE_TYPE_MAP;
-      const def = map && map['Panel.ByPoints'];
+      const def = map && map['Panel.Points'];
       if (!def || typeof def.execute !== 'function') {
-        return { isArray: false, count: -1, firstHasVertices: false, reason: 'no def' };
+        return { isArray: false, count: -1, firstHasPoints: false, reason: 'no def' };
       }
-      const out = def.execute({}, { panels }, {});
-      if (!out || !Array.isArray(out.meshes)) {
-        return { isArray: false, count: -1, firstHasVertices: false, reason: 'no meshes' };
+      // Panel.Points input port is 'panel' (singular); returns { points: [...] }
+      const out = def.execute({}, { panel: panels }, {});
+      if (!out || !Array.isArray(out.points)) {
+        return { isArray: false, count: -1, firstHasPoints: false, reason: 'no points output' };
       }
-      const first = out.meshes[0];
+      const first = out.points[0];
       return {
-        isArray:          true,
-        count:            out.meshes.length,
-        firstHasVertices: !!(first && Array.isArray(first.vertices) && first.vertices.length >= 3)
+        isArray:       true,
+        count:         out.points.length,
+        firstHasPoints: Array.isArray(first) && first.length === 4
       };
     });
 
     expect(result.isArray).toBe(true);
     expect(result.count).toBe(16);
-    expect(result.firstHasVertices).toBe(true);
+    expect(result.firstHasPoints).toBe(true);
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -132,7 +130,7 @@ test.describe('Pattern on Surface — AC-1, AC-5, AC-9', () => {
   // List.Create._dynInputIds is set so the engine sees all 4 boundary points.
   // runGraph() is awaited so the snapshot is committed before reading results.
   // ─────────────────────────────────────────────────────────────────────────────
-  test('AC-9: full graph Surface.ByPatch → Pattern.FacadePanels → Panel.ByPoints → Output.Watch shows 16 items', async ({ page }) => {
+  test('AC-9: full graph Surface.ByPatch → Pattern.FacadePanels → Panel.Points → Output.Watch shows 16 items', async ({ page }) => {
     await waitForApp(page);
 
     const result = await page.evaluate(async () => {
@@ -152,32 +150,27 @@ test.describe('Pattern on Surface — AC-1, AC-5, AC-9', () => {
       const facade     = window.app.addNodeToCanvas('Pattern.FacadePanels', 720, 100);
       facade.controlValues.uPanels = '4';
       facade.controlValues.vPanels = '4';
-      const panelByPts = window.app.addNodeToCanvas('Panel.ByPoints',       960, 100);
+      // Panel.ByPoints was removed; Panel.Points extracts corner-point arrays
+      const panelPts   = window.app.addNodeToCanvas('Panel.Points',         960, 100);
       const watch      = window.app.addNodeToCanvas('Output.Watch',         1200, 100);
 
-      // List.Create is a dynamic-input node. addNodeToCanvas() does not set
-      // _dynInputIds, so only item0/item1 (the two default ports) would resolve.
-      // Set it explicitly so all 4 boundary-point wires are seen by the engine.
       list._dynInputIds = ['item0', 'item1', 'item2', 'item3'];
 
-      window.app.addWire(p00.id, 'point',   list.id,       'item0');
-      window.app.addWire(p10.id, 'point',   list.id,       'item1');
-      window.app.addWire(p11.id, 'point',   list.id,       'item2');
-      window.app.addWire(p01.id, 'point',   list.id,       'item3');
-      window.app.addWire(list.id,       'list',    surf.id,       'boundary');
-      window.app.addWire(surf.id,       'surface', facade.id,     'mesh');
-      window.app.addWire(facade.id,     'panels',  panelByPts.id, 'panels');
-      window.app.addWire(panelByPts.id, 'meshes',  watch.id,      'value');
+      window.app.addWire(p00.id, 'point',   list.id,      'item0');
+      window.app.addWire(p10.id, 'point',   list.id,      'item1');
+      window.app.addWire(p11.id, 'point',   list.id,      'item2');
+      window.app.addWire(p01.id, 'point',   list.id,      'item3');
+      window.app.addWire(list.id,      'list',    surf.id,      'boundary');
+      window.app.addWire(surf.id,      'surface', facade.id,    'mesh');
+      window.app.addWire(facade.id,    'panels',  panelPts.id,  'panel');
+      window.app.addWire(panelPts.id,  'points',  watch.id,     'value');
 
-      // runGraph() is async — await it so _hasRun = true and _lastRunValue is set.
       await window.app.runGraph();
 
-      // After runGraph, _isRunningGraph = false and _hasRun = true.
-      // computeNodeValue returns getLastRunNodeValue(pbpNode) = _lastRunValue.
-      const pbpNode = window.app.nodes.find(n => n.id === panelByPts.id);
-      const meshes  = window.app.computeNodeValue(pbpNode);
+      const ppNode = window.app.nodes.find(n => n.id === panelPts.id);
+      const pts    = window.app.computeNodeValue(ppNode);
       return {
-        count: Array.isArray(meshes) ? meshes.length : -1
+        count: Array.isArray(pts) ? pts.length : -1
       };
     });
 
