@@ -274,6 +274,85 @@ export const Viewer3D = {
     this.addPoints(points, color || 0x89b4fa, spacing * 0.15);
   },
 
+  // addPanelObjects — renders a panel-object list as independent quad meshes.
+  // Each panel in the list has the shape { points: Point[], frame: Plane }.
+  // A separate THREE.Mesh is created per panel so that geo-selector.js can
+  // hit-test and highlight individual panels (AC-3, AC-4).
+  //
+  // Coordinate system note: Nova geometry uses [x, y, z] where Y is the
+  // horizontal axis and Z is vertical (same as addMesh / addPoints above).
+  // Three.js uses Y-up, so we swap Y and Z when setting vertex positions.
+  //
+  // Returns the array of Mesh objects added (used by geo-selector to build
+  // per-panel scene items).
+  addPanelObjects(panels, color) {
+    if (!this.scene || !panels || panels.length === 0) return [];
+    // Use the accent-green colour (#a6e3a1) to match STYLE.md selection accent.
+    // This is also NovaPalette3D.union, kept in sync.
+    color = (color !== undefined) ? color : 0xa6e3a1;
+
+    var addedMeshes = [];
+
+    panels.forEach(function(panel, index) {
+      if (!panel || !Array.isArray(panel.points) || panel.points.length < 3) return;
+
+      var pts = panel.points;
+      // Validate all corner points are finite
+      var corners = pts.slice(0, 4).map(function(p) {
+        var x = Number(p && p.x !== undefined ? p.x : (Array.isArray(p) ? p[0] : 0));
+        var y = Number(p && p.y !== undefined ? p.y : (Array.isArray(p) ? p[1] : 0));
+        var z = Number(p && p.z !== undefined ? p.z : (Array.isArray(p) ? p[2] : 0));
+        return { x: x, y: y, z: z };
+      });
+      if (corners.some(function(c) { return !isFinite(c.x) || !isFinite(c.y) || !isFinite(c.z); })) return;
+
+      // Build a quad (two triangles) from the 4 corners.
+      // Winding order: 0-1-2 and 0-2-3 (counter-clockwise when viewed from normal side).
+      // Three.js coord: x→x, y(Nova)→z(Three), z(Nova)→y(Three)  [Y/Z swap]
+      var geo = new THREE.BufferGeometry();
+      // prettier-ignore
+      var verts = new Float32Array([
+        corners[0].x, corners[0].z, corners[0].y,
+        corners[1].x, corners[1].z, corners[1].y,
+        corners[2].x, corners[2].z, corners[2].y,
+        corners[3].x, corners[3].z, corners[3].y
+      ]);
+      geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+      geo.setIndex([0, 1, 2, 0, 2, 3]);
+      geo.computeVertexNormals();
+
+      var mat = new THREE.MeshPhongMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.85,
+        side: THREE.DoubleSide,
+        shininess: 18,
+        specular: 0x252538
+      });
+
+      var meshObj = new THREE.Mesh(geo, mat);
+      // Tag with panelId so hit-testing in geo-selector can identify which
+      // specific panel was hovered / clicked.
+      meshObj.userData.panelId = index;
+      meshObj.userData.isPanelMesh = true;
+
+      addedMeshes.push(meshObj);
+    });
+
+    // Update the scene object counter so T04a's Playwright spec can assert
+    // the count of distinct panel meshes: window._novaSceneObjectCount.
+    // Also mirror the count on the canvas wrapper element as data-panel-count.
+    var totalPanels = addedMeshes.length;
+    if (typeof window !== 'undefined') {
+      window._novaSceneObjectCount = totalPanels;
+      // Find the canvas wrapper and stamp data-panel-count on it
+      var wrapper = this.renderer && this.renderer.domElement && this.renderer.domElement.parentElement;
+      if (wrapper) wrapper.setAttribute('data-panel-count', String(totalPanels));
+    }
+
+    return addedMeshes;
+  },
+
   loadGLTF(url, onDone) {
     if (!this.scene) return;
     const loader = new THREE.GLTFLoader();
