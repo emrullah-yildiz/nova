@@ -15,10 +15,13 @@
 //   0..10..2     start..end..STEP                → [0,2,4,6,8,10]
 //   0..10..#5    start..end..#COUNT              → 5 evenly spaced incl. ends
 //                                                   → [0,2.5,5,7.5,10]
-//   0..#5..2     start..#COUNT..step             → [0,2,4,6,8]
+//   0..#5..2     start..#COUNT..end              → 5 evenly spaced from 0 to 2
+//                                                   → [0,0.5,1,1.5,2]
 //
 // Rule: `#` prefixes a COUNT token; a plain number is end-or-step by POSITION
 // (2nd token = end, 3rd token = step — unless `#` flips the 2nd into a count).
+// When mark2='#': A..#N..B means N evenly-spaced values from A to B (B is end,
+// not step). This matches the symmetric pattern of A..B..#N (B is end, #N count).
 //
 // Only `..` expressions whose operands are numeric literals (optionally signed,
 // optionally `#`-prefixed) are transformed; everything else in the code is left
@@ -100,12 +103,11 @@ export function desugarSeries(code) {
     }
     // Three-token form: A..B..C
     if (mark2 === '#') {
-      // start..#count..step → count values from start, stepping by step.
-      const count = num(v2);
-      const step = num(v3);
-      const list = [];
-      for (let i = 0; i < count; i++) list.push(round(start + step * i));
-      return toLiteral(list);
+      // start..#count..end → count values evenly spaced from start to end (inclusive).
+      // Symmetric with start..end..#count: in both cases the non-# numbers are
+      // start and end, and #count controls how many steps. A user writing
+      // 1..#2..10 expects [1, 10] — two values from 1 to 10 — not [1, 11].
+      return toLiteral(buildList(start, { end: num(v3), count: num(v2) }));
     }
     if (mark3 === '#') {
       // start..end..#count → count values evenly spaced incl. ends.

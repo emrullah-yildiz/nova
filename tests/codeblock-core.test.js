@@ -98,8 +98,10 @@ describe('desugarSeries — four forms, end inclusive', () => {
     expect(desugarSeries('n = 0..10..#5')).toBe('n = [0, 2.5, 5, 7.5, 10]');
   });
 
-  it('0..#5..2 → start, count, step', () => {
-    expect(desugarSeries('n = 0..#5..2')).toBe('n = [0, 2, 4, 6, 8]');
+  it('0..#5..2 → start, count, end: 5 evenly spaced from 0 to 2', () => {
+    // After fix: A..#N..B means N evenly-spaced values from A to B (B is end).
+    // 0..#5..2 → [0, 0.5, 1, 1.5, 2]  (5 evenly spaced from 0 to 2 inclusive)
+    expect(desugarSeries('n = 0..#5..2')).toBe('n = [0, 0.5, 1, 1.5, 2]');
   });
 
   it('negative step counts down, end inclusive', () => {
@@ -305,6 +307,7 @@ describe('F-002: desugarSeries leaves Python comments untouched', () => {
 
   it('still desugars the `..#count` series marker (the # there is NOT a comment)', () => {
     expect(desugarSeries('0..10..#5')).toBe('[0, 2.5, 5, 7.5, 10]');
-    expect(desugarSeries('0..#5..2')).toBe('[0, 2, 4, 6, 8]');
+    // After fix: 0..#5..2 means "5 evenly spaced from 0 to 2" (2 is END, not step)
+    expect(desugarSeries('0..#5..2')).toBe('[0, 0.5, 1, 1.5, 2]');
   });
 });
