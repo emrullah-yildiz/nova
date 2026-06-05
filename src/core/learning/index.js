@@ -7,6 +7,7 @@
 
 import { validateChecks } from './validate-lesson.js';
 import { validateLessonShape, collectLessonChecks } from './lesson-schema.js';
+import { beginnerLessons } from './lessons/beginner.js';
 
 export {
   validateChecks,
@@ -23,8 +24,6 @@ export {
 } from './lesson-schema.js';
 
 // ── Lesson registry / manifest hook ──────────────────────────────────────────
-// Empty for now. Tank adds lessons via registerLesson(...) from the manifest.
-
 const _lessons = new Map();
 
 /**
@@ -42,6 +41,14 @@ export function registerLesson(lesson) {
   }
   _lessons.set(lesson.id, lesson);
   return lesson;
+}
+
+/** Register shipped lessons. Idempotent so tests/tools can rebuild the manifest. */
+export function registerBuiltInLessons() {
+  beginnerLessons.forEach((lesson) => {
+    if (!_lessons.has(lesson.id)) registerLesson(lesson);
+  });
+  return listLessons();
 }
 
 /** @returns {Array<import('./lesson-schema.js').Lesson>} sorted by track then order */
@@ -78,3 +85,5 @@ export function verifyLessonSolution(lesson, options = {}) {
   );
   return validateChecks(solution, checks, options);
 }
+
+registerBuiltInLessons();
