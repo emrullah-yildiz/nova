@@ -305,3 +305,4 @@ If two of these ever disagree, NOVA.md + decisions.md win; fix the others.
 - Think that multiple agents are working together and everything should be documented so that another agent can continue to the work from where it is left. 
 - Every new node is tested like a real user, meaningful results and usable actions.
 - The learning system must be as detailed and interactive as Dynamo Primer (https://primer2.dynamobim.org): each lesson has concept explanation, step-by-step exercises, and at least one interactive question the user must answer correctly before advancing.
+- Every sample file of nodes will be checked carefully. The agents will check not only if there is an output but also if the output is usable for another nodes input and if the output appears correctly when the sampel file is run. 
