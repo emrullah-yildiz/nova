@@ -1,7 +1,7 @@
 ---
 id: TICK-004
 title: Pattern nodes on surface — per-cell points + PanelPlane output; Panel.Points extractor; VoronoiMesh fix
-status: in-progress
+status: cancelled
 priority: high
 type: feature
 sprint: 2026-06-05
