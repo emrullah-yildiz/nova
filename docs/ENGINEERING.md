@@ -204,6 +204,14 @@ In the **same branch** as the code:
 
 The canonical end-to-end gate for every task. Tick it.
 
+### Before you start — ticket gate
+Every non-trivial task originates from a ticket in [`tickets/INDEX.md`](tickets/INDEX.md).
+
+- [ ] Locate the parent ticket (`docs/tickets/TICK-NNN.md`) from your task brief.
+- [ ] Read its **Acceptance Criteria** section — these are what "done" means.
+- [ ] Read its **Testing gate** — know which AC require E2E, unit tests, or manual verification.
+- [ ] Ticket status must be 🔵 ready (PM confirmed AC). If it's ⬜ draft, stop — wait for PM confirmation.
+
 ### Start
 - [ ] Read [`NOVA.md`](NOVA.md) and confirm the task fits the big picture.
 - [ ] Read [`agent-workboard.md`](agent-workboard.md); confirm your owned paths
@@ -245,17 +253,26 @@ The canonical end-to-end gate for every task. Tick it.
 - [ ] Ran the testing ladder (§4) appropriate to the risk; recorded results and
       anything skipped.
 
+### Acceptance criteria sign-off
+For each AC in the parent ticket:
+- [ ] Check it off (`- [x]`) in `docs/tickets/TICK-NNN.md` with a note: test file + line, or "manual browser: YYYY-MM-DD".
+- [ ] The Stop hook will block finishing if any `- [ ]` remains in the ticket file.
+- [ ] UI changes: confirm at least one `tests/e2e/*.spec.js` covers the E2E-gated ACs.
+
 ### Commit & end
 - [ ] Stage only intended files; commit with `type: short task summary`.
 - [ ] `git switch develop` → `git merge --no-ff … ` → `git branch -d …` →
       `git push origin develop`.
 - [ ] Release your work-board claim.
-- [ ] Final report: files changed, validation run, known gaps, branch/merge status.
+- [ ] Update `docs/tickets/INDEX.md` status (🟡 in-progress → ✅ done when all AC checked).
+- [ ] Final report: files changed, validation run, AC verified, known gaps, branch/merge status.
 
 ### Merge blockers — do **not** merge if
-- Required checks fail.
-- The PR did not get its mandatory security pass (see Code & security), or it
-  introduced an unresolved `critical`/`high` security ticket.
+- Required checks fail (lint, tests, build).
+- The parent ticket has unchecked `- [ ]` AC items — the Stop hook enforces this.
+- UI changes have no Playwright E2E spec covering the E2E-gated ACs.
+- Oracle has not issued `VERDICT: APPROVE`.
+- The PR did not get its mandatory security pass, or introduced an unresolved `critical`/`high` SEC ticket.
 - Docs contradict implemented behavior (or NOVA.md is now stale).
 - A risky behavior change has no test or explicit reason.
 - Secrets or generated artifacts are present.
