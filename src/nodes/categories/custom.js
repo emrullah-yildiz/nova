@@ -50,7 +50,7 @@ const CUSTOM_CODEBLOCK_V1 = {
   name: 'Custom.Code',
   category: 'custom',
   subGroup: 'Custom',
-  icon: '{ }',
+  icon: '{}',
   version: 1,
   description: 'A JavaScript code block that takes a single input (named input0) and returns one value. The Code control is the body of an anonymous function, so it must contain an explicit return statement.',
   inputs: [
@@ -92,7 +92,7 @@ const CUSTOM_CODEBLOCK_DEF = {
   name: 'Custom.CodeBlock',
   category: 'custom',
   subGroup: 'Custom',
-  icon: '{ }',
+  icon: '{}',
   version: 2,
   aliases: ['custom-codeblock', 'custom-code', 'Custom.Code'],
   priorVersions: [CUSTOM_CODEBLOCK_V1],
