@@ -254,8 +254,17 @@ export function selectionModeClick(item) {
 }
 
 /**
- * Confirm the selection. Calls onApprove with the list of selected item labels,
+ * Confirm the selection. Calls onApprove with the list of selected scene items,
  * then deactivates.
+ *
+ * The callback receives: (items: SceneItem[]) — full scene-item objects, each with
+ *   { id, nodeId, varName, label, group (THREE.Group), visible, selected }
+ *
+ * The group.userData.label is the human-readable name (e.g. "Box.ByCenterWidthDepthHeight (node-1)").
+ * The caller (node-renderer.js _activateNodeSelection) stores items for downstream use.
+ * NOTE: TICK-002 AC-9 requires the selection output to carry geometry objects, not
+ * bare string labels. The node-renderer.js onApprove handler must be updated to store
+ * geometry references alongside labels — see T02a task brief for the full fix.
  */
 export function approveSelection() {
   if (!_state.active) return;

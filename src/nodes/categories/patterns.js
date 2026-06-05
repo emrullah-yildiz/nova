@@ -706,7 +706,7 @@ export const patternsNodes = [
     subGroup: 'Panels',
     icon: '▦',
     aliases: ['pat-facade-panels'],
-    description: 'Divides a surface into a U×V grid of rectangular facade panels. When a curved Surface is wired in, corners are projected onto the actual surface so each panel sits on it. Returns a list of panel objects — each with corner points and an orientation frame — ready for Panel.ByPoints or Pattern.PanelFrames.',
+    description: 'Divides a surface into a U×V grid of rectangular facade panels. When a curved Surface is wired in, corners are projected onto the actual surface so each panel sits on it. Returns a list of panel objects — each with corner points and an orientation frame — ready for Panel.Points or Pattern.PanelPlane.',
     inputs: [
       { id: 'mesh', name: 'Surface', type: 'any', description: 'Surface or surface mesh to panelize. Accepts Surface.ByPatch output (curved surface) or a flat mesh.' },
       { id: 'uPanels', name: 'U Panels', type: 'number', description: 'Number of panels along U' },
@@ -739,7 +739,7 @@ export const patternsNodes = [
       ],
       outputs: [{ name: 'Panels', description: 'List of panel objects (points + frame)' }],
       example: {
-        title: '4×4 panels on a curved surface — 16 panel objects ready for Panel.ByPoints',
+        title: '4×4 panels on a curved surface — 16 panel objects, extract corner points with Panel.Points',
         nodes: [
           { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
           { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 10, y: 0, z: 0 } },
@@ -750,7 +750,7 @@ export const patternsNodes = [
           { type: 'Input.Integer', x: 460, y: 230, controls: { val: 4 } },
           { type: 'Input.Integer', x: 460, y: 300, controls: { val: 4 } },
           { type: 'Pattern.FacadePanels', x: 700, y: 170 },
-          { type: 'Panel.ByPoints', x: 940, y: 170 },
+          { type: 'Panel.Points', x: 940, y: 170 },
           { type: 'Output.Watch', x: 1140, y: 170 }
         ],
         wires: [
@@ -762,8 +762,8 @@ export const patternsNodes = [
           [5, 'surface', 8, 'mesh'],
           [6, 'value', 8, 'uPanels'],
           [7, 'value', 8, 'vPanels'],
-          [8, 'panels', 9, 'panels'],
-          [9, 'meshes', 10, 'value']
+          [8, 'panels', 9, 'panel'],
+          [9, 'points', 10, 'value']
         ]
       },
       sampleCode: '{{panels}} = Geo.facadePanelsOnSurface({{mesh}}, {{uPanels}}, {{vPanels}})'
@@ -771,54 +771,53 @@ export const patternsNodes = [
   },
 
   {
-    type: 'Pattern.PanelFrames',
-    name: 'Pattern.PanelFrames',
+    type: 'Pattern.PanelPlane',
+    name: 'Pattern.PanelPlane',
     category: 'patterns',
     subGroup: 'Panels',
     icon: '⌖',
-    aliases: ['pat-panel-frames'],
-    description: 'Recovers a per-panel orientation frame from a list of panel meshes (e.g. from Pattern.FacadePanels). Each frame is a plane whose origin is the panel centroid, whose normal is the area-weighted (Newell) panel normal, and whose in-plane axes are orthonormal — the SAME plane shape Geometry.Orient consumes, so a panel family, mullion or box drops flat onto every panel.',
+    aliases: ['pat-panel-plane', 'pat-panel-frames'],
+    description: 'Returns the orientation plane for each panel in a list. Each plane has its origin at the panel centroid, its normal equal to the area-weighted (Newell) panel normal, and orthonormal in-plane axes — the SAME plane shape Geometry.Orient consumes, so a panel family, mullion or box drops flat onto every panel.',
     inputs: [
       { id: 'panels', name: 'Panels', type: 'list', description: 'List of panel meshes (quad/polygon meshes)' }
     ],
     outputs: [
-      { id: 'frames', name: 'Frames', type: 'list', description: 'Orientation plane per panel (centroid origin + panel normal)' },
+      { id: 'planes', name: 'Planes', type: 'list', description: 'Orientation plane per panel (centroid origin + panel normal)' },
       { id: 'centroids', name: 'Centroids', type: 'list', description: 'Centroid point per panel' }
     ],
     controls: [],
     execute(context, inputs) {
       const panels = toList(inputs.panels);
-      if (panels.length === 0) return { frames: [], centroids: [] };
+      if (panels.length === 0) return { planes: [], centroids: [] };
       // Backwards-compatible: if items have a `frame` property (new panel-object
       // format from facadePanelsOnSurface / voronoiCellObjects) use it directly;
       // otherwise fall back to centroid computation on raw mesh (existing logic).
-      const frames = panels.map((panel) => {
+      const planes = panels.map((panel) => {
         if (panel && panel.frame) return panel.frame;
         // Legacy path: compute frame from the raw mesh via panelFrames.
         return Geo.panelFrames([panel])[0] || null;
       });
-      const centroids = frames.map((f) => (f && f.origin ? f.origin : null));
-      return { frames, centroids };
+      const centroids = planes.map((f) => (f && f.origin ? f.origin : null));
+      return { planes, centroids };
     },
     codegen: {
-      python: '{{frames}} = [p["frame"] if hasattr(p, "frame") else Geo.panelFrames([p])[0] for p in {{panels}}]\n{{centroids}} = [f.origin for f in {{frames}}]',
-      csharp: 'var {{frames}} = {{panels}}.Select(p => p.frame ?? Geo.panelFrames(new[]{p})[0]).ToList();\nvar {{centroids}} = {{frames}}.Select(f => f.origin).ToList();'
+      python: '{{planes}} = [p["frame"] if hasattr(p, "frame") else Geo.panelFrames([p])[0] for p in {{panels}}]\n{{centroids}} = [f.origin for f in {{planes}}]',
+      csharp: 'var {{planes}} = {{panels}}.Select(p => p.frame ?? Geo.panelFrames(new[]{p})[0]).ToList();\nvar {{centroids}} = {{planes}}.Select(f => f.origin).ToList();'
     },
     help: {
       inputs: [
-        { name: 'Panels', description: 'List of panel meshes' }
+        { name: 'Panels', description: 'List of panel objects or panel meshes' }
       ],
       outputs: [
-        { name: 'Frames', description: 'Orientation plane per panel' },
+        { name: 'Planes', description: 'Orientation plane per panel (origin at centroid, Z = panel normal)' },
         { name: 'Centroids', description: 'Centroid point per panel' }
       ],
-      // FACADE RATIONALIZATION LOOP (M1 + M2 + M5): a surface patch →
-      // Pattern.FacadePanels splits it into quad panels → Pattern.PanelFrames
-      // recovers a frame per panel → Geometry.Orient lays a thin panel box
-      // (built on world XY) flat onto every frame → Output.Watch shows the
-      // populated facade. The frames list laces into Orient's toPlane input.
+      // FACADE RATIONALIZATION LOOP: a surface patch →
+      // Pattern.FacadePanels splits it into quad panels → Pattern.PanelPlane
+      // recovers an orientation plane per panel → Geometry.Orient lays a thin panel box
+      // (built on world XY) flat onto every plane → Output.Watch shows the populated facade.
       example: {
-        title: 'Panelize a patch, recover frames, orient a thin box onto every panel',
+        title: 'Panelize a patch, recover orientation planes, orient a thin box onto every panel',
         nodes: [
           { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
           { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 4, y: 0, z: 0 } },
@@ -829,7 +828,7 @@ export const patternsNodes = [
           { type: 'Input.Integer', x: 460, y: 230, controls: { val: 3 } },
           { type: 'Input.Integer', x: 460, y: 300, controls: { val: 3 } },
           { type: 'Pattern.FacadePanels', x: 700, y: 150 },
-          { type: 'Pattern.PanelFrames', x: 940, y: 150 },
+          { type: 'Pattern.PanelPlane', x: 940, y: 150 },
           { type: 'Point.Origin', x: 700, y: 380 },
           { type: 'Box.ByCenterWidthDepthHeight', x: 940, y: 380, controls: { width: 0.8, depth: 0.8, height: 0.05 } },
           { type: 'Plane.XY', x: 940, y: 520 },
@@ -849,11 +848,11 @@ export const patternsNodes = [
           [10, 'point', 11, 'center'],
           [11, 'solid', 13, 'geometry'],
           [12, 'plane', 13, 'fromPlane'],
-          [9, 'frames', 13, 'toPlane'],
+          [9, 'planes', 13, 'toPlane'],
           [13, 'result', 14, 'value']
         ]
       },
-      sampleCode: '{{frames}} = Geo.panelFrames({{panels}})'
+      sampleCode: '{{planes}} = [p.frame for p in {{panels}}]'
     }
   },
   {
@@ -925,56 +924,39 @@ export const patternsNodes = [
     }
   },
 
-  // ─── Panel.ByPoints ──────────────────────────────────────
+  // ─── Panel.Points ──────────────────────────────────────
   {
-    type: 'Panel.ByPoints',
-    name: 'Panel.ByPoints',
+    type: 'Panel.Points',
+    name: 'Panel.Points',
     category: 'patterns',
     subGroup: 'Panels',
     icon: '⬚',
-    aliases: ['panel-by-points'],
-    description: 'Creates one quad mesh per panel object, with corners snapped to the panel\'s corner points and orientation following the panel frame. Consumes the panel-object list from Pattern.FacadePanels or Pattern.VoronoiMesh.',
+    aliases: ['panel-points'],
+    description: 'Extracts the corner points from a panel object (or list of panel objects). Returns the corner-point array stored in panel.points. Use this to inspect panel geometry, drive fabrication workflows, or wire corner points into downstream geometry nodes.',
     inputs: [
-      { id: 'panels', name: 'Panels', type: 'list', description: 'List of panel objects with points + frame (from Pattern.FacadePanels or Pattern.VoronoiMesh)' }
+      { id: 'panel', name: 'Panel', type: 'any', description: 'Panel object (or list of panel objects) from Pattern.FacadePanels or Pattern.VoronoiMesh' }
     ],
-    outputs: [{ id: 'meshes', name: 'Meshes', type: 'list', description: 'One placed quad mesh per input panel, corners snapped to panel.points' }],
+    outputs: [{ id: 'points', name: 'Points', type: 'list', description: 'Corner points of the panel (or list of point-lists for a list input)' }],
     controls: [],
     execute(context, inputs) {
-      const panels = toList(inputs.panels);
-      if (panels.length === 0) return { meshes: [] };
-      const color = 0xfab387; // NovaPalette3D.extrusion — matches the facade panel family
-      const meshes = panels.map((panel) => {
-        if (!panel) return null;
-        const pts = Array.isArray(panel.points) ? panel.points : [];
-        if (pts.length < 3) return null;
-        // For quad panels (4 corners): triangulate as two triangles.
-        // For polygon panels (>4 corners): fan-triangulate from the first vertex.
-        let faces;
-        if (pts.length === 4) {
-          faces = [[0, 1, 2], [0, 2, 3]];
-        } else {
-          faces = [];
-          for (let k = 1; k < pts.length - 1; k++) {
-            faces.push([0, k, k + 1]);
-          }
-        }
-        const mesh = new Geo.Mesh3(pts, faces, color);
-        mesh._solidType = 'PanelMesh';
-        return mesh;
-      }).filter(Boolean);
-      return { meshes };
+      const input = inputs.panel;
+      if (input == null) return { points: [] };
+      if (Array.isArray(input)) {
+        return { points: input.map((p) => (p && Array.isArray(p.points) ? p.points : [])) };
+      }
+      return { points: Array.isArray(input.points) ? input.points : [] };
     },
     codegen: {
-      python: '{{meshes}} = [Geo.Mesh3(p["points"], [[0,1,2],[0,2,3]], 0xfab387) for p in {{panels}} if p and len(p.get("points", [])) >= 3]',
-      csharp: 'var {{meshes}} = {{panels}}.Where(p => p != null && p.points?.Count >= 3).Select(p => new Geo.Mesh3(p.points, new[]{new[]{0,1,2},new[]{0,2,3}}, 0xfab387)).ToList();'
+      python: '{{points}} = [p["points"] for p in {{panel}}] if isinstance({{panel}}, list) else {{panel}}["points"]',
+      csharp: 'var {{points}} = {{panel}} is IList<object> lst ? lst.Select(p => ((dynamic)p).points).ToList() : (object)((dynamic){{panel}}).points;'
     },
     help: {
       inputs: [
-        { name: 'Panels', description: 'Panel object list from Pattern.FacadePanels (or Pattern.VoronoiMesh)' }
+        { name: 'Panel', description: 'Panel object or list of panel objects from Pattern.FacadePanels or Pattern.VoronoiMesh' }
       ],
-      outputs: [{ name: 'Meshes', description: 'One quad mesh per panel, corners snapped to panel points' }],
+      outputs: [{ name: 'Points', description: 'Corner point list (4 points for quad panels), or list of point-lists when a panel list is wired in' }],
       example: {
-        title: '4×4 panels on a curved surface — 16 placed quad meshes',
+        title: '4×4 panels on a curved surface — extract corner points with Panel.Points',
         nodes: [
           { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0, y: 0, z: 0 } },
           { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 10, y: 0, z: 0 } },
@@ -985,8 +967,8 @@ export const patternsNodes = [
           { type: 'Input.Integer', x: 460, y: 230, controls: { val: 4 } },
           { type: 'Input.Integer', x: 460, y: 300, controls: { val: 4 } },
           { type: 'Pattern.FacadePanels', x: 700, y: 170 },
-          { type: 'Panel.ByPoints', x: 940, y: 170 },
-          { type: 'Output.Watch', x: 1180, y: 170 }
+          { type: 'Panel.Points', x: 940, y: 170 },
+          { type: 'Output.Watch', x: 1140, y: 170 }
         ],
         wires: [
           [0, 'point', 4, 'item0'],
@@ -997,11 +979,11 @@ export const patternsNodes = [
           [5, 'surface', 8, 'mesh'],
           [6, 'value', 8, 'uPanels'],
           [7, 'value', 8, 'vPanels'],
-          [8, 'panels', 9, 'panels'],
-          [9, 'meshes', 10, 'value']
+          [8, 'panels', 9, 'panel'],
+          [9, 'points', 10, 'value']
         ]
       },
-      sampleCode: '{{meshes}} = [Geo.Mesh3(p["points"], [[0,1,2],[0,2,3]]) for p in {{panels}}]'
+      sampleCode: '{{points}} = [p["points"] for p in {{panel}}]'
     }
   },
 
@@ -1030,10 +1012,11 @@ export const patternsNodes = [
       // Return panel cell objects { points, frame } instead of raw extruded meshes.
       // voronoiCellObjects re-uses the existing voronoiOutlines kernel and wraps
       // each cell boundary as a panel object matching the TICK-004 contract.
-      // height/gap are preserved for backward compatibility but not applied to
-      // the flat cell objects (they affect the extruded mesh, not the boundary).
+      // Pass null resolution so voronoi2D auto-derives step size from site bounds
+      // (fixes the empty-output bug when sites span a small range like 0–10).
+      // height/gap inputs are preserved for backward compatibility.
       return {
-        meshes: Geo.voronoiCellObjects(sites, null, 0.5)
+        meshes: Geo.voronoiCellObjects(sites, null, null)
       };
     },
     codegen: {
@@ -1048,18 +1031,17 @@ export const patternsNodes = [
       ],
       outputs: [{ name: 'Meshes', description: 'Cell meshes' }],
       example: {
-        title: 'Voronoi mesh from 4 sites in a unit square',
+        title: 'Voronoi mesh from 4 sites — 4 cell objects with points and frame',
         nodes: [
-          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 0.2, y: 0.2, z: 0 } },
-          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 0.8, y: 0.2, z: 0 } },
-          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 0.5, y: 0.8, z: 0 } },
-          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 0.2, y: 0.7, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 0, controls: { x: 2, y: 2, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 70, controls: { x: 8, y: 2, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 140, controls: { x: 5, y: 8, z: 0 } },
+          { type: 'Point.ByCoordinates', x: 0, y: 210, controls: { x: 2, y: 7, z: 0 } },
           { type: 'List.Create', x: 240, y: 90 },
           { type: 'Input.Number', x: 240, y: 230, controls: { val: 1 } },
           { type: 'Input.Number', x: 240, y: 300, controls: { val: 0.1 } },
           { type: 'Pattern.VoronoiMesh', x: 480, y: 170 },
-          { type: 'List.Count', x: 720, y: 170 },
-          { type: 'Output.Watch', x: 920, y: 170 }
+          { type: 'Output.Watch', x: 720, y: 170 }
         ],
         wires: [
           [0, 'point', 4, 'item0'],
@@ -1069,8 +1051,7 @@ export const patternsNodes = [
           [4, 'list', 7, 'sites'],
           [5, 'value', 7, 'height'],
           [6, 'value', 7, 'gap'],
-          [7, 'meshes', 8, 'list'],
-          [8, 'count', 9, 'value']
+          [7, 'meshes', 8, 'value']
         ]
       },
       sampleCode: '{{meshes}} = Geo.voronoiMesh({{sites}}, None, {{height}}, {{gap}})'
