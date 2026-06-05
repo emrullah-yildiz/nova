@@ -83,6 +83,51 @@ jobs:
         with:
           args: --severity-threshold=high
 
+  e2e:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-latest
+    # Run only on pull requests that touch src/ or tests/ — no point running
+    # E2E on docs-only or config-only changes.
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Detect changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            code:
+              - 'src/**'
+              - 'tests/**'
+
+      - name: Setup Node.js
+        if: steps.filter.outputs.code == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        if: steps.filter.outputs.code == 'true'
+        run: npm ci
+
+      - name: Install Playwright browsers
+        if: steps.filter.outputs.code == 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        if: steps.filter.outputs.code == 'true'
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: steps.filter.outputs.code == 'true' && failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
   build:
     name: Build Project
     runs-on: ubuntu-latest
