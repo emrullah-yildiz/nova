@@ -15,9 +15,11 @@ function main() {
   // Also skip commands where the "command" itself looks like piped JSON (subagent debug artifacts).
   const trimmed = cmd.trimStart();
   if (/^echo\b/.test(trimmed) || /^printf\b/.test(trimmed) || /^\{/.test(trimmed)) process.exit(0);
+  // Match vitest/npm test but NOT npm run test:e2e (Playwright — different output format).
+  // `test(?![\w:])` ensures "test" is not followed by word chars or colon (e.g. test:e2e).
   const isTestRun =
     /\bvitest\b.*\brun\b/.test(cmd) ||
-    /\bnpm(?:\.cmd)?\s+(?:run\s+)?test\b/.test(cmd) ||
+    /\bnpm(?:\.cmd)?\s+(?:run\s+)?test(?![\w:])/.test(cmd) ||
     /\bnpx(?:\.cmd)?\s+vitest\b/.test(cmd);
   if (!isTestRun) process.exit(0);
 
