@@ -58,12 +58,12 @@ const GROUPS = [
   {
     title: 'Panelization — host ON a surface, then vary by a field',
     methods: [
-      { name: 'facadePanels', sig: 'Geo.facadePanels(surface, uPanels, vPanels, scaleFn) → mesh[]', note: 'rectangular panels with per-panel scale — pass an attractor as scaleFn' },
+      { name: 'facadePanelsOnSurface', sig: 'Geo.facadePanelsOnSurface(surface, uPanels, vPanels) → {points, frame}[]', note: 'rectangular panels projected onto a curved surface — returns panel objects {points, frame} for Panel.ByPoints' },
+      { name: 'voronoiCellObjects', sig: 'Geo.voronoiCellObjects(sites, bounds, resolution) → {points, frame}[]', flag: 'approx', note: 'Voronoi boundary polygon objects — grid-sampled, not true Voronoi; each cell is {points, frame}' },
       { name: 'hexPanelGrid', note: 'hex / diamond panels wrapping a profile stack' },
       { name: 'diagridPattern', note: 'structural diagonal grid' },
       { name: 'hexGrid', note: 'planar honeycomb tiling' },
-      { name: 'diamondGrid', note: 'planar diamond tiling' },
-      { name: 'voronoiMesh', flag: 'approx', note: 'cellular skin — grid-sampled, not true Voronoi; coarse for engineering' }
+      { name: 'diamondGrid', note: 'planar diamond tiling' }
     ]
   },
   {

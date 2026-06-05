@@ -15,6 +15,22 @@ longer useful.
 
 ---
 
+## 2026-06-05 — T04a: capability-ledger.js updated for facadePanelsOnSurface + voronoiCellObjects (geometry-engineer → AI-copilot reviewer)
+
+**Branch:** `feat/pattern-on-surface-geo`
+
+**Cross-module change:** `src/ai/capability-ledger.js` was updated in this branch (outside geometry lane ownership) because the old ledger entries for `facadePanels` and `voronoiMesh` became stale after the T04a kernel changes renamed the public API to `Geo.facadePanelsOnSurface` and `Geo.voronoiCellObjects`. The capability-ledger test (`tests/capability-ledger.test.js`) asserts every ledger entry matches an actual kernel method — leaving the old names would have caused a merge-blocking test failure.
+
+**What changed:**
+- `facadePanels` entry → replaced with `facadePanelsOnSurface` (new sig: `Geo.facadePanelsOnSurface(surface, uPanels, vPanels) → {points, frame}[]`)
+- `voronoiMesh` entry → replaced with `voronoiCellObjects` (new sig: `Geo.voronoiCellObjects(sites, bounds, resolution) → {points, frame}[]`, flag: approx)
+
+**Rationale:** ENGINEERING.md §"golden-examples/capability-ledger tests fail" rule (A): include coordinated update with rationale. The Geo object still exposes the OLD methods (`Geo.facadePanels`, `Geo.voronoiMesh` in nurbs-math.js) for legacy compatibility — they are not removed, just not advertised to the AI. The node layer now calls the new structured methods.
+
+**Expected reviewer:** AI-copilot lane (owns `src/ai/`). Please confirm the ledger entries are appropriately described and the test passes.
+
+---
+
 ## 2026-06-05 — In-process C# WebSocket hub (Approach C) supersedes the SEA hub (Trinity, connect-engineer)
 
 **Branch:** `feat/connect-csharp-hub` (off develop). Not merged/pushed.
