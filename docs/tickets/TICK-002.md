@@ -12,7 +12,7 @@ branch: fix/selection-mode-e2e
 
 ## User story
 
-As a designer, I can click the "Select" button on a Select.Faces / Select.Edges / Select.Points node, pick geometry in the 3D viewport, and click Approve — so the node's output contains the geometry I picked and I can wire it downstream.
+As a designer, I can click the "Select" button on a Select.Faces / Select.Edges / Select.Points node,the view changes from node layout to 3D viewer, Approve(green check) and Cancel(red cross) buttons appears on the left side of Auto test, users pick geometry in the 3D viewport, and click Approve — so the node's output contains the geometry I picked and I can wire it downstream.
 
 ## Context
 
@@ -35,6 +35,38 @@ Relevant files: `src/viewer/selection-mode.js`, `src/viewer/geo-selector.js`, `s
 - E2E (Playwright): AC-1, AC-2, AC-3, AC-4, AC-7
 - Manual browser verification: AC-5, AC-6 (toolbar hide + cancel + mode discrimination)
 - Unit test: none required for this ticket
+
+## How to test
+
+### Local dev verification
+
+1. `git switch develop && git pull --ff-only && git switch fix/selection-mode-e2e`
+2. `npm install && npm run dev` — open `http://localhost:5173`
+3. Create a new workspace. Open the node library → Geometry → add `Select.Faces`.
+4. **AC-1:** Confirm a "Select" button appears in the node's controls area.
+5. Add a `Box.ByCenterWidthDepthHeight` node and wire it into the scene so a mesh is visible in the 3D viewport.
+6. **AC-2:** Click "Select" on the `Select.Faces` node. Confirm:
+   - Canvas switches to 3D view
+   - Approve (✓) and Cancel (✕) toolbar appears within ~500 ms
+   - The box mesh is highlighted green; background items are dimmed
+7. **AC-3:** Click the box mesh → confirm it enters the selection set (highlight changes). Click it again → confirm it leaves the set.
+8. Wire an `Output.Watch` node to the `faces` output of `Select.Faces`. **AC-4:** Click Approve → confirm the watch panel shows a non-empty, readable value (not `[object Object]`).
+9. Enter selection mode again. **AC-5:** Click Cancel → confirm the toolbar disappears and the watch value is unchanged.
+10. Add `Select.Edges` and `Select.Points` nodes. **AC-6:** Enter Edges mode — confirm only edge/line geometry highlights, clicking a solid mesh does NOT select it. Repeat for Points mode.
+
+### Automated tests
+
+```bash
+npm run lint:all
+npm run test
+npm run test:e2e          # tests/e2e/geometry-selection.spec.js must pass (AC-7)
+```
+
+### How to mark an AC done
+
+Change `- [ ] AC-N` → `- [x] AC-N` with a note:
+- Automated: `— covered by tests/e2e/geometry-selection.spec.js:line`
+- Manual: `— manual browser YYYY-MM-DD: [what you observed]`
 
 ## Definition of done
 
