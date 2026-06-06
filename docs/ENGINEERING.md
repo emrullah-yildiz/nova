@@ -71,15 +71,23 @@ git switch -c type/short-task-name      # feat/ fix/ chore/ docs/ refactor/
 
 # 3. …work in small chunks, commit with focused messages…
 
-# 4. Merge back (no-ff keeps the task grouped), delete, push
+# 4. Merge back (no-ff keeps the task grouped), delete local + remote, push
 git switch develop
 git merge --no-ff type/short-task-name -m "merge: short task summary"
 git branch -d type/short-task-name
+git push origin --delete type/short-task-name
 git push origin develop
 ```
 
 Keep branches short-lived — merge within hours, not days. Conflict risk grows with
 `branch lifetime × file overlap`; small + fast shrinks both.
+
+**After every merge, also check for orphaned `worktree-agent-*` branches** (left by
+agent worktree runs) and delete them:
+
+```powershell
+git branch | Select-String "worktree-agent-" | ForEach-Object { git branch -D $_.ToString().Trim() }
+```
 
 ---
 
@@ -262,8 +270,9 @@ For each AC in the parent ticket:
 
 ### Commit & end
 - [ ] Stage only intended files; commit with `type: short task summary`.
-- [ ] `git switch develop` → `git merge --no-ff … ` → `git branch -d …` →
-      `git push origin develop`.
+- [ ] `git switch develop` → `git merge --no-ff …` → `git branch -d <branch>` →
+      `git push origin --delete <branch>` → `git push origin develop`.
+- [ ] Delete any orphaned `worktree-agent-*` branches left by agent runs.
 - [ ] Release your work-board claim.
 - [ ] Update `docs/tickets/INDEX.md` status (🟡 in-progress → ✅ done when all AC checked).
 - [ ] Final report: files changed, validation run, AC verified, known gaps, branch/merge status.
