@@ -79,6 +79,7 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 - [T07b](../task-briefs/T07b-learning-mini-canvas.md) — lane: ui — Build src/ui/mini-canvas.js component (wire drawing, submit, pass/fail feedback); integrate into learning-page.js. Depends on T07a merge.
 - [T07c](../task-briefs/T07c-learning-exercises-e2e.md) — lane: ui — Write tests/e2e/learning-interactive.spec.js (open overlay → ch01 → draw wire → Submit → assert success). Depends on T07a + T07b merge.
 - [T07d](../task-briefs/T07d-mini-canvas-real-nodes-wires.md) — lane: ui (switch) — PM re-open: fix mini-canvas so nodes look like real Nova canvas nodes and the pending wire correctly tracks the cursor from output port click to landing on an input port.
+- [T07e](../task-briefs/T07e-mini-canvas-number-nodes.md) — lane: ui (switch) — PM re-open: Input.Number nodes must show value spinner + range slider in node body, matching real Nova canvas
 
 ## Notes
 
@@ -91,4 +92,8 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 
 - The interactive canvas where users are expected to connect nodes should be like real nova canvas for nodes with real nodes. Current canvas has broken wire system and input/output system. Wire is not following. → AC-2 re-opened; T07d dispatched on fix/tick-007-mini-canvas-real-nodes.
 
+## Latest PM Notes (2026-06-07 — processed)
 
+- Still it is not the real canvas and real nodes. Number nodes are not correct.
+
+→ Captured as T07e task brief (docs/task-briefs/T07e-mini-canvas-number-nodes.md). Fix: render Input.Number nodes in mini-canvas with a number spinner (<input type="number">) and range slider (<input type="range">) in the node body, matching real Nova canvas exactly. Branch: fix/tick-007-number-nodes.

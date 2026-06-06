@@ -68,6 +68,7 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 - T06a — lane: ui — SUPERSEDED by T06b (human-manual approach replaced with automated script)
 - [T06b](../task-briefs/T06b-learning-screenshots-script.md) — lane: ui (switch) — Write scripts/take-learning-shots.js: Playwright headless script that starts dev server, builds each of the 20 representative graphs programmatically, screenshots the canvas area, and saves to public/learning/<slot-id>.png ≤400 KB each
 - [T06c](../task-briefs/T06c-screenshot-fix-math-inputs.md) — lane: ui (switch) — PM re-open: fix Math chapter screenshot builders so all required input nodes are wired and Output.Watch shows a computed numeric result
+- [T06d](../task-briefs/T06d-screenshot-viewport-connections.md) — lane: ui (switch) — PM re-open: set viewport to 1280×720 + fit-to-nodes before screenshot + audit all 20 slot builders for wrong values / disconnected wires
 
 ## Notes
 
@@ -78,3 +79,10 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 ## Latest PM Notes (2026-06-07 — processed)
 
 - Screenshots are not representing the example. There are missing inputs for Math examples. → AC-4 re-opened; T06c dispatched on fix/tick-006-screenshot-math-inputs.
+
+## Latest PM Notes (2026-06-07 — processed)
+
+- Screenshots are not fitting to the screen. The screen size can vary. I have laptop.
+- The screenshots are not showing correct connection. Some inputs are empty, some input number nodes have wrong number.
+
+→ Captured as T06d task brief (docs/task-briefs/T06d-screenshot-viewport-connections.md). Fix A: set viewport to 1280×720, call app.fitToView() before each screenshot, crop to node bounding box. Fix B: audit all 20 slot builders for wrong input values or disconnected wires. Branch: fix/tick-006-screenshot-viewport.

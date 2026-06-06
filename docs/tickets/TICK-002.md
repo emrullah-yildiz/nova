@@ -89,6 +89,7 @@ Links added by morpheus after PM confirms AC.
 - [T02b](../task-briefs/T02b-face-highlight-approve-geometry.md) — lane: ui (switch) — Fix AC-8 (per-face blue hover) + AC-9 (structured geometry output from Approve)
 - [T02c](../task-briefs/T02c-selection-ac8-ac9-e2e.md) — lane: ui (switch) — Playwright specs asserting AC-8 and AC-9 fixes
 - [T02d](../task-briefs/T02d-face-mesh-output-hover.md) — lane: ui (switch) — PM re-open: fix Select.Faces so (1) face highlight on hover actually works in the viewport and (2) Approve output is a real Three.js Mesh geometry with spatial data
+- [T02e](../task-briefs/T02e-selection-interaction-model.md) — lane: ui (switch) — PM re-open: full interaction model — hover→face turns blue, click→count+1, multi-click increments, empty-area click→reset to 0, re-click selected→deselect
 
 ## Notes
 
@@ -110,3 +111,9 @@ AC-8 through AC-11 added to ticket. Task brief T02a updated. switch agent dispat
 
 - Select.Faces is not selecting the face of a Box element. The output should be a Mesh representing the selected face. → captured as AC-9 re-open; T02d dispatched on fix/tick-002-face-mesh-hover.
 - Select.Faces is not highlighting the mesh face when the mouse is on the face. → captured as AC-8 re-open; T02d dispatched on fix/tick-002-face-mesh-hover.
+
+# Latest PM Comments (2026-06-07 — processed)
+
+- The process is unfunctional. Make sure that there is color changed when the mouse is hovered. The acceptance criteria is that when the mouse is on the face, the mesh surface changes color. When it is selected, the selected number increases, when new surfaces selected, the selected number increases, when clicked on empty zone, selection gets to zero. When selected surface, reselected, it gets deselected.
+
+→ Captured as T02e task brief (docs/task-briefs/T02e-selection-interaction-model.md). Five interaction behaviors: hover→face color change, click→count+1, multi-click→count increments, empty-area click→reset to 0, re-click selected→deselect. Branch: fix/tick-002-selection-interaction.
