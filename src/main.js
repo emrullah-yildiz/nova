@@ -63,6 +63,7 @@ import {
   selectionModeClick as _selectionModeClick,
   selectionModeHover as _selectionModeHover,
   clearSelection as _clearSelection,
+  getSelectedFaces as _getSelectedFaces,
 } from './viewer/selection-mode.js';
 import { RuntimeConfig, getRuntimeConfig } from './config/runtime-config.js';
 import { NovaCloudClient, createNovaCloudClient } from './enterprise/cloud-client.js';
@@ -179,6 +180,7 @@ if (typeof window !== 'undefined') {
     selectionModeClick: _selectionModeClick,
     selectionModeHover: _selectionModeHover,
     clearSelection: _clearSelection,
+    getSelectedFaces: _getSelectedFaces,
   };
 }
 

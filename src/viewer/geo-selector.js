@@ -1,7 +1,7 @@
 import { Geo } from '../geometry/index.js';
 import { setNodePreviewState, setPreviewItemVisibility, showAllPreviews } from './preview-sync.js';
 import { Viewer3D as RuntimeViewer3D } from './viewer3d.js';
-import { isSelectionModeActive, selectionModeClick, selectionModeHover, getSelectedItems, clearSelection } from './selection-mode.js';
+import { isSelectionModeActive, selectionModeClick, selectionModeHover, selectionMeshClick, selectionMeshHover, getSelectedItems, clearSelection } from './selection-mode.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -112,6 +112,16 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
 
     var itemId = nodeId + (varName ? ':' + varName : '');
     var item = { id: itemId, nodeId: nodeId, varName: varName || '', label: label || varName || '', group: group, visible: true, selected: false };
+
+    // Store the raw Mesh3 geometry value so that selection-mode.js can call
+    // mesh3.groupFaces() + toSelectionMesh() for per-face selection (T09b).
+    // The _Mesh3 instance carries _type === 'Mesh3' directly on the object.
+    if (geoVal && geoVal._type === 'Mesh3') {
+      item._mesh3 = geoVal;
+    } else if (Array.isArray(geoVal) && geoVal.length === 1 && geoVal[0] && geoVal[0]._type === 'Mesh3') {
+      item._mesh3 = geoVal[0];
+    }
+
     this._sceneItems.push(item);
     return item;
   };
@@ -314,6 +324,21 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       var intersects = self._raycaster.intersectObjects(allMeshes, false);
       if (intersects.length > 0) {
         var hit = intersects[0];
+
+        // ── Per-face-group selection mesh click (T09b) ──────────────────────
+        // When the hit is on a selection mesh (swapped in by _swapToFaceMeshes),
+        // route to the face-group click handler rather than the whole-item path.
+        if (isSelectionModeActive() && hit.object && hit.object.userData && hit.object.userData.isSelectionMesh) {
+          var selMeshItem = null;
+          for (var si = 0; si < self._sceneItems.length; si++) {
+            if (self._sceneItems[si]._selectionSwappedMesh === hit.object) { selMeshItem = self._sceneItems[si]; break; }
+          }
+          if (selMeshItem) {
+            selectionMeshClick(hit, selMeshItem);
+            return;
+          }
+        }
+
         var item = findSceneItemForHit(hit);
         if (item) {
           // When selection mode is active, route to the selection accumulator
@@ -380,6 +405,25 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         self._hoveredSelectionFaceIndex = hitFaceIndex;
         // Expose for E2E assertions (AC-8)
         if (typeof window !== 'undefined') window.__geoSelectorHoveredFaceMesh = hitMesh || null;
+
+        // ── Per-face-group hover (T09b) ─────────────────────────────────────
+        // When the hit is on a selection mesh (swapped in by _swapToFaceMeshes),
+        // call selectionMeshHover for group-level hover coloring instead of the
+        // whole-item hover path below. Also call it (with null) when the cursor
+        // leaves a selection mesh, so the previously hovered group is restored.
+        var anySelMesh = self._sceneItems && self._sceneItems.some(function(it) { return !!it._selectionSwappedMesh; });
+        if (anySelMesh) {
+          var selMeshHoverItem = null;
+          if (hit && hit.object && hit.object.userData && hit.object.userData.isSelectionMesh) {
+            for (var smi = 0; smi < self._sceneItems.length; smi++) {
+              if (self._sceneItems[smi]._selectionSwappedMesh === hit.object) { selMeshHoverItem = self._sceneItems[smi]; break; }
+            }
+          }
+          // Pass hit only when it is on a selection mesh (selMeshHoverItem found),
+          // otherwise null so selectionMeshHover clears the previously hovered group.
+          selectionMeshHover(selMeshHoverItem ? hit : null, selMeshHoverItem);
+          return;
+        }
 
         selectionModeHover(findSceneItemForHit(hit), hit);
         if (typeof window !== 'undefined') return; // don't run the panel-hover path below in selection mode
