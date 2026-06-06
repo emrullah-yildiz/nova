@@ -1,7 +1,7 @@
 import { Geo } from '../geometry/index.js';
 import { setNodePreviewState, setPreviewItemVisibility, showAllPreviews } from './preview-sync.js';
 import { Viewer3D as RuntimeViewer3D } from './viewer3d.js';
-import { isSelectionModeActive, selectionModeClick, getSelectedItems, clearSelection } from './selection-mode.js';
+import { isSelectionModeActive, selectionModeClick, selectionModeHover, getSelectedItems, clearSelection } from './selection-mode.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -63,6 +63,18 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
 
   const DIM_OPACITY = 0.15;
   const NORMAL_OPACITY = 0.85;
+
+  function findSceneItemForHit(hit) {
+    if (!hit || !hit.object) return null;
+    var taggedGroup = null;
+    var current = hit.object;
+    while (current) {
+      if (current.userData && current.userData.isGeoItem) { taggedGroup = current; break; }
+      current = current.parent;
+    }
+    if (!taggedGroup) return null;
+    return Viewer3D._sceneItems.find(function(it) { return it.group === taggedGroup; }) || null;
+  }
 
   // ══════════════════════════════════════
   // 2. TAGGED GROUP CREATION
@@ -301,26 +313,17 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
 
       var intersects = self._raycaster.intersectObjects(allMeshes, false);
       if (intersects.length > 0) {
-        // Walk up to find the tagged group
-        var hit = intersects[0].object;
-        var taggedGroup = null;
-        var current = hit;
-        while (current) {
-          if (current.userData && current.userData.isGeoItem) { taggedGroup = current; break; }
-          current = current.parent;
-        }
-        if (taggedGroup) {
-          var item = self._sceneItems.find(function(it) { return it.group === taggedGroup; });
-          if (item) {
-            // When selection mode is active, route to the selection accumulator
-            // instead of the normal single-select flow.
-            if (isSelectionModeActive()) {
-              selectionModeClick(item);
-            } else {
-              self._selectItem(item);
-            }
-            return;
+        var hit = intersects[0];
+        var item = findSceneItemForHit(hit);
+        if (item) {
+          // When selection mode is active, route to the selection accumulator
+          // instead of the normal single-select flow.
+          if (isSelectionModeActive()) {
+            selectionModeClick(item, hit);
+          } else {
+            self._selectItem(item);
           }
+          return;
         }
       }
       // Clicked empty space — clear the relevant selection.
@@ -368,12 +371,18 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         });
 
         var intersects = self._raycaster.intersectObjects(candidateMeshes, false);
-        var hitMesh = intersects.length > 0 ? intersects[0].object : null;
+        var hit = intersects.length > 0 ? intersects[0] : null;
+        var hitMesh = hit ? hit.object : null;
+        var hitFaceIndex = hit && hit.faceIndex !== undefined ? hit.faceIndex : null;
 
-        if (hitMesh === self._hoveredSelectionMesh) return; // nothing changed
+        if (hitMesh === self._hoveredSelectionMesh && hitFaceIndex === self._hoveredSelectionFaceIndex) return; // nothing changed
         self._hoveredSelectionMesh = hitMesh;
+        self._hoveredSelectionFaceIndex = hitFaceIndex;
         // Expose for E2E assertions (AC-8)
         if (typeof window !== 'undefined') window.__geoSelectorHoveredFaceMesh = hitMesh || null;
+
+        selectionModeHover(findSceneItemForHit(hit), hit);
+        if (typeof window !== 'undefined') return; // don't run the panel-hover path below in selection mode
 
         // Rebuild the highlight using the same selected-item set that
         // _applySelectionHighlight uses, then overlay the blue hover.
@@ -433,6 +442,7 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       // ── Normal mode: per-panel hover ──────────────────────────────────────
       // Clear any stale selection-mode hover mesh reference when mode is off.
       self._hoveredSelectionMesh = null;
+      self._hoveredSelectionFaceIndex = null;
 
       var panelMeshes = [];
       self.geometryGroup.traverseVisible(function(obj) {

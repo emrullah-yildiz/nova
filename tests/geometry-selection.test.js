@@ -91,6 +91,22 @@ describe('selection-mode state machine', () => {
     expect(getSelectedItems().length).toBe(0);
   });
 
+  it('selectionModeClick treats different mesh face hits on the same item as separate selections', () => {
+    activateSelectionMode('node-1', 'faces', () => {}, () => {});
+    const mesh = { isMesh: true, material: { opacity: 1 } };
+    const mockGroup = { traverse: (fn) => fn(mesh) };
+    const item = { id: 'item-1', label: 'Geo.Box', group: mockGroup, visible: true };
+
+    selectionModeClick(item, { object: mesh, faceIndex: 0 });
+    selectionModeClick(item, { object: mesh, faceIndex: 1 });
+    expect(getSelectedItems().length).toBe(2);
+    expect(getSelectedItems().map((it) => it.selectionKey)).toEqual(['item-1:face:0', 'item-1:face:1']);
+
+    selectionModeClick(item, { object: mesh, faceIndex: 0 });
+    expect(getSelectedItems().length).toBe(1);
+    expect(getSelectedItems()[0].selectionKey).toBe('item-1:face:1');
+  });
+
   it('selectionModeClick does not add an item whose type does not match mode', () => {
     activateSelectionMode('node-1', 'faces', () => {}, () => {});
     // Line item (isLine) — should NOT match 'faces' mode

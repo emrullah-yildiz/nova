@@ -31,6 +31,10 @@ const _state = {
   onCancel: null,
 };
 
+const FACE_HOVER_COLOR = 0x89b4fa;
+const SELECTED_COLOR = 0xa6e3a1;
+const CANDIDATE_COLOR = 0x94e2d5;
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function getViewer() {
@@ -64,6 +68,85 @@ function _itemMatchesMode(item, mode) {
   return true; // unknown mode — accept everything
 }
 
+function _cloneMaterial(mat) {
+  if (!mat) return mat;
+  const cloned = typeof mat.clone === 'function' ? mat.clone() : mat;
+  if (cloned) cloned.__novaSelectionOwned = true;
+  return cloned;
+}
+
+function _ensureFaceMaterials(mesh) {
+  if (!mesh || !mesh.isMesh || !mesh.geometry || !mesh.material) return false;
+  const geo = mesh.geometry;
+  const posAttr = geo.attributes && geo.attributes.position;
+  const faceCount = geo.index ? Math.floor(geo.index.count / 3) : (posAttr ? Math.floor(posAttr.count / 3) : 0);
+  if (!faceCount) return false;
+
+  if (!mesh.userData) mesh.userData = {};
+  if (!mesh.userData.__novaSelectionFaceMaterials) {
+    const base = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+    mesh.userData.__novaSelectionBaseMaterial = base;
+    mesh.userData.__novaSelectionBaseColor = base && base.color && typeof base.color.getHex === 'function' ? base.color.getHex() : CANDIDATE_COLOR;
+    const materials = [];
+    for (let i = 0; i < faceCount; i++) materials.push(_cloneMaterial(base));
+    mesh.material = materials;
+
+    if (typeof geo.clearGroups === 'function') geo.clearGroups();
+    if (typeof geo.addGroup === 'function') {
+      for (let i = 0; i < faceCount; i++) geo.addGroup(i * 3, 3, i);
+    }
+    mesh.userData.__novaSelectionFaceMaterials = true;
+  }
+  return true;
+}
+
+function _setMaterialColor(material, color, opacity, emissiveIntensity) {
+  if (!material) return;
+  if (material.color && typeof material.color.set === 'function') material.color.set(color);
+  if (material.emissive && typeof material.emissive.set === 'function') material.emissive.set(color);
+  if (material.emissiveIntensity !== undefined) material.emissiveIntensity = emissiveIntensity;
+  if (material.opacity !== undefined) material.opacity = opacity;
+  material.needsUpdate = true;
+}
+
+function _setMeshFaceColor(mesh, faceIndex, color, opacity, emissiveIntensity) {
+  if (!mesh || faceIndex == null || faceIndex < 0) return false;
+  if (!_ensureFaceMaterials(mesh) || !Array.isArray(mesh.material)) return false;
+  const material = mesh.material[faceIndex];
+  if (!material) return false;
+  _setMaterialColor(material, color, opacity, emissiveIntensity);
+  return true;
+}
+
+function _getSelectionKey(item) {
+  if (!item) return '';
+  if (item.selectionKey) return item.selectionKey;
+  if (item.faceIndex !== undefined && item.faceIndex !== null) return item.id + ':face:' + item.faceIndex;
+  if (item.edgeIndex !== undefined && item.edgeIndex !== null) return item.id + ':edge:' + item.edgeIndex;
+  return item.id || '';
+}
+
+function _makeSelectionItem(item, hit) {
+  if (!hit || _state.mode !== 'faces' || hit.faceIndex === undefined || hit.faceIndex === null || !hit.object || !hit.object.isMesh) {
+    return item;
+  }
+  const faceIndex = hit.faceIndex;
+  const label = (item.label || item.id || 'Mesh') + ' face ' + (faceIndex + 1);
+  return {
+    id: item.id,
+    selectionKey: item.id + ':face:' + faceIndex,
+    nodeId: item.nodeId,
+    varName: item.varName || '',
+    label: label,
+    group: item.group,
+    visible: item.visible,
+    selected: item.selected,
+    mesh: hit.object,
+    faceIndex: faceIndex,
+    point: hit.point && typeof hit.point.clone === 'function' ? hit.point.clone() : hit.point || null,
+  };
+}
+
 /**
  * Apply visual highlighting to all scene items:
  * - matching items that are selected: bright green (#a6e3a1)
@@ -76,7 +159,7 @@ function _applySelectionHighlight() {
   // THREE is only needed for type-guards; if not present, skip colour changes.
   // The state logic (item accumulation) still works without THREE.
 
-  const selectedIds = new Set(_state.items.map(function (it) { return it.id; }));
+  const selectedIds = new Set(_state.items.map(_getSelectionKey));
 
   viewer._sceneItems.forEach(function (item) {
     if (!item.visible || !item.group) return;
@@ -85,14 +168,19 @@ function _applySelectionHighlight() {
 
     item.group.traverse(function (obj) {
       if (!obj.material) return;
-      if (selected) {
+      if (matches && _state.mode === 'faces' && obj.isMesh && _ensureFaceMaterials(obj) && Array.isArray(obj.material)) {
+        obj.material.forEach(function (mat, faceIndex) {
+          const faceSelected = selected || selectedIds.has(item.id + ':face:' + faceIndex);
+          _setMaterialColor(mat, faceSelected ? SELECTED_COLOR : CANDIDATE_COLOR, faceSelected ? 1.0 : 0.75, faceSelected ? 0.6 : 0.3);
+        });
+      } else if (selected) {
         // Selected item: bright green
-        if (obj.material.color && typeof obj.material.color.set === 'function') obj.material.color.set(0xa6e3a1);
+        if (obj.material.color && typeof obj.material.color.set === 'function') obj.material.color.set(SELECTED_COLOR);
         if (obj.material.emissiveIntensity !== undefined) obj.material.emissiveIntensity = 0.6;
         if (obj.material.opacity !== undefined) obj.material.opacity = 1.0;
       } else if (matches) {
         // Candidate item: teal, slightly opaque to show it's selectable
-        if (obj.material.color && typeof obj.material.color.set === 'function') obj.material.color.set(0x94e2d5);
+        if (obj.material.color && typeof obj.material.color.set === 'function') obj.material.color.set(CANDIDATE_COLOR);
         if (obj.material.emissiveIntensity !== undefined) obj.material.emissiveIntensity = 0.3;
         if (obj.material.opacity !== undefined) obj.material.opacity = 0.75;
       } else {
@@ -111,6 +199,13 @@ function _restoreNormalHighlight() {
     if (!item.visible || !item.group) return;
     item.group.traverse(function (obj) {
       if (!obj.material) return;
+      if (Array.isArray(obj.material)) {
+        const color = obj.userData && obj.userData.__novaSelectionBaseColor !== undefined ? obj.userData.__novaSelectionBaseColor : CANDIDATE_COLOR;
+        obj.material.forEach(function (mat) {
+          _setMaterialColor(mat, color, 0.85, 0.3);
+        });
+        return;
+      }
       if (obj.material.opacity !== undefined) obj.material.opacity = 0.85;
       if (obj.material.emissiveIntensity !== undefined) obj.material.emissiveIntensity = 0.3;
     });
@@ -233,21 +328,27 @@ export function getSelectedItems() {
   return _state.items.slice();
 }
 
+export function getSelectionMode() {
+  return _state.mode;
+}
+
 /**
  * Called by geo-selector.js click handler when selection mode is active.
  * Toggles the item into/out of the accumulated selection set.
  *
  * @param {object} item  A Viewer3D._sceneItems entry.
  */
-export function selectionModeClick(item) {
+export function selectionModeClick(item, hit) {
   if (!_state.active) return;
   if (!_itemMatchesMode(item, _state.mode)) return;
 
-  const existingIdx = _state.items.findIndex(function (it) { return it.id === item.id; });
+  const selectionItem = _makeSelectionItem(item, hit);
+  const selectionKey = _getSelectionKey(selectionItem);
+  const existingIdx = _state.items.findIndex(function (it) { return _getSelectionKey(it) === selectionKey; });
   if (existingIdx >= 0) {
     _state.items.splice(existingIdx, 1);
   } else {
-    _state.items.push(item);
+    _state.items.push(selectionItem);
   }
 
   _applySelectionHighlight();
@@ -301,5 +402,16 @@ export function clearSelection() {
   _updateToolbarCount();
 }
 
+export function selectionModeHover(item, hit) {
+  if (!_state.active) return;
+  _applySelectionHighlight();
+  if (!_itemMatchesMode(item, _state.mode)) return;
+  if (_state.mode !== 'faces' || !hit || hit.faceIndex === undefined || hit.faceIndex === null || !hit.object || !hit.object.isMesh) return;
+
+  const key = item.id + ':face:' + hit.faceIndex;
+  const selected = _state.items.some(function (it) { return _getSelectionKey(it) === key; });
+  if (!selected) _setMeshFaceColor(hit.object, hit.faceIndex, FACE_HOVER_COLOR, 1.0, 0.5);
+}
+
 // Expose for testing without DOM
-export const _internals = { _state, _itemMatchesMode };
+export const _internals = { _state, _itemMatchesMode, _ensureFaceMaterials, _setMeshFaceColor, _getSelectionKey, _makeSelectionItem };

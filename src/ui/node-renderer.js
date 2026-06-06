@@ -836,7 +836,7 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
           if (!nd.controlValues) nd.controlValues = {};
           var geoData = items.map(function(item) {
             // Find the first actual mesh child inside the THREE.Group.
-            var mesh = null;
+            var mesh = item.mesh || null;
             if (item.group && typeof item.group.traverse === 'function') {
               item.group.traverse(function(child) { if (!mesh && child.isMesh) mesh = child; });
             }
@@ -847,6 +847,35 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
             }
             var geo = mesh.geometry;
             var posAttr = geo.attributes && geo.attributes.position;
+            if (item.faceIndex !== undefined && item.faceIndex !== null && posAttr) {
+              var indices = [];
+              if (geo.index) {
+                indices = [
+                  geo.index.getX(item.faceIndex * 3),
+                  geo.index.getX(item.faceIndex * 3 + 1),
+                  geo.index.getX(item.faceIndex * 3 + 2)
+                ];
+              } else {
+                indices = [item.faceIndex * 3, item.faceIndex * 3 + 1, item.faceIndex * 3 + 2];
+              }
+              var faceVertices = [];
+              indices.forEach(function(vertexIndex) {
+                var v = new window.THREE.Vector3(posAttr.getX(vertexIndex), posAttr.getY(vertexIndex), posAttr.getZ(vertexIndex));
+                if (typeof mesh.localToWorld === 'function') mesh.localToWorld(v);
+                faceVertices.push(v.x, v.z, v.y);
+              });
+              return {
+                _type: 'Mesh',
+                label: label,
+                nodeId: item.nodeId || '',
+                varName: item.varName || '',
+                sourceItemId: item.id || '',
+                faceIndex: item.faceIndex,
+                vertexCount: indices.length,
+                vertices: faceVertices,
+                faceCount: 1
+              };
+            }
             var vertexCount = posAttr ? posAttr.count : 0;
             // Capture first 30 floats (≤10 vertices × xyz) as a plain Array
             var vertices = posAttr ? Array.from(posAttr.array).slice(0, 30) : [];

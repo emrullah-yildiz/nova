@@ -61,6 +61,7 @@ import {
   deactivateSelectionMode as _deactivateSelectionMode,
   isSelectionModeActive as _isSelectionModeActive,
   selectionModeClick as _selectionModeClick,
+  selectionModeHover as _selectionModeHover,
   clearSelection as _clearSelection,
 } from './viewer/selection-mode.js';
 import { RuntimeConfig, getRuntimeConfig } from './config/runtime-config.js';
@@ -176,6 +177,7 @@ if (typeof window !== 'undefined') {
     deactivateSelectionMode: _deactivateSelectionMode,
     isSelectionModeActive: _isSelectionModeActive,
     selectionModeClick: _selectionModeClick,
+    selectionModeHover: _selectionModeHover,
     clearSelection: _clearSelection,
   };
 }
