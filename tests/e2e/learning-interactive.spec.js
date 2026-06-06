@@ -46,6 +46,15 @@ test.describe('Learning interactive exercises', () => {
     const miniCanvas = page.locator('.mini-canvas').first();
     await expect(miniCanvas).toBeVisible();
 
+    // ── Assert Input.Number nodes display their numeric value ─────────────────
+    // ch01: n1=Input.Number(val=3), n2=Input.Number(val=4).
+    // The mini-canvas renders a num-spin-wrap with <input type="number"> for
+    // each Input.Number node — verify the displayed value matches controlValues.
+    const n1ValueInput = page.locator('[data-node-id="n1"] input[type="number"][data-mini-canvas-value="true"]');
+    const n2ValueInput = page.locator('[data-node-id="n2"] input[type="number"][data-mini-canvas-value="true"]');
+    await expect(n1ValueInput).toHaveValue('3');
+    await expect(n2ValueInput).toHaveValue('4');
+
     // ── Draw the missing wire: n2 output "value" → n3 input "b" ──────────────
     // ch01: n2 is Input.Number(b=4), n3 is Math.Add.
     const outputPort = page.locator(
