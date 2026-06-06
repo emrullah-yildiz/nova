@@ -76,7 +76,7 @@ PHASE 1 — PM comment review (do this first):
     - If the comment confirms everything works / gives a positive verdict:
         → Mark all relevant ACs [x], update status to ✅ done.
         → Move the ticket row to the Done table in INDEX.md.
-        → Archive the ticket file to docs/tickets/archive/TICK-NNN.md.
+        → MOVE (not copy) the ticket file: `git mv docs/tickets/TICK-NNN.md docs/tickets/archive/TICK-NNN.md`. The original must not remain in docs/tickets/.
     - If the ticket has no PM comment yet: leave it as-is.
 
 PHASE 2 — New sprint items (tickets that don't exist yet):

@@ -73,7 +73,7 @@ Every piece of work is tracked through a ticket. The ticket is the contract betw
 **PM comment loop.** After merging to develop:
 1. PM tests the feature on develop and writes a comment in the `## PM Notes` section of the ticket file.
 2. On the next "run", morpheus reads every PM comment:
-   - **Positive** (confirms AC): mark ✅ done, archive ticket, move row to Done table in INDEX.md.
+   - **Positive** (confirms AC): mark ✅ done, `git mv docs/tickets/TICK-NNN.md docs/tickets/archive/TICK-NNN.md` (move, not copy — original must not remain in docs/tickets/), move row to Done table in INDEX.md.
    - **Negative** (bug / missing behavior): reopen ticket (back to 🔵 ready), create a new task brief, dispatch agent on a new branch.
 3. A ticket is **never archived without a positive PM comment** — merged ≠ done.
 4. When all tickets are archived, morpheus reports "all tickets closed" and asks the PM for the next sprint green light.
