@@ -11,7 +11,7 @@
 // -> app.openCloudProject() (all from src/app/save-load.js + the byte-identical
 // _joinContinue from src/app/app.js), with a fake cloud client + a minimal fake app.
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { installSaveLoad } from '../src/app/save-load.js';
 
 // A manually-resolvable promise so we can assert state mid-flight (e.g. that
@@ -90,8 +90,13 @@ const visibleText = () => (document.body.textContent || '').toLowerCase();
 const statusOverlay = () => document.getElementById('join-status-overlay');
 
 beforeEach(() => {
+  vi.spyOn(console, 'log').mockImplementation(() => {});
   document.body.innerHTML =
     '<div id="landing-page" class="active"></div><div id="workspace-page"></div>';
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe('invite redeem: land in the shared project or show a visible error', () => {
