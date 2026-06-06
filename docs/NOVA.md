@@ -10,7 +10,7 @@
 > Companion: [`ENGINEERING.md`](ENGINEERING.md) — *how* we work (rules, branching,
 > testing, multi-agent). This file is *what & why & where*; that one is *how*.
 >
-> Last updated: **2026-06-03**.
+> Last updated: **2026-06-07**.
 
 ---
 
@@ -196,6 +196,17 @@ like the code around it. (Each links to the decision that owns the detail.)
   (Python = imports/bridge/typed headers/terminal; CodeBlock = expressions/series/
   literals/inline). Codegen tracks *live* ports, not the static def. `Custom.Formula`
   was folded into CodeBlock (`Result = <expr>`) and retired.
+- **Geometry selection uses a temporary mesh swap, not permanent splitting.**
+  `Select.Faces` / `Select.Edges` / `Select.Points` nodes operate in two display
+  modes. **Normal mode:** the geometry renders as a single unified `THREE.Mesh`
+  (one material, one draw call). **Selection mode (active):** the mesh is swapped
+  for a `BufferGeometry` with `groups` — one group per logical face (coplanar
+  triangle set, grouped by shared normal within tolerance). Each group gets its own
+  `MeshPhongMaterial` so face colors can be set independently. `Raycaster` returns
+  `faceIndex`; a lookup table maps triangle index → group index → logical face.
+  On Approve/Cancel the multi-group mesh is disposed and the normal mesh is
+  restored. Output is face polygon geometry — the face's vertex positions extracted
+  from the group's index range — not the whole mesh object.
 - **Graph run modes are app-level policy over the engine mechanism.** The graph
   recomputes per `app.runMode`: **Automatic** (default — recompute on every edit,
   the legacy behavior) or **Manual** (defer to an explicit Run). The *mechanism*
@@ -237,6 +248,15 @@ like the code around it. (Each links to the decision that owns the detail.)
   no checkout, no separate hub exe — so a clean install can Connect.
 
 **In-flight / not started:**
+- **Select.Faces per-face selection (Sprint A2, TICK-009)** — individual face hover
+  + click selection on any `Geo.Mesh3` solid. Architecture: when selection mode
+  activates, the scene item's single `THREE.Mesh` is swapped for a multi-group
+  `BufferGeometry` with one material per logical face (coplanar-triangle groups).
+  `Raycaster.faceIndex` identifies the hit group; the per-group material color
+  updates for hover (blue) / selected (green) / candidate (teal). Approve/Cancel
+  swaps back to the normal unified mesh. Output is the selected face(s) as planar
+  polygon geometry (`Geo.Plane` or face-vertex array). The mesh renders as a
+  unified whole in all other contexts — no permanent geometry splitting.
 - **Accounts & collaboration: Phase 0 not started** — the `src/enterprise/` domain
   logic exists but is frontend-dormant and Node-bound; the Worker port is pending.
 - AI prompt Phase 3 (library hardening: real boolean CSG, paneling, Voronoi) and
