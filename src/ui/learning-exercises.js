@@ -45,10 +45,10 @@ const ch01 = {
   id: 'ch01',
   title: 'Introduction: Add two numbers',
   nodes: [
-    { id: 'n1', type: 'Input.Number', x: 80,  y: 60,  controlValues: { val: 3 } },
-    { id: 'n2', type: 'Input.Number', x: 80,  y: 160, controlValues: { val: 4 } },
-    { id: 'n3', type: 'Math.Add',     x: 280, y: 100 },
-    { id: 'n4', type: 'Output.Watch', x: 480, y: 100 }
+    { id: 'n1', type: 'Input.Number', x: 20,  y: 40,  controlValues: { val: 3 } },
+    { id: 'n2', type: 'Input.Number', x: 20,  y: 155, controlValues: { val: 4 } },
+    { id: 'n3', type: 'Math.Add',     x: 270, y: 80 },
+    { id: 'n4', type: 'Output.Watch', x: 520, y: 80 }
   ],
   preDrawnWires: [
     { fromNode: 'n1', fromPort: 'value', toNode: 'n3', toPort: 'a' },
@@ -70,10 +70,10 @@ const ch02 = {
   id: 'ch02',
   title: 'Interface: Multiply and watch',
   nodes: [
-    { id: 'n1', type: 'Input.Number',  x: 80,  y: 60,  controlValues: { val: 6 } },
-    { id: 'n2', type: 'Input.Number',  x: 80,  y: 160, controlValues: { val: 7 } },
-    { id: 'n3', type: 'Math.Multiply', x: 280, y: 100 },
-    { id: 'n4', type: 'Output.Watch',  x: 480, y: 100 }
+    { id: 'n1', type: 'Input.Number',  x: 20,  y: 40,  controlValues: { val: 6 } },
+    { id: 'n2', type: 'Input.Number',  x: 20,  y: 155, controlValues: { val: 7 } },
+    { id: 'n3', type: 'Math.Multiply', x: 270, y: 80 },
+    { id: 'n4', type: 'Output.Watch',  x: 520, y: 80 }
   ],
   preDrawnWires: [
     { fromNode: 'n1', fromPort: 'value', toNode: 'n3', toPort: 'a' },
@@ -95,10 +95,10 @@ const ch03 = {
   id: 'ch03',
   title: 'Node Anatomy: Subtract via ports',
   nodes: [
-    { id: 'n1', type: 'Input.Number',  x: 80,  y: 60,  controlValues: { val: 10 } },
-    { id: 'n2', type: 'Input.Number',  x: 80,  y: 160, controlValues: { val: 3 } },
-    { id: 'n3', type: 'Math.Subtract', x: 280, y: 100 },
-    { id: 'n4', type: 'Output.Watch',  x: 480, y: 100 }
+    { id: 'n1', type: 'Input.Number',  x: 20,  y: 40,  controlValues: { val: 10 } },
+    { id: 'n2', type: 'Input.Number',  x: 20,  y: 155, controlValues: { val: 3 } },
+    { id: 'n3', type: 'Math.Subtract', x: 270, y: 80 },
+    { id: 'n4', type: 'Output.Watch',  x: 520, y: 80 }
   ],
   preDrawnWires: [
     { fromNode: 'n1', fromPort: 'value', toNode: 'n3', toPort: 'a' },
@@ -120,10 +120,10 @@ const ch04 = {
   id: 'ch04',
   title: 'Data Types: Divide two numbers',
   nodes: [
-    { id: 'n1', type: 'Input.Number', x: 80,  y: 60,  controlValues: { val: 20 } },
-    { id: 'n2', type: 'Input.Number', x: 80,  y: 160, controlValues: { val: 4 } },
-    { id: 'n3', type: 'Math.Divide',  x: 280, y: 100 },
-    { id: 'n4', type: 'Output.Watch', x: 480, y: 100 }
+    { id: 'n1', type: 'Input.Number', x: 20,  y: 40,  controlValues: { val: 20 } },
+    { id: 'n2', type: 'Input.Number', x: 20,  y: 155, controlValues: { val: 4 } },
+    { id: 'n3', type: 'Math.Divide',  x: 270, y: 80 },
+    { id: 'n4', type: 'Output.Watch', x: 520, y: 80 }
   ],
   preDrawnWires: [
     { fromNode: 'n1', fromPort: 'value', toNode: 'n3', toPort: 'a' },
@@ -146,10 +146,10 @@ const ch05 = {
   id: 'ch05',
   title: 'Math Operations: Power (2^8)',
   nodes: [
-    { id: 'n1', type: 'Input.Number', x: 80,  y: 60,  controlValues: { val: 2 } },
-    { id: 'n2', type: 'Input.Number', x: 80,  y: 160, controlValues: { val: 8 } },
-    { id: 'n3', type: 'Math.Power',   x: 280, y: 100 },
-    { id: 'n4', type: 'Output.Watch', x: 480, y: 100 }
+    { id: 'n1', type: 'Input.Number', x: 20,  y: 40,  controlValues: { val: 2 } },
+    { id: 'n2', type: 'Input.Number', x: 20,  y: 155, controlValues: { val: 8 } },
+    { id: 'n3', type: 'Math.Power',   x: 270, y: 80 },
+    { id: 'n4', type: 'Output.Watch', x: 520, y: 80 }
   ],
   preDrawnWires: [
     { fromNode: 'n1', fromPort: 'value', toNode: 'n3', toPort: 'base' },
@@ -172,11 +172,11 @@ const ch06 = {
   id: 'ch06',
   title: 'Geometry Operations: Extract Point.X',
   nodes: [
-    { id: 'n1', type: 'Input.Number',        x: 80,  y: 60,  controlValues: { val: 5 } },
-    { id: 'n2', type: 'Input.Number',        x: 80,  y: 160, controlValues: { val: 3 } },
-    { id: 'n3', type: 'Point.ByCoordinates', x: 280, y: 100 },
-    { id: 'n4', type: 'Point.X',             x: 480, y: 100 },
-    { id: 'n5', type: 'Output.Watch',        x: 680, y: 100 }
+    { id: 'n1', type: 'Input.Number',        x: 20,  y: 40,  controlValues: { val: 5 } },
+    { id: 'n2', type: 'Input.Number',        x: 20,  y: 155, controlValues: { val: 3 } },
+    { id: 'n3', type: 'Point.ByCoordinates', x: 270, y: 70 },
+    { id: 'n4', type: 'Point.X',             x: 520, y: 70 },
+    { id: 'n5', type: 'Output.Watch',        x: 770, y: 70 }
   ],
   preDrawnWires: [
     { fromNode: 'n1', fromPort: 'value', toNode: 'n3', toPort: 'x' },
@@ -200,11 +200,11 @@ const ch07 = {
   id: 'ch07',
   title: 'List Operations: Count a range',
   nodes: [
-    { id: 'n1', type: 'Input.Number', x: 80,  y: 60,  controlValues: { val: 1 } },
-    { id: 'n2', type: 'Input.Number', x: 80,  y: 160, controlValues: { val: 6 } },
-    { id: 'n3', type: 'List.Range',   x: 280, y: 100 },
-    { id: 'n4', type: 'List.Count',   x: 480, y: 100 },
-    { id: 'n5', type: 'Output.Watch', x: 680, y: 100 }
+    { id: 'n1', type: 'Input.Number', x: 20,  y: 40,  controlValues: { val: 1 } },
+    { id: 'n2', type: 'Input.Number', x: 20,  y: 155, controlValues: { val: 6 } },
+    { id: 'n3', type: 'List.Range',   x: 270, y: 70 },
+    { id: 'n4', type: 'List.Count',   x: 520, y: 70 },
+    { id: 'n5', type: 'Output.Watch', x: 770, y: 70 }
   ],
   preDrawnWires: [
     { fromNode: 'n1', fromPort: 'value', toNode: 'n3', toPort: 'start' },
@@ -229,10 +229,10 @@ const ch08 = {
   id: 'ch08',
   title: 'Python Node: Round a number',
   nodes: [
-    { id: 'n1', type: 'Input.Number', x: 80,  y: 60,  controlValues: { val: 3.7 } },
-    { id: 'n2', type: 'Input.Number', x: 80,  y: 160, controlValues: { val: 0 } },
-    { id: 'n3', type: 'Math.Round',   x: 280, y: 100 },
-    { id: 'n4', type: 'Output.Watch', x: 480, y: 100 }
+    { id: 'n1', type: 'Input.Number', x: 20,  y: 40,  controlValues: { val: 3.7 } },
+    { id: 'n2', type: 'Input.Number', x: 20,  y: 155, controlValues: { val: 0 } },
+    { id: 'n3', type: 'Math.Round',   x: 270, y: 80 },
+    { id: 'n4', type: 'Output.Watch', x: 520, y: 80 }
   ],
   preDrawnWires: [
     { fromNode: 'n2', fromPort: 'value', toNode: 'n3', toPort: 'digits' },
@@ -255,11 +255,11 @@ const ch09 = {
   id: 'ch09',
   title: 'Code Terminal: Sum a sequence',
   nodes: [
-    { id: 'n1', type: 'Input.Number',  x: 80,  y: 60,  controlValues: { val: 0 } },
-    { id: 'n2', type: 'Input.Number',  x: 80,  y: 160, controlValues: { val: 5 } },
-    { id: 'n3', type: 'List.Sequence', x: 280, y: 100 },
-    { id: 'n4', type: 'List.Sum',      x: 480, y: 100 },
-    { id: 'n5', type: 'Output.Watch',  x: 680, y: 100 }
+    { id: 'n1', type: 'Input.Number',  x: 20,  y: 40,  controlValues: { val: 0 } },
+    { id: 'n2', type: 'Input.Number',  x: 20,  y: 155, controlValues: { val: 5 } },
+    { id: 'n3', type: 'List.Sequence', x: 270, y: 70 },
+    { id: 'n4', type: 'List.Sum',      x: 520, y: 70 },
+    { id: 'n5', type: 'Output.Watch',  x: 770, y: 70 }
   ],
   preDrawnWires: [
     { fromNode: 'n1', fromPort: 'value', toNode: 'n3', toPort: 'start' },
@@ -284,12 +284,12 @@ const ch10 = {
   id: 'ch10',
   title: 'Code Block: Chain two operations',
   nodes: [
-    { id: 'n1', type: 'Input.Number',  x: 80,  y: 60,  controlValues: { val: 3 } },
-    { id: 'n2', type: 'Input.Number',  x: 80,  y: 160, controlValues: { val: 2 } },
-    { id: 'n3', type: 'Math.Add',      x: 280, y: 100 },
-    { id: 'n4', type: 'Input.Number',  x: 280, y: 240, controlValues: { val: 4 } },
-    { id: 'n5', type: 'Math.Multiply', x: 480, y: 160 },
-    { id: 'n6', type: 'Output.Watch',  x: 680, y: 160 }
+    { id: 'n1', type: 'Input.Number',  x: 20,  y: 40,  controlValues: { val: 3 } },
+    { id: 'n2', type: 'Input.Number',  x: 20,  y: 155, controlValues: { val: 2 } },
+    { id: 'n3', type: 'Math.Add',      x: 270, y: 80 },
+    { id: 'n4', type: 'Input.Number',  x: 270, y: 260, controlValues: { val: 4 } },
+    { id: 'n5', type: 'Math.Multiply', x: 520, y: 155 },
+    { id: 'n6', type: 'Output.Watch',  x: 770, y: 155 }
   ],
   preDrawnWires: [
     { fromNode: 'n1', fromPort: 'value',  toNode: 'n3', toPort: 'a' },

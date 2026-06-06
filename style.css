@@ -2286,21 +2286,14 @@ input[type="number"] {
 
 /* ── Mini-canvas exercise component ── */
 #learning-overlay .learn-exercise-section { margin-top: 40px; padding-top: 28px; border-top: 1px solid var(--border-color, #313244); }
+/* mini-canvas exercise component — nodes use real Nova .node CSS classes */
 .mini-canvas { display: flex; flex-direction: column; gap: 12px; width: 100%; }
-.mini-canvas-area { position: relative; background: #11111b; border: 1px solid var(--border-color, #313244); border-radius: 8px; overflow: auto; cursor: default; user-select: none; }
-.mini-canvas-node { position: absolute; background: #313244; border: 1.5px solid #45475a; border-radius: 6px; box-sizing: border-box; font-size: 11px; color: var(--text-primary, #cdd6f4); }
-.mini-canvas-node-header { background: #3b3c52; border-bottom: 1px solid #45475a; border-radius: 5px 5px 0 0; padding: 4px 8px; font-size: 11px; font-weight: 600; color: var(--text-primary, #cdd6f4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mini-canvas-ports { position: relative; }
-.mini-canvas-port { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #585b70; border: 2px solid #89b4fa; cursor: pointer; box-sizing: border-box; display: flex; align-items: center; }
-.mini-canvas-port:hover { border-color: #b4d0ff; background: #6c7086; }
-.mini-canvas-port.input { transform: translateY(-50%); }
-.mini-canvas-port.output { position: absolute; transform: translateY(-50%); }
-.mini-canvas-port.unwired { background: transparent; border-color: #585b70; }
-.mini-canvas-port.unwired:hover { border-color: #89b4fa; }
-.mini-canvas-port.pending { background: #89b4fa; border-color: #b4d0ff; box-shadow: 0 0 0 3px rgba(137,180,250,0.35); }
-.mini-canvas-port-label { position: absolute; font-size: 9.5px; color: var(--text-muted, #6c7086); white-space: nowrap; pointer-events: none; line-height: 1; }
-.mini-canvas-port-label--input { left: 14px; top: 50%; transform: translateY(-50%); }
-.mini-canvas-port-label--output { right: 14px; top: 50%; transform: translateY(-50%); }
+.mini-canvas-area { position: relative; background: var(--bg-canvas, #11111b); border: 1px solid var(--border-color, #313244); border-radius: 8px; min-height: 280px; cursor: default; user-select: none; overflow: auto; }
+.mini-canvas .node-header { cursor: default; }
+.mini-canvas .node { cursor: default; }
+.mini-canvas .port-dot.unwired { background: transparent !important; border-color: #585b70 !important; }
+.mini-canvas .port-dot.unwired:hover { border-color: var(--port-color, #89b4fa) !important; }
+.mini-canvas .port-dot.pending { background: var(--port-color, #89b4fa) !important; border-color: #fff !important; box-shadow: 0 0 0 3px rgba(137,180,250,0.4); }
 .mini-canvas-submit { align-self: flex-start; font-size: 13px; font-weight: 700; padding: 9px 22px; border-radius: 8px; cursor: pointer; background: var(--accent-blue, #89b4fa); color: #11111b; border: none; transition: filter 0.15s; }
 .mini-canvas-submit:hover { filter: brightness(1.1); }
 .mini-canvas-success { padding: 10px 14px; border-radius: 8px; background: rgba(166,227,161,0.15); border: 1px solid var(--accent-green, #a6e3a1); color: var(--accent-green, #a6e3a1); font-size: 13px; font-weight: 600; }
