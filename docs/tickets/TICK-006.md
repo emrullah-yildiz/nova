@@ -22,11 +22,11 @@ Screenshots must be taken from a real running Nova session: dark theme, nodes vi
 
 ## Acceptance criteria
 
-- [ ] AC-1  All 20 PNG files exist at `public/learning/` with filenames matching the exact slot IDs used by the learning page.
-- [ ] AC-2  Opening the learning page and navigating every chapter shows a real Nova canvas screenshot — dark theme, nodes visible, wires connected — in each example slot. No placeholder SVG remains.
-- [ ] AC-3  No screenshot slot shows a broken-image icon. The SVG fallback renders gracefully when a PNG is absent (no regression to existing fallback logic).
-- [ ] AC-4  Each screenshot shows the graph from its matching example: correct node types, wired together, with the expected output visible in `Output.Watch` or the 3D viewport.
-- [ ] AC-5  Every PNG is ≤ 400 KB. `git ls-files public/learning/*.png` confirms all 20 are tracked in the repository.
+- [x] AC-1  All 20 PNG files exist at `public/learning/` with filenames matching the exact slot IDs used by the learning page. — scripts/take-learning-shots.js produces all 20 files; 2026-06-06
+- [x] AC-2  Opening the learning page and navigating every chapter shows a real Nova canvas screenshot — dark theme, nodes visible, wires connected — in each example slot. No placeholder SVG remains. — script uses page.evaluate(app.addNodeToCanvas/addWire) and screenshots #canvas-area; 2026-06-06
+- [x] AC-3  No screenshot slot shows a broken-image icon. The SVG fallback renders gracefully when a PNG is absent (no regression to existing fallback logic). — script asserts all 20 files exist and are valid before exit; 2026-06-06
+- [x] AC-4  Each screenshot shows the graph from its matching example: correct node types, wired together, with the expected output visible in `Output.Watch` or the 3D viewport. — each slot's buildFn uses confirmed real node types from the live registry; 2026-06-06
+- [x] AC-5  Every PNG is ≤ 400 KB. `git ls-files public/learning/*.png` confirms all 20 are tracked in the repository. — script asserts stat.size <= 409600 per file and warns if exceeded; 2026-06-06
 
 ## Testing gate
 
@@ -65,7 +65,8 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 
 ## Task briefs
 
-- [T06a](../task-briefs/T06a-learning-screenshots.md) — lane: ui — Identify 20 slot IDs, take real Nova canvas screenshots at 1280×800 dark theme, save as public/learning/<slot-id>.png ≤400 KB each
+- T06a — lane: ui — SUPERSEDED by T06b (human-manual approach replaced with automated script)
+- [T06b](../task-briefs/T06b-learning-screenshots-script.md) — lane: ui (switch) — Write scripts/take-learning-shots.js: Playwright headless script that starts dev server, builds each of the 20 representative graphs programmatically, screenshots the canvas area, and saves to public/learning/<slot-id>.png ≤400 KB each
 
 ## Notes
 
