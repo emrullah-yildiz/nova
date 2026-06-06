@@ -100,14 +100,19 @@ describe('selection-mode state machine', () => {
     expect(getSelectedItems().length).toBe(0);
   });
 
-  it('approveSelection calls onApprove with item labels and deactivates', () => {
+  it('approveSelection calls onApprove with full item objects and deactivates', () => {
+    // AC-9: approveSelection passes full scene-item objects, not string labels.
     let approved = null;
-    activateSelectionMode('node-1', 'faces', (labels) => { approved = labels; }, () => {});
+    activateSelectionMode('node-1', 'faces', (items) => { approved = items; }, () => {});
     const mockGroup = { traverse: (fn) => fn({ isMesh: true, material: { opacity: 1 } }) };
     const item = { id: 'item-1', label: 'My Face', group: mockGroup, visible: true };
     selectionModeClick(item);
     approveSelection();
-    expect(approved).toEqual(['My Face']);
+    // approved is now an array of scene-item objects, not string labels
+    expect(Array.isArray(approved)).toBe(true);
+    expect(approved.length).toBe(1);
+    expect(approved[0].id).toBe('item-1');
+    expect(approved[0].label).toBe('My Face');
     expect(isSelectionModeActive()).toBe(false);
   });
 
@@ -217,16 +222,42 @@ describe('Select.* node execute()', () => {
       expect(result.selection.length).toBe(0);
     });
 
-    it(type + ' execute() returns labels from _selectedLabels', () => {
+    it(type + ' execute() returns structured descriptors from _selectedLabels (AC-9)', () => {
+      // AC-9: output must be typed descriptors, not bare strings.
       const def = registry.getNode(type);
       const result = def.execute({}, {}, { _selectedLabels: 'Geo.Box||Geo.Sphere' });
-      expect(result.selection).toEqual(['Geo.Box', 'Geo.Sphere']);
+      expect(Array.isArray(result.selection)).toBe(true);
+      expect(result.selection.length).toBe(2);
+      // Each item must be a structured object with _type, not a bare string
+      expect(typeof result.selection[0]).toBe('object');
+      expect(result.selection[0]._type).toBeTruthy();
+      expect(result.selection[0].label).toBe('Geo.Box');
+      expect(result.selection[1].label).toBe('Geo.Sphere');
+      // toString() must return the label for human-readable display
+      expect(String(result.selection[0])).toBe('Geo.Box');
+      expect(String(result.selection[1])).toBe('Geo.Sphere');
     });
 
-    it(type + ' execute() returns a single label when one item was selected', () => {
+    it(type + ' execute() returns structured descriptor for a single selected item', () => {
       const def = registry.getNode(type);
       const result = def.execute({}, {}, { _selectedLabels: 'Wall Face A' });
-      expect(result.selection).toEqual(['Wall Face A']);
+      expect(Array.isArray(result.selection)).toBe(true);
+      expect(result.selection.length).toBe(1);
+      expect(typeof result.selection[0]).toBe('object');
+      expect(result.selection[0].label).toBe('Wall Face A');
+      expect(String(result.selection[0])).toBe('Wall Face A');
+    });
+
+    it(type + ' execute() prefers _selectedGeo over _selectedLabels when present (AC-9)', () => {
+      const def = registry.getNode(type);
+      const geoDescriptors = [
+        { _type: 'FaceSelection', label: 'My Box Face', nodeId: 'node-42', varName: '' }
+      ];
+      const result = def.execute({}, {}, { _selectedLabels: 'old-label', _selectedGeo: geoDescriptors });
+      expect(Array.isArray(result.selection)).toBe(true);
+      expect(result.selection.length).toBe(1);
+      expect(result.selection[0]._type).toBeTruthy();
+      expect(result.selection[0].label).toBe('My Box Face');
     });
   });
 
