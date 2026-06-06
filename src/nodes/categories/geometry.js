@@ -543,7 +543,8 @@ export const geometryNodes = [
     ],
     controls: [
       { id: '_selectedLabels', type: 'hidden', default: '' },
-      { id: '_selectedGeo', type: 'hidden', default: '' }
+      { id: '_selectedGeo', type: 'hidden', default: '' },
+      { id: '_selectedFaces', type: 'hidden', default: '' }
     ],
     metadata: { selectionMode: 'faces' },
     codegen: {
@@ -551,13 +552,27 @@ export const geometryNodes = [
       csharp: 'var {{faces}} = SelectFaces();'
     },
     execute(context, inputs, controlValues) {
-      // AC-9: _selectedGeo is a JSON string written by node-renderer.js on Approve.
-      // It contains Array<{ _type:'Mesh', label, nodeId, varName, vertexCount, vertices, faceCount }>.
-      // Fall back to empty list for old saved graphs or when no selection has been made.
-      var raw = controlValues._selectedGeo;
-      if (raw && typeof raw === 'string') {
+      // T09c: read _selectedFaces first (JSON written by node-renderer.js on Approve).
+      // Contains Array<Face> where each Face has _type:'Face' plus polygon/vertex data.
+      // Falls back to legacy _selectedGeo (pre-T09c graphs) so old saved graphs keep working.
+      var raw = controlValues._selectedFaces;
+      if (raw) {
+        var faces;
         try {
-          var geoData = JSON.parse(raw);
+          faces = JSON.parse(raw);
+        } catch (_) {
+          return { faces: [] };
+        }
+        var valid = Array.isArray(faces)
+          ? faces.filter(function(f) { return f && f._type === 'Face'; })
+          : [];
+        return { faces: valid };
+      }
+      // Legacy path: _selectedGeo was the pre-T09c key (Mesh objects, no _type filter).
+      var legacyRaw = controlValues._selectedGeo;
+      if (legacyRaw && typeof legacyRaw === 'string') {
+        try {
+          var geoData = JSON.parse(legacyRaw);
           if (Array.isArray(geoData)) return { faces: geoData };
         } catch (_) { /* fall through */ }
       }

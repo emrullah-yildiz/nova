@@ -10,9 +10,14 @@
 //   deactivateSelectionMode()
 //   isSelectionModeActive()
 //   getSelectedItems()
+//   getSelectedFaces()          — returns per-face group data for Select.Faces
+//   selectionMeshClick(hit)     — called by geo-selector for isSelectionMesh hits
+//   selectionMeshHover(hit)     — called by geo-selector for isSelectionMesh hover
 //
 // The "mode" parameter controls what geometry types count as selectable:
-//   'faces'  — surface / solid meshes
+//   'faces'  — surface / solid meshes, with per-face-group granularity via
+//               mesh3.toSelectionMesh() (T09a). Each logical face (coplanar
+//               triangle group) is independently hoverable and selectable.
 //   'edges'  — line / curve geometry
 //   'points' — point / vertex geometry
 //
@@ -26,9 +31,10 @@ const _state = {
   active: false,
   nodeId: null,
   mode: null,         // 'faces' | 'edges' | 'points'
-  items: [],          // accumulated selection (scene-item objects)
+  items: [],          // accumulated selection (scene-item or face-group objects)
   onApprove: null,
   onCancel: null,
+  hoveredGroup: null, // { item, groupIndex } — currently hovered face group
 };
 
 const FACE_HOVER_COLOR = 0x89b4fa;
@@ -147,6 +153,104 @@ function _makeSelectionItem(item, hit) {
   };
 }
 
+// ── Face-group mesh swap helpers (T09b) ────────────────────────────────────────
+//
+// When mode === 'faces' and a scene item has a _mesh3 with groupFaces() /
+// toSelectionMesh() (added by T09a), swap the body mesh out for a multi-group
+// selection mesh so each logical face (coplanar triangle set) gets its own
+// MeshPhongMaterial and can be individually hovered / selected.
+
+/**
+ * Swap body meshes to selection meshes for all scene items.
+ * Called by activateSelectionMode when mode === 'faces'.
+ * Defensive: if mesh3 or its methods are absent, the item is skipped and
+ * the existing whole-mesh selection path still works.
+ */
+function _swapToFaceMeshes() {
+  const viewer = getViewer();
+  if (!viewer || !viewer._sceneItems) return;
+  viewer._sceneItems.forEach(function (item) {
+    if (!item.group) return;
+    const mesh3 = item._mesh3;
+    if (!mesh3 || typeof mesh3.groupFaces !== 'function' || typeof mesh3.toSelectionMesh !== 'function') return;
+
+    // Find the body mesh (isMeshBody) — must NOT touch LineSegments (edge lines).
+    let bodyMesh = null;
+    item.group.traverse(function (obj) {
+      if (!bodyMesh && obj.isMesh && obj.userData && obj.userData.isMeshBody) {
+        bodyMesh = obj;
+      }
+    });
+    if (!bodyMesh) return;
+
+    try {
+      const faceGroups = mesh3.groupFaces();
+      const result = mesh3.toSelectionMesh(faceGroups);
+      if (!result || !result.mesh) return;
+
+      // Initialise all materials to teal (candidate color).
+      if (result.materials && Array.isArray(result.materials)) {
+        result.materials.forEach(function (mat) {
+          if (mat && mat.color && typeof mat.color.set === 'function') {
+            mat.color.set(CANDIDATE_COLOR);
+            if (mat.emissive && typeof mat.emissive.set === 'function') mat.emissive.set(CANDIDATE_COLOR);
+            if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = 0.3;
+            if (mat.opacity !== undefined) mat.opacity = 0.85;
+            mat.needsUpdate = true;
+          }
+        });
+      }
+
+      // Swap: remove body mesh, insert selection mesh.
+      const parent = bodyMesh.parent;
+      if (!parent) return;
+      parent.remove(bodyMesh);
+      parent.add(result.mesh);
+
+      item._selectionOriginalMesh = bodyMesh;
+      item._selectionSwappedMesh = result.mesh;
+      item._selectionMeshResult = result;
+      item._selectionFaceGroups = faceGroups;
+    } catch (err) {
+      // T09a not yet merged or error in groupFaces — fall back gracefully.
+      console.warn('[Nova] _swapToFaceMeshes: skipping item', item.id, err && err.message);
+    }
+  });
+}
+
+/**
+ * Restore original body meshes and dispose selection mesh resources.
+ * Called by deactivateSelectionMode.
+ */
+function _restoreFaceMeshes() {
+  const viewer = getViewer();
+  if (!viewer || !viewer._sceneItems) return;
+  viewer._sceneItems.forEach(function (item) {
+    if (!item._selectionOriginalMesh || !item._selectionSwappedMesh) return;
+    const parent = item._selectionSwappedMesh.parent;
+    if (parent) {
+      parent.remove(item._selectionSwappedMesh);
+      parent.add(item._selectionOriginalMesh);
+    }
+    if (item._selectionMeshResult) {
+      if (item._selectionMeshResult.mesh && item._selectionMeshResult.mesh.geometry) {
+        item._selectionMeshResult.mesh.geometry.dispose();
+      }
+      if (item._selectionMeshResult.materials && Array.isArray(item._selectionMeshResult.materials)) {
+        item._selectionMeshResult.materials.forEach(function (m) { if (m && typeof m.dispose === 'function') m.dispose(); });
+      }
+    }
+    delete item._selectionOriginalMesh;
+    delete item._selectionSwappedMesh;
+    delete item._selectionMeshResult;
+    delete item._selectionFaceGroups;
+  });
+
+  // Clear hovered face group state.
+  _state.hoveredGroup = null;
+  if (typeof window !== 'undefined') window.__geoSelectorHoveredFaceGroup = null;
+}
+
 /**
  * Apply visual highlighting to all scene items:
  * - matching items that are selected: bright green (#a6e3a1)
@@ -159,18 +263,40 @@ function _applySelectionHighlight() {
   // THREE is only needed for type-guards; if not present, skip colour changes.
   // The state logic (item accumulation) still works without THREE.
 
-  const selectedIds = new Set(_state.items.map(_getSelectionKey));
+  const selectedKeys = new Set(_state.items.map(_getSelectionKey));
 
   viewer._sceneItems.forEach(function (item) {
     if (!item.visible || !item.group) return;
+
+    // ── Face-group selection mesh path (T09b) ──────────────────────────────
+    // When a selection mesh has been swapped in, colorise per group rather than
+    // the whole item — this is the fine-grained face selection visual.
+    if (item._selectionMeshResult && item._selectionMeshResult.materials) {
+      const result = item._selectionMeshResult;
+      result.materials.forEach(function (mat, groupIndex) {
+        if (!mat) return;
+        const selKey = item.id + ':group:' + groupIndex;
+        const isSelected = selectedKeys.has(selKey);
+        const color = isSelected ? SELECTED_COLOR : CANDIDATE_COLOR;
+        const opacity = isSelected ? 1.0 : 0.85;
+        const emissive = isSelected ? 0.6 : 0.3;
+        if (mat.color && typeof mat.color.set === 'function') mat.color.set(color);
+        if (mat.emissive && typeof mat.emissive.set === 'function') mat.emissive.set(color);
+        if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = emissive;
+        if (mat.opacity !== undefined) mat.opacity = opacity;
+        mat.needsUpdate = true;
+      });
+      return; // handled by per-group path
+    }
+
     const matches = _itemMatchesMode(item, _state.mode);
-    const selected = selectedIds.has(item.id);
+    const selected = selectedKeys.has(item.id);
 
     item.group.traverse(function (obj) {
       if (!obj.material) return;
       if (matches && _state.mode === 'faces' && obj.isMesh && _ensureFaceMaterials(obj) && Array.isArray(obj.material)) {
         obj.material.forEach(function (mat, faceIndex) {
-          const faceSelected = selected || selectedIds.has(item.id + ':face:' + faceIndex);
+          const faceSelected = selected || selectedKeys.has(item.id + ':face:' + faceIndex);
           _setMaterialColor(mat, faceSelected ? SELECTED_COLOR : CANDIDATE_COLOR, faceSelected ? 1.0 : 0.75, faceSelected ? 0.6 : 0.3);
         });
       } else if (selected) {
@@ -258,7 +384,13 @@ function _removeToolbar() {
 
 function _updateToolbarCount() {
   const el = document.getElementById('sel-mode-count');
-  if (el) el.textContent = _state.items.length + ' selected';
+  if (!el) return;
+  const n = _state.items.length;
+  if (_state.mode === 'faces') {
+    el.textContent = n === 1 ? '1 face selected' : n + ' faces selected';
+  } else {
+    el.textContent = n + ' selected';
+  }
 }
 
 function _modeLabel(mode) {
@@ -288,8 +420,17 @@ export function activateSelectionMode(nodeId, mode, onApprove, onCancel) {
   _state.nodeId = nodeId;
   _state.mode = mode || 'faces';
   _state.items = [];
+  _state.hoveredGroup = null;
   _state.onApprove = onApprove || function () {};
   _state.onCancel = onCancel || function () {};
+
+  // When in faces mode, swap each eligible scene item's body mesh with a
+  // multi-group selection mesh (one material per logical face). This requires
+  // T09a's _Mesh3.groupFaces() + toSelectionMesh() — if absent, falls back to
+  // the existing whole-mesh path.
+  if (_state.mode === 'faces') {
+    _swapToFaceMeshes();
+  }
 
   if (typeof document !== 'undefined') {
     _showToolbar();
@@ -301,10 +442,14 @@ export function activateSelectionMode(nodeId, mode, onApprove, onCancel) {
  * Deactivate selection mode without calling any callback.
  */
 export function deactivateSelectionMode() {
+  // Restore original body meshes before clearing state.
+  _restoreFaceMeshes();
+
   _state.active = false;
   _state.nodeId = null;
   _state.mode = null;
   _state.items = [];
+  _state.hoveredGroup = null;
   _state.onApprove = null;
   _state.onCancel = null;
 
@@ -333,8 +478,157 @@ export function getSelectionMode() {
 }
 
 /**
+ * Returns the selected face groups for Select.Faces mode.
+ * Each entry has: { itemId, groupIndex, faceGroups, mesh3 }
+ * — the T09a consumer (geometry.js Select.Faces node) uses these to extract
+ * face vertex geometry via mesh3.getFaceVertices(groupIndex, faceGroups).
+ *
+ * @returns {Array<{itemId:string, groupIndex:number, faceGroups:object[], mesh3:object}>}
+ */
+export function getSelectedFaces() {
+  return _state.items
+    .filter(function (it) { return it.groupIndex !== undefined; })
+    .map(function (it) {
+      return {
+        itemId: it.id,
+        groupIndex: it.groupIndex,
+        faceGroups: it.faceGroups,
+        mesh3: it.mesh3,
+      };
+    });
+}
+
+/**
+ * Called by geo-selector.js click handler when selection mode is active and
+ * the hit object is a selection mesh (userData.isSelectionMesh === true).
+ *
+ * Toggles the face group into/out of the accumulated selection set and
+ * updates the group's material color (green selected / teal unselected).
+ *
+ * @param {object} hit            THREE.js raycaster intersection result.
+ * @param {object} sceneItem      The Viewer3D._sceneItems entry whose
+ *                                _selectionSwappedMesh === hit.object.
+ */
+export function selectionMeshClick(hit, sceneItem) {
+  if (!_state.active || !hit || !sceneItem) return;
+  const result = sceneItem._selectionMeshResult;
+  if (!result || !result.triangleToGroup || !result.materials) return;
+
+  const triIndex = Math.floor(hit.faceIndex != null ? hit.faceIndex : 0);
+  const groupIndex = result.triangleToGroup[triIndex];
+  if (groupIndex === undefined || groupIndex === null) return;
+
+  const selKey = sceneItem.id + ':group:' + groupIndex;
+  const existingIdx = _state.items.findIndex(function (it) { return it.selectionKey === selKey; });
+
+  if (existingIdx >= 0) {
+    // Deselect: remove and revert to teal.
+    _state.items.splice(existingIdx, 1);
+    const mat = result.materials[groupIndex];
+    if (mat) {
+      if (mat.color && typeof mat.color.set === 'function') mat.color.set(CANDIDATE_COLOR);
+      if (mat.emissive && typeof mat.emissive.set === 'function') mat.emissive.set(CANDIDATE_COLOR);
+      if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = 0.3;
+      if (mat.opacity !== undefined) mat.opacity = 0.85;
+      mat.needsUpdate = true;
+    }
+  } else {
+    // Select: add and paint green.
+    _state.items.push({
+      id: sceneItem.id,
+      selectionKey: selKey,
+      nodeId: sceneItem.nodeId,
+      varName: sceneItem.varName || '',
+      label: (sceneItem.label || sceneItem.id || 'Mesh') + ' face group ' + groupIndex,
+      groupIndex: groupIndex,
+      faceGroups: sceneItem._selectionFaceGroups,
+      mesh3: sceneItem._mesh3,
+    });
+    const mat = result.materials[groupIndex];
+    if (mat) {
+      if (mat.color && typeof mat.color.set === 'function') mat.color.set(SELECTED_COLOR);
+      if (mat.emissive && typeof mat.emissive.set === 'function') mat.emissive.set(SELECTED_COLOR);
+      if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = 0.6;
+      if (mat.opacity !== undefined) mat.opacity = 1.0;
+      mat.needsUpdate = true;
+    }
+  }
+
+  _updateToolbarCount();
+}
+
+/**
+ * Called by geo-selector.js mousemove handler when selection mode is active
+ * and the cursor is over (or has just left) a selection mesh.
+ *
+ * Applies blue hover color to the hovered face group, restoring any
+ * previously hovered group back to teal or green (if selected).
+ *
+ * @param {object|null} hit        THREE.js intersection, or null if nothing hit.
+ * @param {object|null} sceneItem  Scene item for the hit, or null.
+ */
+export function selectionMeshHover(hit, sceneItem) {
+  if (!_state.active) return;
+
+  const prevHovered = _state.hoveredGroup;
+
+  // Restore previously hovered group to its correct color (green or teal).
+  if (prevHovered) {
+    const prevResult = prevHovered.item._selectionMeshResult;
+    if (prevResult && prevResult.materials) {
+      const mat = prevResult.materials[prevHovered.groupIndex];
+      if (mat) {
+        const selKey = prevHovered.item.id + ':group:' + prevHovered.groupIndex;
+        const isSelected = _state.items.some(function (it) { return it.selectionKey === selKey; });
+        const color = isSelected ? SELECTED_COLOR : CANDIDATE_COLOR;
+        if (mat.color && typeof mat.color.set === 'function') mat.color.set(color);
+        if (mat.emissive && typeof mat.emissive.set === 'function') mat.emissive.set(color);
+        if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = isSelected ? 0.6 : 0.3;
+        if (mat.opacity !== undefined) mat.opacity = isSelected ? 1.0 : 0.85;
+        mat.needsUpdate = true;
+      }
+    }
+    _state.hoveredGroup = null;
+  }
+
+  if (!hit || !sceneItem) {
+    // Not hovering any selection mesh — expose null for E2E assertions.
+    if (typeof window !== 'undefined') window.__geoSelectorHoveredFaceGroup = null;
+    return;
+  }
+
+  const result = sceneItem._selectionMeshResult;
+  if (!result || !result.triangleToGroup || !result.materials) return;
+
+  const triIndex = Math.floor(hit.faceIndex != null ? hit.faceIndex : 0);
+  const groupIndex = result.triangleToGroup[triIndex];
+  if (groupIndex === undefined || groupIndex === null) return;
+
+  const selKey = sceneItem.id + ':group:' + groupIndex;
+  const isSelected = _state.items.some(function (it) { return it.selectionKey === selKey; });
+
+  // Selected group takes priority: keep green, don't apply blue hover.
+  if (!isSelected) {
+    const mat = result.materials[groupIndex];
+    if (mat) {
+      if (mat.color && typeof mat.color.set === 'function') mat.color.set(FACE_HOVER_COLOR);
+      if (mat.emissive && typeof mat.emissive.set === 'function') mat.emissive.set(FACE_HOVER_COLOR);
+      if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = 0.5;
+      if (mat.opacity !== undefined) mat.opacity = 1.0;
+      mat.needsUpdate = true;
+    }
+  }
+
+  _state.hoveredGroup = { item: sceneItem, groupIndex: groupIndex };
+  if (typeof window !== 'undefined') {
+    window.__geoSelectorHoveredFaceGroup = { itemId: sceneItem.id, groupIndex: groupIndex };
+  }
+}
+
+/**
  * Called by geo-selector.js click handler when selection mode is active.
  * Toggles the item into/out of the accumulated selection set.
+ * For face-group selection meshes, use selectionMeshClick() instead.
  *
  * @param {object} item  A Viewer3D._sceneItems entry.
  */
@@ -373,8 +667,9 @@ export function approveSelection() {
   // Previously this mapped to labels (strings) — changed for AC-9.
   const items = _state.items.slice();
   const cb = _state.onApprove;
-  deactivateSelectionMode();
+  // Fire callback BEFORE deactivate so getSelectedFaces() still has state
   if (typeof cb === 'function') cb(items);
+  deactivateSelectionMode();
 }
 
 /**
@@ -398,6 +693,23 @@ export function cancelSelection() {
 export function clearSelection() {
   if (!_state.active) return;
   _state.items = [];
+
+  // Reset all selection mesh materials to teal (candidate color).
+  const viewer = getViewer();
+  if (viewer && viewer._sceneItems) {
+    viewer._sceneItems.forEach(function (item) {
+      if (!item._selectionMeshResult || !item._selectionMeshResult.materials) return;
+      item._selectionMeshResult.materials.forEach(function (mat) {
+        if (!mat) return;
+        if (mat.color && typeof mat.color.set === 'function') mat.color.set(CANDIDATE_COLOR);
+        if (mat.emissive && typeof mat.emissive.set === 'function') mat.emissive.set(CANDIDATE_COLOR);
+        if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = 0.3;
+        if (mat.opacity !== undefined) mat.opacity = 0.85;
+        mat.needsUpdate = true;
+      });
+    });
+  }
+
   _applySelectionHighlight();
   _updateToolbarCount();
 }
