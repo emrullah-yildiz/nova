@@ -8,7 +8,7 @@
 // Full DOM/viewer integration (toolbar rendering, 3D click routing) is verified
 // manually in the browser; here we test the pure-logic surface.
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import {
   activateSelectionMode,
   deactivateSelectionMode,
@@ -309,5 +309,82 @@ describe('Select.* node execute()', () => {
 
   it('Select.Points selectionMode is "points"', () => {
     expect(registry.getNode('Select.Points').metadata.selectionMode).toBe('points');
+  });
+});
+
+// ── Geo.Mesh3 face grouping (T09a) ──────────────────────────────────────────
+//
+// These tests exercise the three new _Mesh3 methods added in T09a:
+//   groupFaces()        — groups triangles by coplanar normal
+//   getFaceVertices()   — returns unique vertex positions for one group
+//   toSelectionMesh()   — builds THREE.Mesh with per-group BufferGeometry groups
+//
+// THREE is not available in the Node test environment; a minimal mock is
+// installed on globalThis before the import so geometry-lib.js resolves it.
+
+describe('Geo.Mesh3 face grouping', () => {
+  let Geo;
+
+  beforeAll(async () => {
+    // Minimal THREE mock — only the surface that toSelectionMesh() calls.
+    const makeAttr = (arr, itemSize) => ({ array: arr, itemSize, isBufferAttribute: true });
+    const mockGeometry = () => {
+      const geo = {
+        _attrs: {},
+        _index: null,
+        _groups: [],
+        setAttribute(name, attr) { this._attrs[name] = attr; },
+        setIndex(arr) { this._index = arr; },
+        addGroup(start, count, gi) { this._groups.push({ start, count, gi }); },
+        computeVertexNormals() {},
+        get groups() { return this._groups; }
+      };
+      return geo;
+    };
+    const mockMat = () => {
+      const m = { color: 0x94e2d5, side: 2, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, _cloned: false };
+      m.clone = () => { const c = mockMat(); c._cloned = true; return c; };
+      return m;
+    };
+    globalThis.THREE = {
+      BufferGeometry: function() { return mockGeometry(); },
+      BufferAttribute: function(arr, n) { return makeAttr(arr, n); },
+      MeshPhongMaterial: function(opts) { const m = mockMat(); Object.assign(m, opts || {}); m.clone = () => { const c = mockMat(); Object.assign(c, opts || {}); c.clone = m.clone; return c; }; return m; },
+      Mesh: function(geo, mats) { return { geometry: geo, material: mats, userData: {} }; },
+      DoubleSide: 2
+    };
+
+    // Import Geo after the mock is in place so geometry-lib.js sees globalThis.THREE.
+    const mod = await import('../src/geometry/index.js');
+    Geo = mod.Geo;
+  });
+
+  it('groups 12 box triangles into 6 coplanar face groups', () => {
+    const box = Geo.createBox(new Geo.Point3(0, 0, 0), 2, 2, 2);
+    const groups = box.groupFaces();
+    expect(groups.length).toBe(6);
+    groups.forEach(g => {
+      expect(g.triangleIndices.length).toBe(2);
+      const [nx, ny, nz] = g.normal;
+      expect(Math.abs(nx * nx + ny * ny + nz * nz - 1)).toBeLessThan(1e-5);
+    });
+  });
+
+  it('getFaceVertices returns 4 unique vertices for group 0', () => {
+    const box = Geo.createBox(new Geo.Point3(0, 0, 0), 2, 2, 2);
+    const groups = box.groupFaces();
+    const verts = box.getFaceVertices(0, groups);
+    expect(verts.length).toBe(4);
+    verts.forEach(v => expect(v.length).toBe(3));
+  });
+
+  it('toSelectionMesh returns mesh with N groups matching faceGroups', () => {
+    const box = Geo.createBox(new Geo.Point3(0, 0, 0), 2, 2, 2);
+    const groups = box.groupFaces();
+    const { mesh, materials, triangleToGroup } = box.toSelectionMesh(groups);
+    expect(mesh).toBeTruthy();
+    expect(materials.length).toBe(groups.length);
+    expect(triangleToGroup.length).toBe(12);
+    expect(mesh.geometry.groups.length).toBe(groups.length);
   });
 });
