@@ -85,3 +85,7 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 - Wire drawing UX should match the main canvas feel (click-to-start, click-to-end) but can be simplified (no drag required).
 - Exercises should be designed so they can be completed in under 2 minutes each.
 - Do not add a parallel learning system — integrate into the existing learning overlay component.
+
+## PM Notes
+- The interactive canvas where users are expected to connected nodes should be like real nova canvas for nodes with real nodes.
+- Current canvas has broken wire system and input/output system. Wire is not following
