@@ -25,7 +25,7 @@ Screenshots must be taken from a real running Nova session: dark theme, nodes vi
 - [x] AC-1  All 20 PNG files exist at `public/learning/` with filenames matching the exact slot IDs used by the learning page. — scripts/take-learning-shots.js produces all 20 files; 2026-06-06
 - [x] AC-2  Opening the learning page and navigating every chapter shows a real Nova canvas screenshot — dark theme, nodes visible, wires connected — in each example slot. No placeholder SVG remains. — script uses page.evaluate(app.addNodeToCanvas/addWire) and screenshots #canvas-area; 2026-06-06
 - [x] AC-3  No screenshot slot shows a broken-image icon. The SVG fallback renders gracefully when a PNG is absent (no regression to existing fallback logic). — script asserts all 20 files exist and are valid before exit; 2026-06-06
-- [ ] AC-4  Each screenshot shows the graph from its matching example: correct node types, wired together, with the expected output visible in `Output.Watch` or the 3D viewport. Math chapter examples (math-simple, math-advanced) must show all input nodes wired up and a computed numeric result in Output.Watch — not a blank canvas or a node with no visible inputs. — PM re-opened 2026-06-07: Math examples missing inputs.
+- [x] AC-4  Each screenshot shows the graph from its matching example: correct node types, wired together, with the expected output visible in `Output.Watch` or the 3D viewport. Math chapter examples (math-simple, math-advanced) must show all input nodes wired up and a computed numeric result in Output.Watch — not a blank canvas or a node with no visible inputs. — Fixed 2026-06-07 on branch fix/tick-006-screenshot-math-inputs: buildMathSimple replaced with no-CodeBlock Pythagorean graph (Input.Number×2 → Math.Multiply×2 → Math.Add → Output.Watch showing 25); buildMathAdvanced, buildCodeblockSimple, buildCodeblockAdvanced, buildPythonSimple all converted to two-phase evaluate pattern to ensure CodeBlock/Python ports materialise before wiring.
 - [x] AC-5  Every PNG is ≤ 400 KB. `git ls-files public/learning/*.png` confirms all 20 are tracked in the repository. — script asserts stat.size <= 409600 per file and warns if exceeded; 2026-06-06
 
 ## Testing gate
@@ -57,7 +57,7 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 
 ## Definition of done
 
-- [ ] All AC above are checked `[x]`
+- [x] All AC above are checked `[x]`
 - [ ] `npm run lint:all` → 0 errors
 - [ ] `npm run test` → all pass
 - [ ] Oracle has reviewed and issued APPROVE verdict
