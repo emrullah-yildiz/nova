@@ -13,6 +13,19 @@
 //   data-node-id, data-port-role="output"|"input", data-port-name
 
 // ---------------------------------------------------------------------------
+// Inline control schema — nodes whose body shows a value control instead of
+// (or in addition to) port rows.  Mirrors the real node-renderer.js behaviour:
+//   type 'number' → num-spin-wrap with <input type="number">
+//   type 'text'   → <input type="text">
+// controlId is the key inside node.controlValues that holds the live value.
+// ---------------------------------------------------------------------------
+const CONTROL_SCHEMA = {
+  'Input.Number':  { controlId: 'val', type: 'number' },
+  'Input.Integer': { controlId: 'val', type: 'number' },
+  'Input.Text':    { controlId: 'val', type: 'text'   }
+};
+
+// ---------------------------------------------------------------------------
 // Static port schema for the node types used in exercises.
 // ---------------------------------------------------------------------------
 const PORT_SCHEMA = {
@@ -214,7 +227,17 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
     const box = document.createElement('div');
     // Use real Nova `.node` class — gets border-top, background, border-radius.
     box.className = 'node mini-canvas-node';
-    box.style.cssText = `left:${node.x}px;top:${node.y}px;--node-color:${meta.color};width:140px;position:absolute;cursor:default`;
+    // data-node-id lets the E2E spec and CSS locate any descendant of this node.
+    box.dataset.nodeId = node.id;
+    // Set individual style properties so that the CSS custom property
+    // --node-color is applied via the proper setProperty API (style.cssText
+    // does not reliably set custom properties in all browsers).
+    box.style.position = 'absolute';
+    box.style.left = `${node.x}px`;
+    box.style.top  = `${node.y}px`;
+    box.style.width = '140px';
+    box.style.cursor = 'default';
+    box.style.setProperty('--node-color', meta.color);
 
     // Header
     const header = document.createElement('div');
@@ -286,17 +309,84 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
       body.appendChild(row);
     }
 
+    // ── Inline value control (e.g. Input.Number spinner) ─────────────────
+    // Mirrors the num-spin-wrap rendered by the real node-renderer.js so
+    // the node body looks identical to the main Nova canvas.
+    const ctrlDef = CONTROL_SCHEMA[node.type];
+    if (ctrlDef) {
+      const cv = node.controlValues && node.controlValues[ctrlDef.controlId];
+      const displayVal = cv !== undefined && cv !== null ? cv : 0;
+      const controlDiv = document.createElement('div');
+      controlDiv.className = 'node-control';
+
+      if (ctrlDef.type === 'number') {
+        const wrap = document.createElement('div');
+        wrap.className = 'num-spin-wrap';
+        wrap.style.width = '100%';
+
+        const numInput = document.createElement('input');
+        numInput.type = 'number';
+        numInput.value = displayVal;
+        numInput.step = '1';
+        numInput.readOnly = true;
+        numInput.dataset.miniCanvasValue = 'true';
+        numInput.style.cssText =
+          'width:100%;padding:3px 20px 3px 8px;font-size:11px;height:24px;' +
+          'box-sizing:border-box;background:var(--bg-tertiary);' +
+          'border:1px solid var(--border-color);border-radius:4px';
+        // Prevent clicks on the input from bubbling to wire interaction.
+        numInput.addEventListener('click', (e) => e.stopPropagation());
+        numInput.addEventListener('mousedown', (e) => e.stopPropagation());
+
+        const spinBtns = document.createElement('div');
+        spinBtns.className = 'num-spin-btns';
+
+        const upBtn = document.createElement('button');
+        upBtn.className = 'num-spin-btn';
+        upBtn.textContent = '▲';
+        upBtn.addEventListener('click', (e) => e.stopPropagation());
+        upBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+
+        const downBtn = document.createElement('button');
+        downBtn.className = 'num-spin-btn';
+        downBtn.textContent = '▼';
+        downBtn.addEventListener('click', (e) => e.stopPropagation());
+        downBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+
+        spinBtns.appendChild(upBtn);
+        spinBtns.appendChild(downBtn);
+        wrap.appendChild(numInput);
+        wrap.appendChild(spinBtns);
+        controlDiv.appendChild(wrap);
+      } else if (ctrlDef.type === 'text') {
+        const textInput = document.createElement('input');
+        textInput.type = 'text';
+        textInput.value = displayVal;
+        textInput.readOnly = true;
+        textInput.dataset.miniCanvasValue = 'true';
+        textInput.addEventListener('click', (e) => e.stopPropagation());
+        textInput.addEventListener('mousedown', (e) => e.stopPropagation());
+        controlDiv.appendChild(textInput);
+      }
+
+      body.appendChild(controlDiv);
+    }
+
     box.appendChild(body);
     canvasEl.appendChild(box);
   });
 
-  // ── Port position (from live DOM rects) ───────────────────────────────────
+  // ── Port position (from live DOM rects, SVG-relative) ────────────────────
+  // All coordinates are measured relative to the SVG element's bounding box so
+  // that wire endpoints and cursor position share the same coordinate space as
+  // the SVG <path> d-attribute values — regardless of scroll or transforms on
+  // ancestor elements (e.g., the learning overlay's fixed/transformed container).
   function _dotCenter(dotEl) {
     const dr = dotEl.getBoundingClientRect();
-    const cr = canvasEl.getBoundingClientRect();
+    const sr = svg.getBoundingClientRect();
     return {
-      x: dr.left - cr.left + dr.width / 2 + canvasEl.scrollLeft,
-      y: dr.top  - cr.top  + dr.height / 2 + canvasEl.scrollTop
+      x: dr.left - sr.left + dr.width  / 2,
+      y: dr.top  - sr.top  + dr.height / 2
     };
   }
 
@@ -357,11 +447,9 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
     const fromDot = portEls.get(`${pendingWire.nodeId}:output:${pendingWire.portId}`);
     if (!fromDot) return;
     const from = _dotCenter(fromDot);
-    const cr = canvasEl.getBoundingClientRect();
-    const to = {
-      x: e.clientX - cr.left + canvasEl.scrollLeft,
-      y: e.clientY - cr.top  + canvasEl.scrollTop
-    };
+    const sr = svg.getBoundingClientRect();
+    const to = { x: e.clientX - sr.left, y: e.clientY - sr.top };
+    pendingLine.style.display = '';
     pendingLine.setAttribute('d', _bezierPath(from, to));
   }
 
@@ -381,9 +469,12 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
     const portType = dotEl.dataset.portType;
     pendingWire = { nodeId, portId, portType, dotEl };
     dotEl.classList.add('pending');
-    pendingLine.style.display = '';
     const from = _dotCenter(dotEl);
     pendingLine.setAttribute('d', _bezierPath(from, from));
+    // Ensure visibility via both CSS style and SVG display attribute so no
+    // residual SVG-level display="none" from a prior setAttribute can hide it.
+    pendingLine.style.display = '';
+    pendingLine.removeAttribute('display');
     document.addEventListener('mousemove', _onDocMouseMove);
   }
 

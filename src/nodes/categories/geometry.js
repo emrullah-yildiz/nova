@@ -536,27 +536,36 @@ export const geometryNodes = [
     subGroup: 'Selection',
     icon: '⬡',
     aliases: ['select-faces'],
-    description: 'Activates interactive face-selection mode in the 3D viewport. Click the Select button, then click surface or solid mesh geometry in the 3D view to build a selection set. Press Approve (green ✓) to confirm or Cancel (red ✗) to discard. Outputs the list of selected geometry labels. Works with Nova geometry only.',
+    description: 'Activates interactive face-selection mode in the 3D viewport. Click the Select button, then click surface or solid mesh geometry in the 3D view to build a selection set. Press Approve (green ✓) to confirm or Cancel (red ✗) to discard. Outputs an array of selected mesh geometry objects with vertex and face data.',
     inputs: [],
     outputs: [
-      { id: 'selection', name: 'Selection', type: 'list', description: 'List of selected geometry item labels' }
+      { id: 'faces', name: 'Faces', type: 'list', description: 'Array of selected mesh geometry objects ({ _type:"Mesh", label, vertexCount, vertices, faceCount })' }
     ],
     controls: [
-      { id: '_selectedLabels', type: 'hidden', default: '' }
+      { id: '_selectedLabels', type: 'hidden', default: '' },
+      { id: '_selectedGeo', type: 'hidden', default: '' }
     ],
     metadata: { selectionMode: 'faces' },
     codegen: {
-      python: '{{selection}} = select_faces()',
-      csharp: 'var {{selection}} = SelectFaces();'
+      python: '{{faces}} = select_faces()',
+      csharp: 'var {{faces}} = SelectFaces();'
     },
     execute(context, inputs, controlValues) {
-      const raw = controlValues._selectedLabels || '';
-      const labels = raw ? raw.split('||').filter(Boolean) : [];
-      return { selection: labels };
+      // AC-9: _selectedGeo is a JSON string written by node-renderer.js on Approve.
+      // It contains Array<{ _type:'Mesh', label, nodeId, varName, vertexCount, vertices, faceCount }>.
+      // Fall back to empty list for old saved graphs or when no selection has been made.
+      var raw = controlValues._selectedGeo;
+      if (raw && typeof raw === 'string') {
+        try {
+          var geoData = JSON.parse(raw);
+          if (Array.isArray(geoData)) return { faces: geoData };
+        } catch (_) { /* fall through */ }
+      }
+      return { faces: [] };
     },
     help: {
       inputs: [],
-      outputs: [{ name: 'Selection', description: 'List of selected geometry labels' }],
+      outputs: [{ name: 'Faces', description: 'Array of selected mesh geometry objects with vertex and face data' }],
       example: {
         title: 'Select faces and inspect them',
         nodes: [
@@ -564,10 +573,10 @@ export const geometryNodes = [
           { type: 'Output.Watch', x: 240, y: 0 }
         ],
         wires: [
-          [0, 'selection', 1, 'value']
+          [0, 'faces', 1, 'value']
         ]
       },
-      sampleCode: '{{selection}} = select_faces()'
+      sampleCode: '{{faces}} = select_faces()'
     }
   },
   {
@@ -583,7 +592,8 @@ export const geometryNodes = [
       { id: 'selection', name: 'Selection', type: 'list', description: 'List of selected edge/curve geometry labels' }
     ],
     controls: [
-      { id: '_selectedLabels', type: 'hidden', default: '' }
+      { id: '_selectedLabels', type: 'hidden', default: '' },
+      { id: '_selectedGeo', type: 'hidden', default: '' }
     ],
     metadata: { selectionMode: 'edges' },
     codegen: {
@@ -591,13 +601,19 @@ export const geometryNodes = [
       csharp: 'var {{selection}} = SelectEdges();'
     },
     execute(context, inputs, controlValues) {
-      const raw = controlValues._selectedLabels || '';
-      const labels = raw ? raw.split('||').filter(Boolean) : [];
-      return { selection: labels };
+      // Read _selectedGeo JSON string (written by node-renderer.js on Approve).
+      var raw = controlValues._selectedGeo;
+      if (raw && typeof raw === 'string') {
+        try {
+          var geoData = JSON.parse(raw);
+          if (Array.isArray(geoData)) return { selection: geoData };
+        } catch (_) { /* fall through */ }
+      }
+      return { selection: [] };
     },
     help: {
       inputs: [],
-      outputs: [{ name: 'Selection', description: 'List of selected edge/curve labels' }],
+      outputs: [{ name: 'Selection', description: 'List of selected edge/curve descriptors ({ _type, label, nodeId, varName })' }],
       example: {
         title: 'Select edges and inspect them',
         nodes: [
@@ -624,7 +640,8 @@ export const geometryNodes = [
       { id: 'selection', name: 'Selection', type: 'list', description: 'List of selected point geometry labels' }
     ],
     controls: [
-      { id: '_selectedLabels', type: 'hidden', default: '' }
+      { id: '_selectedLabels', type: 'hidden', default: '' },
+      { id: '_selectedGeo', type: 'hidden', default: '' }
     ],
     metadata: { selectionMode: 'points' },
     codegen: {
@@ -632,13 +649,19 @@ export const geometryNodes = [
       csharp: 'var {{selection}} = SelectPoints();'
     },
     execute(context, inputs, controlValues) {
-      const raw = controlValues._selectedLabels || '';
-      const labels = raw ? raw.split('||').filter(Boolean) : [];
-      return { selection: labels };
+      // Read _selectedGeo JSON string (written by node-renderer.js on Approve).
+      var raw = controlValues._selectedGeo;
+      if (raw && typeof raw === 'string') {
+        try {
+          var geoData = JSON.parse(raw);
+          if (Array.isArray(geoData)) return { selection: geoData };
+        } catch (_) { /* fall through */ }
+      }
+      return { selection: [] };
     },
     help: {
       inputs: [],
-      outputs: [{ name: 'Selection', description: 'List of selected point labels' }],
+      outputs: [{ name: 'Selection', description: 'List of selected point descriptors ({ _type, label, nodeId, varName })' }],
       example: {
         title: 'Select points and inspect them',
         nodes: [

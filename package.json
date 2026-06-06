@@ -29,6 +29,7 @@
     "cf:dev": "wrangler dev",
     "cf:deploy": "npm run build && wrangler deploy",
     "build:connect-installer": "powershell -NoProfile -File scripts/build-connect-installer.ps1",
+    "screenshots:learning": "node scripts/take-learning-shots.js",
     "prepare": "husky"
   },
   "keywords": [

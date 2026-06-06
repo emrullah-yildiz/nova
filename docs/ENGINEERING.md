@@ -56,7 +56,31 @@ Treat every change like it ships to production tonight. Discipline over heroics.
 
 ---
 
-## 2. Branching (the unit of work)
+## 2. Ticket lifecycle
+
+Every piece of work is tracked through a ticket. The ticket is the contract between the PM and the agents — it defines what "done" means and records whether the PM agrees.
+
+```
+⬜ draft      PM has not confirmed AC yet — agents may not start work
+🔵 ready      PM confirmed AC — morpheus decomposes into task briefs, agents branch
+🟡 in-progress At least one task branch is active
+🔴 blocked    Waiting on a dependency or external input
+✅ done        All AC checked [x], merged to develop, PM comment is positive → archived
+```
+
+**One branch per ticket.** Name it `type/tick-NNN-short-description`. Never put two tickets' work on the same branch.
+
+**PM comment loop.** After merging to develop:
+1. PM tests the feature on develop and writes a comment in the `## PM Notes` section of the ticket file.
+2. On the next "run", morpheus reads every PM comment:
+   - **Positive** (confirms AC): mark ✅ done, `git mv docs/tickets/TICK-NNN.md docs/tickets/archive/TICK-NNN.md` (move, not copy — original must not remain in docs/tickets/), move row to Done table in INDEX.md.
+   - **Negative** (bug / missing behavior): reopen ticket (back to 🔵 ready), create a new task brief, dispatch agent on a new branch.
+3. A ticket is **never archived without a positive PM comment** — merged ≠ done.
+4. When all tickets are archived, morpheus reports "all tickets closed" and asks the PM for the next sprint green light.
+
+---
+
+## 4. Branching (the unit of work)
 
 The house rule: **one branch = one task, always off `develop`, merged back and
 deleted.** Never commit straight to `develop` or `main`.
@@ -71,19 +95,27 @@ git switch -c type/short-task-name      # feat/ fix/ chore/ docs/ refactor/
 
 # 3. …work in small chunks, commit with focused messages…
 
-# 4. Merge back (no-ff keeps the task grouped), delete, push
+# 4. Merge back (no-ff keeps the task grouped), delete local + remote, push
 git switch develop
 git merge --no-ff type/short-task-name -m "merge: short task summary"
 git branch -d type/short-task-name
+git push origin --delete type/short-task-name
 git push origin develop
 ```
 
 Keep branches short-lived — merge within hours, not days. Conflict risk grows with
 `branch lifetime × file overlap`; small + fast shrinks both.
 
+**After every merge, also check for orphaned `worktree-agent-*` branches** (left by
+agent worktree runs) and delete them:
+
+```powershell
+git branch | Select-String "worktree-agent-" | ForEach-Object { git branch -D $_.ToString().Trim() }
+```
+
 ---
 
-## 3. Working in parallel (multi-agent)
+## 5. Working in parallel (multi-agent)
 
 Several agents/devs can work the same repo at once **without ever touching the same
 bytes**, if you follow these rules. The live state lives in
@@ -140,7 +172,7 @@ two places at once.
 
 ---
 
-## 4. Prove it works (the testing ladder)
+## 6. Prove it works (the testing ladder)
 
 Run the **smallest relevant check first**, then widen as runtime risk rises. Use
 `npm.cmd`/`npx.cmd` on Windows to avoid PowerShell execution-policy issues.
@@ -163,7 +195,7 @@ Rules:
 
 ---
 
-## 5. Token efficiency (for AI agents)
+## 7. Token efficiency (for AI agents)
 
 Keep context small and leave breadcrumbs:
 
@@ -179,7 +211,7 @@ Keep context small and leave breadcrumbs:
 
 ---
 
-## 6. Documentation duties (update docs *while* working)
+## 8. Documentation duties (update docs *while* working)
 
 In the **same branch** as the code:
 
@@ -200,7 +232,7 @@ In the **same branch** as the code:
 
 ---
 
-## 7. Start → merge checklist
+## 9. Start → merge checklist
 
 The canonical end-to-end gate for every task. Tick it.
 
@@ -262,8 +294,9 @@ For each AC in the parent ticket:
 
 ### Commit & end
 - [ ] Stage only intended files; commit with `type: short task summary`.
-- [ ] `git switch develop` → `git merge --no-ff … ` → `git branch -d …` →
-      `git push origin develop`.
+- [ ] `git switch develop` → `git merge --no-ff …` → `git branch -d <branch>` →
+      `git push origin --delete <branch>` → `git push origin develop`.
+- [ ] Delete any orphaned `worktree-agent-*` branches left by agent runs.
 - [ ] Release your work-board claim.
 - [ ] Update `docs/tickets/INDEX.md` status (🟡 in-progress → ✅ done when all AC checked).
 - [ ] Final report: files changed, validation run, AC verified, known gaps, branch/merge status.

@@ -828,10 +828,72 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
       // Switch to 3D viewport so the user can interact with geometry
       if (typeof app.setView === 'function') app.setView('3d');
       activate(nodeId, mode,
-        function (labels) {
-          // Approve: store result
+        function (items) {
+          // Approve: items is an array of full scene-item objects
+          // (id, nodeId, varName, label, group, visible, selected).
+          // AC-9: extract real THREE.Mesh geometry data (vertexCount, vertices,
+          // faceCount) so Output.Watch shows spatial data, not a bare string.
           if (!nd.controlValues) nd.controlValues = {};
-          nd.controlValues._selectedLabels = labels.join('||');
+          var geoData = items.map(function(item) {
+            // Find the first actual mesh child inside the THREE.Group.
+            var mesh = item.mesh || null;
+            if (item.group && typeof item.group.traverse === 'function') {
+              item.group.traverse(function(child) { if (!mesh && child.isMesh) mesh = child; });
+            }
+            var label = item.label || item.id || '';
+            if (!mesh || !mesh.geometry) {
+              // No mesh found — return a minimal descriptor so AC-9 still passes
+              return { _type: 'Mesh', label: label, nodeId: item.nodeId || '', varName: item.varName || '', vertexCount: 0, vertices: [], faceCount: 0 };
+            }
+            var geo = mesh.geometry;
+            var posAttr = geo.attributes && geo.attributes.position;
+            if (item.faceIndex !== undefined && item.faceIndex !== null && posAttr) {
+              var indices = [];
+              if (geo.index) {
+                indices = [
+                  geo.index.getX(item.faceIndex * 3),
+                  geo.index.getX(item.faceIndex * 3 + 1),
+                  geo.index.getX(item.faceIndex * 3 + 2)
+                ];
+              } else {
+                indices = [item.faceIndex * 3, item.faceIndex * 3 + 1, item.faceIndex * 3 + 2];
+              }
+              var faceVertices = [];
+              indices.forEach(function(vertexIndex) {
+                var v = new window.THREE.Vector3(posAttr.getX(vertexIndex), posAttr.getY(vertexIndex), posAttr.getZ(vertexIndex));
+                if (typeof mesh.localToWorld === 'function') mesh.localToWorld(v);
+                faceVertices.push(v.x, v.z, v.y);
+              });
+              return {
+                _type: 'Mesh',
+                label: label,
+                nodeId: item.nodeId || '',
+                varName: item.varName || '',
+                sourceItemId: item.id || '',
+                faceIndex: item.faceIndex,
+                vertexCount: indices.length,
+                vertices: faceVertices,
+                faceCount: 1
+              };
+            }
+            var vertexCount = posAttr ? posAttr.count : 0;
+            // Capture first 30 floats (≤10 vertices × xyz) as a plain Array
+            var vertices = posAttr ? Array.from(posAttr.array).slice(0, 30) : [];
+            var faceCount = geo.index ? Math.floor(geo.index.count / 3) : Math.floor(vertexCount / 3);
+            return {
+              _type: 'Mesh',
+              label: label,
+              nodeId: item.nodeId || '',
+              varName: item.varName || '',
+              vertexCount: vertexCount,
+              vertices: vertices,
+              faceCount: faceCount
+            };
+          });
+          // Store as a JSON string so it survives project save/load round-trips.
+          nd.controlValues._selectedGeo = JSON.stringify(geoData);
+          // Keep _selectedLabels in sync for the "N faces selected" button display.
+          nd.controlValues._selectedLabels = items.map(function(it) { return it.label || it.id || ''; }).join('||');
           self.renderNode(nd);
           self.runGraph();
         },
@@ -853,6 +915,7 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
     if (!nd) return;
     if (!nd.controlValues) nd.controlValues = {};
     nd.controlValues._selectedLabels = '';
+    nd.controlValues._selectedGeo = [];
     this.renderNode(nd);
     this.runGraph();
   };
