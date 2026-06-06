@@ -16,9 +16,9 @@
 
 | ID | Title | Status | Priority | Sprint | Lane(s) | Branch |
 |---|---|---|---|---|---|---|
-| TICK-002 | Select Faces/Edges/Points — E2E verification + Playwright spec | 🟡 in-progress | high | 2026-06-05 | ui | merged to develop — awaiting PM verification |
-| TICK-006 | Learning page screenshots | 🟡 in-progress | high | 2026-06-05 | ui | merged to develop — awaiting PM verification |
-| TICK-007 | Learning page interactive exercises | 🟡 in-progress | high | 2026-06-05 | ui, core | merged to develop — awaiting PM verification |
+| TICK-002 | Select Faces/Edges/Points — E2E verification + Playwright spec | 🔵 ready | high | 2026-06-05 | ui | fix/tick-002-face-mesh-hover |
+| TICK-006 | Learning page screenshots | 🔵 ready | high | 2026-06-05 | ui | fix/tick-006-screenshot-math-inputs |
+| TICK-007 | Learning page interactive exercises | 🔵 ready | high | 2026-06-05 | ui, core | fix/tick-007-mini-canvas-real-nodes |
 | TICK-008 | Live agent dashboard — futuristic real-time view of agent activity | ⬜ draft | high | 2026-06-06 | ui, platform | feat/agent-dashboard |
 
 ## Done (last 30 days)

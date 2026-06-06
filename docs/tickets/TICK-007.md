@@ -1,13 +1,13 @@
 ---
 id: TICK-007
 title: Learning page — interactive mini-canvas exercises
-status: in-progress
+status: ready
 priority: high
 type: feature
 sprint: 2026-06-05
 created: 2026-06-05
 lanes: ui, core
-branch: feat/learning-exercises
+branch: fix/tick-007-mini-canvas-real-nodes
 ---
 
 ## User story
@@ -23,7 +23,7 @@ The mini-canvas must be self-contained — no global app state mutation. It comm
 ## Acceptance criteria
 
 - [ ] AC-1  All 10 chapters display an interactive exercise section (below the existing quiz), containing a mini-canvas with 4–5 pre-placed nodes and at least 1 unwired input port. — manual browser verification pending
-- [ ] AC-2  The user can draw a wire by clicking an output port then a compatible input port. The wire appears as a visible connector between the two ports. — manual browser verification pending
+- [ ] AC-2  The user can draw a wire by clicking an output port then a compatible input port. The wire appears as a visible connector between the two ports, and the pending wire visually follows the cursor from the output port to the current mouse position while the user is mid-draw. — PM re-opened 2026-06-07: wire does not follow the cursor.
 - [ ] AC-3  Clicking an incompatible port (type mismatch) does nothing — no wire is started or partially drawn. — manual browser verification pending
 - [ ] AC-4  Submitting a correctly completed exercise shows a green success message and enables the "Next chapter" button. — manual browser verification pending
 - [ ] AC-5  Submitting an incomplete or incorrectly wired exercise shows a red feedback message describing what was expected. The user can adjust and resubmit. — manual browser verification pending
@@ -78,6 +78,7 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 - [T07a](../task-briefs/T07a-learning-exercise-engine.md) — lane: core — Create src/ui/learning-exercises.js with 10 exercise definitions + acceptance functions; Vitest unit tests (≥20 cases). Independent, unblocked.
 - [T07b](../task-briefs/T07b-learning-mini-canvas.md) — lane: ui — Build src/ui/mini-canvas.js component (wire drawing, submit, pass/fail feedback); integrate into learning-page.js. Depends on T07a merge.
 - [T07c](../task-briefs/T07c-learning-exercises-e2e.md) — lane: ui — Write tests/e2e/learning-interactive.spec.js (open overlay → ch01 → draw wire → Submit → assert success). Depends on T07a + T07b merge.
+- [T07d](../task-briefs/T07d-mini-canvas-real-nodes-wires.md) — lane: ui (switch) — PM re-open: fix mini-canvas so nodes look like real Nova canvas nodes and the pending wire correctly tracks the cursor from output port click to landing on an input port.
 
 ## Notes
 
@@ -86,6 +87,8 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 - Exercises should be designed so they can be completed in under 2 minutes each.
 - Do not add a parallel learning system — integrate into the existing learning overlay component.
 
-## PM Notes
-- The interactive canvas where users are expected to connected nodes should be like real nova canvas for nodes with real nodes.
-- Current canvas has broken wire system and input/output system. Wire is not following
+## Latest PM Notes (2026-06-07 — processed)
+
+- The interactive canvas where users are expected to connect nodes should be like real nova canvas for nodes with real nodes. Current canvas has broken wire system and input/output system. Wire is not following. → AC-2 re-opened; T07d dispatched on fix/tick-007-mini-canvas-real-nodes.
+
+

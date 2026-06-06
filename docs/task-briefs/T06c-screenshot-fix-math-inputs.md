@@ -1,0 +1,168 @@
+# T06c — Fix screenshot script: Math chapter examples show all inputs + visible output
+
+**Parent ticket:** [TICK-006](../tickets/TICK-006.md)
+**Lane:** ui (agent: switch)
+**Branch:** `fix/tick-006-screenshot-math-inputs`
+**Status:** queued
+**Dependency:** none — independent branch off develop (or off feat/learning-screenshots if that is ahead of develop)
+
+---
+
+## Goal
+
+The PM reports that Math chapter screenshots are missing inputs — the canvas shows nodes but without the required `Input.Number` nodes wired up, so `Output.Watch` is blank or shows no value.
+
+The two affected slots are:
+- `math-simple` (`buildMathSimple` in `scripts/take-learning-shots.js`)
+- `math-advanced` (`buildMathAdvanced` in `scripts/take-learning-shots.js`)
+
+Additionally, do a sweep of ALL 20 slot builders for the same class of failure: any slot where the screenshot could appear blank, missing input nodes, or showing `undefined`/`NaN` in Output.Watch.
+
+---
+
+## Root-cause diagnosis
+
+### math-simple (lines 296–326)
+
+The builder adds two `Input.Number` nodes and chains `Math.Multiply` → `Math.Multiply` → `Math.Add` → `Custom.CodeBlock` → `Output.Watch`. The problems:
+
+1. **CodeBlock port materialization timing.** `app.onCtrl(cb.id, 'code', 'hyp = sqrt(x)')` sets the code, but `addWire(add.id, 'result', cb.id, 'x')` runs immediately after in the same `page.evaluate()` call. The CodeBlock may not have materialized port `x` yet at wire time, causing the wire to silently fail. The fix: set the CodeBlock code first, `await page.waitForTimeout(300)` in a second `page.evaluate`, THEN add the wire.
+
+2. **Math.Multiply for squaring.** The builder wires `numA.id → mul1.id 'a'` AND `numA.id → mul1.id 'b'` to square the number. This is correct in principle but may fail if the Nova graph doesn't allow two wires from the same output to the same node's two different input ports in one `evaluate()` batch. Confirm this works or split into two evaluate calls.
+
+3. **Alternative cleaner approach (preferred):** Replace the CodeBlock sqrt with a simpler pure-Math graph that doesn't need CodeBlock at all. Since `Math.Sqrt` may not exist as a node, use this simpler pythagorean demo:
+   - `Input.Number(3)` → `Math.Multiply` (a=self, b=self) = 9 (a²)
+   - `Input.Number(4)` → `Math.Multiply` (a=self, b=self) = 16 (b²)
+   - Both multiply outputs → `Math.Add` = 25 (a² + b²)
+   - `Output.Watch` on the Add result showing "25"
+   - This is clearly "Pythagorean theorem: 3² + 4² = 25" without needing sqrt — the educational point is the formula, and "25" is an unambiguous computed result.
+
+### math-advanced (lines 329–350)
+
+The builder does: `Input.Number(24)` → `List.Range` → `Custom.CodeBlock('sineVal = sin(rad(angles))')` → `Output.Watch`.
+
+Problems:
+1. `app.onCtrl(num.id, 'val', 24)` sets the number but then wires it to `range.id 'end'`. The `List.Range` already has `start=0, end=360, step=15` set inline — so wiring `num` to `end` overrides `end=360`. The resulting range is actually 0..24..15 = [0, 15] — not a full sine wave demonstration.
+2. The CodeBlock `sin(rad(angles))` may fail if the CodeBlock doesn't expose the `sineVal` output port before `addWire(cb.id, 'sineVal', watch.id, 'value')` runs.
+3. The screenshot will likely show an empty Output.Watch if CodeBlock computation fails.
+
+**Fix (preferred approach):** Remove the `Input.Number` wiring to `List.Range.end` entirely and just set `range.end` via `onCtrl`. Then add the wire from `range.list` to `cb.angles` in a second evaluate block (after setting code and waiting):
+
+```js
+// Phase 1: create nodes and set controls
+const range = app.addNodeToCanvas('List.Range', 180, 200);
+const cb = app.addNodeToCanvas('Custom.CodeBlock', 440, 200);
+const watch = app.addNodeToCanvas('Output.Watch', 680, 200);
+if (!range || !cb || !watch) return;
+app.onCtrl(range.id, 'start', 0);
+app.onCtrl(range.id, 'end', 360);
+app.onCtrl(range.id, 'step', 45);          // 8 values: 0,45,90,135,180,225,270,315
+app.onCtrl(cb.id, 'code', 'sineVals = sin(rad(angles))');
+```
+Then after a 400ms wait in the browser:
+```js
+// Phase 2: add wires (CodeBlock port has now materialized)
+app.addWire(range.id, 'list', cb.id, 'angles');
+app.addWire(cb.id, 'sineVals', watch.id, 'value');
+```
+
+After this, `Output.Watch` shows a list of 8 sine values — clearly a sine wave data demonstration.
+
+---
+
+## Owned paths
+
+```
+scripts/take-learning-shots.js    (fix buildMathSimple and buildMathAdvanced; sweep other builders)
+public/learning/math-simple.png   (regenerated screenshot)
+public/learning/math-advanced.png (regenerated screenshot)
+```
+
+If any other slot builders are also producing blank screenshots (e.g., `codeblock-simple`, `codeblock-advanced`, `python-simple`), fix those in the same script edit on this branch.
+
+**Do NOT touch:**
+- `src/**` — no source changes needed; this is a script-only fix
+- `docs/**` — morpheus manages those
+- `public/learning/*.png` other than the ones regenerated by this fix (or all 20 if a full re-run is cleaner)
+- Any file not listed above
+
+---
+
+## Fix specification: full script rewrite approach
+
+The most reliable fix is a **two-phase evaluate pattern** for any slot that uses `Custom.CodeBlock`:
+
+```
+Phase 1 (in one page.evaluate):
+  - addNodeToCanvas all nodes
+  - onCtrl all static controls (number values, list ranges, CodeBlock code)
+
+Phase 2 (after await page.waitForTimeout(500) outside evaluate):
+  - in a second page.evaluate, add all wires
+  - this ensures CodeBlock dynamic ports have materialized before wiring
+```
+
+Apply this pattern to:
+- `buildMathSimple` — use CodeBlock or the simplified no-sqrt approach above
+- `buildMathAdvanced` — split into two-phase evaluate
+- `buildCodeblockSimple` — already may have the same issue
+- `buildCodeblockAdvanced` — same
+- `buildPythonSimple` — same (Custom.Python port materialization)
+
+After applying the fix, run `node scripts/take-learning-shots.js` and confirm:
+- `math-simple.png` shows nodes (Input.Number × 2, Math.Multiply × 2, Math.Add, Output.Watch) fully wired with Output.Watch displaying a numeric result.
+- `math-advanced.png` shows (List.Range, Custom.CodeBlock, Output.Watch) fully wired with Output.Watch displaying a list of numbers.
+- No slot shows a blank canvas or Output.Watch with `undefined`/`NaN`.
+
+---
+
+## How to test the fix locally
+
+1. `git switch develop && git pull --ff-only`
+2. `git switch -c fix/tick-006-screenshot-math-inputs`
+3. Edit `scripts/take-learning-shots.js` with the fixes above.
+4. `npm run dev` (in a separate terminal) OR let the script spawn it.
+5. `node scripts/take-learning-shots.js`
+6. Open `public/learning/math-simple.png` and `public/learning/math-advanced.png` — visually confirm nodes, wires, and Output.Watch values are all visible.
+7. Open all 20 PNGs and confirm none are blank.
+8. `npm run lint:all` — 0 errors.
+9. `npm run test` — all pass.
+10. `npm run test:e2e` — all pass.
+
+---
+
+## AC coverage
+
+| AC | Fix | Observable |
+|---|---|---|
+| AC-4 | Fix buildMathSimple + buildMathAdvanced (and any other CodeBlock-timing bugs) | math-simple.png and math-advanced.png show all input nodes wired and Output.Watch with a computed numeric/list result |
+
+AC-1, AC-2, AC-3, AC-5 are already passing — do not regress them.
+
+---
+
+## Testing gate
+
+- Manual visual check: open all 20 PNGs after running the script. math-simple and math-advanced must show complete wired graphs with output.
+- No automated E2E test required for this fix (the script itself is the generator, not a tested feature). However, `npm run lint:all && npm run test && npm run test:e2e` must all pass.
+
+---
+
+## Merge checklist
+
+- [ ] `math-simple.png`: shows Input.Number × 2 + Math nodes wired + Output.Watch with numeric value
+- [ ] `math-advanced.png`: shows List.Range + CodeBlock + Output.Watch with list of sine values (or equivalent numeric list)
+- [ ] All 20 PNGs have no blank canvas / undefined / NaN in Output.Watch
+- [ ] `npm run lint:all` — 0 errors
+- [ ] `npm run test` — all pass
+- [ ] `npm run test:e2e` — all pass
+- [ ] TICK-006 AC-4 checkbox updated with confirmation date + branch
+- [ ] Workboard row released on merge
+
+---
+
+## Notes
+
+- The `buildGraph` helper already calls `app.invalidateCompute()` and waits 1200ms after the builder function. That delay is inside `buildGraph`. Within the builder function itself, you can use `await page.waitForTimeout(N)` between evaluate calls to let CodeBlock ports materialize.
+- Do NOT use `page.evaluate` with `await` inside the evaluate callback — evaluate is synchronous in the browser context. All async work (timeouts) must happen in the Node.js layer between evaluate calls.
+- If the simplified no-CodeBlock approach for `math-simple` (showing 3²+4²=25 without sqrt) is chosen, the educational narrative should be updated in the builder comment to say "Sum of squares: 3² + 4² = 25 (Pythagorean a²+b² step)".

@@ -7,7 +7,7 @@ type: feature
 sprint: 2026-06-05
 created: 2026-06-05
 lanes: ui
-branch: feat/learning-screenshots
+branch: fix/tick-006-screenshot-math-inputs
 ---
 
 ## User story
@@ -25,7 +25,7 @@ Screenshots must be taken from a real running Nova session: dark theme, nodes vi
 - [x] AC-1  All 20 PNG files exist at `public/learning/` with filenames matching the exact slot IDs used by the learning page. — scripts/take-learning-shots.js produces all 20 files; 2026-06-06
 - [x] AC-2  Opening the learning page and navigating every chapter shows a real Nova canvas screenshot — dark theme, nodes visible, wires connected — in each example slot. No placeholder SVG remains. — script uses page.evaluate(app.addNodeToCanvas/addWire) and screenshots #canvas-area; 2026-06-06
 - [x] AC-3  No screenshot slot shows a broken-image icon. The SVG fallback renders gracefully when a PNG is absent (no regression to existing fallback logic). — script asserts all 20 files exist and are valid before exit; 2026-06-06
-- [x] AC-4  Each screenshot shows the graph from its matching example: correct node types, wired together, with the expected output visible in `Output.Watch` or the 3D viewport. — each slot's buildFn uses confirmed real node types from the live registry; 2026-06-06
+- [ ] AC-4  Each screenshot shows the graph from its matching example: correct node types, wired together, with the expected output visible in `Output.Watch` or the 3D viewport. Math chapter examples (math-simple, math-advanced) must show all input nodes wired up and a computed numeric result in Output.Watch — not a blank canvas or a node with no visible inputs. — PM re-opened 2026-06-07: Math examples missing inputs.
 - [x] AC-5  Every PNG is ≤ 400 KB. `git ls-files public/learning/*.png` confirms all 20 are tracked in the repository. — script asserts stat.size <= 409600 per file and warns if exceeded; 2026-06-06
 
 ## Testing gate
@@ -67,9 +67,14 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 
 - T06a — lane: ui — SUPERSEDED by T06b (human-manual approach replaced with automated script)
 - [T06b](../task-briefs/T06b-learning-screenshots-script.md) — lane: ui (switch) — Write scripts/take-learning-shots.js: Playwright headless script that starts dev server, builds each of the 20 representative graphs programmatically, screenshots the canvas area, and saves to public/learning/<slot-id>.png ≤400 KB each
+- [T06c](../task-briefs/T06c-screenshot-fix-math-inputs.md) — lane: ui (switch) — PM re-open: fix Math chapter screenshot builders so all required input nodes are wired and Output.Watch shows a computed numeric result
 
 ## Notes
 
 - Screenshots should be taken at 1280×800 or higher, cropped to show the canvas area only.
 - Use the dark theme (default). Do not include browser chrome.
 - The slot ID list must be confirmed from the actual learning page source before taking screenshots.
+
+## Latest PM Notes (2026-06-07 — processed)
+
+- Screenshots are not representing the example. There are missing inputs for Math examples. → AC-4 re-opened; T06c dispatched on fix/tick-006-screenshot-math-inputs.

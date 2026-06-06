@@ -76,3 +76,7 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 - TICK-004 (Pattern nodes on surface) has been cancelled and archived — do not attempt to preserve any of its work.
 - Also remove any Pattern-related task briefs under `docs/task-briefs/` (T04a, T04b, T04c).
 - If any other node's `help.example` sample graph references a Pattern node, update that sample to remove the reference.
+
+## Latest PM Notes
+
+- This ticket is completed. Archieve it. 
