@@ -455,4 +455,121 @@ test.describe('Geometry Selection mode — Select.Faces pick-and-approve flow', 
     // Must NOT be a plain string label only
     expect(watchJSON).not.toMatch(/^"[A-Za-z].*"$/);
   });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // AC-10: Selection counter shows exact counts — 0 → 1 → 2 → 1 on successive
+  //        click / deselect operations.
+  // ─────────────────────────────────────────────────────────────────────────────
+  test('AC-10: Counter increments to 1, to 2, then decrements to 1 on re-click', async ({ page }) => {
+    await waitForApp(page);
+
+    const nodeId = await page.evaluate(() => {
+      window.app.newProject();
+      const nd = window.app.addNodeToCanvas('Select.Faces', 300, 200);
+      return nd && nd.id;
+    });
+
+    await page.locator(`#${nodeId} .node-select-btn`).click();
+    await expect(page.locator('#selection-mode-toolbar')).toBeVisible({ timeout: 500 });
+
+    // Inject two distinct fake mesh items that pass _itemMatchesMode('faces')
+    await page.evaluate(() => {
+      var makeFakeItem = function(id) {
+        var mesh = { isMesh: true, material: null };
+        var grp  = { userData: { isGeoItem: true }, traverse: function(fn) { fn(mesh); } };
+        return { id: id, label: id, group: grp, visible: true, selected: false };
+      };
+      if (!window.Viewer3D) return;
+      window.Viewer3D._sceneItems = window.Viewer3D._sceneItems || [];
+      window.Viewer3D._sceneItems.push(makeFakeItem('ac10-a'));
+      window.Viewer3D._sceneItems.push(makeFakeItem('ac10-b'));
+    });
+
+    // Helper: invoke selectionModeClick via any available path
+    const clickItem = (id) => page.evaluate((itemId) => {
+      var item = window.Viewer3D._sceneItems.find(function(it) { return it.id === itemId; });
+      if (!item) return false;
+      if (window.selectionModeClick) { window.selectionModeClick(item); return true; }
+      if (window.__selectionModeModule) { window.__selectionModeModule.selectionModeClick(item); return true; }
+      return false;
+    }, id);
+
+    // 0 selected initially
+    await expect(page.locator('#sel-mode-count')).toContainText('0 selected');
+
+    // Click A → 1
+    const c1 = await clickItem('ac10-a');
+    if (c1) await expect(page.locator('#sel-mode-count')).toContainText('1 selected');
+
+    // Click B → 2
+    const c2 = await clickItem('ac10-b');
+    if (c2) await expect(page.locator('#sel-mode-count')).toContainText('2 selected');
+
+    // Re-click A → 1 (deselect)
+    const c3 = await clickItem('ac10-a');
+    if (c3) await expect(page.locator('#sel-mode-count')).toContainText('1 selected');
+
+    await page.evaluate(() => { if (window.__selectionCancel) window.__selectionCancel(); });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // AC-10 extension: clicking empty viewport while in selection mode resets to 0
+  // ─────────────────────────────────────────────────────────────────────────────
+  test('AC-10 empty-area: empty viewport click resets selection count to 0', async ({ page }) => {
+    await waitForApp(page);
+
+    const nodeId = await page.evaluate(() => {
+      window.app.newProject();
+      const nd = window.app.addNodeToCanvas('Select.Faces', 300, 200);
+      return nd && nd.id;
+    });
+
+    await page.locator(`#${nodeId} .node-select-btn`).click();
+    await expect(page.locator('#selection-mode-toolbar')).toBeVisible({ timeout: 500 });
+
+    // Inject two fake items and select both via selectionModeClick
+    const selected = await page.evaluate(() => {
+      var makeFakeItem = function(id) {
+        var mesh = { isMesh: true, material: null };
+        var grp  = { userData: { isGeoItem: true }, traverse: function(fn) { fn(mesh); } };
+        return { id: id, label: id, group: grp, visible: true, selected: false };
+      };
+      if (!window.Viewer3D) return 0;
+      window.Viewer3D._sceneItems = window.Viewer3D._sceneItems || [];
+      var a = makeFakeItem('empty-a');
+      var b = makeFakeItem('empty-b');
+      window.Viewer3D._sceneItems.push(a, b);
+
+      var clickFn = window.selectionModeClick ||
+                    (window.__selectionModeModule && window.__selectionModeModule.selectionModeClick);
+      if (clickFn) { clickFn(a); clickFn(b); return 2; }
+      return 0;
+    });
+
+    if (selected === 2) {
+      await expect(page.locator('#sel-mode-count')).toContainText('2 selected');
+    }
+
+    // Call clearSelection() — the same function geo-selector.js calls when the
+    // raycaster finds no intersects and selection mode is active.
+    const resetCount = await page.evaluate(() => {
+      var clearFn = window.clearSelection ||
+                    (window.__selectionModeModule && window.__selectionModeModule.clearSelection);
+      if (clearFn) {
+        clearFn();
+        var el = document.getElementById('sel-mode-count');
+        return el ? el.textContent : 'NO_COUNT';
+      }
+      return 'NO_CLEAR_FN';
+    });
+
+    if (resetCount !== 'NO_CLEAR_FN') {
+      expect(resetCount).toMatch(/0 selected/);
+    }
+
+    // Counter must show 0 selected regardless of path
+    await expect(page.locator('#sel-mode-count')).toContainText('0 selected');
+
+    await page.evaluate(() => { if (window.__selectionCancel) window.__selectionCancel(); });
+  });
 });

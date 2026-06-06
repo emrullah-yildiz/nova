@@ -61,6 +61,7 @@ import {
   deactivateSelectionMode as _deactivateSelectionMode,
   isSelectionModeActive as _isSelectionModeActive,
   selectionModeClick as _selectionModeClick,
+  clearSelection as _clearSelection,
 } from './viewer/selection-mode.js';
 import { RuntimeConfig, getRuntimeConfig } from './config/runtime-config.js';
 import { NovaCloudClient, createNovaCloudClient } from './enterprise/cloud-client.js';
@@ -175,6 +176,7 @@ if (typeof window !== 'undefined') {
     deactivateSelectionMode: _deactivateSelectionMode,
     isSelectionModeActive: _isSelectionModeActive,
     selectionModeClick: _selectionModeClick,
+    clearSelection: _clearSelection,
   };
 }
 

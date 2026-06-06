@@ -1,7 +1,7 @@
 import { Geo } from '../geometry/index.js';
 import { setNodePreviewState, setPreviewItemVisibility, showAllPreviews } from './preview-sync.js';
 import { Viewer3D as RuntimeViewer3D } from './viewer3d.js';
-import { isSelectionModeActive, selectionModeClick, getSelectedItems } from './selection-mode.js';
+import { isSelectionModeActive, selectionModeClick, getSelectedItems, clearSelection } from './selection-mode.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -323,8 +323,14 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
           }
         }
       }
-      // Clicked empty space — deselect (only in normal mode)
-      if (!isSelectionModeActive()) self._deselectAll();
+      // Clicked empty space — clear the relevant selection.
+      // In selection mode: reset the accumulated items to zero (AC-10 extension).
+      // In normal mode: deselect the 3D-highlighted item.
+      if (isSelectionModeActive()) {
+        clearSelection();
+      } else {
+        self._deselectAll();
+      }
     });
 
     // Track mousedown position to distinguish click from orbit
@@ -391,24 +397,34 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
           }
           var isSelected = ownerItem && selectedIds.has(ownerItem.id);
 
+          // Clone shared materials before mutating so we never corrupt other
+          // meshes that reference the same material instance.
+          if (m.material && !m.material.__novaOwned) {
+            m.material = m.material.clone();
+            m.material.__novaOwned = true;
+          }
+
           if (isSelected) {
             // Already selected: keep green
             if (m.material.color && typeof m.material.color.setHex === 'function') m.material.color.setHex(0xa6e3a1);
             if (m.material.emissive && typeof m.material.emissive.setHex === 'function') m.material.emissive.setHex(0xa6e3a1);
             if (m.material.emissiveIntensity !== undefined) m.material.emissiveIntensity = 0.6;
             if (m.material.opacity !== undefined) m.material.opacity = 1.0;
+            m.material.needsUpdate = true;
           } else if (m === hitMesh) {
             // Hovered candidate: blue highlight (AC-8)
             if (m.material.color && typeof m.material.color.setHex === 'function') m.material.color.setHex(0x89b4fa);
             if (m.material.emissive && typeof m.material.emissive.setHex === 'function') m.material.emissive.setHex(0x89b4fa);
             if (m.material.emissiveIntensity !== undefined) m.material.emissiveIntensity = 0.5;
             if (m.material.opacity !== undefined) m.material.opacity = 1.0;
+            m.material.needsUpdate = true;
           } else {
             // Other candidate: teal
             if (m.material.color && typeof m.material.color.setHex === 'function') m.material.color.setHex(0x94e2d5);
             if (m.material.emissive && typeof m.material.emissive.setHex === 'function') m.material.emissive.setHex(0x000000);
             if (m.material.emissiveIntensity !== undefined) m.material.emissiveIntensity = 0.3;
             if (m.material.opacity !== undefined) m.material.opacity = 0.75;
+            m.material.needsUpdate = true;
           }
         });
         return; // don't run the panel-hover path below in selection mode
