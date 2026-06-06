@@ -1,7 +1,7 @@
 ---
 id: TICK-009
 title: Select.Faces — per-face hover, selection, and planar face output
-status: ready
+status: in-progress
 priority: high
 type: feature
 sprint: 2026-06-07
@@ -126,5 +126,12 @@ src/nodes/categories/geometry.js   — Select.Faces execute returns face polygon
 tests/geometry-selection.test.js   — unit test for face-grouping algorithm
 tests/e2e/geometry-selection.spec.js — E2E for AC-11
 ```
+
+## Task briefs
+
+- [T09a](../task-briefs/T09a-face-grouping-geometry.md) — lane: geometry — Face grouping algorithm + toSelectionMesh() + getFaceVertices() on Geo.Mesh3; unit tests
+- [T09b](../task-briefs/T09b-viewer-mesh-swap-hover-click.md) — lane: ui — Viewer mesh swap on selection activate; per-face hover/click in geo-selector.js; getSelectedFaces() in selection-mode.js
+- [T09c](../task-briefs/T09c-select-faces-execute.md) — lane: ui — Select.Faces execute returns face polygon geometry (blocked on T09a)
+- [T09d](../task-briefs/T09d-node-renderer-approve-e2e.md) — lane: ui — node-renderer onApprove wires face data; E2E spec for AC-11 (blocked on T09b)
 
 ## Latest PM Notes

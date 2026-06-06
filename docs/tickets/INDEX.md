@@ -16,7 +16,7 @@
 
 | ID | Title | Status | Priority | Sprint | Lane(s) | Branch |
 |---|---|---|---|---|---|---|
-| TICK-009 | Select.Faces — per-face hover, selection, and planar face output | 🔵 ready | high | 2026-06-07 | geometry, ui | feat/tick-009-per-face-selection |
+| TICK-009 | Select.Faces — per-face hover, selection, and planar face output | 🟡 in-progress | high | 2026-06-07 | geometry, ui | feat/tick-009-per-face-selection |
 | TICK-006 | Learning page screenshots | 🟡 in-progress | high | A3 | ui | merged to develop — awaiting PM sign-off |
 | TICK-007 | Learning page interactive exercises | 🟡 in-progress | high | A3 | ui, core | merged to develop — awaiting PM sign-off |
 | TICK-008 | Live agent dashboard — futuristic real-time view of agent activity | ⬜ draft | high | A3 | ui, platform | feat/agent-dashboard |

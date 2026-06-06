@@ -56,6 +56,11 @@ root `README.md` · `docs/NOVA.md` · `.github/workflows/ci.yml`
 | fix/tick-006-screenshot-viewport | ui-engineer (switch) | T06d — TICK-006: (A) VIEWPORT→1280×720, app.fitAll() before screenshot; (B) fixed code-terminal-advanced (disconnected→connected pipeline result=53), data-types-advanced (op '>'→'>='), interface-advanced (added step=10). Lint 0 errors, 1911 tests, 28 e2e pass. | `scripts/take-learning-shots.js` | — | 2026-06-07 | **merged 2026-06-07** |
 | fix/tick-007-number-nodes | ui-engineer (switch) | T07e — TICK-007: Add Input.Number value display to mini-canvas node body (number spinner + range slider matching real Nova canvas). Read node.value from exercise definition. Assert in E2E spec. | `src/ui/mini-canvas.js`, `tests/e2e/learning-interactive.spec.js` | — | 2026-06-07 | **merged 2026-06-07** |
 
+| feat/tick-009-per-face-selection | mouse (geometry-engineer) | T09a — TICK-009: Add groupFaces() + toSelectionMesh() + getFaceVertices() to Geo.Mesh3 in geometry-lib.js; unit tests in tests/geometry-selection.test.js | `src/geometry/geometry-lib.js`, `tests/geometry-selection.test.js` | — | 2026-06-07 | queued |
+| feat/tick-009-per-face-selection | switch (ui-engineer) | T09b — TICK-009: Viewer mesh swap on selection activate; per-face hover/click in geo-selector.js; getSelectedFaces() + toolbar count fix in selection-mode.js | `src/viewer/geo-selector.js`, `src/viewer/selection-mode.js` | — | 2026-06-07 | queued |
+| feat/tick-009-per-face-selection | switch (ui-engineer) | T09c — TICK-009: Update Select.Faces execute to parse _selectedFaces JSON and return { faces: [{ _type:'Face', vertices, normal, area }] }. BLOCKED until T09a merged. | `src/nodes/categories/geometry.js` | — | 2026-06-07 | blocked (awaits T09a merge) |
+| feat/tick-009-per-face-selection | switch (ui-engineer) | T09d — TICK-009: node-renderer.js onApprove calls getSelectedFaces() + getFaceVertices(); E2E spec for AC-11. BLOCKED until T09b merged. | `src/ui/node-renderer.js`, `tests/e2e/geometry-selection.spec.js` | `src/ui/node-renderer.js` | 2026-06-07 | blocked (awaits T09b merge) |
+
 <!--
 Example row (copy, fill in, remove this comment block's example when claiming):
 | feat/attractor-falloff | geometry-engineer | new falloff helper | src/geometry/** | — | 2026-06-03 | active |
