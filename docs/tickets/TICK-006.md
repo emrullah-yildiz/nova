@@ -58,10 +58,10 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 ## Definition of done
 
 - [x] All AC above are checked `[x]`
-- [ ] `npm run lint:all` → 0 errors
-- [ ] `npm run test` → all pass
+- [x] `npm run lint:all` → 0 errors — 2026-06-07, fix/tick-006-screenshot-viewport
+- [x] `npm run test` → all pass (1911 tests, 145 files) — 2026-06-07, fix/tick-006-screenshot-viewport
 - [ ] Oracle has reviewed and issued APPROVE verdict
-- [ ] Merged to `develop`, workboard row released, INDEX.md updated
+- [x] Merged to `develop`, workboard row released — 2026-06-07, fix/tick-006-screenshot-viewport merged to develop
 
 ## Task briefs
 
