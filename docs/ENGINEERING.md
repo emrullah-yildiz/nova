@@ -56,7 +56,31 @@ Treat every change like it ships to production tonight. Discipline over heroics.
 
 ---
 
-## 2. Branching (the unit of work)
+## 2. Ticket lifecycle
+
+Every piece of work is tracked through a ticket. The ticket is the contract between the PM and the agents — it defines what "done" means and records whether the PM agrees.
+
+```
+⬜ draft      PM has not confirmed AC yet — agents may not start work
+🔵 ready      PM confirmed AC — morpheus decomposes into task briefs, agents branch
+🟡 in-progress At least one task branch is active
+🔴 blocked    Waiting on a dependency or external input
+✅ done        All AC checked [x], merged to develop, PM comment is positive → archived
+```
+
+**One branch per ticket.** Name it `type/tick-NNN-short-description`. Never put two tickets' work on the same branch.
+
+**PM comment loop.** After merging to develop:
+1. PM tests the feature on develop and writes a comment in the `## PM Notes` section of the ticket file.
+2. On the next "run", morpheus reads every PM comment:
+   - **Positive** (confirms AC): mark ✅ done, archive ticket, move row to Done table in INDEX.md.
+   - **Negative** (bug / missing behavior): reopen ticket (back to 🔵 ready), create a new task brief, dispatch agent on a new branch.
+3. A ticket is **never archived without a positive PM comment** — merged ≠ done.
+4. When all tickets are archived, morpheus reports "all tickets closed" and asks the PM for the next sprint green light.
+
+---
+
+## 4. Branching (the unit of work)
 
 The house rule: **one branch = one task, always off `develop`, merged back and
 deleted.** Never commit straight to `develop` or `main`.
@@ -91,7 +115,7 @@ git branch | Select-String "worktree-agent-" | ForEach-Object { git branch -D $_
 
 ---
 
-## 3. Working in parallel (multi-agent)
+## 5. Working in parallel (multi-agent)
 
 Several agents/devs can work the same repo at once **without ever touching the same
 bytes**, if you follow these rules. The live state lives in
@@ -148,7 +172,7 @@ two places at once.
 
 ---
 
-## 4. Prove it works (the testing ladder)
+## 6. Prove it works (the testing ladder)
 
 Run the **smallest relevant check first**, then widen as runtime risk rises. Use
 `npm.cmd`/`npx.cmd` on Windows to avoid PowerShell execution-policy issues.
@@ -171,7 +195,7 @@ Rules:
 
 ---
 
-## 5. Token efficiency (for AI agents)
+## 7. Token efficiency (for AI agents)
 
 Keep context small and leave breadcrumbs:
 
@@ -187,7 +211,7 @@ Keep context small and leave breadcrumbs:
 
 ---
 
-## 6. Documentation duties (update docs *while* working)
+## 8. Documentation duties (update docs *while* working)
 
 In the **same branch** as the code:
 
@@ -208,7 +232,7 @@ In the **same branch** as the code:
 
 ---
 
-## 7. Start → merge checklist
+## 9. Start → merge checklist
 
 The canonical end-to-end gate for every task. Tick it.
 
