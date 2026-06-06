@@ -31,7 +31,7 @@ The mini-canvas must be self-contained — no global app state mutation. It comm
 - [x] AC-7  10 exercise definitions live in `src/ui/learning-exercises.js`. Each definition declares: node list, pre-drawn wires, expected output, and an acceptance function. A Vitest unit test confirms each acceptance function returns `true` for a correct solution and `false` for an incorrect one. — 20 Vitest tests, all pass 2026-06-06
 - [ ] AC-8  The mini-canvas renders correctly inside the learning overlay at a 1280×800 viewport — no overflow, no clipped ports, no invisible wires. — manual browser verification pending
 - [x] AC-9  The mini-canvas component does not import from `src/app/app.js` or mutate any global `window.app` state. It communicates only through its `onSolve` callback. — grep confirmed 0 results 2026-06-06
-- [x] AC-10  A Playwright E2E spec `tests/e2e/learning-interactive.spec.js` covers: open learning overlay → chapter 1 → draw the required wire → Submit → assert green success message and "Next chapter" button is enabled. — 31/31 E2E tests pass 2026-06-06
+- [x] AC-10  A Playwright E2E spec `tests/e2e/learning-interactive.spec.js` covers: open learning overlay → chapter 1 → draw the required wire → Submit → assert green success message and "Next chapter" button is enabled. — 31/31 E2E tests pass 2026-06-06; extended 2026-06-07 (T07e) to assert Input.Number nodes show correct numeric value (n1=3, n2=4) via num-spin-wrap input; 28/28 E2E pass on fix/tick-007-number-nodes
 
 ## Testing gate
 
