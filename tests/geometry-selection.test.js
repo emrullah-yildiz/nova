@@ -193,6 +193,10 @@ describe('_itemMatchesMode', () => {
 });
 
 // ── Select.Faces / Select.Edges / Select.Points node execute() ────────────────
+//
+// AC-9: _selectedGeo is now a JSON string produced by node-renderer.js on Approve.
+// It contains Array<{ _type:'Mesh', label, nodeId, varName, vertexCount, vertices, faceCount }>.
+// Select.Faces returns { faces: geoData }; Select.Edges/Points return { selection: geoData }.
 
 describe('Select.* node execute()', () => {
   let registry;
@@ -215,50 +219,68 @@ describe('Select.* node execute()', () => {
       expect(def.metadata.selectionMode.length).toBeGreaterThan(0);
     });
 
-    it(type + ' execute() returns empty selection when _selectedLabels is empty', () => {
+    it(type + ' execute() returns empty list when _selectedGeo is empty', () => {
       const def = registry.getNode(type);
-      const result = def.execute({}, {}, { _selectedLabels: '' });
-      expect(Array.isArray(result.selection)).toBe(true);
-      expect(result.selection.length).toBe(0);
+      const result = def.execute({}, {}, { _selectedLabels: '', _selectedGeo: '' });
+      // Select.Faces uses 'faces' key; others use 'selection'
+      const out = result.faces !== undefined ? result.faces : result.selection;
+      expect(Array.isArray(out)).toBe(true);
+      expect(out.length).toBe(0);
     });
 
-    it(type + ' execute() returns structured descriptors from _selectedLabels (AC-9)', () => {
-      // AC-9: output must be typed descriptors, not bare strings.
+    it(type + ' execute() returns empty list for invalid JSON in _selectedGeo', () => {
       const def = registry.getNode(type);
-      const result = def.execute({}, {}, { _selectedLabels: 'Geo.Box||Geo.Sphere' });
-      expect(Array.isArray(result.selection)).toBe(true);
-      expect(result.selection.length).toBe(2);
-      // Each item must be a structured object with _type, not a bare string
-      expect(typeof result.selection[0]).toBe('object');
-      expect(result.selection[0]._type).toBeTruthy();
-      expect(result.selection[0].label).toBe('Geo.Box');
-      expect(result.selection[1].label).toBe('Geo.Sphere');
-      // toString() must return the label for human-readable display
-      expect(String(result.selection[0])).toBe('Geo.Box');
-      expect(String(result.selection[1])).toBe('Geo.Sphere');
+      const result = def.execute({}, {}, { _selectedGeo: 'not-json' });
+      const out = result.faces !== undefined ? result.faces : result.selection;
+      expect(Array.isArray(out)).toBe(true);
+      expect(out.length).toBe(0);
     });
+  });
 
-    it(type + ' execute() returns structured descriptor for a single selected item', () => {
-      const def = registry.getNode(type);
-      const result = def.execute({}, {}, { _selectedLabels: 'Wall Face A' });
-      expect(Array.isArray(result.selection)).toBe(true);
-      expect(result.selection.length).toBe(1);
-      expect(typeof result.selection[0]).toBe('object');
-      expect(result.selection[0].label).toBe('Wall Face A');
-      expect(String(result.selection[0])).toBe('Wall Face A');
-    });
+  // AC-9 specific: Select.Faces reads _selectedGeo JSON and returns { faces: [...] }
+  // with real mesh geometry data (vertexCount > 0, vertices array, _type:'Mesh').
 
-    it(type + ' execute() prefers _selectedGeo over _selectedLabels when present (AC-9)', () => {
-      const def = registry.getNode(type);
-      const geoDescriptors = [
-        { _type: 'FaceSelection', label: 'My Box Face', nodeId: 'node-42', varName: '' }
-      ];
-      const result = def.execute({}, {}, { _selectedLabels: 'old-label', _selectedGeo: geoDescriptors });
-      expect(Array.isArray(result.selection)).toBe(true);
-      expect(result.selection.length).toBe(1);
-      expect(result.selection[0]._type).toBeTruthy();
-      expect(result.selection[0].label).toBe('My Box Face');
-    });
+  it('Select.Faces execute() with _selectedGeo JSON returns { faces: [{ _type:"Mesh", vertexCount > 0 }] }', () => {
+    const def = registry.getNode('Select.Faces');
+    const geoData = [
+      { _type: 'Mesh', label: 'Box (node-1)', nodeId: 'node-1', varName: '', vertexCount: 24, vertices: [0.5, -0.5, 0.5, -0.5, -0.5, 0.5], faceCount: 12 }
+    ];
+    const result = def.execute({}, {}, { _selectedGeo: JSON.stringify(geoData) });
+    expect(Array.isArray(result.faces)).toBe(true);
+    expect(result.faces.length).toBe(1);
+    expect(result.faces[0]._type).toBe('Mesh');
+    expect(result.faces[0].vertexCount).toBeGreaterThan(0);
+    expect(Array.isArray(result.faces[0].vertices)).toBe(true);
+    expect(result.faces[0].vertices.length).toBeGreaterThan(0);
+  });
+
+  it('Select.Faces execute() with multi-item _selectedGeo returns all items', () => {
+    const def = registry.getNode('Select.Faces');
+    const geoData = [
+      { _type: 'Mesh', label: 'Box A', nodeId: 'n1', varName: '', vertexCount: 24, vertices: [0.5], faceCount: 12 },
+      { _type: 'Mesh', label: 'Box B', nodeId: 'n2', varName: '', vertexCount: 8, vertices: [0.1], faceCount: 4 }
+    ];
+    const result = def.execute({}, {}, { _selectedGeo: JSON.stringify(geoData) });
+    expect(result.faces.length).toBe(2);
+    expect(result.faces[0].label).toBe('Box A');
+    expect(result.faces[1].label).toBe('Box B');
+  });
+
+  it('Select.Edges execute() with _selectedGeo JSON returns { selection: [...] }', () => {
+    const def = registry.getNode('Select.Edges');
+    const geoData = [{ _type: 'Mesh', label: 'Edge A', nodeId: 'n1', varName: '', vertexCount: 2, vertices: [0, 0, 0, 1, 0, 0], faceCount: 0 }];
+    const result = def.execute({}, {}, { _selectedGeo: JSON.stringify(geoData) });
+    expect(Array.isArray(result.selection)).toBe(true);
+    expect(result.selection.length).toBe(1);
+    expect(result.selection[0]._type).toBe('Mesh');
+  });
+
+  it('Select.Points execute() with _selectedGeo JSON returns { selection: [...] }', () => {
+    const def = registry.getNode('Select.Points');
+    const geoData = [{ _type: 'Mesh', label: 'Point A', nodeId: 'n1', varName: '', vertexCount: 1, vertices: [1, 2, 3], faceCount: 0 }];
+    const result = def.execute({}, {}, { _selectedGeo: JSON.stringify(geoData) });
+    expect(Array.isArray(result.selection)).toBe(true);
+    expect(result.selection.length).toBe(1);
   });
 
   it('Select.Faces selectionMode is "faces"', () => {

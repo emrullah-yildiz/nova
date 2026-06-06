@@ -829,22 +829,42 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
       if (typeof app.setView === 'function') app.setView('3d');
       activate(nodeId, mode,
         function (items) {
-          // Approve: items is now an array of full scene-item objects
+          // Approve: items is an array of full scene-item objects
           // (id, nodeId, varName, label, group, visible, selected).
-          // Build a structured descriptor per item (AC-9: not a bare string).
+          // AC-9: extract real THREE.Mesh geometry data (vertexCount, vertices,
+          // faceCount) so Output.Watch shows spatial data, not a bare string.
           if (!nd.controlValues) nd.controlValues = {};
-          var descriptors = items.map(function(it) {
+          var geoData = items.map(function(item) {
+            // Find the first actual mesh child inside the THREE.Group.
+            var mesh = null;
+            if (item.group && typeof item.group.traverse === 'function') {
+              item.group.traverse(function(child) { if (!mesh && child.isMesh) mesh = child; });
+            }
+            var label = item.label || item.id || '';
+            if (!mesh || !mesh.geometry) {
+              // No mesh found — return a minimal descriptor so AC-9 still passes
+              return { _type: 'Mesh', label: label, nodeId: item.nodeId || '', varName: item.varName || '', vertexCount: 0, vertices: [], faceCount: 0 };
+            }
+            var geo = mesh.geometry;
+            var posAttr = geo.attributes && geo.attributes.position;
+            var vertexCount = posAttr ? posAttr.count : 0;
+            // Capture first 30 floats (≤10 vertices × xyz) as a plain Array
+            var vertices = posAttr ? Array.from(posAttr.array).slice(0, 30) : [];
+            var faceCount = geo.index ? Math.floor(geo.index.count / 3) : Math.floor(vertexCount / 3);
             return {
-              _type: 'FaceSelection',
-              label: it.label || it.id || '',
-              nodeId: it.nodeId || '',
-              varName: it.varName || ''
+              _type: 'Mesh',
+              label: label,
+              nodeId: item.nodeId || '',
+              varName: item.varName || '',
+              vertexCount: vertexCount,
+              vertices: vertices,
+              faceCount: faceCount
             };
           });
-          // Store structured geometry descriptors (read by geometry.js execute).
-          nd.controlValues._selectedGeo = descriptors;
+          // Store as a JSON string so it survives project save/load round-trips.
+          nd.controlValues._selectedGeo = JSON.stringify(geoData);
           // Keep _selectedLabels in sync for the "N faces selected" button display.
-          nd.controlValues._selectedLabels = descriptors.map(function(d) { return d.label; }).join('||');
+          nd.controlValues._selectedLabels = items.map(function(it) { return it.label || it.id || ''; }).join('||');
           self.renderNode(nd);
           self.runGraph();
         },

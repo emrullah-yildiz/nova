@@ -366,6 +366,8 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
 
         if (hitMesh === self._hoveredSelectionMesh) return; // nothing changed
         self._hoveredSelectionMesh = hitMesh;
+        // Expose for E2E assertions (AC-8)
+        if (typeof window !== 'undefined') window.__geoSelectorHoveredFaceMesh = hitMesh || null;
 
         // Rebuild the highlight using the same selected-item set that
         // _applySelectionHighlight uses, then overlay the blue hover.
