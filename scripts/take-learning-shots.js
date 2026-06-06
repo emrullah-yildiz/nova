@@ -290,63 +290,70 @@ async function buildDataTypesAdvanced(page) {
   });
 }
 
-// ── 9. math-simple: Pythagorean hypotenuse (a=3, b=4 → 5) ───────────────────
-// Math.Sin/Cos/Sqrt/Radians don't exist as discrete nodes; use Custom.CodeBlock
+// ── 9. math-simple: Sum of squares — 3² + 4² = 25 (Pythagorean a²+b² step) ───
+// No CodeBlock needed — avoids all port-materialization timing issues.
+// Graph: Input.Number(3) → Multiply(a=self,b=self) = 9
+//        Input.Number(4) → Multiply(a=self,b=self) = 16
+//        Both results → Math.Add = 25 → Output.Watch
 
 async function buildMathSimple(page) {
   await page.evaluate(() => {
     const numA = app.addNodeToCanvas('Input.Number', 80, 120);
-    const numB = app.addNodeToCanvas('Input.Number', 80, 280);
-    const mul1 = app.addNodeToCanvas('Math.Multiply', 280, 120);
-    const mul2 = app.addNodeToCanvas('Math.Multiply', 280, 280);
-    const add = app.addNodeToCanvas('Math.Add', 460, 200);
-    // Custom.CodeBlock to compute sqrt (Math.Sqrt not in registry)
-    const cb = app.addNodeToCanvas('Custom.CodeBlock', 620, 200);
-    const watch = app.addNodeToCanvas('Output.Watch', 800, 200);
-    if (!numA || !numB || !mul1 || !mul2 || !add || !cb || !watch) return;
+    const numB = app.addNodeToCanvas('Input.Number', 80, 300);
+    const mul1 = app.addNodeToCanvas('Math.Multiply', 300, 120);
+    const mul2 = app.addNodeToCanvas('Math.Multiply', 300, 300);
+    const add  = app.addNodeToCanvas('Math.Add', 500, 210);
+    const watch = app.addNodeToCanvas('Output.Watch', 700, 210);
+    if (!numA || !numB || !mul1 || !mul2 || !add || !watch) return;
     if (app.onCtrl) {
       app.onCtrl(numA.id, 'val', 3);
       app.onCtrl(numB.id, 'val', 4);
-      // CodeBlock: hyp = sqrt(x) where x is the sum of squares
-      app.onCtrl(cb.id, 'code', 'hyp = sqrt(x)');
     }
-    // a squared
+    // 3² = 9
     app.addWire(numA.id, 'value', mul1.id, 'a');
     app.addWire(numA.id, 'value', mul1.id, 'b');
-    // b squared
+    // 4² = 16
     app.addWire(numB.id, 'value', mul2.id, 'a');
     app.addWire(numB.id, 'value', mul2.id, 'b');
-    // sum of squares
+    // 9 + 16 = 25
     app.addWire(mul1.id, 'result', add.id, 'a');
     app.addWire(mul2.id, 'result', add.id, 'b');
-    // sqrt via CodeBlock
-    app.addWire(add.id, 'result', cb.id, 'x');
-    app.addWire(cb.id, 'hyp', watch.id, 'value');
+    app.addWire(add.id, 'result', watch.id, 'value');
   });
 }
 
-// ── 10. math-advanced: Input.Number(24) → List.Range → CodeBlock(radians+sin) → Watch ─
+// ── 10. math-advanced: List.Range(0,360,45) → CodeBlock(sin of degrees) → Watch ─
+// Two-phase evaluate: Phase 1 creates nodes + sets controls (including code).
+// Phase 2 (after a 500 ms wait) adds wires so CodeBlock ports have materialised.
+// The Input.Number override of List.Range.end is removed — range is set directly
+// via onCtrl so the range is always 0..360 (8 values: 0,45,90,135,180,225,270,315).
 
 async function buildMathAdvanced(page) {
-  await page.evaluate(() => {
-    const num = app.addNodeToCanvas('Input.Number', 80, 200);
-    const range = app.addNodeToCanvas('List.Range', 280, 200);
-    // Math.Radians + Math.Sin don't exist; use Custom.CodeBlock for both
-    const cb = app.addNodeToCanvas('Custom.CodeBlock', 480, 200);
-    const watch = app.addNodeToCanvas('Output.Watch', 700, 200);
-    if (!num || !range || !cb || !watch) return;
+  // Phase 1: create nodes and set all controls
+  const ids = await page.evaluate(() => {
+    const range = app.addNodeToCanvas('List.Range', 180, 200);
+    const cb    = app.addNodeToCanvas('Custom.CodeBlock', 440, 200);
+    const watch = app.addNodeToCanvas('Output.Watch', 680, 200);
+    if (!range || !cb || !watch) return null;
     if (app.onCtrl) {
-      app.onCtrl(num.id, 'val', 24);
       app.onCtrl(range.id, 'start', 0);
       app.onCtrl(range.id, 'end', 360);
-      app.onCtrl(range.id, 'step', 15);
-      // CodeBlock: compute sin of degrees list
-      app.onCtrl(cb.id, 'code', 'sineVal = sin(rad(angles))');
+      app.onCtrl(range.id, 'step', 45);   // 8 values: 0,45,90,…,315
+      app.onCtrl(cb.id, 'code', 'sineVals = sin(rad(angles))');
     }
-    app.addWire(num.id, 'value', range.id, 'end');
-    app.addWire(range.id, 'list', cb.id, 'angles');
-    app.addWire(cb.id, 'sineVal', watch.id, 'value');
+    return { rangeId: range.id, cbId: cb.id, watchId: watch.id };
   });
+
+  if (!ids) return; // nodes failed to create
+
+  // Wait for CodeBlock to materialise its 'angles' input and 'sineVals' output port
+  await page.waitForTimeout(500);
+
+  // Phase 2: add wires now that ports exist
+  await page.evaluate(({ rangeId, cbId, watchId }) => {
+    app.addWire(rangeId, 'list',     cbId,    'angles');
+    app.addWire(cbId,    'sineVals', watchId, 'value');
+  }, ids);
 }
 
 // ── 11. geometry-simple: 2× Point.ByCoordinates → Line.ByStartPointEndPoint ──
@@ -439,22 +446,35 @@ async function buildListsAdvanced(page) {
   });
 }
 
-// ── 15. python-simple: List.Create(1..5) → Custom.Python(squares) → Watch ────
+// ── 15. python-simple: List.Create(1,2) → Custom.Python(squares) → Watch ─────
+// Two-phase: Phase 1 sets the Python code so the runtime can infer ports.
+// Phase 2 (after 500 ms) wires the now-materialised 'elements' input + 'result' output.
 
 async function buildPythonSimple(page) {
-  await page.evaluate(() => {
+  // Phase 1: create nodes and set controls / code
+  const ids = await page.evaluate(() => {
     const create = app.addNodeToCanvas('List.Create', 80, 200);
-    const py = app.addNodeToCanvas('Custom.Python', 320, 200);
-    const watch = app.addNodeToCanvas('Output.Watch', 560, 200);
-    if (!create || !py || !watch) return;
+    const py     = app.addNodeToCanvas('Custom.Python', 320, 200);
+    const watch  = app.addNodeToCanvas('Output.Watch', 560, 200);
+    if (!create || !py || !watch) return null;
     if (app.onCtrl) {
       app.onCtrl(create.id, 'item0', 1);
       app.onCtrl(create.id, 'item1', 2);
       app.onCtrl(py.id, 'code', 'result = [x**2 for x in elements]');
     }
-    app.addWire(create.id, 'list', py.id, 'elements');
-    app.addWire(py.id, 'result', watch.id, 'value');
+    return { createId: create.id, pyId: py.id, watchId: watch.id };
   });
+
+  if (!ids) return;
+
+  // Wait for Custom.Python to materialise its inferred ports (elements, result)
+  await page.waitForTimeout(500);
+
+  // Phase 2: wire now that ports exist
+  await page.evaluate(({ createId, pyId, watchId }) => {
+    app.addWire(createId, 'list',   pyId,    'elements');
+    app.addWire(pyId,     'result', watchId, 'value');
+  }, ids);
 }
 
 // ── 16. python-advanced: Custom.Python(RevitBridge) → Watch (won't compute) ──
@@ -505,38 +525,66 @@ async function buildCodeTerminalAdvanced(page) {
 }
 
 // ── 19. codeblock-simple: Custom.CodeBlock(area+diagonal) → 2× Watch ─────────
+// Two-phase: Phase 1 sets code so ports (area, diagonal, width, height) materialise.
+// Phase 2 (after 500 ms) sets free-variable controls and wires outputs to watches.
 
 async function buildCodeblockSimple(page) {
-  await page.evaluate(() => {
+  // Phase 1: create nodes and set CodeBlock code
+  const ids = await page.evaluate(() => {
     const cb = app.addNodeToCanvas('Custom.CodeBlock', 200, 200);
     const w1 = app.addNodeToCanvas('Output.Watch', 500, 120);
     const w2 = app.addNodeToCanvas('Output.Watch', 500, 280);
-    if (!cb || !w1 || !w2) return;
+    if (!cb || !w1 || !w2) return null;
     if (app.onCtrl) {
       app.onCtrl(cb.id, 'code', 'area = width * height\ndiagonal = sqrt(width^2 + height^2)');
-      // Set free-variable controls if they materialise on the node
-      app.onCtrl(cb.id, 'width', 3);
-      app.onCtrl(cb.id, 'height', 4);
     }
-    app.addWire(cb.id, 'area', w1.id, 'value');
-    app.addWire(cb.id, 'diagonal', w2.id, 'value');
+    return { cbId: cb.id, w1Id: w1.id, w2Id: w2.id };
   });
+
+  if (!ids) return;
+
+  // Wait for CodeBlock to materialise inferred ports (width, height → area, diagonal)
+  await page.waitForTimeout(500);
+
+  // Phase 2: set free-variable controls (ports have now materialised) and wire
+  await page.evaluate(({ cbId, w1Id, w2Id }) => {
+    if (app.onCtrl) {
+      app.onCtrl(cbId, 'width', 3);
+      app.onCtrl(cbId, 'height', 4);
+    }
+    app.addWire(cbId, 'area',     w1Id, 'value');
+    app.addWire(cbId, 'diagonal', w2Id, 'value');
+  }, ids);
 }
 
 // ── 20. codeblock-advanced: CodeBlock(circle points) → Point.ByCoordinates ───
+// Two-phase: Phase 1 sets code so ports (r, xs, ys, angles) materialise.
+// Phase 2 (after 500 ms) sets the free-variable 'r' control and wires outputs.
 
 async function buildCodeblockAdvanced(page) {
-  await page.evaluate(() => {
+  // Phase 1: create nodes and set CodeBlock code
+  const ids = await page.evaluate(() => {
     const cb = app.addNodeToCanvas('Custom.CodeBlock', 80, 200);
     const pt = app.addNodeToCanvas('Point.ByCoordinates', 380, 200);
-    if (!cb || !pt) return;
+    if (!cb || !pt) return null;
     if (app.onCtrl) {
       app.onCtrl(cb.id, 'code', 'angles = 0..360..#24\nxs = r * cos(rad(angles))\nys = r * sin(rad(angles))');
-      app.onCtrl(cb.id, 'r', 5);
     }
-    app.addWire(cb.id, 'xs', pt.id, 'x');
-    app.addWire(cb.id, 'ys', pt.id, 'y');
+    return { cbId: cb.id, ptId: pt.id };
   });
+
+  if (!ids) return;
+
+  // Wait for CodeBlock to materialise inferred ports (r → xs, ys, angles)
+  await page.waitForTimeout(500);
+
+  // Phase 2: set 'r' control (port now exists) and wire
+  await page.evaluate(({ cbId, ptId }) => {
+    if (app.onCtrl) app.onCtrl(cbId, 'r', 5);
+    app.addWire(cbId, 'xs', ptId, 'x');
+    app.addWire(cbId, 'ys', ptId, 'y');
+  }, ids);
+
   await page.evaluate(() => { if (app.setView) app.setView('3d'); });
   await page.waitForTimeout(800);
 }
