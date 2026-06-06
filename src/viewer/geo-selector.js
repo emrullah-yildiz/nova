@@ -1,7 +1,7 @@
 import { Geo } from '../geometry/index.js';
 import { setNodePreviewState, setPreviewItemVisibility, showAllPreviews } from './preview-sync.js';
 import { Viewer3D as RuntimeViewer3D } from './viewer3d.js';
-import { isSelectionModeActive, selectionModeClick } from './selection-mode.js';
+import { isSelectionModeActive, selectionModeClick, getSelectedItems } from './selection-mode.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -337,6 +337,11 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
     // the accent-green highlight (#a6e3a1) to that panel only and restore all
     // others. This is separate from the click-select path; it does not change
     // _selectedItem so the user's click-selection is preserved.
+    //
+    // AC-8: When selection mode is active, extend hover to ALL candidate meshes
+    // and apply blue (#89b4fa) to the hovered face, teal (#94e2d5) to other
+    // candidates, green (#a6e3a1) to already-selected items. This lets the user
+    // see which face they are about to pick before clicking.
     this.renderer.domElement.addEventListener('mousemove', function(e) {
       if (!self.isVisible) return;
       var rect = self.renderer.domElement.getBoundingClientRect();
@@ -344,6 +349,72 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       self._mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
       self._raycaster.setFromCamera(self._mouse, self.camera);
+
+      // ── AC-8: Selection-mode face hover ──────────────────────────────────
+      // When 3D selection mode is active, apply the blue hover colour to the
+      // mesh under the cursor; other candidate meshes stay teal; already-
+      // selected items stay green. Exit early so the panel-hover path below
+      // does not conflict.
+      if (isSelectionModeActive()) {
+        var candidateMeshes = [];
+        self.geometryGroup.traverseVisible(function(obj) {
+          if (obj.isMesh || obj.isLine || obj.isLineSegments) candidateMeshes.push(obj);
+        });
+
+        var intersects = self._raycaster.intersectObjects(candidateMeshes, false);
+        var hitMesh = intersects.length > 0 ? intersects[0].object : null;
+
+        if (hitMesh === self._hoveredSelectionMesh) return; // nothing changed
+        self._hoveredSelectionMesh = hitMesh;
+
+        // Rebuild the highlight using the same selected-item set that
+        // _applySelectionHighlight uses, then overlay the blue hover.
+        // We only touch materials here — no state changes to _state.items.
+        var selectedItems = getSelectedItems();
+        var selectedIds = new Set();
+        if (selectedItems && selectedItems.length) {
+          selectedItems.forEach(function(it) { selectedIds.add(it.id); });
+        }
+
+        candidateMeshes.forEach(function(m) {
+          if (!m.material) return;
+          // Determine which scene item owns this mesh
+          var ownerItem = null;
+          if (self._sceneItems) {
+            for (var i = 0; i < self._sceneItems.length; i++) {
+              var found = false;
+              self._sceneItems[i].group.traverse(function(child) { if (child === m) found = true; });
+              if (found) { ownerItem = self._sceneItems[i]; break; }
+            }
+          }
+          var isSelected = ownerItem && selectedIds.has(ownerItem.id);
+
+          if (isSelected) {
+            // Already selected: keep green
+            if (m.material.color && typeof m.material.color.setHex === 'function') m.material.color.setHex(0xa6e3a1);
+            if (m.material.emissive && typeof m.material.emissive.setHex === 'function') m.material.emissive.setHex(0xa6e3a1);
+            if (m.material.emissiveIntensity !== undefined) m.material.emissiveIntensity = 0.6;
+            if (m.material.opacity !== undefined) m.material.opacity = 1.0;
+          } else if (m === hitMesh) {
+            // Hovered candidate: blue highlight (AC-8)
+            if (m.material.color && typeof m.material.color.setHex === 'function') m.material.color.setHex(0x89b4fa);
+            if (m.material.emissive && typeof m.material.emissive.setHex === 'function') m.material.emissive.setHex(0x89b4fa);
+            if (m.material.emissiveIntensity !== undefined) m.material.emissiveIntensity = 0.5;
+            if (m.material.opacity !== undefined) m.material.opacity = 1.0;
+          } else {
+            // Other candidate: teal
+            if (m.material.color && typeof m.material.color.setHex === 'function') m.material.color.setHex(0x94e2d5);
+            if (m.material.emissive && typeof m.material.emissive.setHex === 'function') m.material.emissive.setHex(0x000000);
+            if (m.material.emissiveIntensity !== undefined) m.material.emissiveIntensity = 0.3;
+            if (m.material.opacity !== undefined) m.material.opacity = 0.75;
+          }
+        });
+        return; // don't run the panel-hover path below in selection mode
+      }
+
+      // ── Normal mode: per-panel hover ──────────────────────────────────────
+      // Clear any stale selection-mode hover mesh reference when mode is off.
+      self._hoveredSelectionMesh = null;
 
       var panelMeshes = [];
       self.geometryGroup.traverseVisible(function(obj) {
@@ -357,8 +428,8 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         return;
       }
 
-      var intersects = self._raycaster.intersectObjects(panelMeshes, false);
-      var hitId = intersects.length > 0 ? intersects[0].object.userData.panelId : null;
+      var panelIntersects = self._raycaster.intersectObjects(panelMeshes, false);
+      var hitId = panelIntersects.length > 0 ? panelIntersects[0].object.userData.panelId : null;
 
       // Only update materials if the hovered panel changed
       if (hitId === self._hoveredPanelId) return;

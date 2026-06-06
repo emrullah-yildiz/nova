@@ -542,7 +542,8 @@ export const geometryNodes = [
       { id: 'selection', name: 'Selection', type: 'list', description: 'List of selected geometry item labels' }
     ],
     controls: [
-      { id: '_selectedLabels', type: 'hidden', default: '' }
+      { id: '_selectedLabels', type: 'hidden', default: '' },
+      { id: '_selectedGeo', type: 'hidden', default: [] }
     ],
     metadata: { selectionMode: 'faces' },
     codegen: {
@@ -550,13 +551,30 @@ export const geometryNodes = [
       csharp: 'var {{selection}} = SelectFaces();'
     },
     execute(context, inputs, controlValues) {
+      // AC-9: return structured geometry descriptors, not bare string labels.
+      // _selectedGeo is written by node-renderer.js on Approve and contains
+      // { _type: 'FaceSelection', label, nodeId, varName } objects.
+      // Fall back to building descriptors from _selectedLabels for saved graphs
+      // that pre-date this fix (backward compat).
+      //
+      // Each descriptor gets a toString() so Array.join produces the label
+      // rather than "[object Object]" — keeps downstream display readable while
+      // still being a typed object (satisfies AC-9's "not a bare string" requirement).
+      function makeDescriptor(src, type) {
+        var d = { _type: type, label: src.label || src, nodeId: src.nodeId || '', varName: src.varName || '' };
+        d.toString = function() { return d.label; };
+        return d;
+      }
+      if (controlValues._selectedGeo && Array.isArray(controlValues._selectedGeo) && controlValues._selectedGeo.length > 0) {
+        return { selection: controlValues._selectedGeo.map(function(g) { return makeDescriptor(g, 'FaceSelection'); }) };
+      }
       const raw = controlValues._selectedLabels || '';
       const labels = raw ? raw.split('||').filter(Boolean) : [];
-      return { selection: labels };
+      return { selection: labels.map(function(lbl) { return makeDescriptor({ label: lbl, nodeId: '', varName: '' }, 'FaceSelection'); }) };
     },
     help: {
       inputs: [],
-      outputs: [{ name: 'Selection', description: 'List of selected geometry labels' }],
+      outputs: [{ name: 'Selection', description: 'List of selected geometry descriptors ({ _type, label, nodeId, varName })' }],
       example: {
         title: 'Select faces and inspect them',
         nodes: [
@@ -583,7 +601,8 @@ export const geometryNodes = [
       { id: 'selection', name: 'Selection', type: 'list', description: 'List of selected edge/curve geometry labels' }
     ],
     controls: [
-      { id: '_selectedLabels', type: 'hidden', default: '' }
+      { id: '_selectedLabels', type: 'hidden', default: '' },
+      { id: '_selectedGeo', type: 'hidden', default: [] }
     ],
     metadata: { selectionMode: 'edges' },
     codegen: {
@@ -591,13 +610,22 @@ export const geometryNodes = [
       csharp: 'var {{selection}} = SelectEdges();'
     },
     execute(context, inputs, controlValues) {
+      // AC-9: return structured geometry descriptors (same pattern as Select.Faces).
+      function makeDescriptor(src, type) {
+        var d = { _type: type, label: src.label || src, nodeId: src.nodeId || '', varName: src.varName || '' };
+        d.toString = function() { return d.label; };
+        return d;
+      }
+      if (controlValues._selectedGeo && Array.isArray(controlValues._selectedGeo) && controlValues._selectedGeo.length > 0) {
+        return { selection: controlValues._selectedGeo.map(function(g) { return makeDescriptor(g, 'EdgeSelection'); }) };
+      }
       const raw = controlValues._selectedLabels || '';
       const labels = raw ? raw.split('||').filter(Boolean) : [];
-      return { selection: labels };
+      return { selection: labels.map(function(lbl) { return makeDescriptor({ label: lbl, nodeId: '', varName: '' }, 'EdgeSelection'); }) };
     },
     help: {
       inputs: [],
-      outputs: [{ name: 'Selection', description: 'List of selected edge/curve labels' }],
+      outputs: [{ name: 'Selection', description: 'List of selected edge/curve descriptors ({ _type, label, nodeId, varName })' }],
       example: {
         title: 'Select edges and inspect them',
         nodes: [
@@ -624,7 +652,8 @@ export const geometryNodes = [
       { id: 'selection', name: 'Selection', type: 'list', description: 'List of selected point geometry labels' }
     ],
     controls: [
-      { id: '_selectedLabels', type: 'hidden', default: '' }
+      { id: '_selectedLabels', type: 'hidden', default: '' },
+      { id: '_selectedGeo', type: 'hidden', default: [] }
     ],
     metadata: { selectionMode: 'points' },
     codegen: {
@@ -632,13 +661,22 @@ export const geometryNodes = [
       csharp: 'var {{selection}} = SelectPoints();'
     },
     execute(context, inputs, controlValues) {
+      // AC-9: return structured geometry descriptors (same pattern as Select.Faces).
+      function makeDescriptor(src, type) {
+        var d = { _type: type, label: src.label || src, nodeId: src.nodeId || '', varName: src.varName || '' };
+        d.toString = function() { return d.label; };
+        return d;
+      }
+      if (controlValues._selectedGeo && Array.isArray(controlValues._selectedGeo) && controlValues._selectedGeo.length > 0) {
+        return { selection: controlValues._selectedGeo.map(function(g) { return makeDescriptor(g, 'PointSelection'); }) };
+      }
       const raw = controlValues._selectedLabels || '';
       const labels = raw ? raw.split('||').filter(Boolean) : [];
-      return { selection: labels };
+      return { selection: labels.map(function(lbl) { return makeDescriptor({ label: lbl, nodeId: '', varName: '' }, 'PointSelection'); }) };
     },
     help: {
       inputs: [],
-      outputs: [{ name: 'Selection', description: 'List of selected point labels' }],
+      outputs: [{ name: 'Selection', description: 'List of selected point descriptors ({ _type, label, nodeId, varName })' }],
       example: {
         title: 'Select points and inspect them',
         nodes: [

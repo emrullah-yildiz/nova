@@ -181,8 +181,9 @@ function _modeLabel(mode) {
  * @param {string}   nodeId     The node requesting selection (used to restore
  *                              highlight on the source node after confirm).
  * @param {string}   mode       'faces' | 'edges' | 'points'
- * @param {Function} onApprove  Called with (items: string[]) when user clicks Approve.
- *                              items is an array of scene-item labels.
+ * @param {Function} onApprove  Called with (items: SceneItem[]) when user clicks Approve.
+ *                              items is an array of full scene-item objects (id, nodeId,
+ *                              varName, label, group, visible, selected).
  * @param {Function} onCancel   Called with no arguments when user clicks Cancel.
  */
 export function activateSelectionMode(nodeId, mode, onApprove, onCancel) {
@@ -261,17 +262,18 @@ export function selectionModeClick(item) {
  *   { id, nodeId, varName, label, group (THREE.Group), visible, selected }
  *
  * The group.userData.label is the human-readable name (e.g. "Box.ByCenterWidthDepthHeight (node-1)").
- * The caller (node-renderer.js _activateNodeSelection) stores items for downstream use.
- * NOTE: TICK-002 AC-9 requires the selection output to carry geometry objects, not
- * bare string labels. The node-renderer.js onApprove handler must be updated to store
- * geometry references alongside labels — see T02a task brief for the full fix.
+ * The caller (node-renderer.js _activateNodeSelection) builds a structured descriptor
+ * per item ({ _type: 'FaceSelection', label, nodeId, varName }) and stores it in
+ * nd.controlValues._selectedGeo — satisfying TICK-002 AC-9.
  */
 export function approveSelection() {
   if (!_state.active) return;
-  const labels = _state.items.map(function (it) { return it.label; });
+  // Pass full scene-item objects so the caller can build structured descriptors.
+  // Previously this mapped to labels (strings) — changed for AC-9.
+  const items = _state.items.slice();
   const cb = _state.onApprove;
   deactivateSelectionMode();
-  if (typeof cb === 'function') cb(labels);
+  if (typeof cb === 'function') cb(items);
 }
 
 /**

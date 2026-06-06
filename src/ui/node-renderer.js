@@ -828,10 +828,23 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
       // Switch to 3D viewport so the user can interact with geometry
       if (typeof app.setView === 'function') app.setView('3d');
       activate(nodeId, mode,
-        function (labels) {
-          // Approve: store result
+        function (items) {
+          // Approve: items is now an array of full scene-item objects
+          // (id, nodeId, varName, label, group, visible, selected).
+          // Build a structured descriptor per item (AC-9: not a bare string).
           if (!nd.controlValues) nd.controlValues = {};
-          nd.controlValues._selectedLabels = labels.join('||');
+          var descriptors = items.map(function(it) {
+            return {
+              _type: 'FaceSelection',
+              label: it.label || it.id || '',
+              nodeId: it.nodeId || '',
+              varName: it.varName || ''
+            };
+          });
+          // Store structured geometry descriptors (read by geometry.js execute).
+          nd.controlValues._selectedGeo = descriptors;
+          // Keep _selectedLabels in sync for the "N faces selected" button display.
+          nd.controlValues._selectedLabels = descriptors.map(function(d) { return d.label; }).join('||');
           self.renderNode(nd);
           self.runGraph();
         },
@@ -853,6 +866,7 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
     if (!nd) return;
     if (!nd.controlValues) nd.controlValues = {};
     nd.controlValues._selectedLabels = '';
+    nd.controlValues._selectedGeo = [];
     this.renderNode(nd);
     this.runGraph();
   };
