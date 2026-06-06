@@ -667,8 +667,9 @@ export function approveSelection() {
   // Previously this mapped to labels (strings) — changed for AC-9.
   const items = _state.items.slice();
   const cb = _state.onApprove;
-  deactivateSelectionMode();
+  // Fire callback BEFORE deactivate so getSelectedFaces() still has state
   if (typeof cb === 'function') cb(items);
+  deactivateSelectionMode();
 }
 
 /**

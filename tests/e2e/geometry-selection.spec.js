@@ -1,6 +1,6 @@
 // Nova — Geometry Selection E2E Spec
 //
-// Covers TICK-002 AC-1 through AC-4 and AC-7.
+// Covers TICK-009 AC-1 through AC-11 (per-face selection).
 //
 // AC-1: Select.Faces node has a "Select" button in its node controls.
 // AC-2: Clicking Select activates selection mode — the Approve/Cancel toolbar

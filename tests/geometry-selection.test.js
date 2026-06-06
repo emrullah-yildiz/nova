@@ -299,6 +299,27 @@ describe('Select.* node execute()', () => {
     expect(result.selection.length).toBe(1);
   });
 
+  it('Select.Faces execute() with _selectedFaces JSON returns { faces: [{ _type:"Face" }] }', () => {
+    const def = registry.getNode('Select.Faces');
+    const faceData = [
+      { _type: 'Face', vertices: [[0,0,0],[1,0,0],[1,1,0],[0,1,0]], normal: [0,0,1], area: 1.0 }
+    ];
+    const result = def.execute({}, {}, { _selectedFaces: JSON.stringify(faceData) });
+    expect(Array.isArray(result.faces)).toBe(true);
+    expect(result.faces.length).toBe(1);
+    expect(result.faces[0]._type).toBe('Face');
+    expect(Array.isArray(result.faces[0].vertices)).toBe(true);
+    expect(Array.isArray(result.faces[0].normal)).toBe(true);
+    expect(typeof result.faces[0].area).toBe('number');
+  });
+
+  it('Select.Faces execute() with invalid _selectedFaces returns empty faces', () => {
+    const def = registry.getNode('Select.Faces');
+    const result = def.execute({}, {}, { _selectedFaces: 'not-json' });
+    expect(Array.isArray(result.faces)).toBe(true);
+    expect(result.faces.length).toBe(0);
+  });
+
   it('Select.Faces selectionMode is "faces"', () => {
     expect(registry.getNode('Select.Faces').metadata.selectionMode).toBe('faces');
   });
