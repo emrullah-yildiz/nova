@@ -135,3 +135,4 @@ tests/e2e/geometry-selection.spec.js — E2E for AC-11
 - [T09d](../task-briefs/T09d-node-renderer-approve-e2e.md) — lane: ui — node-renderer onApprove wires face data; E2E spec for AC-11 (blocked on T09b)
 
 ## Latest PM Notes
+- I tested by creating a box and then used Select.Faces node. I do not see that hihglights when my mouse on the object face. I cannot click and add a face to the counter. 
