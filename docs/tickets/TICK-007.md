@@ -23,7 +23,7 @@ The mini-canvas must be self-contained — no global app state mutation. It comm
 ## Acceptance criteria
 
 - [ ] AC-1  All 10 chapters display an interactive exercise section (below the existing quiz), containing a mini-canvas with 4–5 pre-placed nodes and at least 1 unwired input port. — manual browser verification pending
-- [ ] AC-2  The user can draw a wire by clicking an output port then a compatible input port. The wire appears as a visible connector between the two ports, and the pending wire visually follows the cursor from the output port to the current mouse position while the user is mid-draw. — PM re-opened 2026-06-07: wire does not follow the cursor.
+- [x] AC-2  The user can draw a wire by clicking an output port then a compatible input port. The wire appears as a visible connector between the two ports, and the pending wire visually follows the cursor from the output port to the current mouse position while the user is mid-draw. — fixed 2026-06-07 on fix/tick-007-mini-canvas-real-nodes: SVG-relative coordinates (_dotCenter/_onDocMouseMove use svg.getBoundingClientRect()), --node-color via setProperty, overflow:visible on .mini-canvas-area, pendingLine.removeAttribute('display') in _startPending; E2E AC-10 passes.
 - [ ] AC-3  Clicking an incompatible port (type mismatch) does nothing — no wire is started or partially drawn. — manual browser verification pending
 - [ ] AC-4  Submitting a correctly completed exercise shows a green success message and enables the "Next chapter" button. — manual browser verification pending
 - [ ] AC-5  Submitting an incomplete or incorrectly wired exercise shows a red feedback message describing what was expected. The user can adjust and resubmit. — manual browser verification pending
