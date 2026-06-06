@@ -2288,7 +2288,7 @@ input[type="number"] {
 #learning-overlay .learn-exercise-section { margin-top: 40px; padding-top: 28px; border-top: 1px solid var(--border-color, #313244); }
 /* mini-canvas exercise component — nodes use real Nova .node CSS classes */
 .mini-canvas { display: flex; flex-direction: column; gap: 12px; width: 100%; }
-.mini-canvas-area { position: relative; background: var(--bg-canvas, #11111b); border: 1px solid var(--border-color, #313244); border-radius: 8px; min-height: 280px; cursor: default; user-select: none; overflow: auto; }
+.mini-canvas-area { position: relative; background: var(--bg-canvas, #11111b); border: 1px solid var(--border-color, #313244); border-radius: 8px; min-height: 280px; cursor: default; user-select: none; overflow: visible; }
 .mini-canvas .node-header { cursor: default; }
 .mini-canvas .node { cursor: default; }
 .mini-canvas .port-dot.unwired { background: transparent !important; border-color: #585b70 !important; }

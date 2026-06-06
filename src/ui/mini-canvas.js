@@ -214,7 +214,15 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
     const box = document.createElement('div');
     // Use real Nova `.node` class — gets border-top, background, border-radius.
     box.className = 'node mini-canvas-node';
-    box.style.cssText = `left:${node.x}px;top:${node.y}px;--node-color:${meta.color};width:140px;position:absolute;cursor:default`;
+    // Set individual style properties so that the CSS custom property
+    // --node-color is applied via the proper setProperty API (style.cssText
+    // does not reliably set custom properties in all browsers).
+    box.style.position = 'absolute';
+    box.style.left = `${node.x}px`;
+    box.style.top  = `${node.y}px`;
+    box.style.width = '140px';
+    box.style.cursor = 'default';
+    box.style.setProperty('--node-color', meta.color);
 
     // Header
     const header = document.createElement('div');
@@ -290,13 +298,17 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
     canvasEl.appendChild(box);
   });
 
-  // ── Port position (from live DOM rects) ───────────────────────────────────
+  // ── Port position (from live DOM rects, SVG-relative) ────────────────────
+  // All coordinates are measured relative to the SVG element's bounding box so
+  // that wire endpoints and cursor position share the same coordinate space as
+  // the SVG <path> d-attribute values — regardless of scroll or transforms on
+  // ancestor elements (e.g., the learning overlay's fixed/transformed container).
   function _dotCenter(dotEl) {
     const dr = dotEl.getBoundingClientRect();
-    const cr = canvasEl.getBoundingClientRect();
+    const sr = svg.getBoundingClientRect();
     return {
-      x: dr.left - cr.left + dr.width / 2 + canvasEl.scrollLeft,
-      y: dr.top  - cr.top  + dr.height / 2 + canvasEl.scrollTop
+      x: dr.left - sr.left + dr.width  / 2,
+      y: dr.top  - sr.top  + dr.height / 2
     };
   }
 
@@ -357,11 +369,9 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
     const fromDot = portEls.get(`${pendingWire.nodeId}:output:${pendingWire.portId}`);
     if (!fromDot) return;
     const from = _dotCenter(fromDot);
-    const cr = canvasEl.getBoundingClientRect();
-    const to = {
-      x: e.clientX - cr.left + canvasEl.scrollLeft,
-      y: e.clientY - cr.top  + canvasEl.scrollTop
-    };
+    const sr = svg.getBoundingClientRect();
+    const to = { x: e.clientX - sr.left, y: e.clientY - sr.top };
+    pendingLine.style.display = '';
     pendingLine.setAttribute('d', _bezierPath(from, to));
   }
 
@@ -381,9 +391,12 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
     const portType = dotEl.dataset.portType;
     pendingWire = { nodeId, portId, portType, dotEl };
     dotEl.classList.add('pending');
-    pendingLine.style.display = '';
     const from = _dotCenter(dotEl);
     pendingLine.setAttribute('d', _bezierPath(from, from));
+    // Ensure visibility via both CSS style and SVG display attribute so no
+    // residual SVG-level display="none" from a prior setAttribute can hide it.
+    pendingLine.style.display = '';
+    pendingLine.removeAttribute('display');
     document.addEventListener('mousemove', _onDocMouseMove);
   }
 
