@@ -286,5 +286,20 @@ export function cancelSelection() {
   if (typeof cb === 'function') cb();
 }
 
+/**
+ * Clear all accumulated items from the active selection without leaving
+ * selection mode. Called by geo-selector.js when the user clicks empty space
+ * while selection mode is active (AC-10 extension: empty-area click → reset to 0).
+ *
+ * Reapplies the visual highlight (so previously-green items go back to teal)
+ * and updates the toolbar counter to "0 selected".
+ */
+export function clearSelection() {
+  if (!_state.active) return;
+  _state.items = [];
+  _applySelectionHighlight();
+  _updateToolbarCount();
+}
+
 // Expose for testing without DOM
 export const _internals = { _state, _itemMatchesMode };
