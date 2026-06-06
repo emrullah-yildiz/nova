@@ -7,7 +7,7 @@
 //   1. Spawns the Vite dev server on http://localhost:5173 (kills on exit).
 //   2. For each of the 20 slots, navigates the Nova workspace, builds a
 //      representative node graph via page.evaluate(), waits for computation,
-//      and screenshots #canvas-area.
+//      calls app.fitAll() to centre the graph, and screenshots #canvas-area.
 //   3. Saves each PNG to public/learning/<slot-id>.png.
 //   4. Asserts each file is <= 400 KB and logs a warning if exceeded.
 //
@@ -16,8 +16,10 @@
 //   app.addNodeToCanvas(type, x, y, opts?)        - add a node, returns node object
 //   app.addWire(fromId, fromPort, toId, toPort)   - connect two ports
 //   app.setView('3d')                             - switch to 3D viewport
-//   app.openTerminal()                            - open code terminal
+//   app.openTerminal()                            - open code terminal overlay
+//   app.fitAll()                                  - fit/centre all nodes in view
 //   app.invalidateCompute?.()                     - trigger recompute
+//   app.onCtrl(id, key, val)                      - set a node control value
 
 'use strict';
 
@@ -30,7 +32,8 @@ const fs = require('node:fs');
 
 const SHOTS_DIR = path.join(__dirname, '..', 'public', 'learning');
 const BASE_URL = 'http://localhost:5173';
-const VIEWPORT = { width: 1280, height: 800 };
+// FIX A: 1280×720 (laptop-friendly) per T06d spec.
+const VIEWPORT = { width: 1280, height: 720 };
 const MAX_BYTES = 409600; // 400 KB
 
 // Ensure output directory exists before any screenshot is taken.
@@ -125,6 +128,8 @@ process.on('SIGTERM', () => { stopDevServer(); process.exit(143); });
 //   app.addWire(fnId, fp, tnId, tp)  — connect ports
 //   app.setView('3d')                — switch to 3D viewport
 //   app.openTerminal()               — open code terminal overlay
+//   app.fitAll()                     — fit/centre the graph in view
+//   app.onCtrl(id, key, val)         — set a node control value
 //   app.invalidateCompute?.()        — mark graph dirty → auto recompute
 
 // ── Slot graph definitions ─────────────────────────────────────────────────────
@@ -132,6 +137,12 @@ process.on('SIGTERM', () => { stopDevServer(); process.exit(143); });
 /**
  * Each entry: { slotId: string, build: async function(page) }
  * The build function calls page.evaluate() to manipulate the Nova canvas.
+ *
+ * buildGraph() calls this then:
+ *   1. Invalidates compute so the engine runs.
+ *   2. Waits 1200 ms for auto-compute to settle.
+ *   3. Calls app.fitAll() so all nodes are centred and visible in the viewport.
+ *   4. Screenshots #canvas-area only (no browser chrome).
  */
 
 async function buildGraph(page, fn) {
@@ -155,6 +166,12 @@ async function buildGraph(page, fn) {
     if (typeof app !== 'undefined' && app.invalidateCompute) app.invalidateCompute();
   });
   await page.waitForTimeout(1200);
+
+  // FIX A: fit-to-view — centre all nodes so nothing is clipped by the viewport.
+  await page.evaluate(() => {
+    if (typeof app !== 'undefined' && typeof app.fitAll === 'function') app.fitAll();
+  });
+  await page.waitForTimeout(200);
 }
 
 // ── 1. intro-simple: Input.Number(5) → Math.Multiply(b=2) → Output.Watch ──────
@@ -165,8 +182,10 @@ async function buildIntroSimple(page) {
     const n2 = app.addNodeToCanvas('Math.Multiply', 320, 200);
     const n3 = app.addNodeToCanvas('Output.Watch', 560, 200);
     if (!n1 || !n2 || !n3) return;
-    if (app.onCtrl) app.onCtrl(n1.id, 'val', 5);
-    if (app.onCtrl) app.onCtrl(n2.id, 'b', 2);
+    if (app.onCtrl) {
+      app.onCtrl(n1.id, 'val', 5);
+      app.onCtrl(n2.id, 'b', 2);
+    }
     app.addWire(n1.id, 'value', n2.id, 'a');
     app.addWire(n2.id, 'result', n3.id, 'value');
   });
@@ -181,7 +200,10 @@ async function buildIntroAdvanced(page) {
     const mul = app.addNodeToCanvas('Math.Multiply', 320, 180);
     const watch = app.addNodeToCanvas('Output.Watch', 560, 180);
     if (!floors || !fh || !mul || !watch) return;
-    if (app.onCtrl) { app.onCtrl(floors.id, 'val', 10); app.onCtrl(fh.id, 'val', 3); }
+    if (app.onCtrl) {
+      app.onCtrl(floors.id, 'val', 10);
+      app.onCtrl(fh.id, 'val', 3);
+    }
     app.addWire(floors.id, 'value', mul.id, 'a');
     app.addWire(fh.id, 'value', mul.id, 'b');
     app.addWire(mul.id, 'result', watch.id, 'value');
@@ -195,7 +217,10 @@ async function buildInterfaceSimple(page) {
     const add = app.addNodeToCanvas('Math.Add', 200, 200);
     const watch = app.addNodeToCanvas('Output.Watch', 460, 200);
     if (!add || !watch) return;
-    if (app.onCtrl) { app.onCtrl(add.id, 'a', 4); app.onCtrl(add.id, 'b', 6); }
+    if (app.onCtrl) {
+      app.onCtrl(add.id, 'a', 4);
+      app.onCtrl(add.id, 'b', 6);
+    }
     app.addWire(add.id, 'result', watch.id, 'value');
   });
 }
@@ -208,7 +233,12 @@ async function buildInterfaceAdvanced(page) {
     const range = app.addNodeToCanvas('List.Range', 320, 200);
     const watch = app.addNodeToCanvas('Output.Watch', 560, 200);
     if (!num || !range || !watch) return;
-    if (app.onCtrl) { app.onCtrl(num.id, 'val', 100); app.onCtrl(range.id, 'start', 0); }
+    if (app.onCtrl) {
+      app.onCtrl(num.id, 'val', 100);
+      // start=0 (default), step=10 to keep the list manageable at 10 items
+      app.onCtrl(range.id, 'start', 0);
+      app.onCtrl(range.id, 'step', 10);
+    }
     app.addWire(num.id, 'value', range.id, 'end');
     app.addWire(range.id, 'list', watch.id, 'value');
   });
@@ -221,7 +251,10 @@ async function buildNodeLayoutSimple(page) {
     const add = app.addNodeToCanvas('Math.Add', 200, 200);
     const watch = app.addNodeToCanvas('Output.Watch', 460, 200);
     if (!add || !watch) return;
-    if (app.onCtrl) { app.onCtrl(add.id, 'a', 7); app.onCtrl(add.id, 'b', 3); }
+    if (app.onCtrl) {
+      app.onCtrl(add.id, 'a', 7);
+      app.onCtrl(add.id, 'b', 3);
+    }
     app.addWire(add.id, 'result', watch.id, 'value');
   });
 }
@@ -255,13 +288,17 @@ async function buildDataTypesSimple(page) {
     const w1 = app.addNodeToCanvas('Output.Watch', 360, 120);
     const w2 = app.addNodeToCanvas('Output.Watch', 360, 280);
     if (!str || !num || !w1 || !w2) return;
-    if (app.onCtrl) { app.onCtrl(str.id, 'val', 'Hello'); app.onCtrl(num.id, 'val', 42); }
+    if (app.onCtrl) {
+      app.onCtrl(str.id, 'val', 'Hello');
+      app.onCtrl(num.id, 'val', 42);
+    }
     app.addWire(str.id, 'value', w1.id, 'value');
     app.addWire(num.id, 'value', w2.id, 'value');
   });
 }
 
-// ── 8. data-types-advanced: List.Create → Logic.Compare(>) → List.FilterByBoolean → Watch ─
+// ── 8. data-types-advanced: List.Create → Logic.Compare(>=2) → FilterByBoolean → Watch ─
+// FIX B: Use op='>=' so that items [1,2] produce inList=[2] (non-empty result).
 
 async function buildDataTypesAdvanced(page) {
   await page.evaluate(() => {
@@ -270,22 +307,20 @@ async function buildDataTypesAdvanced(page) {
     const filter = app.addNodeToCanvas('List.FilterByBoolean', 520, 200);
     const watch = app.addNodeToCanvas('Output.Watch', 740, 200);
     if (!create || !cmp || !filter || !watch) return;
-    // Set List.Create items 1–5
     if (app.onCtrl) {
+      // Two list items: 1 and 2
       app.onCtrl(create.id, 'item0', 1);
       app.onCtrl(create.id, 'item1', 2);
-      // Dynamic inputs: item2, item3, item4 added via the app's dynamic input mechanism
-      // For the screenshot, 2 items (1 and 2) are enough to show the filter concept.
-      // Set Logic.Compare operator to '>' with b=2
+      // Compare >= 2 so item 2 passes, giving inList=[2]
       app.onCtrl(cmp.id, 'b', 2);
-      app.onCtrl(cmp.id, 'op', '>');
+      app.onCtrl(cmp.id, 'op', '>=');
     }
     // list → compare.a (lacing applies comparison to each item)
     app.addWire(create.id, 'list', cmp.id, 'a');
     // compare.result → filter.mask; create.list → filter.list
     app.addWire(cmp.id, 'result', filter.id, 'mask');
     app.addWire(create.id, 'list', filter.id, 'list');
-    // filter.inList → watch
+    // filter.inList → watch (shows [2])
     app.addWire(filter.id, 'inList', watch.id, 'value');
   });
 }
@@ -325,8 +360,6 @@ async function buildMathSimple(page) {
 // ── 10. math-advanced: List.Range(0,360,45) → CodeBlock(sin of degrees) → Watch ─
 // Two-phase evaluate: Phase 1 creates nodes + sets controls (including code).
 // Phase 2 (after a 500 ms wait) adds wires so CodeBlock ports have materialised.
-// The Input.Number override of List.Range.end is removed — range is set directly
-// via onCtrl so the range is always 0..360 (8 values: 0,45,90,135,180,225,270,315).
 
 async function buildMathAdvanced(page) {
   // Phase 1: create nodes and set all controls
@@ -383,7 +416,11 @@ async function buildGeometryAdvanced(page) {
     const coords = [[0,0,0],[4,0,0],[4,3,0],[0,3,0]];
     const pts = coords.map(([x,y,z], i) => {
       const p = app.addNodeToCanvas('Point.ByCoordinates', 80, 80 + i * 100);
-      if (p && app.onCtrl) { app.onCtrl(p.id, 'x', x); app.onCtrl(p.id, 'y', y); app.onCtrl(p.id, 'z', z); }
+      if (p && app.onCtrl) {
+        app.onCtrl(p.id, 'x', x);
+        app.onCtrl(p.id, 'y', y);
+        app.onCtrl(p.id, 'z', z);
+      }
       return p;
     }).filter(Boolean);
 
@@ -395,12 +432,16 @@ async function buildGeometryAdvanced(page) {
 
     if (!create || !poly || !vec || !extrude) return;
     if (app.onCtrl) {
-      app.onCtrl(vec.id, 'x', 0); app.onCtrl(vec.id, 'y', 0); app.onCtrl(vec.id, 'z', 5);
+      app.onCtrl(vec.id, 'x', 0);
+      app.onCtrl(vec.id, 'y', 0);
+      app.onCtrl(vec.id, 'z', 5);
     }
 
     // Wire points into List.Create (items item0..item3)
     const portIds = ['item0','item1','item2','item3'];
-    pts.forEach((pt, i) => { if (portIds[i]) app.addWire(pt.id, 'point', create.id, portIds[i]); });
+    pts.forEach((pt, i) => {
+      if (portIds[i]) app.addWire(pt.id, 'point', create.id, portIds[i]);
+    });
 
     app.addWire(create.id, 'list', poly.id, 'points');
     app.addWire(poly.id, 'curve', extrude.id, 'curve');
@@ -423,6 +464,7 @@ async function buildListsSimple(page) {
       app.onCtrl(create.id, 'item1', 20);
     }
     app.addWire(create.id, 'list', rev.id, 'list');
+    // List.Reverse output port is 'result'
     app.addWire(rev.id, 'result', watch.id, 'value');
   });
 }
@@ -437,8 +479,12 @@ async function buildListsAdvanced(page) {
     const watch = app.addNodeToCanvas('Output.Watch', 540, 200);
     if (!rangeX || !rangeY || !pt || !watch) return;
     if (app.onCtrl) {
-      app.onCtrl(rangeX.id, 'start', 0); app.onCtrl(rangeX.id, 'end', 5); app.onCtrl(rangeX.id, 'step', 1);
-      app.onCtrl(rangeY.id, 'start', 0); app.onCtrl(rangeY.id, 'end', 4); app.onCtrl(rangeY.id, 'step', 1);
+      app.onCtrl(rangeX.id, 'start', 0);
+      app.onCtrl(rangeX.id, 'end', 5);
+      app.onCtrl(rangeX.id, 'step', 1);
+      app.onCtrl(rangeY.id, 'start', 0);
+      app.onCtrl(rangeY.id, 'end', 4);
+      app.onCtrl(rangeY.id, 'step', 1);
     }
     app.addWire(rangeX.id, 'list', pt.id, 'x');
     app.addWire(rangeY.id, 'list', pt.id, 'y');
@@ -504,7 +550,10 @@ async function buildCodeTerminalSimple(page) {
     const add = app.addNodeToCanvas('Math.Add', 200, 200);
     const watch = app.addNodeToCanvas('Output.Watch', 460, 200);
     if (!add || !watch) return;
-    if (app.onCtrl) { app.onCtrl(add.id, 'a', 4); app.onCtrl(add.id, 'b', 6); }
+    if (app.onCtrl) {
+      app.onCtrl(add.id, 'a', 4);
+      app.onCtrl(add.id, 'b', 6);
+    }
     app.addWire(add.id, 'result', watch.id, 'value');
   });
   // Try to open the code terminal; graceful if unavailable.
@@ -514,14 +563,32 @@ async function buildCodeTerminalSimple(page) {
   await page.waitForTimeout(600);
 }
 
-// ── 18. code-terminal-advanced: 5× Math.Add in a column ──────────────────────
+// ── 18. code-terminal-advanced: Input.Number(10) → Math.Multiply(b=5) → Math.Add(b=3) → Watch ─
+// FIX B: Replace the broken "5 disconnected Math.Add nodes" graph with a
+// proper connected pipeline: producer → two transforms → Output.Watch,
+// then open the terminal overlay so the chapter context is visible.
 
 async function buildCodeTerminalAdvanced(page) {
   await page.evaluate(() => {
-    for (let i = 0; i < 5; i++) {
-      app.addNodeToCanvas('Math.Add', 200, i * 90);
+    const num = app.addNodeToCanvas('Input.Number', 80, 200);
+    const mul = app.addNodeToCanvas('Math.Multiply', 280, 200);
+    const add = app.addNodeToCanvas('Math.Add', 480, 200);
+    const watch = app.addNodeToCanvas('Output.Watch', 680, 200);
+    if (!num || !mul || !add || !watch) return;
+    if (app.onCtrl) {
+      app.onCtrl(num.id, 'val', 10);
+      app.onCtrl(mul.id, 'b', 5);  // 10 × 5 = 50
+      app.onCtrl(add.id, 'b', 3);  // 50 + 3 = 53
     }
+    app.addWire(num.id, 'value', mul.id, 'a');
+    app.addWire(mul.id, 'result', add.id, 'a');
+    app.addWire(add.id, 'result', watch.id, 'value');
   });
+  // Open the code terminal overlay so the screenshot shows the terminal context.
+  await page.evaluate(() => {
+    try { if (app.openTerminal) app.openTerminal(); } catch (_) { /* non-fatal */ }
+  });
+  await page.waitForTimeout(600);
 }
 
 // ── 19. codeblock-simple: Custom.CodeBlock(area+diagonal) → 2× Watch ─────────
@@ -636,6 +703,7 @@ async function main() {
 
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
+  // FIX A: Set 1280×720 viewport as spec requires.
   await page.setViewportSize(VIEWPORT);
 
   // Load the app and wait for it to initialise.
@@ -659,12 +727,13 @@ async function main() {
     try {
       await buildGraph(page, buildFn);
 
-      // Take screenshot of the canvas area element.
+      // FIX A: Screenshot only the canvas area element (no browser chrome).
       const canvasEl = await page.$('#canvas-area');
       if (canvasEl) {
         await canvasEl.screenshot({ path: outPath, type: 'png' });
       } else {
-        // Fallback: full page screenshot cropped.
+        // Fallback: full page screenshot when canvas element not found.
+        console.warn(`[shots] WARNING: #canvas-area not found for ${slotId} — falling back to full-page`);
         await page.screenshot({ path: outPath, type: 'png' });
       }
 
@@ -693,10 +762,10 @@ async function main() {
   console.log('\n[shots] ── Summary ──────────────────────────────────');
   results.forEach((r) => {
     if (r.ok) {
-      const warn = r.sizeKb > 400 ? ' ⚠ OVER LIMIT' : '';
-      console.log(`  ✓ ${r.slotId}.png  ${r.sizeKb} KB${warn}`);
+      const warn = r.sizeKb > 400 ? ' WARNING OVER LIMIT' : '';
+      console.log(`  OK ${r.slotId}.png  ${r.sizeKb} KB${warn}`);
     } else {
-      console.log(`  ✗ ${r.slotId}  FAILED: ${r.error}`);
+      console.log(`  FAILED ${r.slotId}  FAILED: ${r.error}`);
     }
   });
   console.log(`[shots] ${successCount}/${SHOTS.length} screenshots taken, ${warnCount} over 400 KB.`);
