@@ -179,3 +179,24 @@ green on click, counter increments. Approve/Cancel should restore the normal mes
 **Task brief:** [T09b-fix](../task-briefs/T09b-face-selection-orbit-flat.md)
 
 **Verification:** lint:all 0 errors, 1917 unit tests pass, build green. AC-T09b-8 E2E step added. Branch pushed — awaiting PM re-test after merge to develop.
+
+## Run comments (2026-06-07 — Bug C/D/E fix, branch fix/tick-009c-hover-output-approve)
+
+**Status:** fixed, branch ready for review
+
+**Bug C — Hover highlight not rendering:**
+Root cause: `selectionMeshHover()` in `selection-mode.js` updated `mat.color` and set `mat.needsUpdate = true` but never triggered a render frame. The animate loop may not be running between pointer events, so the material change was invisible.
+Fix: Added `_requestRender()` helper that calls `viewer.renderer.render(scene, camera)` directly. Called at the end of `selectionMeshHover()` after every material change.
+File changed: `src/viewer/selection-mode.js`
+
+**Bug D — Approve returns single merged Mesh3 instead of one Geo.Mesh3 per face:**
+Root cause: The `onApprove` callback in `node-renderer.js` produced a single merged `Geo.Mesh3`. `Select.Faces.execute()` returned this as a scalar, not an array.
+Fix: Replaced merge loop with per-face `Array.map` producing one `Geo.Mesh3` per selected face. Stores `_selectedMeshes` (JSON array) and `_selectedMesh` (first element, backwards compat). `Select.Faces.execute()` reads `_selectedMeshes` first, returns `{ faces: Geo.Mesh3[] }`. Output type changed from `'mesh'` to `'list'`. Unit tests updated.
+Files changed: `src/ui/node-renderer.js`, `src/nodes/categories/geometry.js`, `tests/geometry-selection.test.js`
+
+**Bug E — Approve keeps viewport in 3D view:**
+Root cause: `onApprove` in `node-renderer.js` called `self.runGraph()` but never switched back to the 2D canvas.
+Fix: Added `if (typeof app.setView === 'function') app.setView('nodes');` after `self.runGraph()`.
+File changed: `src/ui/node-renderer.js`
+
+**Validation:** lint:all 0 errors, 1915 unit tests pass, 32/32 e2e tests pass, build green.
