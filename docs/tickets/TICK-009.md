@@ -151,3 +151,27 @@ Fix (commit `5b1c311`, merged to develop):
 
 PM: please re-test. Box should turn teal when "Select" is clicked, face should turn blue on hover,
 green on click, counter increments. Approve/Cancel should restore the normal mesh.
+
+## PM Comments
+- Now, the selection works, It is being countered correcly but there is mix between orbit operation and clickin on the empty space. If Orbit operation is started do not reset the counting after wards. 
+- The color changes are too vogue, on geometry, there is a shadow and bright zone, can we eliminate the light impact and make it flat surface without any sun rays. 
+
+## Bug Reports (post-fix, 2026-06-07) — outstanding, ticket still 🟡 in-progress
+
+### Bug A — Orbit drag resets face selection counter
+**Symptom:** After orbiting (drag-rotate) the 3D view and releasing the mouse button, the face selection counter resets to 0 and/or selected faces are deselected. The PM confirmed counting works correctly during normal clicks, but orbit-release is being misread as an empty-space click.
+
+**Root cause (suspected):** The orbit guard in `geo-selector.js` `_initRaycaster` click handler already tracks mousedown position and returns early if the cursor moved > 5px. However, in some browsers/Three.js OrbitControls configurations the `click` event fires with `clientX/Y` equal to the `pointerdown` position (not the release position), making the delta always 0 and bypassing the guard. Fix: switch from position-delta guard to an explicit `_isDragging` flag set by `mousemove` after `mousedown` and cleared on `mouseup`. The flag approach is immune to `click` event coordinate ambiguity.
+
+**Fix scope:** `src/viewer/geo-selector.js` only — replace the `_lastMouseDown` position guard with a `_isDragging` boolean flag pattern.
+
+### Bug B — Face materials show lighting/shadows (not flat)
+**Symptom:** Hovered (blue) and selected (green) face highlights on the geometry show shadows, bright zones, and specular highlights from the scene's three-point lighting rig. PM wants completely flat, matte solid colors with no lighting influence.
+
+**Root cause:** `toSelectionMesh()` in `geometry-lib.js` creates face materials using `THREE.MeshPhongMaterial`, which responds to scene lighting. The per-group materials in `selectionMeshHover()` and `selectionMeshClick()` in `selection-mode.js` also operate on Phong materials.
+
+**Fix scope:** Change `new THREE.MeshPhongMaterial(...)` to `new THREE.MeshBasicMaterial(...)` in `toSelectionMesh()` in `src/geometry/geometry-lib.js`. `MeshBasicMaterial` ignores all lighting and renders as a solid flat color. The `emissive` / `emissiveIntensity` properties do not exist on `MeshBasicMaterial` — remove those property writes from the material initialization and from the color-update helpers in `selection-mode.js` that set `mat.emissive`.
+
+**Fix scope:** `src/geometry/geometry-lib.js` (material construction) + `src/viewer/selection-mode.js` (remove emissive writes, they are no-ops on MeshBasicMaterial but cause console warnings in strict Three.js builds).
+
+**Task brief:** [T09b-fix](../task-briefs/T09b-face-selection-orbit-flat.md)
