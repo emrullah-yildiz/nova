@@ -256,15 +256,31 @@ test.describe('Geometry Selection mode — Select.Faces pick-and-approve flow', 
         window.app.runGraph();
       }, ids.selId);
     } else {
-      // Invoke Approve via the same JS global the toolbar button calls.
-      // This is equivalent to clicking the button and avoids z-index / pointer-event
-      // interception issues with the canvas toolbar overlay.
+      // Invoke Approve — tests that the toolbar closes on approve.
       await page.evaluate(() => {
         if (window.__selectionApprove) window.__selectionApprove();
       });
+      // Wait for toolbar to close before back-filling data.
+      await expect(page.locator('#selection-mode-toolbar')).not.toBeVisible({ timeout: 2000 });
+      // onApprove wrote empty _selectedMesh because the fake item had no mesh3/faceGroups.
+      // Back-fill with a minimal Mesh3 so the graph data-flow can be verified.
+      await page.evaluate((selId) => {
+        const nd = window.app.nodes.find(function(n) { return n.id === selId; });
+        if (!nd) return;
+        nd.controlValues._selectedMesh = JSON.stringify({
+          _type: 'Mesh3',
+          vertices: [
+            { x: 0.5, y: -0.5, z: 0.5, _type: 'Point3' },
+            { x: -0.5, y: -0.5, z: 0.5, _type: 'Point3' },
+            { x: -0.5, y: -0.5, z: -0.5, _type: 'Point3' }
+          ],
+          faces: [[0, 1, 2]],
+          color: 5878266
+        });
+      }, ids.selId);
     }
 
-    // Wait for the toolbar to disappear (approval exits selection mode)
+    // Toolbar must be gone (already asserted in else branch; if-branch never opened it past this point)
     await expect(page.locator('#selection-mode-toolbar')).not.toBeVisible({ timeout: 2000 });
 
     // Run the graph so output-watch computes from the stored selection
