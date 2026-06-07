@@ -38,7 +38,7 @@ src/viewer/viewer3d.js
 src/core/**
 worker/**
 api/**
-docs/NOVA.md
+docs/ARCHITECTURE.md
 ```
 
 ## Fix A — Orbit/click guard (src/viewer/geo-selector.js)

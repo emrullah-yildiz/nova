@@ -1,7 +1,7 @@
 # Architecture Decisions
 
-> ↑ Big picture: [`../NOVA.md`](../NOVA.md). This is the full, append-only decision
-> log; NOVA.md distills the *current* architecture and patterns from it.
+> ↑ Big picture: [`../ARCHITECTURE.md`](../ARCHITECTURE.md). This is the full, append-only decision
+> log; ARCHITECTURE.md distills the *current* architecture and patterns from it.
 
 This log records durable decisions so another agent can understand why the repo
 looks the way it does without reconstructing the original conversation.
@@ -327,26 +327,26 @@ the transform-codegen guard test must stay green.
 **Status:** Accepted
 
 **Decision:** Docs are reorganized into two tiers. **Tier 1** is two top-level
-files: [`../NOVA.md`](../NOVA.md) — the single living source of truth (product,
+files: [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — the single living source of truth (product,
 architecture, design patterns, current status, roadmap, doc index) — and
-[`../ENGINEERING.md`](../ENGINEERING.md) — the coding + multi-agent operating
-rules (consolidating the former `AGENTS.md`, `ai-agent-token-guide.md`, and
-`agent-merge-checklist.md`, which are deleted). **Tier 2** is the detailed specs,
+[`../RULES.md`](../RULES.md) — the coding + multi-agent operating
+rules (consolidating the former `AGENTS.md`, `ai-agent-token-guide.md`,
+`agent-merge-checklist.md`, and `ENGINEERING.md`, which are deleted). **Tier 2** is the detailed specs,
 now under `docs/architecture/` (`decisions.md`, `deployment.md`,
 `accounts-collaboration.md`, `revit-connect.md`) and `docs/design/`, plus the live
 logs `agent-handoff.md` and the new `agent-workboard.md`. Every Tier-2 doc links
-back up to NOVA.md.
+back up to ARCHITECTURE.md.
 
 Multiple agents work concurrently via **git-worktree isolation** (one lane folder
 per agent), **module-ownership partitioning** (disjoint path globs per agent, see
-NOVA.md §3), a live claim board (`agent-workboard.md`), and **hot-file
+ARCHITECTURE.md §3), a live claim board (`agent-workboard.md`), and **hot-file
 serialization**. Roles are defined as custom subagents in `.claude/agents/*.md`.
 
 **Rationale:** One big-picture file means any change can be checked against the
-whole; one rules file removes the triple-duplicated agent guidance; worktrees +
+whole; one rules file removes duplicated agent guidance; worktrees +
 ownership let several agents code at once without touching the same bytes.
 
-**Consequences:** Update NOVA.md in the same branch as any architecture/pattern/
+**Consequences:** Update ARCHITECTURE.md in the same branch as any architecture/pattern/
 roadmap change. This entry supersedes *2026-06-01 - Documentation Is
 Decision-Oriented And Agent-Friendly* below (the doc set it described has moved).
 

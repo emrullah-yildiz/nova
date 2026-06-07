@@ -5,10 +5,10 @@ It is the single entry point that tells Claude Code how to operate in this repo.
 
 ## Read immediately on every session start
 
-1. [`docs/NOVA.md`](docs/NOVA.md) — what Nova is, architecture, patterns, module ownership map.
-2. [`docs/ENGINEERING.md`](docs/ENGINEERING.md) — how to work: branching, testing ladder, multi-agent rules, start→merge checklist.
+1. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — what Nova is, architecture, patterns, module ownership map.
+2. [`docs/RULES.md`](docs/RULES.md) — how to work: branching, testing ladder, multi-agent rules, structured output contract, start→merge checklist.
 3. [`docs/STYLE.md`](docs/STYLE.md) — UI design system: colors, fonts, spacing, icons. **Mandatory for any UI/viewer/CSS task.**
-4. [`docs/pm/PRIORITIES.md`](docs/pm/PRIORITIES.md) — the PM's current sprint goals and backlog. Read this to understand what matters right now.
+4. [`docs/PM.md`](docs/PM.md) — the PM's current sprint goals and the active run session.
 5. [`docs/tickets/INDEX.md`](docs/tickets/INDEX.md) — live ticket board. Know what's in-progress before starting anything new.
 
 Do not load any other docs unless the task specifically needs them.
@@ -17,41 +17,38 @@ Do not load any other docs unless the task specifically needs them.
 
 ## Sprint lifecycle
 
-This is the canonical loop. Every sprint follows these phases in order.
-
 ```
-PM edits PRIORITIES.md → says "run"
+PM edits docs/PM.md → writes what they want in ### Planning → says "run"
         │
         ▼
-Morpheus reads priorities + INDEX
+Morpheus reads docs/PM.md (Planning section + Sprint goals)
         │
-        ├─ New sprint items → create TICK-NNN tickets → show AC to PM → wait for confirmation
+        ├─ APPROVE TICK-NNN entries → archive those tickets → move to docs/tickets/done/
         │
-        ├─ Confirmed tickets (ready) → decompose into task briefs → dispatch agents
+        ├─ New sprint items → create TICK-NNN tickets → show AC in Coordinator Response
+        │                     PM reads response, confirms by writing "APPROVE TICK-NNN" next run
         │
-        └─ Tickets with PM comments → re-read comments → fix or archive (see below)
+        ├─ Confirmed/ready tickets → decompose into task briefs → dispatch agents in parallel
+        │
+        └─ Agents work on branches (one branch per ticket)
                 │
                 ▼
-        Agents work on branches (one branch per ticket)
+        Each agent produces structured JSON output (RULES.md §10)
                 │
                 ▼
-        Solution tested in-browser (like a real user)
-        lint:all + test + build must pass
+        Solution tested (lint:all + test + build must pass; UI changes need Playwright E2E)
                 │
                 ▼
-        Branch merged to develop → local + remote branch deleted
+        Branch merged to develop → branch deleted
                 │
                 ▼
-        PM tests on develop → leaves comments on each ticket file
+        Morpheus synthesizes all agent JSON into Coordinator Response
+        Writes to docs/PM.md ### Coordinator Response (overwrites previous)
+        Writes ## Run comments in each ticket file (overwrites previous)
                 │
                 ▼
-        PM says "run" → agents read PM comments on every active ticket:
-          - Comment is negative / reports a bug → reopen ticket, new branch, fix, re-merge
-          - Comment is positive / confirms AC → archive ticket
-                │
-                ▼
-        All tickets archived → PM reviews → updates PRIORITIES.md / NOVA.md
-        → gives green light for next sprint
+        PM reads docs/PM.md Coordinator Response
+        PM writes APPROVE TICK-NNN in Planning → says "run" → tickets archive
 ```
 
 ---
@@ -60,64 +57,80 @@ Morpheus reads priorities + INDEX
 
 When the user says **"run"** (or "start", "go", "plan", "kick off"):
 
-1. Read `docs/pm/PRIORITIES.md` and `docs/tickets/INDEX.md`.
+1. Read `docs/PM.md` and `docs/tickets/INDEX.md`.
 2. Invoke **morpheus** via the Agent tool with the prompt below.
 
 ```
-Read docs/pm/PRIORITIES.md and docs/tickets/INDEX.md.
+Read docs/PM.md (full file) and docs/tickets/INDEX.md.
 
-PHASE 1 — PM comment review (do this first):
-  For every active ticket (🟡 in-progress) that has a "## PM Notes" or "## PM Comments" section:
-    - Read the comments carefully.
-    - If the comment reports a problem, regression, or missing behavior:
-        → Set ticket status back to 🔵 ready, add a note explaining the issue.
-        → Create a new task brief for the fix.
-        → Dispatch the appropriate specialist agent on a new branch.
-    - If the comment confirms everything works / gives a positive verdict:
-        → Mark all relevant ACs [x], update status to ✅ done.
-        → Move the ticket row to the Done table in INDEX.md.
-        → MOVE (not copy) the ticket file: `git mv docs/tickets/TICK-NNN.md docs/tickets/archive/TICK-NNN.md`. The original must not remain in docs/tickets/.
-    - If the ticket has no PM comment yet: leave it as-is.
+PHASE 1 — Process APPROVE entries:
+  For every "APPROVE TICK-NNN" in ### Planning:
+    - Confirm all ACs are [x] in the ticket file.
+    - Mark status ✅ done in INDEX.md.
+    - git mv docs/tickets/TICK-NNN.md docs/tickets/done/TICK-NNN.md
+    - Delete the task brief files for that ticket.
 
-PHASE 2 — New sprint items (tickets that don't exist yet):
-  For each sprint item in PRIORITIES.md that has no TICK-* ticket:
-    - Write a ticket file at docs/tickets/TICK-NNN.md using docs/tickets/_template.md.
-    - Show the PM the acceptance criteria and wait for confirmation before decomposing.
+PHASE 2 — New sprint items (no ticket yet):
+  For each goal in the Sprint section with no TICK-* ticket:
+    - Create docs/tickets/TICK-NNN.md using docs/tickets/_template.md.
+    - Show the AC in the Coordinator Response for PM confirmation.
+    - Do NOT dispatch agents until PM writes APPROVE in the next run.
 
-PHASE 3 — Ready tickets (status: 🔵 ready, PM has confirmed AC):
+PHASE 3 — Ready tickets (status: 🔵 ready):
   - Decompose into task briefs under docs/task-briefs/.
   - Update docs/agent-workboard.md with new claims.
-  - Dispatch specialist agents in parallel for independent tasks (one branch per ticket).
+  - Dispatch specialist agents in PARALLEL for independent tasks (one branch per ticket).
+  - Each agent MUST return the structured JSON defined in docs/RULES.md §10.
 
-PHASE 4 — Report:
-  - Tickets with PM comments actioned (fixed / archived).
-  - New tickets created (with AC shown for PM confirmation).
-  - Agents dispatched.
-  - Any blockers.
-  - If all active tickets are archived: tell the PM all tickets are closed and ask for next sprint green light.
+PHASE 4 — Synthesize and write results:
+  Collect all agent JSON outputs. Write to docs/PM.md ### Coordinator Response:
+
+  {
+    "run": "YYYY-MM-DD",
+    "tickets_actioned": [
+      {
+        "id": "TICK-NNN",
+        "title": "...",
+        "status": "archived | reopened | in-progress",
+        "issue": "What was wrong, or null",
+        "changed": ["..."],
+        "how_to_test": ["Step 1", "Step 2"]
+      }
+    ],
+    "new_tickets": [{ "id": "TICK-NNN", "title": "...", "ac_preview": ["AC-1 ..."] }],
+    "agents_dispatched": [{ "agent": "switch", "brief": "T09d", "branch": "feat/tick-009d" }],
+    "blockers": []
+  }
+
+  Also overwrite ## Run comments in each actioned ticket file with the same data in human-readable form.
+  DELETE the old ### Coordinator Response before writing the new one.
+  DELETE the old ## Run comments in ticket files before writing the new ones.
+
+PHASE 5 — Report:
+  - Summarize in 2–3 sentences what was done.
+  - If all active tickets are archived: say so and ask the PM for the next sprint green light.
 ```
 
-Do not decompose into task briefs until the PM has confirmed the acceptance criteria.
-Do not archive a ticket without a positive PM comment.
+Do not archive a ticket without a PM APPROVE entry. Do not dispatch agents for ⬜ draft tickets.
 
 ---
 
 ## Branch rules (enforced)
 
-- **One branch per ticket.** Name it after the ticket: `fix/tick-002-description` or `feat/tick-006-description`.
+- **One branch per ticket.** Name it `type/tick-NNN-description`.
 - Branch off `develop`. Merge back to `develop`. Never commit straight to `develop` or `main`.
-- After merge: delete local branch + remote branch. Clean up any orphaned `worktree-agent-*` branches.
+- After merge: delete local branch + remote branch. Clean up orphaned `worktree-agent-*` branches.
 - Run `npm run lint:all && npm run test && npm run build` before every push.
-- UI/viewer changes require a Playwright E2E spec (the Stop hook enforces this).
-- Every ticket's AC must be checked off `[x]` before the branch merges (the Stop hook enforces this).
+- UI/viewer changes require a Playwright E2E spec.
+- Every ticket's AC must be checked off `[x]` before the branch merges.
 
 ---
 
 ## Agent team
 
-| Trigger word | Agent | Role |
+| Trigger | Agent | Role |
 |---|---|---|
-| "run" / "plan" / "start" | morpheus | Reads priorities + PM comments → writes/archives tickets → dispatches agents |
+| "run" / "start" / "go" | morpheus | Reads PM.md → writes/archives tickets → dispatches agents → writes Coordinator Response |
 | "review" + branch name | oracle | Adversarial diff review + AC check before merge |
 | "merge" / "land" | dozer | Merges green branches into develop in dependency order |
 | "security audit" | seraph | Read-only security audit → files SEC-* tickets |
@@ -128,12 +141,3 @@ Do not archive a ticket without a positive PM comment.
 ## Workboard
 
 `docs/agent-workboard.md` is the live ownership map — claim before coding, release on merge.
-
----
-
-## Maintenance
-
-This file only changes when the team structure or the sprint lifecycle changes.
-Product priorities → `docs/pm/PRIORITIES.md`.
-Architecture decisions → `docs/architecture/decisions.md`.
-Agent rules → `docs/ENGINEERING.md`.

@@ -18,7 +18,7 @@ As a designer, I can activate Select.Faces on any solid mesh node (Box, Sphere, 
 
 The previous Select.Faces implementation selected whole geometry objects (the entire Box = one item). The PM has decided the correct behavior is **per-face selection**: hovering highlights individual faces; clicking selects individual faces; the output is the selected face polygon(s), not the whole mesh.
 
-The key architectural decision (recorded in NOVA.md §4): use a **temporary mesh swap** rather than permanent geometry splitting. In normal mode the mesh renders as a single unified `THREE.Mesh`. When selection mode activates, it is replaced by a `BufferGeometry` with groups (one group = one logical face, grouped by coplanar normal) and per-group materials. `Raycaster.faceIndex` identifies which group was hit. On Approve/Cancel the normal mesh is restored.
+The key architectural decision (recorded in ARCHITECTURE.md §4): use a **temporary mesh swap** rather than permanent geometry splitting. In normal mode the mesh renders as a single unified `THREE.Mesh`. When selection mode activates, it is replaced by a `BufferGeometry` with groups (one group = one logical face, grouped by coplanar normal) and per-group materials. `Raycaster.faceIndex` identifies which group was hit. On Approve/Cancel the normal mesh is restored.
 
 ## Acceptance criteria
 
