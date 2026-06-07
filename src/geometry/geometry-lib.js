@@ -678,6 +678,8 @@ class _Mesh3 {
     // just flat solid teal/blue/green as the PM requires.
     const baseMat = new THREE.MeshBasicMaterial({
       color: 0x94e2d5,
+      transparent: true,
+      opacity: 0.85,
       side: THREE.DoubleSide,
       polygonOffset: true,
       polygonOffsetFactor: 1,
