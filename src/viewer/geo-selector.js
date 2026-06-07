@@ -174,6 +174,11 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
   // ══════════════════════════════════════
 
   Viewer3D.buildFromGraph = function(nodes, wires, computeFn) {
+    // Do not clear and rebuild the scene while face-selection mode is active.
+    // The swap meshes live in the scene items; destroying them would orphan the
+    // selection-mode state and lose the user's in-progress face picks.
+    if (isSelectionModeActive()) return;
+
     // Save previous visibility state so we can restore after rebuild
     var prevVisibility = {};
     if (this._sceneItems && this._sceneItems.length > 0) {
@@ -316,9 +321,19 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       // intersect routine doesn't check object.visible — so a hidden mesh
       // would still be clickable and select its panel row. traverseVisible
       // skips any subtree rooted at an invisible Object3D.
+      //
+      // When face-selection meshes are active, restrict raycasting to those
+      // meshes only. LineSegments (edge wires) have a default THREE.js
+      // raycaster threshold of 1 world-unit — large enough to intercept every
+      // hit on a default 1×1×1 box and prevent face selection from working.
+      var _anyFaceSelMesh = self._sceneItems && self._sceneItems.some(function(it) { return !!it._selectionSwappedMesh; });
       var allMeshes = [];
       self.geometryGroup.traverseVisible(function(obj) {
-        if (obj.isMesh || obj.isLine || obj.isLineSegments) allMeshes.push(obj);
+        if (_anyFaceSelMesh) {
+          if (obj.isMesh && obj.userData && obj.userData.isSelectionMesh) allMeshes.push(obj);
+        } else {
+          if (obj.isMesh || obj.isLine || obj.isLineSegments) allMeshes.push(obj);
+        }
       });
 
       var intersects = self._raycaster.intersectObjects(allMeshes, false);
@@ -390,9 +405,20 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       // selected items stay green. Exit early so the panel-hover path below
       // does not conflict.
       if (isSelectionModeActive()) {
+        // Determine whether face-selection meshes are active before building
+        // the candidate list. When they are, restrict raycasting to those
+        // meshes only. LineSegments (edge wires) have a default THREE.js
+        // raycaster threshold of 1 world-unit — on a default 1×1×1 box that
+        // threshold covers every face-interior point, so edge lines would
+        // always win the raycast and prevent any face from being highlighted.
+        var anySelMesh = self._sceneItems && self._sceneItems.some(function(it) { return !!it._selectionSwappedMesh; });
         var candidateMeshes = [];
         self.geometryGroup.traverseVisible(function(obj) {
-          if (obj.isMesh || obj.isLine || obj.isLineSegments) candidateMeshes.push(obj);
+          if (anySelMesh) {
+            if (obj.isMesh && obj.userData && obj.userData.isSelectionMesh) candidateMeshes.push(obj);
+          } else {
+            if (obj.isMesh || obj.isLine || obj.isLineSegments) candidateMeshes.push(obj);
+          }
         });
 
         var intersects = self._raycaster.intersectObjects(candidateMeshes, false);
@@ -411,7 +437,6 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         // call selectionMeshHover for group-level hover coloring instead of the
         // whole-item hover path below. Also call it (with null) when the cursor
         // leaves a selection mesh, so the previously hovered group is restored.
-        var anySelMesh = self._sceneItems && self._sceneItems.some(function(it) { return !!it._selectionSwappedMesh; });
         if (anySelMesh) {
           var selMeshHoverItem = null;
           if (hit && hit.object && hit.object.userData && hit.object.userData.isSelectionMesh) {
