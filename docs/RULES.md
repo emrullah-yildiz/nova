@@ -188,7 +188,7 @@ For each AC in the parent ticket:
 
 ## 10. Structured output contract
 
-**Every agent must produce this JSON object as its final output.** Morpheus reads these to synthesize the Coordinator Response in `docs/PM.md`. The stop hook validates the schema — missing fields block completion.
+**Every agent must produce this JSON object as its final output.** Morpheus reads these to synthesize the Coordinator Response in `docs/PM.md`. The stop hook validates the schema — missing fields or a false `playwright_tested` on UI work both block completion.
 
 ```json
 {
@@ -203,21 +203,25 @@ For each AC in the parent ticket:
   },
   "ac_checked": ["AC-1", "AC-2", "AC-3"],
   "issue": "Root cause description, or null if this was new work",
-  "changed": [
-    "Replaced position-delta guard with _isDragging boolean flag in geo-selector.js",
-    "Changed MeshPhongMaterial to MeshBasicMaterial in toSelectionMesh()"
-  ],
+  "changed": ["Replaced position-delta guard with _isDragging boolean flag"],
   "how_to_test": [
     "npm run dev → open localhost:5173",
-    "Create Box.ByCenterWidthDepthHeight node",
-    "Add Select.Faces node, click Select",
-    "Orbit (drag-rotate) the scene, release — counter must NOT reset"
+    "Create Box node, click Select.Faces",
+    "Orbit the scene, release — counter must NOT reset"
   ],
-  "gaps": []
+  "gaps": [],
+  "playwright_tested": true,
+  "playwright_result": "12 pass, 0 fail"
 }
 ```
 
-Required fields: `ticket`, `branch`, `files_changed`, `validation`, `ac_checked`, `issue`, `changed`, `how_to_test`, `gaps`.
+**Playwright rules (enforced by the SubagentStop hook):**
+- `playwright_tested` is always required.
+- If any path in `files_changed` is under `src/ui/` or `src/viewer/`, `playwright_tested` **must be `true`**. Setting it to `false` blocks the response — the hook will not let you finish until you run `npm.cmd run test:e2e` and confirm all specs pass.
+- When `playwright_tested` is `true`, `playwright_result` must be a non-empty string: e.g. `"12 pass, 0 fail"`. An empty or null value blocks the response.
+- For non-UI work (backend, docs, geometry kernel), `playwright_tested` may be `false` and `playwright_result` may be `null` — but you must still include both fields.
+
+Required fields: `ticket`, `branch`, `files_changed`, `validation`, `ac_checked`, `issue`, `changed`, `how_to_test`, `gaps`, `playwright_tested`, `playwright_result`.
 
 After writing the JSON, **also update `## Run comments`** in the ticket file (`docs/tickets/TICK-NNN.md`) with the same information in human-readable form. Delete the previous run's comment — do not accumulate history.
 

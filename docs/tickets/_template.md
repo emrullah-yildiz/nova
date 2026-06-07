@@ -64,4 +64,5 @@ Links added by morpheus after PM confirms AC.
 - Issue: [what was wrong, or null if this was new work]
 - Changed: [bullet list of files or behaviors changed]
 - How to test: [numbered steps from npm run dev]
+- Playwright: [pass "N pass, 0 fail" | not applicable]
 - Status: pass | fail | pending PM
