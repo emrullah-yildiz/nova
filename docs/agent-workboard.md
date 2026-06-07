@@ -25,6 +25,7 @@ root `README.md` · `docs/ARCHITECTURE.md` · `.github/workflows/ci.yml`
 
 | Branch | Agent | Task | Owned paths (globs) | Hot locks | Started | Status |
 |---|---|---|---|---|---|---|
+| fix/tick-009f-hover-debug-logging | switch | T09f — hover debug logging | src/viewer/selection-mode.js, src/viewer/geo-selector.js | — | 2026-06-07 | queued |
 
 <!--
 Example row (copy, fill in, remove this comment block when claiming):

@@ -36,6 +36,7 @@
 - Every UI change ships with a Playwright spec.
 - Agents never merge to `main` without explicit PM instruction.
 - Nodes returns meshes whose surface/edges can be picked by Select.Faces and Select.Edges nodes. 
+- When the ticket approval is failed, agents should focus on creating related logs for tickets so that when there is something wrong, we can identify the problem. Do not try to track everything immediately. Understand the problem first. 
 
 ---
 
@@ -43,9 +44,9 @@
 
 ### Planning
 
-- Select.Faces node does not highlight the surfaces when the mouse is hovered.
-- The node returns single mesh even though multiplace faces are selected. Accepted behaviour is that it needs to return meshes per faces.
-- Approving the selection should bring back to the 2D node view. 
+- Select.Faces node still does not highlight the surfaces when the mouse is hovered.
+- The node looks like succesfully selecting the faces. 
+- Approving the selection brings back the 2D environment. 
 
 ### Coordinator Response
 
@@ -57,20 +58,26 @@
       "id": "TICK-009",
       "title": "Select.Faces — per-face hover, selection, and planar face output",
       "status": "in-progress",
-      "issue": "Three PM-reported bugs: (C) hover highlight not working, (D) output is a single mesh instead of one Geo.Mesh3 per face, (E) Approve does not return to 2D node view.",
-      "changed": ["Task brief T09e created", "Branch fix/tick-009c-hover-output-approve dispatched to switch agent"],
+      "issue": "PM confirmed: face clicking and counter work correctly; Approve correctly returns to 2D. Hover highlight (face turns blue on mouseover) still not visible in browser. All automated E2E tests pass (32/32) including hover assertions — those tests inject a fake scene item and do not exercise the real toSelectionMesh() path. The real hover pipeline uses the actual Geo.Mesh3 from the Box node, and the code path from mousemove → selectionMeshHover → _requestRender may be silently failing at some point. Per PM constraint: add targeted debug logging first so we can see exactly where the hover pipeline breaks before attempting another fix.",
+      "changed": [],
       "how_to_test": [
-        "npm run dev → open localhost:5173",
-        "Create Box node → add Select.Faces → click Select",
-        "Bug C: hover over faces — each face must turn blue",
-        "Bug D: select 2 faces → Approve → wire Output.Watch to output → must show 2 Geo.Mesh3 objects",
-        "Bug E: after Approve, UI must return to the 2D node editor canvas automatically"
+        "npm run dev → open localhost:5173 → open browser DevTools console",
+        "Create Box node → add Select.Faces → wire Box.solid → Select.Faces.mesh → Run graph",
+        "Click 'Select Faces...' button",
+        "Open console and type: JSON.stringify(window.__novaHoverDebug) — should show swap and activate state",
+        "Move mouse over the 3D viewport — console should log per-frame hover trace",
+        "Look for: candidateCount, hitFound, groupIndex, renderCalled",
+        "Report which step is 0/null/undefined — that is the exact failure point"
       ]
     }
   ],
   "new_tickets": [],
   "agents_dispatched": [
-    { "agent": "switch", "brief": "T09e-hover-output-approve", "branch": "fix/tick-009c-hover-output-approve" }
+    {
+      "agent": "switch",
+      "brief": "T09f",
+      "branch": "fix/tick-009f-hover-debug-logging"
+    }
   ],
   "blockers": []
 }
