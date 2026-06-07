@@ -35,6 +35,7 @@
 - Nova geometry only for Select nodes — no Revit/Rhino element picking.
 - Every UI change ships with a Playwright spec.
 - Agents never merge to `main` without explicit PM instruction.
+- Nodes returns meshes whose surface/edges can be picked by Select.Faces and Select.Edges nodes. 
 
 ---
 
@@ -42,9 +43,35 @@
 
 ### Planning
 
-<!-- Write what you want this run before typing "run" in chat. Delete the old text each time. -->
-<!-- Example: "Fix the orbit bug on TICK-009" or "APPROVE TICK-009 — tested, works correctly" -->
+- Select.Faces node does not highlight the surfaces when the mouse is hovered.
+- The node returns single mesh even though multiplace faces are selected. Accepted behaviour is that it needs to return meshes per faces.
+- Approving the selection should bring back to the 2D node view. 
 
 ### Coordinator Response
 
-<!-- Morpheus writes here after the run. Old response is replaced each run. -->
+```json
+{
+  "run": "2026-06-07",
+  "tickets_actioned": [
+    {
+      "id": "TICK-009",
+      "title": "Select.Faces — per-face hover, selection, and planar face output",
+      "status": "in-progress",
+      "issue": "Three PM-reported bugs: (C) hover highlight not working, (D) output is a single mesh instead of one Geo.Mesh3 per face, (E) Approve does not return to 2D node view.",
+      "changed": ["Task brief T09e created", "Branch fix/tick-009c-hover-output-approve dispatched to switch agent"],
+      "how_to_test": [
+        "npm run dev → open localhost:5173",
+        "Create Box node → add Select.Faces → click Select",
+        "Bug C: hover over faces — each face must turn blue",
+        "Bug D: select 2 faces → Approve → wire Output.Watch to output → must show 2 Geo.Mesh3 objects",
+        "Bug E: after Approve, UI must return to the 2D node editor canvas automatically"
+      ]
+    }
+  ],
+  "new_tickets": [],
+  "agents_dispatched": [
+    { "agent": "switch", "brief": "T09e-hover-output-approve", "branch": "fix/tick-009c-hover-output-approve" }
+  ],
+  "blockers": []
+}
+```
