@@ -1,4 +1,4 @@
-# NOVA — Source of Truth
+# Nova — Architecture
 
 > **This is the living, always-current big-picture file for Nova.** It is the one
 > place that answers: *what is Nova, how is it built, where is it going, and does
@@ -7,8 +7,8 @@
 > module map, or the roadmap.** A change that contradicts this file is wrong until
 > either the change or this file is fixed.
 >
-> Companion: [`ENGINEERING.md`](ENGINEERING.md) — *how* we work (rules, branching,
-> testing, multi-agent). This file is *what & why & where*; that one is *how*.
+> Companion: [`RULES.md`](RULES.md) — *how* we work (operating rules, branching,
+> testing, multi-agent, structured output contract). This file is *what & why & where*; that one is *how*.
 >
 > Last updated: **2026-06-07**.
 
@@ -76,7 +76,7 @@ Subsystems (each links to its detailed Tier-2 spec):
 ## 3. Source layout & module ownership
 
 This map is also the **ownership partition** for parallel agents
-([`ENGINEERING.md`](ENGINEERING.md) §3): each agent owns a disjoint slice.
+([`RULES.md`](RULES.md) §4): each agent owns a disjoint slice.
 
 | Path | Role | Default owner (agent) |
 |---|---|---|
@@ -95,7 +95,7 @@ This map is also the **ownership partition** for parallel agents
 | `integrations/revit-addin/` | C# Revit add-in | Connect/Revit |
 | `installer/nova-connect/` | WiX MSI installer (Connect add-in) | Connect/Revit |
 | `tests/` | Vitest + Playwright | QA (or each owner for their slice) |
-| `docs/` | documentation | Orchestrator (NOVA.md) / any (their spec) |
+| `docs/` | documentation | Orchestrator (ARCHITECTURE.md) / any (their spec) |
 
 Worker routes are authoritative for **deployed** behavior; `api/` helpers exist
 for local dev + tests (see decision *Keep AI Provider Helpers Shared*).
@@ -290,8 +290,8 @@ Consolidated forward view. Detail lives in the linked specs — don't duplicate 
 
 | Doc | Tier | Purpose |
 |---|---|---|
-| [`NOVA.md`](NOVA.md) | 1 | This file — living source of truth |
-| [`ENGINEERING.md`](ENGINEERING.md) | 1 | Coding + multi-agent operating rules |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | 1 | This file — living source of truth |
+| [`RULES.md`](RULES.md) | 1 | Agent operating rules, checklist, structured output contract |
 | [`README.md`](README.md) | index | Doc map + maintenance policy |
 | [`agent-workboard.md`](agent-workboard.md) | live | Concurrency claim board (who owns what *right now*) |
 | [`agent-handoff.md`](agent-handoff.md) | live | Short-lived task handoffs between agents |
@@ -307,22 +307,8 @@ Consolidated forward view. Detail lives in the linked specs — don't duplicate 
 
 ## Maintenance contract
 
-- **NOVA.md (this file)** — update when architecture, a design pattern, the module
-  map, current status, or the roadmap changes. Keep it distilled; push detail down
-  into the Tier-2 spec and link to it.
-- **`architecture/decisions.md`** — append a dated entry (newest first) for any
-  durable decision; mark superseded entries rather than deleting them.
-- **`agent-handoff.md`** — add an entry when a task leaves context the next agent
-  needs but that isn't a permanent decision.
+- **ARCHITECTURE.md (this file)** — update when architecture, a design pattern, the module map, current status, or the roadmap changes. Keep it distilled; push detail down into the Tier-2 spec and link to it.
+- **`architecture/decisions.md`** — append a dated entry (newest first) for any durable decision; mark superseded entries rather than deleting them.
 - **`agent-workboard.md`** — claim/release your owned paths as you start/finish.
 
-If two of these ever disagree, NOVA.md + decisions.md win; fix the others.
-
-
-## Rules for Agents
-
-- Before every merge, make sure that tests are passing
-- Think that multiple agents are working together and everything should be documented so that another agent can continue to the work from where it is left. 
-- Every new node is tested like a real user, meaningful results and usable actions.
-- The learning system must be as detailed and interactive as Dynamo Primer (https://primer2.dynamobim.org): each lesson has concept explanation, step-by-step exercises, and at least one interactive question the user must answer correctly before advancing.
-- Every sample file of nodes will be checked carefully. The agents will check not only if there is an output but also if the output is usable for another nodes input and if the output appears correctly when the sampel file is run. 
+If two of these ever disagree, ARCHITECTURE.md + decisions.md win; fix the others.

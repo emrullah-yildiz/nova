@@ -1,7 +1,8 @@
 # Ticket Index
 
 > Morpheus owns this file. Do not edit manually.
-> PM edits `docs/pm/PRIORITIES.md` and says "run" — morpheus creates tickets and updates this board.
+> PM edits `docs/PM.md` (Planning section) and says "run" — morpheus creates tickets and updates this board.
+> Archived tickets live in `docs/tickets/done/`.
 
 ## Status legend
 | Symbol | Meaning |
@@ -25,10 +26,10 @@
 
 | ID | Title | Completed | Notes |
 |---|---|---|---|
-| TICK-002 | Select Faces/Edges/Points — E2E verification | 2026-06-07 | Superseded by TICK-009 (per-face selection); archived |
-| TICK-005 | Remove Pattern nodes category | 2026-06-06 | All 8 ACs verified; merged to develop |
-| TICK-004 | Pattern nodes on surface | 2026-06-05 | Superseded by TICK-005 (remove Pattern category); archived |
-| TICK-003 | Testing infrastructure — Playwright E2E coverage gate | 2026-06-05 | Oracle APPROVE; archived |
-| TICK-001 | PM + ticket architecture | 2026-06-05 | Pre-ticket era; chore/agent-pm-architecture |
+| TICK-002 | Select Faces/Edges/Points — E2E verification | 2026-06-07 | Superseded by TICK-009; done/ |
+| TICK-005 | Remove Pattern nodes category | 2026-06-06 | All 8 ACs verified; done/ |
+| TICK-004 | Pattern nodes on surface | 2026-06-05 | Superseded by TICK-005; done/ |
+| TICK-003 | Testing infrastructure — Playwright E2E coverage gate | 2026-06-05 | Oracle APPROVE; done/ |
+| TICK-001 | PM + ticket architecture | 2026-06-05 | Pre-ticket era; done/ |
 | — | Select.Faces wiring | 2026-06-05 | Pre-ticket era; fix/selection-mode-wiring |
 | — | Structured output hooks | 2026-06-05 | Pre-ticket era; chore/agent-hooks-structured-output |

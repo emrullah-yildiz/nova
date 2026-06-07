@@ -1,6 +1,6 @@
 # Nova Connect And Revit Architecture
 
-> ↑ Big picture: [`../NOVA.md`](../NOVA.md) — detailed spec for the Connect/Revit subsystem.
+> ↑ Big picture: [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — detailed spec for the Connect/Revit subsystem.
 
 ## Purpose
 

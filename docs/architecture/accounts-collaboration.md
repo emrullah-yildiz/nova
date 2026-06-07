@@ -2,7 +2,7 @@
 
 Status: **Draft / proposal** (not yet implemented). Owner: TBD. Last updated: 2026-06-03.
 
-> ↑ Big picture: [`../NOVA.md`](../NOVA.md) — this is the detailed spec for the accounts/collaboration subsystem.
+> ↑ Big picture: [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — this is the detailed spec for the accounts/collaboration subsystem.
 
 This document describes the planned user-profile and collaboration system for Nova,
 targeting an **all-Cloudflare** platform. It is meant to be reviewed before any code.
