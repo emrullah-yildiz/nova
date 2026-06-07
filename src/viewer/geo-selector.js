@@ -307,8 +307,12 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
     var self = this;
     this.renderer.domElement.addEventListener('click', function(e) {
       if (!self.isVisible) return;
-      // Ignore if user was orbiting (mouse moved significantly)
-      if (self._lastMouseDown && (Math.abs(e.clientX - self._lastMouseDown.x) > 5 || Math.abs(e.clientY - self._lastMouseDown.y) > 5)) return;
+      // Ignore if user was orbiting (mouse moved significantly).
+      // Use the _isDragging flag set by the mousemove handler rather than
+      // comparing click-event coordinates: some browsers/OrbitControls
+      // configurations report the pointerdown position in the click event's
+      // clientX/Y, making a position-delta check always return 0.
+      if (self._isDragging) return;
 
       var rect = self.renderer.domElement.getBoundingClientRect();
       self._mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -376,9 +380,14 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       }
     });
 
-    // Track mousedown position to distinguish click from orbit
+    // Track mousedown position and reset drag flag to distinguish click from orbit.
+    // _isDragging is set to true by the mousemove handler when displacement > 3px.
+    // Using a flag rather than comparing click-event coordinates is more reliable
+    // because OrbitControls uses pointer events; the click event's clientX/Y may
+    // report the pointerdown position regardless of how far the user dragged.
     this.renderer.domElement.addEventListener('mousedown', function(e) {
       self._lastMouseDown = { x: e.clientX, y: e.clientY };
+      self._isDragging = false;
     });
 
     // ── Per-panel hover highlight (AC-4) ──
@@ -392,6 +401,13 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
     // candidates, green (#a6e3a1) to already-selected items. This lets the user
     // see which face they are about to pick before clicking.
     this.renderer.domElement.addEventListener('mousemove', function(e) {
+      // Set drag flag when mouse moves > 3px after mousedown — used by the click
+      // handler to distinguish orbit drags from genuine point clicks.
+      if (self._lastMouseDown &&
+          (Math.abs(e.clientX - self._lastMouseDown.x) > 3 ||
+           Math.abs(e.clientY - self._lastMouseDown.y) > 3)) {
+        self._isDragging = true;
+      }
       if (!self.isVisible) return;
       var rect = self.renderer.domElement.getBoundingClientRect();
       self._mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;

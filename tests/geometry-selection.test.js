@@ -371,6 +371,9 @@ describe('Geo.Mesh3 face grouping', () => {
       BufferGeometry: function() { return mockGeometry(); },
       BufferAttribute: function(arr, n) { return makeAttr(arr, n); },
       MeshPhongMaterial: function(opts) { const m = mockMat(); Object.assign(m, opts || {}); m.clone = () => { const c = mockMat(); Object.assign(c, opts || {}); c.clone = m.clone; return c; }; return m; },
+      // MeshBasicMaterial: same mock shape as MeshPhongMaterial (flat/unlit in real Three.js;
+      // in unit tests both are just objects with color/opacity/needsUpdate).
+      MeshBasicMaterial: function(opts) { const m = mockMat(); Object.assign(m, opts || {}); m.clone = () => { const c = mockMat(); Object.assign(c, opts || {}); c.clone = m.clone; return c; }; return m; },
       Mesh: function(geo, mats) { return { geometry: geo, material: mats, userData: {} }; },
       DoubleSide: 2
     };
