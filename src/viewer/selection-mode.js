@@ -189,12 +189,11 @@ function _swapToFaceMeshes() {
       if (!result || !result.mesh) return;
 
       // Initialise all materials to teal (candidate color).
+      // Materials are MeshBasicMaterial (flat/unlit) — no emissive properties.
       if (result.materials && Array.isArray(result.materials)) {
         result.materials.forEach(function (mat) {
           if (mat && mat.color && typeof mat.color.set === 'function') {
             mat.color.set(CANDIDATE_COLOR);
-            if (mat.emissive && typeof mat.emissive.set === 'function') mat.emissive.set(CANDIDATE_COLOR);
-            if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = 0.3;
             if (mat.opacity !== undefined) mat.opacity = 0.85;
             mat.needsUpdate = true;
           }
@@ -273,16 +272,14 @@ function _applySelectionHighlight() {
     // the whole item — this is the fine-grained face selection visual.
     if (item._selectionMeshResult && item._selectionMeshResult.materials) {
       const result = item._selectionMeshResult;
+      // Materials are MeshBasicMaterial (flat/unlit) — no emissive properties.
       result.materials.forEach(function (mat, groupIndex) {
         if (!mat) return;
         const selKey = item.id + ':group:' + groupIndex;
         const isSelected = selectedKeys.has(selKey);
         const color = isSelected ? SELECTED_COLOR : CANDIDATE_COLOR;
         const opacity = isSelected ? 1.0 : 0.85;
-        const emissive = isSelected ? 0.6 : 0.3;
         if (mat.color && typeof mat.color.set === 'function') mat.color.set(color);
-        if (mat.emissive && typeof mat.emissive.set === 'function') mat.emissive.set(color);
-        if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = emissive;
         if (mat.opacity !== undefined) mat.opacity = opacity;
         mat.needsUpdate = true;
       });
@@ -529,17 +526,17 @@ export function selectionMeshClick(hit, sceneItem) {
 
   if (existingIdx >= 0) {
     // Deselect: remove and revert to teal.
+    // Materials are MeshBasicMaterial (flat/unlit) — no emissive properties.
     _state.items.splice(existingIdx, 1);
     const mat = result.materials[groupIndex];
     if (mat) {
       if (mat.color && typeof mat.color.set === 'function') mat.color.set(CANDIDATE_COLOR);
-      if (mat.emissive && typeof mat.emissive.set === 'function') mat.emissive.set(CANDIDATE_COLOR);
-      if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = 0.3;
       if (mat.opacity !== undefined) mat.opacity = 0.85;
       mat.needsUpdate = true;
     }
   } else {
     // Select: add and paint green.
+    // Materials are MeshBasicMaterial (flat/unlit) — no emissive properties.
     _state.items.push({
       id: sceneItem.id,
       selectionKey: selKey,
@@ -553,8 +550,6 @@ export function selectionMeshClick(hit, sceneItem) {
     const mat = result.materials[groupIndex];
     if (mat) {
       if (mat.color && typeof mat.color.set === 'function') mat.color.set(SELECTED_COLOR);
-      if (mat.emissive && typeof mat.emissive.set === 'function') mat.emissive.set(SELECTED_COLOR);
-      if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = 0.6;
       if (mat.opacity !== undefined) mat.opacity = 1.0;
       mat.needsUpdate = true;
     }
@@ -579,6 +574,7 @@ export function selectionMeshHover(hit, sceneItem) {
   const prevHovered = _state.hoveredGroup;
 
   // Restore previously hovered group to its correct color (green or teal).
+  // Materials are MeshBasicMaterial (flat/unlit) — no emissive properties.
   if (prevHovered) {
     const prevResult = prevHovered.item._selectionMeshResult;
     if (prevResult && prevResult.materials) {
@@ -588,8 +584,6 @@ export function selectionMeshHover(hit, sceneItem) {
         const isSelected = _state.items.some(function (it) { return it.selectionKey === selKey; });
         const color = isSelected ? SELECTED_COLOR : CANDIDATE_COLOR;
         if (mat.color && typeof mat.color.set === 'function') mat.color.set(color);
-        if (mat.emissive && typeof mat.emissive.set === 'function') mat.emissive.set(color);
-        if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = isSelected ? 0.6 : 0.3;
         if (mat.opacity !== undefined) mat.opacity = isSelected ? 1.0 : 0.85;
         mat.needsUpdate = true;
       }
@@ -614,12 +608,11 @@ export function selectionMeshHover(hit, sceneItem) {
   const isSelected = _state.items.some(function (it) { return it.selectionKey === selKey; });
 
   // Selected group takes priority: keep green, don't apply blue hover.
+  // Materials are MeshBasicMaterial (flat/unlit) — no emissive properties.
   if (!isSelected) {
     const mat = result.materials[groupIndex];
     if (mat) {
       if (mat.color && typeof mat.color.set === 'function') mat.color.set(FACE_HOVER_COLOR);
-      if (mat.emissive && typeof mat.emissive.set === 'function') mat.emissive.set(FACE_HOVER_COLOR);
-      if (mat.emissiveIntensity !== undefined) mat.emissiveIntensity = 0.5;
       if (mat.opacity !== undefined) mat.opacity = 1.0;
       mat.needsUpdate = true;
     }

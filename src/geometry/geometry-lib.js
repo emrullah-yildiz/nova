@@ -667,7 +667,10 @@ class _Mesh3 {
 
     // One independent material per group (teal base color, polygon-offset so it
     // renders just above the underlying solid without z-fighting).
-    const baseMat = new THREE.MeshPhongMaterial({
+    // MeshBasicMaterial is used instead of MeshPhongMaterial so face colors are
+    // completely unaffected by scene lighting — no shadows or specular highlights,
+    // just flat solid teal/blue/green as the PM requires.
+    const baseMat = new THREE.MeshBasicMaterial({
       color: 0x94e2d5,
       side: THREE.DoubleSide,
       polygonOffset: true,
