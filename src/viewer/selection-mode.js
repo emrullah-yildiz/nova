@@ -210,8 +210,20 @@ function _swapToFaceMeshes() {
       item._selectionSwappedMesh = result.mesh;
       item._selectionMeshResult = result;
       item._selectionFaceGroups = faceGroups;
+
+      // When Box (or any mesh) is wired to Select.Faces it is treated as
+      // intermediate geometry and hidden: item.visible = false,
+      // item.group.visible = false. traverseVisible() in the hover and click
+      // handlers would skip it, making the selection mesh unreachable.
+      // Force-show the item for the duration of selection mode; restore on exit.
+      item._selectionOriginalVisible = item.visible;
+      if (!item.visible) {
+        item.visible = true;
+        item.group.visible = true;
+      }
     } catch (err) {
       // T09a not yet merged or error in groupFaces — fall back gracefully.
+      if (typeof window !== 'undefined') window.__novaSwapError = err && err.message;
       console.warn('[Nova] _swapToFaceMeshes: skipping item', item.id, err && err.message);
     }
   });
@@ -239,10 +251,16 @@ function _restoreFaceMeshes() {
         item._selectionMeshResult.materials.forEach(function (m) { if (m && typeof m.dispose === 'function') m.dispose(); });
       }
     }
+    // Restore the visibility state that was saved when the swap happened.
+    if (item._selectionOriginalVisible !== undefined) {
+      item.visible = item._selectionOriginalVisible;
+      if (item.group) item.group.visible = item._selectionOriginalVisible;
+    }
     delete item._selectionOriginalMesh;
     delete item._selectionSwappedMesh;
     delete item._selectionMeshResult;
     delete item._selectionFaceGroups;
+    delete item._selectionOriginalVisible;
   });
 
   // Clear hovered face group state.
@@ -432,7 +450,16 @@ export function activateSelectionMode(nodeId, mode, onApprove, onCancel) {
   if (typeof document !== 'undefined') {
     _showToolbar();
     _applySelectionHighlight();
+    // Force an immediate render so the teal candidate color is visible right
+    // away. The rAF animate loop may not have fired yet at this point.
+    _requestRender();
   }
+
+  // Reset the viewer's drag flag. After an orbit the flag stays true until
+  // the next canvas mousedown — if the user clicks "Select" (outside the
+  // canvas) that reset never fires, so the first face-click is swallowed.
+  const _vwr = getViewer();
+  if (_vwr) _vwr._isDragging = false;
 }
 
 /**
