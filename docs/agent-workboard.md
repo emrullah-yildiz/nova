@@ -58,8 +58,6 @@ root `README.md` · `docs/NOVA.md` · `.github/workflows/ci.yml`
 
 | feat/tick-009-per-face-selection | mouse (geometry-engineer) | T09a — TICK-009: Add groupFaces() + toSelectionMesh() + getFaceVertices() to Geo.Mesh3 in geometry-lib.js; unit tests in tests/geometry-selection.test.js | `src/geometry/geometry-lib.js`, `tests/geometry-selection.test.js` | — | 2026-06-07 | queued |
 | feat/tick-009-per-face-selection | switch (ui-engineer) | T09b — TICK-009: Viewer mesh swap on selection activate; per-face hover/click in geo-selector.js; getSelectedFaces() + toolbar count fix in selection-mode.js; main.js __selectionModeModule updated | `src/viewer/geo-selector.js`, `src/viewer/selection-mode.js` | `src/main.js` | 2026-06-07 | **done — pushed 2026-06-07** |
-| feat/tick-009-per-face-selection | switch (ui-engineer) | T09c — TICK-009: Update Select.Faces execute to parse _selectedFaces JSON and return { faces: [{ _type:'Face', vertices, normal, area }] }. BLOCKED until T09a merged. | `src/nodes/categories/geometry.js` | — | 2026-06-07 | blocked (awaits T09a merge) |
-| feat/tick-009-per-face-selection | switch (ui-engineer) | T09d — TICK-009: node-renderer.js onApprove calls getSelectedFaces() + getFaceVertices(); E2E spec for AC-11. BLOCKED until T09b merged. | `src/ui/node-renderer.js`, `tests/e2e/geometry-selection.spec.js` | `src/ui/node-renderer.js` | 2026-06-07 | blocked (awaits T09b merge) |
 
 <!--
 Example row (copy, fill in, remove this comment block's example when claiming):
