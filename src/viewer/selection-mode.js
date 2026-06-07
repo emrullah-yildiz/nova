@@ -457,6 +457,12 @@ export function deactivateSelectionMode() {
     _removeToolbar();
     _restoreNormalHighlight();
   }
+
+  // Trigger a 3D scene rebuild so the restored body meshes get re-rendered
+  // correctly. The rebuild was blocked while selection mode was active to
+  // protect the swap meshes; mark it needed again now that we're done.
+  const viewer = getViewer();
+  if (viewer) viewer._needsRebuild = true;
 }
 
 /**
