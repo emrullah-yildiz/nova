@@ -822,9 +822,9 @@ test.describe('Geometry Selection mode — Select.Faces pick-and-approve flow', 
     if (watchJSON !== '__empty__' && watchJSON !== '__no_node__') {
       expect(watchJSON).toBeTruthy();
       expect(watchJSON).not.toContain('[object Object]');
-      // If the fake item's getFaceVertices returned data, must have Face type
+      // Output is now a Mesh3 (since face-output-mesh3 branch).
       if (watchJSON.includes('_type')) {
-        expect(watchJSON).toContain('Face');
+        expect(watchJSON).toContain('Mesh3');
         expect(watchJSON).toContain('vertices');
       }
     } else {
