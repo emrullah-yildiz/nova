@@ -135,4 +135,19 @@ tests/e2e/geometry-selection.spec.js — E2E for AC-11
 - [T09d](../task-briefs/T09d-node-renderer-approve-e2e.md) — lane: ui — node-renderer onApprove wires face data; E2E spec for AC-11 (blocked on T09b)
 
 ## Latest PM Notes
-- I tested by creating a box and then used Select.Faces node. I do not see that hihglights when my mouse on the object face. I cannot click and add a face to the counter. 
+- I tested by creating a box and then used Select.Faces node. I do not see that hihglights when my mouse on the object face. I cannot click and add a face to the counter.
+
+## Fix applied (2026-06-07)
+Root cause: THREE.js `LineSegments` (edge wires) have a default raycaster threshold of 1 world-unit.
+For a default 1×1×1 box, every face-interior point is within 0.5 units of an edge, so the edge wires
+always won the raycast and the selection mesh never received hover/click events.
+
+Fix (commit `5b1c311`, merged to develop):
+- `geo-selector.js`: compute `anySelMesh` before building the raycast candidate list; when face-
+  selection meshes are swapped in, restrict candidates to `isSelectionMesh` meshes only.
+- `engine.js` / `geo-selector.js`: guard `_renderFromCompute` and `buildFromGraph` against clearing
+  the scene while selection mode is active.
+- `selection-mode.js`: set `_needsRebuild = true` on deactivation so the restored body mesh re-renders.
+
+PM: please re-test. Box should turn teal when "Select" is clicked, face should turn blue on hover,
+green on click, counter increments. Approve/Cancel should restore the normal mesh.
