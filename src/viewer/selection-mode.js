@@ -622,6 +622,23 @@ export function selectionMeshHover(hit, sceneItem) {
   if (typeof window !== 'undefined') {
     window.__geoSelectorHoveredFaceGroup = { itemId: sceneItem.id, groupIndex: groupIndex };
   }
+
+  // Bug C fix: trigger a single render frame so the blue hover color is visible
+  // immediately, even if the viewer animate loop hasn't fired yet this tick.
+  _requestRender();
+}
+
+/**
+ * Request a single render from the viewer. Covers the case where the rAF loop
+ * has not yet fired this event-loop tick so material changes would sit invisible
+ * until the next frame. Safe to call even when the loop is running — the extra
+ * render is a no-op cost (one draw call).
+ */
+function _requestRender() {
+  const viewer = getViewer();
+  if (viewer && viewer.renderer && viewer.scene && viewer.camera) {
+    try { viewer.renderer.render(viewer.scene, viewer.camera); } catch (_e) { /* best-effort render — ignore WebGL errors */ }
+  }
 }
 
 /**

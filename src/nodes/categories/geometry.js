@@ -536,16 +536,17 @@ export const geometryNodes = [
     subGroup: 'Selection',
     icon: '⬡',
     aliases: ['select-faces'],
-    description: 'Activates interactive face-selection mode in the 3D viewport. Click the Select button, then click surface or solid mesh geometry in the 3D view to build a selection set. Press Approve (green ✓) to confirm or Cancel (red ✗) to discard. Outputs an array of selected mesh geometry objects with vertex and face data.',
+    description: 'Activates interactive face-selection mode in the 3D viewport. Click the Select button, then click surface or solid mesh geometry in the 3D view to build a selection set. Press Approve (green ✓) to confirm or Cancel (red ✗) to discard. Outputs one Geo.Mesh3 per selected face.',
     inputs: [],
     outputs: [
-      { id: 'faces', name: 'Faces', type: 'mesh', description: 'Selected faces as a unified Mesh3 (same format as Surface node outputs)' }
+      { id: 'faces', name: 'Faces', type: 'list', description: 'Array of Geo.Mesh3 — one per selected face' }
     ],
     controls: [
       { id: '_selectedLabels', type: 'hidden', default: '' },
       { id: '_selectedGeo', type: 'hidden', default: '' },
       { id: '_selectedFaces', type: 'hidden', default: '' },
-      { id: '_selectedMesh', type: 'hidden', default: '' }
+      { id: '_selectedMesh', type: 'hidden', default: '' },
+      { id: '_selectedMeshes', type: 'hidden', default: '' }
     ],
     metadata: { selectionMode: 'faces' },
     codegen: {
@@ -553,26 +554,43 @@ export const geometryNodes = [
       csharp: 'var {{faces}} = SelectFaces();'
     },
     execute(context, inputs, controlValues) {
-      // _selectedMesh: Mesh3 JSON written by node-renderer.js on Approve.
-      var meshRaw = controlValues._selectedMesh;
-      if (meshRaw) {
-        var meshData;
-        try { meshData = JSON.parse(meshRaw); } catch (_) { return { faces: null }; }
-        if (meshData && meshData._type === 'Mesh3' && Array.isArray(meshData.vertices) && meshData.vertices.length > 0) {
-          var verts = meshData.vertices.map(function(v) { return new Geo.Point3(v.x, v.y, v.z); });
-          return { faces: new Geo.Mesh3(verts, meshData.faces || [], meshData.color || 0x89b4fa) };
-        }
+      // Bug D fix: read _selectedMeshes (array of Mesh3, one per face).
+      // Falls back to _selectedMesh (single Mesh3) for backwards compatibility.
+      var meshesRaw = controlValues._selectedMeshes;
+      if (meshesRaw && typeof meshesRaw === 'string') {
+        try {
+          var arr = JSON.parse(meshesRaw);
+          if (Array.isArray(arr) && arr.length > 0) {
+            var meshes = arr.map(function(md) {
+              if (!md || md._type !== 'Mesh3' || !Array.isArray(md.vertices) || md.vertices.length === 0) return null;
+              var verts = md.vertices.map(function(v) { return new Geo.Point3(v.x || 0, v.y || 0, v.z || 0); });
+              return new Geo.Mesh3(verts, md.faces || [], md.color || 0x89b4fa);
+            }).filter(Boolean);
+            if (meshes.length > 0) return { faces: meshes };
+          }
+        } catch (_) { /* fall through */ }
       }
-      return { faces: null };
+      // Backwards compat: single _selectedMesh (old format, wraps in array)
+      var meshRaw = controlValues._selectedMesh;
+      if (meshRaw && typeof meshRaw === 'string') {
+        try {
+          var meshData = JSON.parse(meshRaw);
+          if (meshData && meshData._type === 'Mesh3' && Array.isArray(meshData.vertices) && meshData.vertices.length > 0) {
+            var verts2 = meshData.vertices.map(function(v) { return new Geo.Point3(v.x || 0, v.y || 0, v.z || 0); });
+            return { faces: [new Geo.Mesh3(verts2, meshData.faces || [], meshData.color || 0x89b4fa)] };
+          }
+        } catch (_) { /* fall through */ }
+      }
+      return { faces: [] };
     },
     help: {
       inputs: [],
-      outputs: [{ name: 'Faces', description: 'Selected faces as a unified Mesh3 — same format as Surface node outputs, compatible with any mesh-input port' }],
+      outputs: [{ name: 'Faces', description: 'Array of Geo.Mesh3 — one per selected face, compatible with mesh-input ports' }],
       example: {
         title: 'Select faces and inspect them',
         nodes: [
           { type: 'Select.Faces', x: 0, y: 0, controls: {
-            _selectedMesh: '{"_type":"Mesh3","vertices":[{"x":0.5,"y":-0.5,"z":-0.5,"_type":"Point3"},{"x":0.5,"y":0.5,"z":-0.5,"_type":"Point3"},{"x":0.5,"y":0.5,"z":0.5,"_type":"Point3"},{"x":0.5,"y":-0.5,"z":0.5,"_type":"Point3"}],"faces":[[0,1,2],[0,2,3]],"color":5878266}'
+            _selectedMeshes: '[{"_type":"Mesh3","vertices":[{"x":0.5,"y":-0.5,"z":-0.5},{"x":0.5,"y":0.5,"z":-0.5},{"x":0.5,"y":0.5,"z":0.5},{"x":0.5,"y":-0.5,"z":0.5}],"faces":[[0,1,2],[0,2,3]],"color":5878266}]'
           } },
           { type: 'Output.Watch', x: 240, y: 0 }
         ],

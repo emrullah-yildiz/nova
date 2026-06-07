@@ -876,38 +876,45 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
               // Store as JSON so it survives save/load round-trips.
               nd.controlValues._selectedFaces = JSON.stringify(faceArray);
 
-              // Build a Mesh3 from the selected triangles so Select.Faces can output
-              // real geometry compatible with mesh-input ports (same as Surface nodes).
-              var meshVerts = [];
-              var meshFaces = [];
-              var meshColor = 0x89b4fa;
-              facesRaw.forEach(function(f) {
+              // Bug D fix: build ONE Mesh3 per selected face group (not one merged mesh).
+              // Each entry in facesRaw corresponds to one logical face (group) on one mesh.
+              var perFaceMeshArray = facesRaw.map(function(f) {
                 var gi = f.groupIndex;
                 var fg = f.faceGroups;
                 var m3 = f.mesh3;
-                if (!m3 || !m3.faces || !m3.vertices) return;
-                meshColor = m3.color || meshColor;
+                if (!m3 || !m3.faces || !m3.vertices) {
+                  return { _type: 'Mesh3', vertices: [], faces: [], color: 0x89b4fa };
+                }
+                var faceColor = m3.color || 0x89b4fa;
                 var grp = fg && fg[gi];
-                if (!grp || !grp.triangleIndices) return;
-                grp.triangleIndices.forEach(function(triIdx) {
-                  var face = m3.faces[triIdx];
-                  var i0, i1, i2;
-                  if (Array.isArray(face)) { i0 = face[0]; i1 = face[1]; i2 = face[2]; }
-                  else { i0 = face.a; i1 = face.b; i2 = face.c; }
-                  var v0 = m3.vertices[i0], v1 = m3.vertices[i1], v2 = m3.vertices[i2];
-                  if (!v0 || !v1 || !v2) return;
-                  var base = meshVerts.length;
-                  meshVerts.push(
-                    { x: v0.x, y: v0.y, z: v0.z, _type: 'Point3' },
-                    { x: v1.x, y: v1.y, z: v1.z, _type: 'Point3' },
-                    { x: v2.x, y: v2.y, z: v2.z, _type: 'Point3' }
-                  );
-                  meshFaces.push([base, base + 1, base + 2]);
-                });
-              });
-              nd.controlValues._selectedMesh = JSON.stringify({
-                _type: 'Mesh3', vertices: meshVerts, faces: meshFaces, color: meshColor
-              });
+                var faceVerts = [];
+                var faceFaceIndices = [];
+                if (grp && grp.triangleIndices) {
+                  grp.triangleIndices.forEach(function(triIdx) {
+                    var face = m3.faces[triIdx];
+                    var i0, i1, i2;
+                    if (Array.isArray(face)) { i0 = face[0]; i1 = face[1]; i2 = face[2]; }
+                    else { i0 = face.a; i1 = face.b; i2 = face.c; }
+                    var v0 = m3.vertices[i0], v1 = m3.vertices[i1], v2 = m3.vertices[i2];
+                    if (!v0 || !v1 || !v2) return;
+                    var base = faceVerts.length;
+                    faceVerts.push(
+                      { x: v0.x, y: v0.y, z: v0.z, _type: 'Point3' },
+                      { x: v1.x, y: v1.y, z: v1.z, _type: 'Point3' },
+                      { x: v2.x, y: v2.y, z: v2.z, _type: 'Point3' }
+                    );
+                    faceFaceIndices.push([base, base + 1, base + 2]);
+                  });
+                }
+                return { _type: 'Mesh3', vertices: faceVerts, faces: faceFaceIndices, color: faceColor };
+              }).filter(function(m) { return m.vertices.length > 0; });
+
+              // Store per-face array (Bug D). Also keep _selectedMesh for single-face
+              // backwards compat: use the first face if available.
+              nd.controlValues._selectedMeshes = JSON.stringify(perFaceMeshArray);
+              nd.controlValues._selectedMesh = JSON.stringify(
+                perFaceMeshArray.length > 0 ? perFaceMeshArray[0] : { _type: 'Mesh3', vertices: [], faces: [], color: 0x89b4fa }
+              );
             }
             // Keep _selectedLabels in sync for the "N faces selected" button display.
             nd.controlValues._selectedLabels = items.map(function(it) { return it.label || it.id || ''; }).join('||');
@@ -961,6 +968,9 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
 
           self.renderNode(nd);
           self.runGraph();
+          // Bug E fix: return to the 2D node canvas after approval so the
+          // user sees the output port update rather than staying in 3D view.
+          if (typeof app.setView === 'function') app.setView('nodes');
         },
         function () {
           // Cancel: nothing to do — do NOT write _selectedFaces here.

@@ -235,15 +235,50 @@ describe('Select.* node execute()', () => {
     });
   });
 
-  // Select.Faces — Mesh3 output via _selectedMesh
+  // Select.Faces — Mesh3 array output via _selectedMeshes (Bug D fix: one Mesh3 per face)
 
-  it('Select.Faces execute() returns null when nothing selected', () => {
+  it('Select.Faces execute() returns empty array when nothing selected', () => {
     const def = registry.getNode('Select.Faces');
-    const result = def.execute({}, {}, { _selectedLabels: '', _selectedGeo: '', _selectedFaces: '', _selectedMesh: '' });
-    expect(result.faces).toBeNull();
+    const result = def.execute({}, {}, { _selectedLabels: '', _selectedGeo: '', _selectedFaces: '', _selectedMesh: '', _selectedMeshes: '' });
+    expect(Array.isArray(result.faces)).toBe(true);
+    expect(result.faces.length).toBe(0);
   });
 
-  it('Select.Faces execute() with valid _selectedMesh returns a Mesh3 instance', () => {
+  it('Select.Faces execute() with valid _selectedMeshes returns array of Mesh3', () => {
+    const def = registry.getNode('Select.Faces');
+    const meshesData = [
+      {
+        _type: 'Mesh3',
+        vertices: [
+          { x: 0, y: 0, z: 0, _type: 'Point3' },
+          { x: 1, y: 0, z: 0, _type: 'Point3' },
+          { x: 1, y: 1, z: 0, _type: 'Point3' }
+        ],
+        faces: [[0, 1, 2]],
+        color: 0x89b4fa
+      },
+      {
+        _type: 'Mesh3',
+        vertices: [
+          { x: 0, y: 0, z: 0, _type: 'Point3' },
+          { x: 0, y: 1, z: 0, _type: 'Point3' },
+          { x: 1, y: 1, z: 0, _type: 'Point3' }
+        ],
+        faces: [[0, 1, 2]],
+        color: 0x89b4fa
+      }
+    ];
+    const result = def.execute({}, {}, { _selectedMeshes: JSON.stringify(meshesData) });
+    expect(Array.isArray(result.faces)).toBe(true);
+    expect(result.faces.length).toBe(2);
+    expect(result.faces[0]._type).toBe('Mesh3');
+    expect(Array.isArray(result.faces[0].vertices)).toBe(true);
+    expect(result.faces[0].vertices.length).toBe(3);
+    expect(Array.isArray(result.faces[0].faces)).toBe(true);
+    expect(result.faces[0].faces.length).toBe(1);
+  });
+
+  it('Select.Faces execute() backwards compat: valid _selectedMesh returns array with one Mesh3', () => {
     const def = registry.getNode('Select.Faces');
     const meshData = {
       _type: 'Mesh3',
@@ -256,41 +291,44 @@ describe('Select.* node execute()', () => {
       color: 0x89b4fa
     };
     const result = def.execute({}, {}, { _selectedMesh: JSON.stringify(meshData) });
-    expect(result.faces).toBeTruthy();
-    expect(result.faces._type).toBe('Mesh3');
-    expect(Array.isArray(result.faces.vertices)).toBe(true);
-    expect(result.faces.vertices.length).toBe(3);
-    expect(Array.isArray(result.faces.faces)).toBe(true);
-    expect(result.faces.faces.length).toBe(1);
+    expect(Array.isArray(result.faces)).toBe(true);
+    expect(result.faces.length).toBe(1);
+    expect(result.faces[0]._type).toBe('Mesh3');
+    expect(result.faces[0].vertices.length).toBe(3);
+    expect(result.faces[0].faces.length).toBe(1);
   });
 
-  it('Select.Faces execute() with invalid _selectedMesh JSON returns null', () => {
+  it('Select.Faces execute() with invalid _selectedMesh JSON returns empty array', () => {
     const def = registry.getNode('Select.Faces');
     const result = def.execute({}, {}, { _selectedMesh: 'not-json' });
-    expect(result.faces).toBeNull();
+    expect(Array.isArray(result.faces)).toBe(true);
+    expect(result.faces.length).toBe(0);
   });
 
-  it('Select.Faces execute() with empty vertices in _selectedMesh returns null', () => {
+  it('Select.Faces execute() with empty vertices in _selectedMesh returns empty array', () => {
     const def = registry.getNode('Select.Faces');
     const meshData = { _type: 'Mesh3', vertices: [], faces: [], color: 0x89b4fa };
     const result = def.execute({}, {}, { _selectedMesh: JSON.stringify(meshData) });
-    expect(result.faces).toBeNull();
+    expect(Array.isArray(result.faces)).toBe(true);
+    expect(result.faces.length).toBe(0);
   });
 
   it('Select.Faces execute() Mesh3 vertices are Point3 instances with x/y/z', () => {
     const def = registry.getNode('Select.Faces');
-    const meshData = {
-      _type: 'Mesh3',
-      vertices: [
-        { x: 0.5, y: -0.5, z: -0.5, _type: 'Point3' },
-        { x: 0.5, y: 0.5, z: -0.5, _type: 'Point3' },
-        { x: 0.5, y: 0.5, z: 0.5, _type: 'Point3' }
-      ],
-      faces: [[0, 1, 2]],
-      color: 0x89b4fa
-    };
-    const result = def.execute({}, {}, { _selectedMesh: JSON.stringify(meshData) });
-    const v0 = result.faces.vertices[0];
+    const meshesData = [
+      {
+        _type: 'Mesh3',
+        vertices: [
+          { x: 0.5, y: -0.5, z: -0.5, _type: 'Point3' },
+          { x: 0.5, y: 0.5, z: -0.5, _type: 'Point3' },
+          { x: 0.5, y: 0.5, z: 0.5, _type: 'Point3' }
+        ],
+        faces: [[0, 1, 2]],
+        color: 0x89b4fa
+      }
+    ];
+    const result = def.execute({}, {}, { _selectedMeshes: JSON.stringify(meshesData) });
+    const v0 = result.faces[0].vertices[0];
     expect(typeof v0.x).toBe('number');
     expect(typeof v0.y).toBe('number');
     expect(typeof v0.z).toBe('number');
