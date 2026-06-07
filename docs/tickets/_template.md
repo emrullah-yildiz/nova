@@ -86,6 +86,40 @@ Links added by morpheus after PM confirms AC.
 
 - [T?](../task-briefs/T?-name.md) — lane: description
 
+## Agent Response
+
+> Written by the agent after merging to develop. Morpheus copies this into `docs/pm/PM.md` under the ticket section so the PM can review it without opening this file.
+
+**Status:** <!-- Merged to develop — awaiting PM re-test -->
+**Branch merged:** <!-- type/tick-NNN-description -->
+**Date:** <!-- YYYY-MM-DD -->
+
+### What was built
+<!-- 2–4 bullet points: what changed, key decisions made -->
+
+### How to test
+<!-- Numbered steps from a clean `npm run dev` start -->
+
+### Validation run
+- Lint: <!-- ✅ 0 errors / ❌ N errors -->
+- Unit tests: <!-- ✅ N passing / ❌ -->
+- Build: <!-- ✅ green / ❌ -->
+- Playwright E2E: <!-- ✅ all pass / ❌ N failed / ⚠️ not applicable -->
+- Manual browser: <!-- ✅ tested YYYY-MM-DD / ⚠️ not yet -->
+
+### Known gaps or open questions
+<!-- Anything the PM should know before testing. If none: "None." -->
+
+---
+
+## PM Comments
+
+> PM writes here after testing on develop. Do not edit — morpheus reads this on next "run".
+
+<!-- ✅ Approved / ❌ Bug: [description] / ⚠️ [question] -->
+
+---
+
 ## Notes
 
 Any decisions, constraints, or open questions morpheus or the PM recorded here.

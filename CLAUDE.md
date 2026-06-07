@@ -8,7 +8,7 @@ It is the single entry point that tells Claude Code how to operate in this repo.
 1. [`docs/NOVA.md`](docs/NOVA.md) — what Nova is, architecture, patterns, module ownership map.
 2. [`docs/ENGINEERING.md`](docs/ENGINEERING.md) — how to work: branching, testing ladder, multi-agent rules, start→merge checklist.
 3. [`docs/STYLE.md`](docs/STYLE.md) — UI design system: colors, fonts, spacing, icons. **Mandatory for any UI/viewer/CSS task.**
-4. [`docs/pm/PRIORITIES.md`](docs/pm/PRIORITIES.md) — the PM's current sprint goals and backlog. Read this to understand what matters right now.
+4. [`docs/pm/PM.md`](docs/pm/PM.md) — unified PM workspace: current sprint, ticket responses awaiting review, PM comments. Read this to understand what matters right now.
 5. [`docs/tickets/INDEX.md`](docs/tickets/INDEX.md) — live ticket board. Know what's in-progress before starting anything new.
 
 Do not load any other docs unless the task specifically needs them.
@@ -20,38 +20,38 @@ Do not load any other docs unless the task specifically needs them.
 This is the canonical loop. Every sprint follows these phases in order.
 
 ```
-PM edits PRIORITIES.md → says "run"
+PM edits PM.md ("This Sprint" section) → says "run"
         │
         ▼
-Morpheus reads priorities + INDEX
+Morpheus reads docs/pm/PM.md + docs/tickets/INDEX.md
         │
         ├─ New sprint items → create TICK-NNN tickets → show AC to PM → wait for confirmation
         │
         ├─ Confirmed tickets (ready) → decompose into task briefs → dispatch agents
         │
-        └─ Tickets with PM comments → re-read comments → fix or archive (see below)
+        └─ Tickets with PM comments → re-read PM.md "Ticket Responses" → fix or archive (see below)
                 │
                 ▼
         Agents work on branches (one branch per ticket)
                 │
                 ▼
         Solution tested in-browser (like a real user)
-        lint:all + test + build must pass
+        lint:all + test + build + test:e2e must all pass
                 │
                 ▼
+        Agent writes structured response to PM.md under the ticket section
         Branch merged to develop → local + remote branch deleted
                 │
                 ▼
-        PM tests on develop → leaves comments on each ticket file
+        PM tests on develop → writes comment in "Your Comments" block in PM.md
                 │
                 ▼
-        PM says "run" → agents read PM comments on every active ticket:
+        PM says "run" → morpheus reads PM.md comments:
           - Comment is negative / reports a bug → reopen ticket, new branch, fix, re-merge
-          - Comment is positive / confirms AC → archive ticket
+          - Comment is positive / "Approved" → archive ticket (git mv to archive/)
                 │
                 ▼
-        All tickets archived → PM reviews → updates PRIORITIES.md / NOVA.md
-        → gives green light for next sprint
+        All tickets archived → morpheus reports → PM gives green light for next sprint
 ```
 
 ---
@@ -60,27 +60,30 @@ Morpheus reads priorities + INDEX
 
 When the user says **"run"** (or "start", "go", "plan", "kick off"):
 
-1. Read `docs/pm/PRIORITIES.md` and `docs/tickets/INDEX.md`.
+1. Read `docs/pm/PM.md` and `docs/tickets/INDEX.md`.
 2. Invoke **morpheus** via the Agent tool with the prompt below.
 
 ```
-Read docs/pm/PRIORITIES.md and docs/tickets/INDEX.md.
+Read docs/pm/PM.md and docs/tickets/INDEX.md.
 
 PHASE 1 — PM comment review (do this first):
-  For every active ticket (🟡 in-progress) that has a "## PM Notes" or "## PM Comments" section:
-    - Read the comments carefully.
-    - If the comment reports a problem, regression, or missing behavior:
-        → Set ticket status back to 🔵 ready, add a note explaining the issue.
-        → Create a new task brief for the fix.
-        → Dispatch the appropriate specialist agent on a new branch.
-    - If the comment confirms everything works / gives a positive verdict:
-        → Mark all relevant ACs [x], update status to ✅ done.
-        → Move the ticket row to the Done table in INDEX.md.
+  Read the "Ticket Responses — Awaiting Your Review" section in docs/pm/PM.md.
+  For every ticket response that has content in its "Your Comments" block:
+    - If the comment is positive / says "Approved":
+        → In docs/tickets/TICK-NNN.md: mark all AC [x], update status to ✅ done.
+        → Move the ticket row to the Done table in docs/tickets/INDEX.md.
         → MOVE (not copy) the ticket file: `git mv docs/tickets/TICK-NNN.md docs/tickets/archive/TICK-NNN.md`. The original must not remain in docs/tickets/.
-    - If the ticket has no PM comment yet: leave it as-is.
+        → Move the ticket response block in PM.md from "Awaiting Your Review" to "Processed History".
+    - If the comment reports a problem, regression, or missing behavior:
+        → Set ticket status back to 🔵 ready in TICK-NNN.md.
+        → Create a new task brief for the fix under docs/task-briefs/.
+        → Dispatch the appropriate specialist agent on a new branch.
+        → Keep the ticket response in PM.md (it will be overwritten when the fix is done).
+    - If the "Your Comments" block is empty: leave it as-is.
 
 PHASE 2 — New sprint items (tickets that don't exist yet):
-  For each sprint item in PRIORITIES.md that has no TICK-* ticket:
+  Read the "This Sprint" section in docs/pm/PM.md.
+  For each sprint item that has no TICK-* ticket in INDEX.md:
     - Write a ticket file at docs/tickets/TICK-NNN.md using docs/tickets/_template.md.
     - Show the PM the acceptance criteria and wait for confirmation before decomposing.
 
@@ -88,6 +91,7 @@ PHASE 3 — Ready tickets (status: 🔵 ready, PM has confirmed AC):
   - Decompose into task briefs under docs/task-briefs/.
   - Update docs/agent-workboard.md with new claims.
   - Dispatch specialist agents in parallel for independent tasks (one branch per ticket).
+  - After merge: agent writes structured response to PM.md under the ticket section.
 
 PHASE 4 — Report:
   - Tickets with PM comments actioned (fixed / archived).
@@ -134,6 +138,6 @@ Do not archive a ticket without a positive PM comment.
 ## Maintenance
 
 This file only changes when the team structure or the sprint lifecycle changes.
-Product priorities → `docs/pm/PRIORITIES.md`.
+Product priorities and PM comments → `docs/pm/PM.md`.
 Architecture decisions → `docs/architecture/decisions.md`.
 Agent rules → `docs/ENGINEERING.md`.

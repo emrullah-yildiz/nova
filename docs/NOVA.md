@@ -202,11 +202,18 @@ like the code around it. (Each links to the decision that owns the detail.)
   (one material, one draw call). **Selection mode (active):** the mesh is swapped
   for a `BufferGeometry` with `groups` — one group per logical face (coplanar
   triangle set, grouped by shared normal within tolerance). Each group gets its own
-  `MeshPhongMaterial` so face colors can be set independently. `Raycaster` returns
-  `faceIndex`; a lookup table maps triangle index → group index → logical face.
-  On Approve/Cancel the multi-group mesh is disposed and the normal mesh is
-  restored. Output is face polygon geometry — the face's vertex positions extracted
-  from the group's index range — not the whole mesh object.
+  `MeshBasicMaterial` (flat shading, no lighting response) so face colors can be
+  set independently. Hover color: `0x89b4fa` (blue). Selected color: `0xa6e3a1`
+  (green). `Raycaster` returns `faceIndex`; a lookup table maps triangle index →
+  group index → logical face. Orbit drag is guarded — a `_isDragging` flag
+  (set on `pointerdown`, updated on `pointermove` when displacement > 3px)
+  prevents orbit release from adding/removing faces. On Approve/Cancel the
+  multi-group mesh is disposed and the normal mesh is restored. **Output of
+  `Select.Faces` is `Mesh3`** — the selected triangles reconstructed as a
+  `Geo.Mesh3` with `vertices` (Point3[]) and `faces` (int[][]) — the same format
+  as Surface nodes, wirable into any mesh-input node. The vertex positions are
+  extracted from the selected groups' triangle indices and stored in the node's
+  `_selectedMesh` hidden control value as JSON.
 - **Graph run modes are app-level policy over the engine mechanism.** The graph
   recomputes per `app.runMode`: **Automatic** (default — recompute on every edit,
   the legacy behavior) or **Manual** (defer to an explicit Run). The *mechanism*
