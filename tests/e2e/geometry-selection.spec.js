@@ -153,7 +153,7 @@ test.describe('Geometry Selection mode — Select.Faces pick-and-approve flow', 
     // by showing the item entered the selection (count = 1).
     // Both paths should end up with 1 selected.
     if (countAfterFirstClick !== 'NO_CLICK_FN' && countAfterFirstClick !== 'NO_ITEM') {
-      expect(countAfterFirstClick).toMatch(/1 selected/);
+      expect(countAfterFirstClick).toMatch(/1 face selected/);
     }
 
     // Click again to deselect
@@ -172,7 +172,7 @@ test.describe('Geometry Selection mode — Select.Faces pick-and-approve flow', 
     });
 
     if (countAfterSecondClick !== 'NO_CLICK_FN' && countAfterSecondClick !== 'NO_ITEM') {
-      expect(countAfterSecondClick).toMatch(/0 selected/);
+      expect(countAfterSecondClick).toMatch(/0 faces selected/);
     }
 
     // Clean up
@@ -499,15 +499,15 @@ test.describe('Geometry Selection mode — Select.Faces pick-and-approve flow', 
 
     // Click A → 1
     const c1 = await clickItem('ac10-a');
-    if (c1) await expect(page.locator('#sel-mode-count')).toContainText('1 selected');
+    if (c1) await expect(page.locator('#sel-mode-count')).toContainText('1 face selected');
 
     // Click B → 2
     const c2 = await clickItem('ac10-b');
-    if (c2) await expect(page.locator('#sel-mode-count')).toContainText('2 selected');
+    if (c2) await expect(page.locator('#sel-mode-count')).toContainText('2 faces selected');
 
     // Re-click A → 1 (deselect)
     const c3 = await clickItem('ac10-a');
-    if (c3) await expect(page.locator('#sel-mode-count')).toContainText('1 selected');
+    if (c3) await expect(page.locator('#sel-mode-count')).toContainText('1 face selected');
 
     await page.evaluate(() => { if (window.__selectionCancel) window.__selectionCancel(); });
   });
@@ -547,7 +547,7 @@ test.describe('Geometry Selection mode — Select.Faces pick-and-approve flow', 
     });
 
     if (selected === 2) {
-      await expect(page.locator('#sel-mode-count')).toContainText('2 selected');
+      await expect(page.locator('#sel-mode-count')).toContainText('2 faces selected');
     }
 
     // Call clearSelection() — the same function geo-selector.js calls when the
@@ -564,11 +564,11 @@ test.describe('Geometry Selection mode — Select.Faces pick-and-approve flow', 
     });
 
     if (resetCount !== 'NO_CLEAR_FN') {
-      expect(resetCount).toMatch(/0 selected/);
+      expect(resetCount).toMatch(/0 faces selected/);
     }
 
-    // Counter must show 0 selected regardless of path
-    await expect(page.locator('#sel-mode-count')).toContainText('0 selected');
+    // Counter must show 0 faces selected regardless of path
+    await expect(page.locator('#sel-mode-count')).toContainText('0 faces selected');
 
     await page.evaluate(() => { if (window.__selectionCancel) window.__selectionCancel(); });
   });
