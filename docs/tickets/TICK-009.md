@@ -179,3 +179,29 @@ green on click, counter increments. Approve/Cancel should restore the normal mes
 **Task brief:** [T09b-fix](../task-briefs/T09b-face-selection-orbit-flat.md)
 
 **Verification:** lint:all 0 errors, 1917 unit tests pass, build green. AC-T09b-8 E2E step added. Branch pushed — awaiting PM re-test after merge to develop.
+
+## Run comments (2026-06-07 — T09f hover-pipeline debug logging, branch fix/tick-009f-hover-debug-logging)
+
+**Status:** debug instrumentation added — awaiting PM in-browser test to identify the exact hover failure point.
+
+**What was done (T09f):**
+Added `window.__novaHoverDebug` trace object to expose the internal state of the hover pipeline at every step. Two files were instrumented:
+
+- `src/viewer/selection-mode.js` — init of `__novaHoverDebug` after `_state` declaration; `_swapToFaceMeshes` sets `swapAttempted`, `swapItemCount`, `itemWasHidden`, `itemGroupWasHidden`, `swapSucceeded`, `swapError`; `selectionMeshHover` sets `faceIndex`, `triangleToGroupLength`, `groupIndex`, `materialSet`, `renderRequested`. Also re-added the missing `_requestRender()` call in `selectionMeshHover` so the blue hover colour is forced into the canvas every frame.
+- `src/viewer/geo-selector.js` — the `isSelectionModeActive()` block in `mousemove` sets `selectionModeActive`, `anySelMesh`, `candidateCount`, `hitFound`, `hitOnSelMesh`, `sceneItemFound`, `selectionMeshHoverCalled` on each mouse-move event.
+
+**Verification:** lint:all 0 errors, 1915 unit tests pass (1 skipped, pre-existing), build green, 32/32 E2E pass.
+
+**How to diagnose in browser:**
+1. `npm run dev` → localhost:5173 → open DevTools console (F12)
+2. Create a Box node, wire to Select.Faces, Run, click "Select Faces"
+3. Move mouse slowly over the 3D viewport
+4. In console: `JSON.stringify(window.__novaHoverDebug, null, 2)`
+5. Report the full output, especially:
+   - `swapSucceeded` (should be >= 1)
+   - `lastHoverTrace.anySelMesh` (should be true)
+   - `lastHoverTrace.candidateCount` (should be >= 1)
+   - `lastHoverTrace.hitFound` (should be true when mouse is over the box)
+   - `lastHoverTrace.hitOnSelMesh` (should be true)
+   - `lastHoverTrace.groupIndex` (should be 0–5 for a box)
+   - `lastHoverTrace.materialSet` (should be true if hover color is applied)

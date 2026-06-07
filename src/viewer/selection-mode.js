@@ -41,6 +41,23 @@ const FACE_HOVER_COLOR = 0x89b4fa;
 const SELECTED_COLOR = 0xa6e3a1;
 const CANDIDATE_COLOR = 0x94e2d5;
 
+// ── Hover-pipeline debug trace (T09f) ──────────────────────────────────────
+// Exposes internal state at each step so the PM can diagnose hover failures
+// via window.__novaHoverDebug in the browser console.
+// Remove when hover is confirmed working in-browser.
+if (typeof window !== 'undefined') {
+  window.__novaHoverDebug = {
+    swapAttempted: false, swapItemCount: 0, swapSucceeded: 0, swapError: null,
+    itemWasHidden: false, itemGroupWasHidden: false,
+    lastHoverTrace: {
+      selectionModeActive: false, anySelMesh: false, candidateCount: 0,
+      hitFound: false, hitOnSelMesh: false, sceneItemFound: false,
+      selectionMeshHoverCalled: false, faceIndex: null, triangleToGroupLength: null,
+      groupIndex: null, materialSet: false, renderRequested: false
+    }
+  };
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function getViewer() {
@@ -169,6 +186,13 @@ function _makeSelectionItem(item, hit) {
 function _swapToFaceMeshes() {
   const viewer = getViewer();
   if (!viewer || !viewer._sceneItems) return;
+
+  // T09f debug trace — mark that swap was attempted and record item count
+  if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+    window.__novaHoverDebug.swapAttempted = true;
+    window.__novaHoverDebug.swapItemCount = viewer._sceneItems.length;
+  }
+
   viewer._sceneItems.forEach(function (item) {
     if (!item.group) return;
     const mesh3 = item._mesh3;
@@ -182,6 +206,12 @@ function _swapToFaceMeshes() {
       }
     });
     if (!bodyMesh) return;
+
+    // T09f debug trace — record visibility state before force-show
+    if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+      window.__novaHoverDebug.itemWasHidden = !item.visible;
+      window.__novaHoverDebug.itemGroupWasHidden = !!(item.group && !item.group.visible);
+    }
 
     try {
       const faceGroups = mesh3.groupFaces();
@@ -210,8 +240,16 @@ function _swapToFaceMeshes() {
       item._selectionSwappedMesh = result.mesh;
       item._selectionMeshResult = result;
       item._selectionFaceGroups = faceGroups;
+
+      // T09f debug trace — increment success counter
+      if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+        window.__novaHoverDebug.swapSucceeded += 1;
+      }
     } catch (err) {
       // T09a not yet merged or error in groupFaces — fall back gracefully.
+      if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+        window.__novaHoverDebug.swapError = err && err.message;
+      }
       console.warn('[Nova] _swapToFaceMeshes: skipping item', item.id, err && err.message);
     }
   });
@@ -601,8 +639,20 @@ export function selectionMeshHover(hit, sceneItem) {
   if (!result || !result.triangleToGroup || !result.materials) return;
 
   const triIndex = Math.floor(hit.faceIndex != null ? hit.faceIndex : 0);
+
+  // T09f debug trace — record faceIndex and triangleToGroup length
+  if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+    window.__novaHoverDebug.lastHoverTrace.faceIndex = hit && hit.faceIndex != null ? hit.faceIndex : null;
+    window.__novaHoverDebug.lastHoverTrace.triangleToGroupLength = result.triangleToGroup ? result.triangleToGroup.length : null;
+  }
+
   const groupIndex = result.triangleToGroup[triIndex];
   if (groupIndex === undefined || groupIndex === null) return;
+
+  // T09f debug trace — record groupIndex
+  if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+    window.__novaHoverDebug.lastHoverTrace.groupIndex = groupIndex;
+  }
 
   const selKey = sceneItem.id + ':group:' + groupIndex;
   const isSelected = _state.items.some(function (it) { return it.selectionKey === selKey; });
@@ -612,7 +662,13 @@ export function selectionMeshHover(hit, sceneItem) {
   if (!isSelected) {
     const mat = result.materials[groupIndex];
     if (mat) {
-      if (mat.color && typeof mat.color.set === 'function') mat.color.set(FACE_HOVER_COLOR);
+      if (mat.color && typeof mat.color.set === 'function') {
+        mat.color.set(FACE_HOVER_COLOR);
+        // T09f debug trace — record that material color was set
+        if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+          window.__novaHoverDebug.lastHoverTrace.materialSet = true;
+        }
+      }
       if (mat.opacity !== undefined) mat.opacity = 1.0;
       mat.needsUpdate = true;
     }
@@ -621,6 +677,25 @@ export function selectionMeshHover(hit, sceneItem) {
   _state.hoveredGroup = { item: sceneItem, groupIndex: groupIndex };
   if (typeof window !== 'undefined') {
     window.__geoSelectorHoveredFaceGroup = { itemId: sceneItem.id, groupIndex: groupIndex };
+  }
+
+  // Request a render so the blue hover color is visible immediately.
+  _requestRender();
+  // T09f debug trace — record that render was requested
+  if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+    window.__novaHoverDebug.lastHoverTrace.renderRequested = true;
+  }
+}
+
+/**
+ * Request a single render from the viewer. Covers the case where the rAF loop
+ * has not yet fired this event-loop tick so material changes would sit invisible
+ * until the next frame. Safe to call even when the loop is running.
+ */
+function _requestRender() {
+  const viewer = getViewer();
+  if (viewer && viewer.renderer && viewer.scene && viewer.camera) {
+    try { viewer.renderer.render(viewer.scene, viewer.camera); } catch (_e) { /* best-effort render — ignore WebGL errors */ }
   }
 }
 
