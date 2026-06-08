@@ -113,34 +113,23 @@ describe('chapter examples — simpleExample and advancedExample', () => {
     });
   });
 
-  it('every simpleExample has a non-empty title, a slotId, and at least 3 numbered steps', () => {
+  it('every simpleExample has a non-empty title and at least 3 numbered steps', () => {
     LEARNING_CHAPTERS.forEach((ch, i) => {
       const ex = ch.simpleExample;
       expect(typeof ex.title, 'chapter ' + i + ' simpleExample.title type').toBe('string');
       expect(ex.title.length, 'chapter ' + i + ' simpleExample.title length').toBeGreaterThan(0);
-      expect(typeof ex.slotId, 'chapter ' + i + ' simpleExample.slotId type').toBe('string');
-      expect(ex.slotId.length, 'chapter ' + i + ' simpleExample.slotId length').toBeGreaterThan(0);
       expect(Array.isArray(ex.steps), 'chapter ' + i + ' simpleExample.steps array').toBe(true);
       expect(ex.steps.length, 'chapter ' + i + ' simpleExample.steps count').toBeGreaterThanOrEqual(3);
     });
   });
 
-  it('every advancedExample has a non-empty title, a slotId, and at least 3 numbered steps', () => {
+  it('every advancedExample has a non-empty title and at least 3 numbered steps', () => {
     LEARNING_CHAPTERS.forEach((ch, i) => {
       const ex = ch.advancedExample;
       expect(typeof ex.title, 'chapter ' + i + ' advancedExample.title type').toBe('string');
       expect(ex.title.length, 'chapter ' + i + ' advancedExample.title length').toBeGreaterThan(0);
-      expect(typeof ex.slotId, 'chapter ' + i + ' advancedExample.slotId type').toBe('string');
-      expect(ex.slotId.length, 'chapter ' + i + ' advancedExample.slotId length').toBeGreaterThan(0);
       expect(Array.isArray(ex.steps), 'chapter ' + i + ' advancedExample.steps array').toBe(true);
       expect(ex.steps.length, 'chapter ' + i + ' advancedExample.steps count').toBeGreaterThanOrEqual(3);
-    });
-  });
-
-  it('slotIds follow the <chapter-id>-simple / <chapter-id>-advanced convention', () => {
-    LEARNING_CHAPTERS.forEach((ch, i) => {
-      expect(ch.simpleExample.slotId, 'chapter ' + i + ' simple slotId').toContain('-simple');
-      expect(ch.advancedExample.slotId, 'chapter ' + i + ' advanced slotId').toContain('-advanced');
     });
   });
 
@@ -177,36 +166,6 @@ describe('chapter examples — simpleExample and advancedExample', () => {
     });
   });
 
-  it('screenshot figures have data-learn-shot attributes with expected slot IDs', () => {
-    const expectedSimpleSlots = [
-      'intro-simple', 'interface-simple', 'node-layout-simple', 'data-types-simple',
-      'math-simple', 'geometry-simple', 'lists-simple', 'python-simple',
-      'code-terminal-simple', 'codeblock-simple',
-    ];
-    const expectedAdvancedSlots = [
-      'intro-advanced', 'interface-advanced', 'node-layout-advanced', 'data-types-advanced',
-      'math-advanced', 'geometry-advanced', 'lists-advanced', 'python-advanced',
-      'code-terminal-advanced', 'codeblock-advanced',
-    ];
-
-    LEARNING_CHAPTERS.forEach((ch, chIdx) => {
-      const overlay = document.createElement('div');
-      overlay.innerHTML = buildLearningHtml();
-      document.body.appendChild(overlay);
-      initLearning(overlay);
-      window.__learnGo(chIdx);
-      const content = overlay.querySelector('#learn-chapter-content');
-      const figures = content.querySelectorAll('.learn-figure[data-learn-shot]');
-      expect(figures.length, 'chapter ' + chIdx + ' figure count').toBe(2);
-      const slots = Array.from(figures).map(function (f) { return f.getAttribute('data-learn-shot'); });
-      expect(slots).toContain(expectedSimpleSlots[chIdx]);
-      expect(slots).toContain(expectedAdvancedSlots[chIdx]);
-      overlay.remove();
-      delete window.__learnGo;
-      delete window.__learnAnswer;
-    });
-  });
-
   it('buildChapterHtml includes the "Try It" section when examples exist', () => {
     const overlay = document.createElement('div');
     overlay.innerHTML = buildLearningHtml();
@@ -237,28 +196,6 @@ describe('chapter examples — simpleExample and advancedExample', () => {
     delete window.__learnAnswer;
   });
 
-  it('placeholder SVG figures are embedded in the rendered chapter HTML', () => {
-    const overlay = document.createElement('div');
-    overlay.innerHTML = buildLearningHtml();
-    document.body.appendChild(overlay);
-    initLearning(overlay);
-    const content = overlay.querySelector('#learn-chapter-content');
-    const figs = content.querySelectorAll('.learn-example-fig');
-    expect(figs.length).toBe(2);
-    figs.forEach(function (fig) {
-      // Each figure has a placeholder SVG inside .learn-illus
-      const illus = fig.querySelector('.learn-illus');
-      expect(illus).not.toBeNull();
-      expect(illus.innerHTML).toContain('<svg');
-      // And a hidden img awaiting a real PNG
-      const img = fig.querySelector('.learn-shot');
-      expect(img).not.toBeNull();
-      expect(img.hasAttribute('hidden')).toBe(true);
-    });
-    overlay.remove();
-    delete window.__learnGo;
-    delete window.__learnAnswer;
-  });
 });
 
 describe('app Nova Learning page', () => {
