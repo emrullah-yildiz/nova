@@ -425,6 +425,20 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       // selected items stay green. Exit early so the panel-hover path below
       // does not conflict.
       if (isSelectionModeActive()) {
+        // T09f debug trace — record that selection mode is active this frame
+        if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+          window.__novaHoverDebug.lastHoverTrace.selectionModeActive = true;
+          // Reset per-frame fields so stale values don't mislead
+          window.__novaHoverDebug.lastHoverTrace.anySelMesh = false;
+          window.__novaHoverDebug.lastHoverTrace.candidateCount = 0;
+          window.__novaHoverDebug.lastHoverTrace.hitFound = false;
+          window.__novaHoverDebug.lastHoverTrace.hitOnSelMesh = false;
+          window.__novaHoverDebug.lastHoverTrace.sceneItemFound = false;
+          window.__novaHoverDebug.lastHoverTrace.selectionMeshHoverCalled = false;
+          window.__novaHoverDebug.lastHoverTrace.materialSet = false;
+          window.__novaHoverDebug.lastHoverTrace.renderRequested = false;
+        }
+
         // Determine whether face-selection meshes are active before building
         // the candidate list. When they are, restrict raycasting to those
         // meshes only. LineSegments (edge wires) have a default THREE.js
@@ -432,6 +446,12 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         // threshold covers every face-interior point, so edge lines would
         // always win the raycast and prevent any face from being highlighted.
         var anySelMesh = self._sceneItems && self._sceneItems.some(function(it) { return !!it._selectionSwappedMesh; });
+
+        // T09f debug trace — record whether any selection mesh is swapped in
+        if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+          window.__novaHoverDebug.lastHoverTrace.anySelMesh = !!anySelMesh;
+        }
+
         var candidateMeshes = [];
         self.geometryGroup.traverseVisible(function(obj) {
           if (anySelMesh) {
@@ -441,8 +461,19 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
           }
         });
 
+        // T09f debug trace — record candidate mesh count for the raycast
+        if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+          window.__novaHoverDebug.lastHoverTrace.candidateCount = candidateMeshes.length;
+        }
+
         var intersects = self._raycaster.intersectObjects(candidateMeshes, false);
         var hit = intersects.length > 0 ? intersects[0] : null;
+
+        // T09f debug trace — record whether raycast produced a hit
+        if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+          window.__novaHoverDebug.lastHoverTrace.hitFound = hit !== null;
+        }
+
         var hitMesh = hit ? hit.object : null;
         var hitFaceIndex = hit && hit.faceIndex !== undefined ? hit.faceIndex : null;
 
@@ -460,12 +491,24 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         if (anySelMesh) {
           var selMeshHoverItem = null;
           if (hit && hit.object && hit.object.userData && hit.object.userData.isSelectionMesh) {
+            // T09f debug trace — record whether the hit was on a selection mesh
+            if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+              window.__novaHoverDebug.lastHoverTrace.hitOnSelMesh = true;
+            }
             for (var smi = 0; smi < self._sceneItems.length; smi++) {
               if (self._sceneItems[smi]._selectionSwappedMesh === hit.object) { selMeshHoverItem = self._sceneItems[smi]; break; }
             }
           }
+          // T09f debug trace — record whether the scene item was found
+          if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+            window.__novaHoverDebug.lastHoverTrace.sceneItemFound = selMeshHoverItem !== null;
+          }
           // Pass hit only when it is on a selection mesh (selMeshHoverItem found),
           // otherwise null so selectionMeshHover clears the previously hovered group.
+          // T09f debug trace — record that selectionMeshHover is about to be called
+          if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+            window.__novaHoverDebug.lastHoverTrace.selectionMeshHoverCalled = true;
+          }
           selectionMeshHover(selMeshHoverItem ? hit : null, selMeshHoverItem);
           return;
         }
