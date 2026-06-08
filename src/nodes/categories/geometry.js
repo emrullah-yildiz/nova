@@ -560,6 +560,16 @@ export const geometryNodes = [
         return new Geo.Mesh3(verts, meshData.faces || [], meshData.color || 0x89b4fa);
       }
 
+      function meshFromLegacyFace(faceData) {
+        if (!faceData || faceData._type !== 'Face' || !Array.isArray(faceData.vertices) || faceData.vertices.length < 3) return null;
+        var verts = faceData.vertices.map(function(v) {
+          return new Geo.Point3(v[0], v[1], v[2]);
+        });
+        var faces = [];
+        for (var i = 1; i < verts.length - 1; i++) faces.push([0, i, i + 1]);
+        return new Geo.Mesh3(verts, faces, 0x89b4fa);
+      }
+
       // _selectedMeshes is written by node-renderer.js on Approve. Return a
       // list so the Data Inspector shows one mesh surface per selected face,
       // while each item remains compatible with mesh-input nodes.
@@ -568,6 +578,17 @@ export const geometryNodes = [
         try {
           var meshList = JSON.parse(meshesRaw);
           if (Array.isArray(meshList)) return { faces: meshList.map(meshFromData).filter(Boolean) };
+        } catch (_) { return { faces: [] }; }
+      }
+
+      // Compatibility with selections approved by the previous Face-descriptor
+      // implementation. Convert each saved planar Face object into a Mesh3
+      // patch so downstream mesh nodes still receive usable geometry.
+      var legacyFacesRaw = controlValues._selectedFaces;
+      if (legacyFacesRaw) {
+        try {
+          var legacyFaces = JSON.parse(legacyFacesRaw);
+          if (Array.isArray(legacyFaces)) return { faces: legacyFaces.map(meshFromLegacyFace).filter(Boolean) };
         } catch (_) { return { faces: [] }; }
       }
 

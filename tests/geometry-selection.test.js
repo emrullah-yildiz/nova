@@ -280,6 +280,24 @@ describe('Select.* node execute()', () => {
     expect(result.curves[0]._type).toBe('Polyline3');
   });
 
+  it('Select.Faces converts legacy _selectedFaces descriptors to Mesh3 patches', () => {
+    const def = registry.getNode('Select.Faces');
+    const legacyFaces = [
+      {
+        _type: 'Face',
+        vertices: [[-0.5, -0.5, 0.5], [0.5, -0.5, 0.5], [0.5, 0.5, 0.5], [-0.5, 0.5, 0.5]],
+        normal: [0, 0, 1],
+        area: 1
+      }
+    ];
+    const result = def.execute({}, {}, { _selectedFaces: JSON.stringify(legacyFaces), _selectedMeshes: '', _selectedMesh: '' });
+    expect(Array.isArray(result.faces)).toBe(true);
+    expect(result.faces.length).toBe(1);
+    expect(result.faces[0]._type).toBe('Mesh3');
+    expect(result.faces[0].vertices.length).toBe(4);
+    expect(result.faces[0].faces).toEqual([[0, 1, 2], [0, 2, 3]]);
+  });
+
   it('Select.Faces execute() keeps _selectedMesh as a legacy one-item fallback', () => {
     const def = registry.getNode('Select.Faces');
     const meshData = {
