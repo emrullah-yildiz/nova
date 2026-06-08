@@ -17,8 +17,8 @@
 
 | ID | Title | Status | Priority | Sprint | Lane(s) | Branch |
 |---|---|---|---|---|---|---|
-| TICK-006 | Learning page screenshots | 🟡 in-progress | high | A3 | ui | merged to develop — awaiting PM sign-off |
-| TICK-007 | Learning page interactive exercises | 🟡 in-progress | high | A3 | ui, core | merged to develop — awaiting PM sign-off |
+| TICK-006 | Learning page screenshots | 🟡 in-progress | high | A3 | ui | fix/tick-006-screenshot-rework — T06e: crop fix + slot relevance audit |
+| TICK-007 | Learning page interactive exercises | 🟡 in-progress | high | A3 | ui, core | fix/tick-007-wire-drag-ux (T07f) + fix/tick-007-unique-exercises (T07g) — rework in progress |
 | TICK-008 | Live agent dashboard — futuristic real-time view of agent activity | ⬜ draft | high | A3 | ui, platform | feat/agent-dashboard |
 
 ## Done (last 30 days)

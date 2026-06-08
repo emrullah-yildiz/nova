@@ -25,6 +25,9 @@ root `README.md` · `docs/ARCHITECTURE.md` · `.github/workflows/ci.yml`
 
 | Branch | Agent | Task | Owned paths (globs) | Hot locks | Started | Status |
 |---|---|---|---|---|---|---|
+| fix/tick-006-screenshot-rework | switch | T06e: crop fix + slot relevance | scripts/take-learning-shots.js, public/learning/*.png | — | 2026-06-08 | queued |
+| fix/tick-007-wire-drag-ux | switch | T07f: wire drag UX | src/ui/mini-canvas.js, tests/e2e/learning-interactive.spec.js | — | 2026-06-08 | queued |
+| fix/tick-007-unique-exercises | neo | T07g: unique per-chapter exercises | src/ui/learning-exercises.js, src/ui/learning-exercises.test.js | — | 2026-06-08 | queued |
 
 <!--
 Example row (copy, fill in, remove this comment block when claiming):

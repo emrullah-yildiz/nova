@@ -7,7 +7,7 @@ type: feature
 sprint: 2026-06-05
 created: 2026-06-05
 lanes: ui
-branch: merged to develop — awaiting PM sign-off
+branch: fix/tick-006-screenshot-rework
 ---
 
 ## User story
@@ -25,8 +25,10 @@ Screenshots must be taken from a real running Nova session: dark theme, nodes vi
 - [x] AC-1  All 20 PNG files exist at `public/learning/` with filenames matching the exact slot IDs used by the learning page. — scripts/take-learning-shots.js produces all 20 files; 2026-06-06
 - [x] AC-2  Opening the learning page and navigating every chapter shows a real Nova canvas screenshot — dark theme, nodes visible, wires connected — in each example slot. No placeholder SVG remains. — script uses page.evaluate(app.addNodeToCanvas/addWire) and screenshots #canvas-area; 2026-06-06
 - [x] AC-3  No screenshot slot shows a broken-image icon. The SVG fallback renders gracefully when a PNG is absent (no regression to existing fallback logic). — script asserts all 20 files exist and are valid before exit; 2026-06-06
-- [x] AC-4  Each screenshot shows the graph from its matching example: correct node types, wired together, with the expected output visible in `Output.Watch` or the 3D viewport. Math chapter examples (math-simple, math-advanced) must show all input nodes wired up and a computed numeric result in Output.Watch — not a blank canvas or a node with no visible inputs. — Fixed 2026-06-07 on branch fix/tick-006-screenshot-math-inputs: buildMathSimple replaced with no-CodeBlock Pythagorean graph (Input.Number×2 → Math.Multiply×2 → Math.Add → Output.Watch showing 25); buildMathAdvanced, buildCodeblockSimple, buildCodeblockAdvanced, buildPythonSimple all converted to two-phase evaluate pattern to ensure CodeBlock/Python ports materialise before wiring.
+- [ ] AC-4  Each screenshot shows the graph from its matching example: correct node types, wired together, with the expected output visible in `Output.Watch` or the 3D viewport. Math chapter examples (math-simple, math-advanced) must show all input nodes wired up and a computed numeric result in Output.Watch — not a blank canvas or a node with no visible inputs. — REOPENED 2026-06-08: PM reports screenshots are half-cut, not relevant to chapter topics, and graphs are not correctly wired (e.g., B input disconnected on Multiply).
 - [x] AC-5  Every PNG is ≤ 400 KB. `git ls-files public/learning/*.png` confirms all 20 are tracked in the repository. — script asserts stat.size <= 409600 per file and warns if exceeded; 2026-06-06
+- [ ] AC-6  Every screenshot viewport fits all nodes fully in frame — no node is cropped or cut off at the edge. The canvas is sized so the bounding box of all nodes has at least 60px padding on every side. — NEW 2026-06-08 per PM rework feedback.
+- [ ] AC-7  Each screenshot is logically relevant to its chapter title and slot description. The graph in `intro-simple` shows "double a number" with all ports wired (Input.Number → Math.Multiply with BOTH a and b inputs connected → Output.Watch showing 10). No slot may reuse another chapter's graph type unless the chapter topic calls for it. — NEW 2026-06-08 per PM rework feedback.
 
 ## Testing gate
 
@@ -57,11 +59,11 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 
 ## Definition of done
 
-- [x] All AC above are checked `[x]`
-- [x] `npm run lint:all` → 0 errors — 2026-06-07, fix/tick-006-screenshot-viewport
-- [x] `npm run test` → all pass (1911 tests, 145 files) — 2026-06-07, fix/tick-006-screenshot-viewport
-- [x] Oracle has reviewed and issued APPROVE verdict — 2026-06-08: VERDICT: APPROVE — lint 0 errors, 1917 tests pass, 10/10 E2E pass, build green, all 20 PNGs present and valid
-- [x] Merged to `develop`, workboard row released — 2026-06-07, fix/tick-006-screenshot-viewport merged to develop
+- [ ] All AC above are checked `[x]`
+- [ ] `npm run lint:all` → 0 errors
+- [ ] `npm run test` → all pass
+- [ ] Oracle has reviewed and issued APPROVE verdict
+- [ ] Merged to `develop`, workboard row released, INDEX.md updated
 
 ## Task briefs
 
@@ -69,6 +71,7 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 - [T06b](../task-briefs/T06b-learning-screenshots-script.md) — lane: ui (switch) — Write scripts/take-learning-shots.js: Playwright headless script that starts dev server, builds each of the 20 representative graphs programmatically, screenshots the canvas area, and saves to public/learning/<slot-id>.png ≤400 KB each
 - [T06c](../task-briefs/T06c-screenshot-fix-math-inputs.md) — lane: ui (switch) — PM re-open: fix Math chapter screenshot builders so all required input nodes are wired and Output.Watch shows a computed numeric result
 - [T06d](../task-briefs/T06d-screenshot-viewport-connections.md) — lane: ui (switch) — PM re-open: set viewport to 1280×720 + fit-to-nodes before screenshot + audit all 20 slot builders for wrong values / disconnected wires
+- [T06e](../task-briefs/T06e-screenshot-crop-relevance.md) — lane: ui (switch) — PM rework 2026-06-08: fix cropped screenshots + ensure each slot's graph is logically relevant and fully wired to its chapter topic
 
 ## Notes
 
@@ -87,13 +90,23 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 
 → Captured as T06d task brief (docs/task-briefs/T06d-screenshot-viewport-connections.md). Fix A: set viewport to 1280×720, call app.fitToView() before each screenshot, crop to node bounding box. Fix B: audit all 20 slot builders for wrong input values or disconnected wires. Branch: fix/tick-006-screenshot-viewport.
 
+## Rework — 2026-06-08 (PM feedback)
+
+PM reported three classes of defect after visual inspection of the screenshots:
+
+1. **Screenshots cropped / half-cut.** Nodes visible in the PM's screenshot are cut off on the right side. The fit-to-view logic or screenshot clip region is not large enough to capture all nodes at typical laptop viewport sizes.
+2. **Screenshots not relevant to chapter/exercise topic.** The `intro-simple` slot shows "double a number" but the graph has the `B` input of Math.Multiply unconnected — the screenshot does not demonstrate the exercise correctly. Several other slots show graphs that do not match their chapter's description.
+3. **Graphs not correctly wired.** Some slots have disconnected inputs (e.g., Math.Multiply with `b` unconnected), which contradicts the chapter's teaching point.
+
+AC-4 is reopened. Two new ACs added (AC-6 crop, AC-7 relevance). Task T06e dispatched on branch `fix/tick-006-screenshot-rework`.
+
 ## Run comments
 
-Morpheus run 2026-06-08 (oracle review):
+Morpheus run 2026-06-08 (PM rework):
 
-- Status: ALL ACs checked [x] and Oracle has issued APPROVE.
-- VERDICT: APPROVE — lint 0 errors, 1917 unit tests pass, 10/10 learning E2E pass, build green.
-- All 20 PNGs confirmed present at `public/learning/*.png` (20 files verified).
-- AC-2, AC-3, AC-4 verified: screenshots show real Nova canvas, no broken images, correct graph content per chapter.
-- AC-1, AC-5 verified: all 20 files exist and each is ≤ 400 KB (script-asserted).
-- Awaiting PM `APPROVE TICK-006` to archive this ticket.
+- Status: REOPENED — AC-4, AC-6, AC-7 not yet met per PM visual inspection.
+- Issue: Screenshots are cropped/half-cut; graphs in several slots are missing wire connections; slot content does not match chapter topic in multiple cases.
+- Changed: Added AC-6 (no-crop guarantee with 60px padding), AC-7 (logical relevance per slot), reset AC-4 to [ ]. Task T06e written and dispatched.
+- How to test: `npm run dev` → Learning page → click all 10 chapters → confirm all 20 example PNGs show fully-framed, correctly wired graphs matching the chapter description.
+- Playwright: pending T06e agent
+- Status: in-progress
