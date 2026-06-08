@@ -392,28 +392,54 @@ test.describe('Geometry Selection mode — Select.Faces pick-and-approve flow', 
     // raycasting in a headless environment.
     const hoverResult = await page.evaluate(() => {
       if (!window.Viewer3D) return 'NO_VIEWER';
+      var selMod = window.__selectionModeModule;
+      if (!selMod || typeof selMod.selectionMeshHover !== 'function' || typeof selMod.selectionMeshClick !== 'function') return 'NO_SELECTION_MODULE';
 
-      // Build a minimal fake mesh with a mutable material for color inspection
-      var fakeMaterial = { color: { getHex: function() { return 0x89b4fa; }, setHex: function(h) { this._hex = h; } }, emissive: { setHex: function() {} }, emissiveIntensity: 0, opacity: 1 };
-      var fakeMesh = { isMesh: true, material: fakeMaterial };
+      function makeMat() {
+        return {
+          color: {
+            _hex: 0x94e2d5,
+            set: function(hex) { this._hex = hex; },
+            getHex: function() { return this._hex; }
+          },
+          opacity: 0.85,
+          needsUpdate: false
+        };
+      }
 
-      // Simulate what the mousemove handler sets when it finds a hit
-      window.Viewer3D._hoveredSelectionMesh = fakeMesh;
-      window.__geoSelectorHoveredFaceMesh = fakeMesh;
+      var mat0 = makeMat();
+      var fakeItem = {
+        id: 'hover-color-item',
+        label: 'Hover color item',
+        nodeId: 'hover-node',
+        varName: '',
+        visible: true,
+        selected: false,
+        _selectionMeshResult: {
+          triangleToGroup: { 0: 0 },
+          materials: [mat0]
+        },
+        _selectionFaceGroups: [{ triangleIndices: [0], normal: [0, 0, 1] }],
+        _mesh3: {
+          getFaceVertices: function() { return [[0, 0, 0], [1, 0, 0], [1, 1, 0]]; },
+          vertices: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }, { x: 1, y: 1, z: 0 }],
+          faces: [[0, 1, 2]]
+        }
+      };
 
-      // Verify the exposed global exists and has a material
-      var hovered = window.__geoSelectorHoveredFaceMesh;
-      if (!hovered) return 'NO_HOVERED';
-      if (!hovered.material) return 'NO_MATERIAL';
-      // Return the hex color (our fake reports 0x89b4fa)
-      return hovered.material.color.getHex();
+      var hit = { faceIndex: 0, object: { isMesh: true } };
+      selMod.selectionMeshHover(hit, fakeItem);
+      var hoverHex = mat0.color.getHex();
+      selMod.selectionMeshClick(hit, fakeItem);
+      var selectedHex = mat0.color.getHex();
+      return { hoverHex: hoverHex, selectedHex: selectedHex };
     });
 
     // The hovered mesh material color must be the accent-blue 0x89b4fa
     expect(hoverResult).not.toBe('NO_VIEWER');
-    expect(hoverResult).not.toBe('NO_HOVERED');
-    expect(hoverResult).not.toBe('NO_MATERIAL');
-    expect(hoverResult).toBe(0x89b4fa);
+    expect(hoverResult).not.toBe('NO_SELECTION_MODULE');
+    expect(hoverResult.hoverHex).toBe(0x89b4fa);
+    expect(hoverResult.selectedHex).toBe(0xa6e3a1);
 
     // Clean up
     await page.evaluate(() => { if (window.__selectionCancel) window.__selectionCancel(); });
