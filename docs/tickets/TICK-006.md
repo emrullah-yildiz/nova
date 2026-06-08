@@ -1,13 +1,13 @@
 ---
 id: TICK-006
 title: Learning page — real Nova canvas screenshots in all 20 example slots
-status: ready
+status: in-progress
 priority: high
 type: feature
 sprint: 2026-06-05
 created: 2026-06-05
 lanes: ui
-branch: fix/tick-006-screenshot-math-inputs
+branch: merged to develop — awaiting PM sign-off
 ---
 
 ## User story
@@ -86,3 +86,12 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 - The screenshots are not showing correct connection. Some inputs are empty, some input number nodes have wrong number.
 
 → Captured as T06d task brief (docs/task-briefs/T06d-screenshot-viewport-connections.md). Fix A: set viewport to 1280×720, call app.fitToView() before each screenshot, crop to node bounding box. Fix B: audit all 20 slot builders for wrong input values or disconnected wires. Branch: fix/tick-006-screenshot-viewport.
+
+## Run comments
+
+Morpheus run 2026-06-08:
+
+- Current sprint focus: TICK-006 remains active for Sprint A3 focus.
+- Status: implementation is merged to `develop`; all ticket AC are checked, but Oracle approval is still unchecked, so the ticket is not archived.
+- No agent dispatched this run; PM did not provide `APPROVE TICK-006`, and there is no new task brief requested beyond the already-merged screenshot work.
+- How to test: open the Learning page on `develop`, click through all 10 chapters, and confirm all 20 example slots show the correct real Nova screenshots with no broken placeholders.

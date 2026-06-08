@@ -1,13 +1,13 @@
 ---
 id: TICK-007
 title: Learning page — interactive mini-canvas exercises
-status: ready
+status: in-progress
 priority: high
 type: feature
 sprint: 2026-06-05
 created: 2026-06-05
 lanes: ui, core
-branch: fix/tick-007-mini-canvas-real-nodes
+branch: merged to develop — awaiting manual AC verification
 ---
 
 ## User story
@@ -97,3 +97,12 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 - Still it is not the real canvas and real nodes. Number nodes are not correct.
 
 → Captured as T07e task brief (docs/task-briefs/T07e-mini-canvas-number-nodes.md). Fix: render Input.Number nodes in mini-canvas with a number spinner (<input type="number">) and range slider (<input type="range">) in the node body, matching real Nova canvas exactly. Branch: fix/tick-007-number-nodes.
+
+## Run comments
+
+Morpheus run 2026-06-08:
+
+- Current sprint focus: TICK-007 remains active for Sprint A3 focus.
+- Status: implementation is merged to `develop`, but AC-1, AC-3, AC-4, AC-5, and AC-8 still need manual browser verification before the ticket can be archived.
+- No agent dispatched this run; PM did not provide `APPROVE TICK-007`, and the remaining work is verification/sign-off rather than a new draft-ticket dispatch.
+- How to test: open the Learning overlay on `develop`, verify all 10 chapters contain the mini-canvas exercise, try compatible and incompatible wiring, submit both correct and incorrect solutions, and check the 1280×800 layout.

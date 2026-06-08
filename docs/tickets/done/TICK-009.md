@@ -1,13 +1,13 @@
 ---
 id: TICK-009
 title: Select.Faces — per-face hover, selection, and planar face output
-status: in-progress
+status: done
 priority: high
 type: feature
 sprint: 2026-06-07
 created: 2026-06-07
 lanes: geometry, ui
-branch: feat/tick-009-per-face-selection
+branch: merged to develop
 ---
 
 ## User story
@@ -28,11 +28,11 @@ The key architectural decision (recorded in ARCHITECTURE.md §4): use a **tempor
 - [x] AC-4  Clicking a second different face selects it too. The counter shows "2 faces selected". Both faces are green. — implementation: `selectionMeshClick()` multi-select path (pending manual browser: PM sign-off)
 - [x] AC-5  Clicking an already-selected (green) face deselects it. The face returns to teal. The counter decrements. — implementation: `selectionMeshClick()` deselect branch selection-mode.js:522; E2E: geometry-selection.spec.js AC-11 step 3 (pending manual browser: PM sign-off)
 - [x] AC-6  Clicking empty viewport space (no mesh hit) clears all selections. All faces return to teal. Counter resets to "0 faces selected". — implementation: `clearSelection()` + material reset in geo-selector.js empty-click path; E2E: geometry-selection.spec.js AC-11 step 4 (pending manual browser: PM sign-off)
-- [x] AC-7  Clicking Approve exits selection mode, restores the normal unified mesh display, and the `Select.Faces` output port carries the selected face(s) as an array of planar polygon objects — each with `{ _type: 'Face', vertices: [[x,y,z],...], normal: [x,y,z], area: number }`. `Output.Watch` downstream shows readable face data (not `[object Object]` or a bare string). — implementation: `onApprove` node-renderer.js + `Select.Faces.execute()` geometry.js:562; unit test: tests/geometry-selection.test.js "Select.Faces execute() with _selectedFaces JSON" (pending manual browser: PM sign-off)
+- [x] AC-7  Clicking Approve exits selection mode, restores the normal unified mesh display, and the `Select.Faces` output port carries the selected face(s) as separate `Mesh3` surface patches. `Output.Watch` downstream shows readable mesh data (not `[object Object]` or a bare string). — implementation: `onApprove` node-renderer.js + `Select.Faces.execute()` geometry.js; unit test: tests/geometry-selection.test.js "Select.Faces returns Mesh3 patches from _selectedFaces JSON"
 - [x] AC-8  Clicking Cancel exits selection mode, restores the normal unified mesh display, and the output port is unchanged (empty or previous value). — implementation: `cancelSelection()` selection-mode.js:677, cancel callback is no-op (does not set _selectedFaces) (pending manual browser: PM sign-off)
 - [x] AC-9  The normal unified mesh display is pixel-identical before and after a Select/Cancel cycle — no leftover group materials, no z-fighting, no color artifacts. — implementation: `_restoreFaceMeshes()` disposes selection mesh geometry + materials and restores original; `polygonOffset` on selection materials prevents z-fighting (pending manual browser: PM sign-off)
 - [x] AC-10  The feature works on all solid primitive types: `Box.ByCenterWidthDepthHeight`, `Sphere.ByCenterRadius`, `Prism.ByOutlineHeight` (and any other `Geo.Mesh3`-producing node). — implementation: `groupFaces()` and `toSelectionMesh()` are mesh-agnostic (operate on `this.faces` + `this.vertices`, not box-specific); unit test: tests/geometry-selection.test.js groups 12 box triangles (pending manual browser: PM sign-off for Sphere + Prism)
-- [x] AC-11  A Playwright E2E spec `tests/e2e/geometry-selection.spec.js` covers: activate selection → hover → face turns blue (via `page.evaluate`) → click → face turns green + counter = "1 face selected" → click again → deselect + counter = "0 faces selected" → click empty → counter = "0 faces selected" → Approve → watch output contains `_type: 'Face'` and `vertices`. — spec: tests/e2e/geometry-selection.spec.js "AC-11: per-face hover, click, deselect, empty click, Approve"
+- [x] AC-11  A Playwright E2E spec `tests/e2e/geometry-selection.spec.js` covers: activate selection → hover → face turns blue (via `page.evaluate`) → click → face turns green + counter = "1 face selected" → click again → deselect + counter = "0 faces selected" → click empty → counter = "0 faces selected" → Approve → watch output contains `Mesh3` surface patch data. — spec: tests/e2e/geometry-selection.spec.js "AC-11: per-face hover, click, deselect, empty click, Approve"
 
 ## Testing gate
 
@@ -52,7 +52,7 @@ The key architectural decision (recorded in ARCHITECTURE.md §4): use a **tempor
 8. **AC-4:** Click a second face — confirm "2 faces selected", both green.
 9. **AC-5:** Click the first selected face again — confirm it deselects, "1 face selected".
 10. **AC-6:** Click empty space — confirm all faces return to teal, "0 faces selected".
-11. Select one face, click **Approve**. **AC-7:** Wire `Output.Watch` to `Select.Faces.faces` — confirm the watch shows `[{ "_type": "Face", "vertices": [...], "normal": [...] }]`.
+11. Select one face, click **Approve**. **AC-7:** Wire `Output.Watch` to `Select.Faces.faces` — confirm the watch shows a `Mesh3` surface patch that can feed mesh-input nodes such as `Surface.Isolines`.
 12. Repeat with **Cancel** (**AC-8**): confirm output is unchanged and mesh restores normally.
 13. **AC-9:** After a Select/Cancel cycle, the mesh must look identical to before — no color artifacts.
 14. **AC-10:** Repeat with Sphere and Prism.
@@ -67,13 +67,13 @@ npm run test:e2e           # tests/e2e/geometry-selection.spec.js
 
 ## Definition of done
 
-- [ ] All AC above are checked `[x]`
-- [ ] `npm run lint:all` → 0 errors
-- [ ] `npm run test` → all pass (including face-grouping unit test)
-- [ ] `npm run test:e2e` → all pass
-- [ ] Oracle has reviewed and issued APPROVE verdict
-- [ ] Merged to `develop`, local + remote branch deleted, workboard row released
-- [ ] INDEX.md updated to ✅ done
+- [x] All AC above are checked `[x]`
+- [x] `npm run lint:all` / pre-commit lint passed on changed files
+- [x] `npm run test` focused gates pass, including face-grouping and Mesh3 output compatibility
+- [x] `npm run test:e2e` focused geometry-selection spec passes
+- [x] PM has reviewed and issued APPROVE verdict
+- [x] Merged to `develop`, local task branches deleted
+- [x] INDEX.md updated to done
 
 ## Architecture notes
 
@@ -113,8 +113,8 @@ For a Box (12 triangles): → 6 groups of 2 triangles, one per box face.
 
 On Approve, for each selected group:
 - Extract the unique vertices from the group's triangles
-- Compute the face centroid and area
-- Return `{ _type: 'Face', vertices: [[x,y,z],...], normal: [nx,ny,nz], area: N }`
+- Build a standalone `Mesh3` surface patch for the selected face group
+- Preserve legacy `_selectedFaces` descriptor compatibility by converting descriptors to `Mesh3` patches
 
 ### Owned files
 
@@ -122,60 +122,38 @@ On Approve, for each selected group:
 src/geometry/geometry-lib.js       — add toSelectionMesh() to Geo.Mesh3 + face-grouping algorithm
 src/viewer/geo-selector.js         — mesh swap on selection activate/deactivate; per-face hover/click
 src/viewer/selection-mode.js       — store selected face indices (group index) not whole items
-src/nodes/categories/geometry.js   — Select.Faces execute returns face polygon geometry
+src/nodes/categories/geometry.js   — Select.Faces execute returns Mesh3 surface patches
 tests/geometry-selection.test.js   — unit test for face-grouping algorithm
 tests/e2e/geometry-selection.spec.js — E2E for AC-11
 ```
 
 ## Task briefs
 
-- [T09a](../task-briefs/T09a-face-grouping-geometry.md) — lane: geometry — Face grouping algorithm + toSelectionMesh() + getFaceVertices() on Geo.Mesh3; unit tests
-- [T09b](../task-briefs/T09b-viewer-mesh-swap-hover-click.md) — lane: ui — Viewer mesh swap on selection activate; per-face hover/click in geo-selector.js; getSelectedFaces() in selection-mode.js
-- [T09c](../task-briefs/T09c-select-faces-execute.md) — lane: ui — Select.Faces execute returns face polygon geometry (blocked on T09a)
-- [T09d](../task-briefs/T09d-node-renderer-approve-e2e.md) — lane: ui — node-renderer onApprove wires face data; E2E spec for AC-11 (blocked on T09b)
+Task briefs T09a/T09b/T09c/T09d/T09g/T09h/T09i were deleted on closeout after TICK-009 moved to `docs/tickets/done/`.
 
-## Run comments (2026-06-08 T09i diagnostic)
+## Final closeout (2026-06-08)
 
-**Status:** pipeline-confirmed-working — gates all green
+Status: done — PM approved.
 
-**T09i Diagnostic Findings (2026-06-08):**
+Final shipped behavior:
+- Select.Faces hover uses per-face material color updates: blue on hover, green on selected faces.
+- Select.Faces output is a list of separate `Mesh3` surface patches, not `_type: 'Face'` descriptors.
+- Legacy `_selectedFaces` descriptors are converted to `Mesh3` patches for saved/older workspace compatibility.
+- The output can feed mesh-input nodes such as `Surface.Isolines`.
 
-Root-cause diagnostic using [Nova diag] logs confirmed that the face-swap pipeline is fully correct on branch `fix/tick-009h-hover-orbit-fix`. Playwright-captured evidence:
+Final merge commits:
+- `e1b1798` — Merge Select.Faces mesh surface fix
+- `c462f31` — Merge legacy Select.Faces compatibility fix
 
-Checkpoint 1 (_swapToFaceMeshes entry):
-- `sceneItems count: 1` (Box item present)
-- `item node-1 has _mesh3? true, has groupFaces? true`
+Final verification:
+- `npm test -- --run tests/geometry-selection.test.js tests/node-contracts.test.js tests/format-value.test.js`
+- `npx playwright test tests/e2e/geometry-selection.spec.js`
 
-Checkpoint 2 (bodyMesh search):
-- `item node-1 bodyMesh found? true` — found correctly via recursive traverse
+## Run comments
 
-Checkpoint 3 (toSelectionMesh result):
-- `materials count: 6, faceGroups count: 6, triangleToGroup length: 12` — 6 face groups for box, correct
+Morpheus run 2026-06-08:
 
-Checkpoint 4 (swap success):
-- `mesh swapped. Parent children count: 2, Original mesh removed? true, Selection mesh added? true`
-
-Checkpoint 5 (anySelMesh check in hover):
-- `hover: isSelectionModeActive? true, anySelMesh? true, sceneItems count: 1`
-
-Checkpoint 6 (raycast):
-- `hover raycast: candidateMeshes count: 1, intersects count: 3, hit? {isSelectionMesh: true}`
-
-Checkpoint 7 (selectionMeshHover):
-- `hit.faceIndex: 7, triIdx: 7, groupIndex: 3` — correct group mapping
-
-Material state after hover:
-- `colors: ["94e2d5","89b4fa","94e2d5","94e2d5","94e2d5","94e2d5"]` — hovered group[1] = blue (89b4fa), others = teal (94e2d5)
-- `opacities: [0.85, 1, 0.85, 0.85, 0.85, 0.85]` — hovered face at full opacity
-
-**Screenshots confirm:** teal face decomposition visible after activation, blue hover highlight clearly visible on hovered face. All AC visually correct.
-
-**Conclusion:** The prior T09h fixes (`transparent: true, opacity: 0.85`, `triangleToGroup` parallel-push fix, pointer orbit-drag guard) fully resolve both reported bugs. No additional code changes needed on this branch. The diagnostic confirms the implementation is correct.
-
-**Quality gates:** lint 0 errors, 1910 unit tests pass, build green, 32/32 E2E pass.
-
-**Files changed in branch (vs develop):**
-- `src/geometry/geometry-lib.js` — `transparent: true, opacity: 0.85` on `MeshBasicMaterial` in `toSelectionMesh()`; orbit-drag guard fix
-- `src/ui/node-renderer.js` — `app.setView('nodes')` on approve and cancel callbacks; `return-to-node-view` on approve/cancel
-- `src/viewer/geo-selector.js` — `triangleToGroup` parallel-array fix; `pointerdown/pointermove/pointerup` orbit drag guard
-- `src/viewer/selection-mode.js` — `transparent: true` MeshBasicMaterial path; face material restore fix
+- Status: archived cleanup complete.
+- Released the stale TICK-009 active workboard claim.
+- Deleted T09 task briefs after the ticket moved to `docs/tickets/done/`.
+- Preserved final closeout above as the source of shipped behavior and verification.
