@@ -536,10 +536,10 @@ export const geometryNodes = [
     subGroup: 'Selection',
     icon: '⬡',
     aliases: ['select-faces'],
-    description: 'Activates interactive face-selection mode in the 3D viewport. Click the Select button, then click surface or solid mesh geometry in the 3D view to build a selection set. Press Approve (green ✓) to confirm or Cancel (red ✗) to discard. Outputs an array of selected mesh geometry objects with vertex and face data.',
+    description: 'Activates interactive face-selection mode in the 3D viewport. Click the Select button, then click surface or solid mesh geometry in the 3D view to build a selection set. Press Approve (green ✓) to confirm or Cancel (red ✗) to discard. Outputs an array of selected face geometry objects with vertices, normal, and area.',
     inputs: [],
     outputs: [
-      { id: 'faces', name: 'Faces', type: 'mesh', description: 'Selected faces as a unified Mesh3 (same format as Surface node outputs)' }
+      { id: 'faces', name: 'Faces', type: 'list', description: 'Selected faces as separate planar face objects' }
     ],
     controls: [
       { id: '_selectedLabels', type: 'hidden', default: '' },
@@ -553,26 +553,36 @@ export const geometryNodes = [
       csharp: 'var {{faces}} = SelectFaces();'
     },
     execute(context, inputs, controlValues) {
-      // _selectedMesh: Mesh3 JSON written by node-renderer.js on Approve.
+      // _selectedFaces is written by node-renderer.js on Approve. Return it as
+      // the primary value so the Data Inspector shows one row per surface.
+      var facesRaw = controlValues._selectedFaces;
+      if (facesRaw) {
+        try {
+          var faceData = JSON.parse(facesRaw);
+          if (Array.isArray(faceData)) return { faces: faceData };
+        } catch (_) { return { faces: [] }; }
+      }
+
+      // Backward compatibility: older saved graphs may only have _selectedMesh.
       var meshRaw = controlValues._selectedMesh;
       if (meshRaw) {
         var meshData;
-        try { meshData = JSON.parse(meshRaw); } catch (_) { return { faces: null }; }
+        try { meshData = JSON.parse(meshRaw); } catch (_) { return { faces: [] }; }
         if (meshData && meshData._type === 'Mesh3' && Array.isArray(meshData.vertices) && meshData.vertices.length > 0) {
           var verts = meshData.vertices.map(function(v) { return new Geo.Point3(v.x, v.y, v.z); });
-          return { faces: new Geo.Mesh3(verts, meshData.faces || [], meshData.color || 0x89b4fa) };
+          return { faces: [new Geo.Mesh3(verts, meshData.faces || [], meshData.color || 0x89b4fa)] };
         }
       }
-      return { faces: null };
+      return { faces: [] };
     },
     help: {
       inputs: [],
-      outputs: [{ name: 'Faces', description: 'Selected faces as a unified Mesh3 — same format as Surface node outputs, compatible with any mesh-input port' }],
+      outputs: [{ name: 'Faces', description: 'Selected faces as separate planar objects with vertices, normal, and area' }],
       example: {
         title: 'Select faces and inspect them',
         nodes: [
           { type: 'Select.Faces', x: 0, y: 0, controls: {
-            _selectedMesh: '{"_type":"Mesh3","vertices":[{"x":0.5,"y":-0.5,"z":-0.5,"_type":"Point3"},{"x":0.5,"y":0.5,"z":-0.5,"_type":"Point3"},{"x":0.5,"y":0.5,"z":0.5,"_type":"Point3"},{"x":0.5,"y":-0.5,"z":0.5,"_type":"Point3"}],"faces":[[0,1,2],[0,2,3]],"color":5878266}'
+            _selectedFaces: '[{"_type":"Face","vertices":[[0.5,-0.5,-0.5],[0.5,0.5,-0.5],[0.5,0.5,0.5],[0.5,-0.5,0.5]],"normal":[1,0,0],"area":1}]'
           } },
           { type: 'Output.Watch', x: 240, y: 0 }
         ],

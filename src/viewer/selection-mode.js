@@ -470,6 +470,7 @@ export function activateSelectionMode(nodeId, mode, onApprove, onCancel) {
   if (typeof document !== 'undefined') {
     _showToolbar();
     _applySelectionHighlight();
+    _requestRender();
   }
 }
 
@@ -594,6 +595,7 @@ export function selectionMeshClick(hit, sceneItem) {
   }
 
   _updateToolbarCount();
+  _requestRender();
 }
 
 /**
@@ -721,6 +723,7 @@ export function selectionModeClick(item, hit) {
 
   _applySelectionHighlight();
   _updateToolbarCount();
+  _requestRender();
 }
 
 /**
@@ -786,6 +789,7 @@ export function clearSelection() {
 
   _applySelectionHighlight();
   _updateToolbarCount();
+  _requestRender();
 }
 
 export function selectionModeHover(item, hit) {

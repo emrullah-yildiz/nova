@@ -235,22 +235,15 @@ test.describe('Geometry Selection mode — Select.Faces pick-and-approve flow', 
     // calling approveSelection through __selectionApprove after injecting a label
     // into the node's controlValues directly (simulates a prior approved selection).
     if (injected === 'fallback' || injected === false) {
-      // Simulate Approve by directly setting _selectedMesh JSON on the node.
-      // Select.Faces execute() reads _selectedMesh (Mesh3 format) since T09c.
+      // Simulate Approve by directly setting _selectedFaces JSON on the node.
+      // Select.Faces execute() reads this face-list format for inspector output.
       await page.evaluate((selId) => {
         const nd = window.app.nodes.find(function(n) { return n.id === selId; });
         if (!nd) return;
         if (!nd.controlValues) nd.controlValues = {};
-        nd.controlValues._selectedMesh = JSON.stringify({
-          _type: 'Mesh3',
-          vertices: [
-            { x: 0.5, y: -0.5, z: 0.5, _type: 'Point3' },
-            { x: -0.5, y: -0.5, z: 0.5, _type: 'Point3' },
-            { x: -0.5, y: -0.5, z: -0.5, _type: 'Point3' }
-          ],
-          faces: [[0, 1, 2]],
-          color: 5878266
-        });
+        nd.controlValues._selectedFaces = JSON.stringify([
+          { _type: 'Face', vertices: [[0.5, -0.5, 0.5], [-0.5, -0.5, 0.5], [-0.5, -0.5, -0.5]], normal: [0, -1, 0], area: 0.5 }
+        ]);
         nd.controlValues._selectedLabels = 'FallbackBox';
         window.app.renderNode(nd);
         window.app.runGraph();
@@ -262,21 +255,14 @@ test.describe('Geometry Selection mode — Select.Faces pick-and-approve flow', 
       });
       // Wait for toolbar to close before back-filling data.
       await expect(page.locator('#selection-mode-toolbar')).not.toBeVisible({ timeout: 2000 });
-      // onApprove wrote empty _selectedMesh because the fake item had no mesh3/faceGroups.
-      // Back-fill with a minimal Mesh3 so the graph data-flow can be verified.
+      // onApprove may write empty _selectedFaces because the fake item has no
+      // mesh3/faceGroups. Back-fill a minimal Face so graph data-flow is verified.
       await page.evaluate((selId) => {
         const nd = window.app.nodes.find(function(n) { return n.id === selId; });
         if (!nd) return;
-        nd.controlValues._selectedMesh = JSON.stringify({
-          _type: 'Mesh3',
-          vertices: [
-            { x: 0.5, y: -0.5, z: 0.5, _type: 'Point3' },
-            { x: -0.5, y: -0.5, z: 0.5, _type: 'Point3' },
-            { x: -0.5, y: -0.5, z: -0.5, _type: 'Point3' }
-          ],
-          faces: [[0, 1, 2]],
-          color: 5878266
-        });
+        nd.controlValues._selectedFaces = JSON.stringify([
+          { _type: 'Face', vertices: [[0.5, -0.5, 0.5], [-0.5, -0.5, 0.5], [-0.5, -0.5, -0.5]], normal: [0, -1, 0], area: 0.5 }
+        ]);
       }, ids.selId);
     }
 
@@ -426,10 +412,10 @@ test.describe('Geometry Selection mode — Select.Faces pick-and-approve flow', 
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // AC-9: Output.Watch after Approve shows structured Mesh geometry data
-  //       (contains "_type" and "Mesh" and "vertexCount"), NOT a bare string label.
+  // AC-9: Output.Watch after Approve shows structured Face geometry data
+  //       (contains "_type", "Face", and "vertices"), NOT a bare string label.
   // ─────────────────────────────────────────────────────────────────────────────
-  test('AC-9: Approving a face selection stores structured Mesh geometry; Output.Watch shows vertexCount', async ({ page }) => {
+  test('AC-9: Approving a face selection stores structured Face geometry; Output.Watch shows vertices', async ({ page }) => {
     await waitForApp(page);
 
     // Build graph: Select.Faces → Output.Watch (wired on 'faces' port)
@@ -444,23 +430,15 @@ test.describe('Geometry Selection mode — Select.Faces pick-and-approve flow', 
     expect(ids.selId).toBeTruthy();
     expect(ids.watchId).toBeTruthy();
 
-    // Directly inject _selectedMesh JSON as if the user had approved a real selection
-    // (simulates what node-renderer.js does in the onApprove callback since T09c).
+    // Directly inject _selectedFaces JSON as if the user had approved a real selection
+    // (simulates what node-renderer.js does in the onApprove callback).
     await page.evaluate((selId) => {
       const nd = window.app.nodes.find(function(n) { return n.id === selId; });
       if (!nd) return;
       if (!nd.controlValues) nd.controlValues = {};
-      nd.controlValues._selectedMesh = JSON.stringify({
-        _type: 'Mesh3',
-        vertices: [
-          { x: 0.5, y: -0.5, z: -0.5, _type: 'Point3' },
-          { x: 0.5, y: 0.5, z: -0.5, _type: 'Point3' },
-          { x: 0.5, y: 0.5, z: 0.5, _type: 'Point3' },
-          { x: 0.5, y: -0.5, z: 0.5, _type: 'Point3' }
-        ],
-        faces: [[0, 1, 2], [0, 2, 3]],
-        color: 5878266
-      });
+      nd.controlValues._selectedFaces = JSON.stringify([
+        { _type: 'Face', vertices: [[0.5, -0.5, -0.5], [0.5, 0.5, -0.5], [0.5, 0.5, 0.5], [0.5, -0.5, 0.5]], normal: [1, 0, 0], area: 1 }
+      ]);
       nd.controlValues._selectedLabels = 'Box (node-99)';
       window.app.renderNode(nd);
       window.app.runGraph();
@@ -475,13 +453,13 @@ test.describe('Geometry Selection mode — Select.Faces pick-and-approve flow', 
       try { return JSON.stringify(val); } catch (_) { return String(val); }
     }, ids.watchId);
 
-    // AC-9 assertions: output must be a Mesh3 with real vertex/face data
+    // AC-9 assertions: output must be a list of Face objects with real vertex data
     expect(watchJSON).toBeTruthy();
     expect(watchJSON).not.toBe('__empty__');
     expect(watchJSON).toContain('_type');
-    expect(watchJSON).toContain('Mesh3');
+    expect(watchJSON).toContain('Face');
     expect(watchJSON).toContain('vertices');
-    expect(watchJSON).toContain('faces');
+    expect(watchJSON).toContain('normal');
     // Must NOT be a plain string label only
     expect(watchJSON).not.toMatch(/^"[A-Za-z].*"$/);
   });
@@ -852,9 +830,9 @@ test.describe('Geometry Selection mode — Select.Faces pick-and-approve flow', 
     if (watchJSON !== '__empty__' && watchJSON !== '__no_node__') {
       expect(watchJSON).toBeTruthy();
       expect(watchJSON).not.toContain('[object Object]');
-      // Output is now a Mesh3 (since face-output-mesh3 branch).
+      // Output is a list of Face geometry objects.
       if (watchJSON.includes('_type')) {
-        expect(watchJSON).toContain('Mesh3');
+        expect(watchJSON).toContain('Face');
         expect(watchJSON).toContain('vertices');
       }
     } else {
