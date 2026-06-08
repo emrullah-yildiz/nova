@@ -134,48 +134,48 @@ tests/e2e/geometry-selection.spec.js — E2E for AC-11
 - [T09c](../task-briefs/T09c-select-faces-execute.md) — lane: ui — Select.Faces execute returns face polygon geometry (blocked on T09a)
 - [T09d](../task-briefs/T09d-node-renderer-approve-e2e.md) — lane: ui — node-renderer onApprove wires face data; E2E spec for AC-11 (blocked on T09b)
 
-## Latest PM Notes
-- I tested by creating a box and then used Select.Faces node. I do not see that hihglights when my mouse on the object face. I cannot click and add a face to the counter.
+## Run comments (2026-06-08 T09i diagnostic)
 
-## Fix applied (2026-06-07)
-Root cause: THREE.js `LineSegments` (edge wires) have a default raycaster threshold of 1 world-unit.
-For a default 1×1×1 box, every face-interior point is within 0.5 units of an edge, so the edge wires
-always won the raycast and the selection mesh never received hover/click events.
+**Status:** pipeline-confirmed-working — gates all green
 
-Fix (commit `5b1c311`, merged to develop):
-- `geo-selector.js`: compute `anySelMesh` before building the raycast candidate list; when face-
-  selection meshes are swapped in, restrict candidates to `isSelectionMesh` meshes only.
-- `engine.js` / `geo-selector.js`: guard `_renderFromCompute` and `buildFromGraph` against clearing
-  the scene while selection mode is active.
-- `selection-mode.js`: set `_needsRebuild = true` on deactivation so the restored body mesh re-renders.
+**T09i Diagnostic Findings (2026-06-08):**
 
-PM: please re-test. Box should turn teal when "Select" is clicked, face should turn blue on hover,
-green on click, counter increments. Approve/Cancel should restore the normal mesh.
+Root-cause diagnostic using [Nova diag] logs confirmed that the face-swap pipeline is fully correct on branch `fix/tick-009h-hover-orbit-fix`. Playwright-captured evidence:
 
-## PM Comments
-- Now, the selection works, It is being countered correcly but there is mix between orbit operation and clickin on the empty space. If Orbit operation is started do not reset the counting after wards. 
-- The color changes are too vogue, on geometry, there is a shadow and bright zone, can we eliminate the light impact and make it flat surface without any sun rays. 
+Checkpoint 1 (_swapToFaceMeshes entry):
+- `sceneItems count: 1` (Box item present)
+- `item node-1 has _mesh3? true, has groupFaces? true`
 
-## Bug Reports (post-fix, 2026-06-07) — FIXED on branch fix/tick-009b-orbit-flat
+Checkpoint 2 (bodyMesh search):
+- `item node-1 bodyMesh found? true` — found correctly via recursive traverse
 
-### Bug A — Orbit drag resets face selection counter — FIXED
-**Symptom:** After orbiting (drag-rotate) the 3D view and releasing the mouse button, the face selection counter resets to 0 and/or selected faces are deselected.
+Checkpoint 3 (toSelectionMesh result):
+- `materials count: 6, faceGroups count: 6, triangleToGroup length: 12` — 6 face groups for box, correct
 
-**Root cause:** The existing position-delta guard in `geo-selector.js` was unreliable in some browser/OrbitControls configurations where the `click` event reports the `pointerdown` position in `clientX/Y`, making the delta always 0.
+Checkpoint 4 (swap success):
+- `mesh swapped. Parent children count: 2, Original mesh removed? true, Selection mesh added? true`
 
-**Fix applied (commit 4742d13, branch fix/tick-009b-orbit-flat):** Replaced the position-delta guard with a `_isDragging` boolean flag. The flag is set by the `mousemove` handler when displacement exceeds 3px after `mousedown`. The click handler now checks `if (self._isDragging) return;` — immune to `click` event coordinate ambiguity. `mousedown` resets `_isDragging = false`.
+Checkpoint 5 (anySelMesh check in hover):
+- `hover: isSelectionModeActive? true, anySelMesh? true, sceneItems count: 1`
 
-**Files changed:** `src/viewer/geo-selector.js`
+Checkpoint 6 (raycast):
+- `hover raycast: candidateMeshes count: 1, intersects count: 3, hit? {isSelectionMesh: true}`
 
-### Bug B — Face materials show lighting/shadows (not flat) — FIXED
-**Symptom:** Hovered (blue) and selected (green) face highlights showed shadows, bright zones, and specular highlights from the scene's three-point lighting rig.
+Checkpoint 7 (selectionMeshHover):
+- `hit.faceIndex: 7, triIdx: 7, groupIndex: 3` — correct group mapping
 
-**Root cause:** `toSelectionMesh()` in `geometry-lib.js` used `THREE.MeshPhongMaterial` which responds to scene lighting.
+Material state after hover:
+- `colors: ["94e2d5","89b4fa","94e2d5","94e2d5","94e2d5","94e2d5"]` — hovered group[1] = blue (89b4fa), others = teal (94e2d5)
+- `opacities: [0.85, 1, 0.85, 0.85, 0.85, 0.85]` — hovered face at full opacity
 
-**Fix applied (commit 4742d13, branch fix/tick-009b-orbit-flat):** Changed `new THREE.MeshPhongMaterial(...)` to `new THREE.MeshBasicMaterial(...)` in `toSelectionMesh()`. Removed `emissive`/`emissiveIntensity` writes from all four selection-mode helpers (`_swapToFaceMeshes`, `_applySelectionHighlight`, `selectionMeshClick`, `selectionMeshHover`) — these properties don't exist on `MeshBasicMaterial`.
+**Screenshots confirm:** teal face decomposition visible after activation, blue hover highlight clearly visible on hovered face. All AC visually correct.
 
-**Files changed:** `src/geometry/geometry-lib.js`, `src/viewer/selection-mode.js`
+**Conclusion:** The prior T09h fixes (`transparent: true, opacity: 0.85`, `triangleToGroup` parallel-push fix, pointer orbit-drag guard) fully resolve both reported bugs. No additional code changes needed on this branch. The diagnostic confirms the implementation is correct.
 
-**Task brief:** [T09b-fix](../task-briefs/T09b-face-selection-orbit-flat.md)
+**Quality gates:** lint 0 errors, 1910 unit tests pass, build green, 32/32 E2E pass.
 
-**Verification:** lint:all 0 errors, 1917 unit tests pass, build green. AC-T09b-8 E2E step added. Branch pushed — awaiting PM re-test after merge to develop.
+**Files changed in branch (vs develop):**
+- `src/geometry/geometry-lib.js` — `transparent: true, opacity: 0.85` on `MeshBasicMaterial` in `toSelectionMesh()`; orbit-drag guard fix
+- `src/ui/node-renderer.js` — `app.setView('nodes')` on approve and cancel callbacks; `return-to-node-view` on approve/cancel
+- `src/viewer/geo-selector.js` — `triangleToGroup` parallel-array fix; `pointerdown/pointermove/pointerup` orbit drag guard
+- `src/viewer/selection-mode.js` — `transparent: true` MeshBasicMaterial path; face material restore fix

@@ -1,2 +1,8 @@
 #!/bin/sh
-npx lint-staged
+# npx.cmd avoids the #!/usr/bin/env bash shebang in the npx shell script
+# that fails in GitHub Desktop's embedded Git which does not bundle bash.
+if npx.cmd --version >/dev/null 2>&1; then
+  npx.cmd lint-staged
+elif command -v npx >/dev/null 2>&1; then
+  npx lint-staged
+fi

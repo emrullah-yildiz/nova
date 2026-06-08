@@ -961,9 +961,12 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
 
           self.renderNode(nd);
           self.runGraph();
+          // Return to node view so the user sees the updated Select.Faces node.
+          if (typeof app.setView === 'function') app.setView('nodes');
         },
         function () {
-          // Cancel: nothing to do — do NOT write _selectedFaces here.
+          // Cancel: return to node view.
+          if (typeof app.setView === 'function') app.setView('nodes');
         }
       );
     } else {

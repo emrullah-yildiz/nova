@@ -651,13 +651,19 @@ class _Mesh3 {
     geometry.setAttribute('position', new THREE.BufferAttribute(verts, 3));
 
     // Build triangle index array ordered by group; track each group's slice.
+    // triangleToGroup is built as a parallel array so its indices match
+    // hit.faceIndex (the triangle's position in the reordered buffer), not
+    // the original face indices. Each push to indexArr is accompanied by a
+    // push of the owning group index so the two arrays stay in sync.
     const indexArr = [];
+    const triangleToGroup = [];
     for (let gi = 0; gi < faceGroups.length; gi++) {
       const startOffset = indexArr.length;
       const tris = faceGroups[gi].triangleIndices;
       for (let k = 0; k < tris.length; k++) {
         const f = this.faces[tris[k]];
         indexArr.push(f[0], f[1], f[2]);
+        triangleToGroup.push(gi);
       }
       const count = indexArr.length - startOffset;
       geometry.addGroup(startOffset, count, gi);
@@ -672,6 +678,8 @@ class _Mesh3 {
     // just flat solid teal/blue/green as the PM requires.
     const baseMat = new THREE.MeshBasicMaterial({
       color: 0x94e2d5,
+      transparent: true,
+      opacity: 0.85,
       side: THREE.DoubleSide,
       polygonOffset: true,
       polygonOffsetFactor: 1,
@@ -681,15 +689,6 @@ class _Mesh3 {
 
     const mesh = new THREE.Mesh(geometry, materials);
     mesh.userData.isSelectionMesh = true;
-
-    // Build triangleToGroup lookup: for each original triangle, which group owns it?
-    const triangleToGroup = new Array(this.faces.length);
-    for (let gi = 0; gi < faceGroups.length; gi++) {
-      const tris = faceGroups[gi].triangleIndices;
-      for (let k = 0; k < tris.length; k++) {
-        triangleToGroup[tris[k]] = gi;
-      }
-    }
 
     return { mesh, materials, faceGroups, triangleToGroup };
   }
