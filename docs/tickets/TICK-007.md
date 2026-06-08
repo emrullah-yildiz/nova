@@ -82,8 +82,9 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 - [T07c](../task-briefs/T07c-learning-exercises-e2e.md) — lane: ui — Write tests/e2e/learning-interactive.spec.js (open overlay → ch01 → draw wire → Submit → assert success). Depends on T07a + T07b merge.
 - [T07d](../task-briefs/T07d-mini-canvas-real-nodes-wires.md) — lane: ui (switch) — PM re-open: fix mini-canvas so nodes look like real Nova canvas nodes and the pending wire correctly tracks the cursor from output port click to landing on an input port.
 - [T07e](../task-briefs/T07e-mini-canvas-number-nodes.md) — lane: ui (switch) — PM re-open: Input.Number nodes must show value spinner + range slider in node body, matching real Nova canvas
-- [T07f](../task-briefs/T07f-wire-drag-ux.md) — lane: ui (switch) — PM rework 2026-06-08: change wire interaction from click-to-start + click-to-end to mousedown-drag-mouseup; update E2E spec to use drag gestures. Covers AC-2, AC-10.
-- [T07g](../task-briefs/T07g-unique-chapter-exercises.md) — lane: core (neo) — PM rework 2026-06-08: redesign all 10 exercises so each is unique and tailored to its chapter topic; add logical consistency check. Covers AC-11, AC-12.
+- [T07f](../task-briefs/T07f-wire-drag-ux.md) — lane: ui (switch) — PM rework 2026-06-08: change wire interaction from click-to-start + click-to-end to mousedown-drag-mouseup; update E2E spec to use drag gestures. Covers AC-2, AC-10. — SUPERSEDED by T07h
+- [T07g](../task-briefs/T07g-unique-chapter-exercises.md) — lane: core (neo) — PM rework 2026-06-08: redesign all 10 exercises so each is unique and tailored to its chapter topic; add logical consistency check. Covers AC-11, AC-12. — SUPERSEDED by T07h (port schema additions) + existing exercises.js which already has domain-appropriate exercises
+- [T07h](../task-briefs/T07h-real-canvas-embed.md) — lane: ui (switch) — PM rework 2026-06-08 (second pass): add pan/zoom to mini-canvas (feel like real Nova canvas); ensure all node types in exercises have correct PORT_SCHEMA + NODE_META entries; confirm drag wire UX is present; update E2E spec. Covers AC-2, AC-8, AC-10, AC-11, AC-12.
 
 ## Notes
 
@@ -102,7 +103,7 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 
 → Captured as T07e task brief (docs/task-briefs/T07e-mini-canvas-number-nodes.md). Fix: render Input.Number nodes in mini-canvas with a number spinner (<input type="number">) and range slider (<input type="range">) in the node body, matching real Nova canvas exactly. Branch: fix/tick-007-number-nodes.
 
-## Rework — 2026-06-08 (PM feedback)
+## Rework — 2026-06-08 (PM feedback, first pass — T07f + T07g)
 
 PM reported two classes of defect after testing the interactive mini-canvas:
 
@@ -111,13 +112,23 @@ PM reported two classes of defect after testing the interactive mini-canvas:
 
 AC-2 and AC-10 reopened for wire drag UX. AC-11 and AC-12 added for exercise uniqueness and cross-item logical consistency. Two tasks dispatched in parallel: T07f (switch, wire drag) and T07g (neo, exercise redesign).
 
+## Rework — 2026-06-08 (PM feedback, second pass — T07h)
+
+PM directed three improvements for the interactive canvas:
+
+1. **"The interactive canvas should be like the Nova canvas where you can pan and move around."** The mini-canvas has no pan/zoom. Add pan (middle-mouse drag or Space+drag) and zoom (scroll wheel toward cursor) to `src/ui/mini-canvas.js` using a CSS transform on a viewport wrapper.
+2. **"I need a web view there like Nova canvas."** The mini-canvas must visually match the real Nova canvas at the same zoom level — same node CSS classes (already done), same port layout, same control widgets. Audit `PORT_SCHEMA` and `NODE_META` for completeness against all exercise node types.
+3. **"Make sure the interactive examples contain real nodes not representatives."** The mini-canvas already uses real Nova CSS classes and the real compute engine. The remaining gap is: (a) pan/zoom feel, (b) any missing node type schemas, (c) confirm drag wire UX is present.
+
+T07h supersedes T07f and T07g. Branch: `fix/tick-007-real-canvas-embed`.
+
 ## Run comments
 
-Morpheus run 2026-06-08 (PM rework):
+Morpheus run 2026-06-08 (PM rework, second pass):
 
-- Status: REOPENED — AC-2, AC-10, AC-11, AC-12 not yet met per PM feedback.
-- Issue: Wire interaction uses click-click not drag; all 10 exercises use the same math-only pattern regardless of chapter topic.
-- Changed: AC-2 and AC-10 reopened; AC-11 and AC-12 added; T07f (wire drag UX) and T07g (unique exercises per chapter) dispatched in parallel.
-- How to test: `npm run dev` → Learning page → open any chapter → confirm wire draws by holding and dragging; confirm each chapter's exercise uses nodes relevant to the chapter topic.
-- Playwright: pending T07f agent (drag spec update)
+- Status: REOPENED — AC-2, AC-8, AC-10, AC-11, AC-12 not yet met per PM feedback.
+- Issue: Mini-canvas has no pan/zoom (does not feel like the real Nova canvas). Some node types used in exercises may be missing from PORT_SCHEMA. Drag wire UX may need verification.
+- Changed: T07h brief written covering pan/zoom, PORT_SCHEMA audit, drag UX verification, and E2E spec update. T07f and T07g superseded by T07h. Branch: fix/tick-007-real-canvas-embed.
+- How to test: npm run dev → Learning page → any chapter exercise → scroll wheel to zoom; middle-mouse drag to pan; drag wire from output to input port → wire connects. npm run test:e2e must pass.
+- Playwright: pending T07h agent
 - Status: in-progress

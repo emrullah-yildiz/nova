@@ -12,13 +12,9 @@
 
 ## Sprint A2
 
-1. **Select.Faces per-face selection** — When a mesh object exists in the scene, activating Select.Faces mode must let the user hover individual faces (each face highlights blue on hover), click to select them (turns green, counter increments), click again to deselect (counter decrements), click empty space to clear all (counter resets to 0). Output must be the selected face(s) as real planar geometry. The mesh displays as a unified whole in normal mode — only selection mode decomposes it into individually-selectable faces using Three.js BufferGeometry groups + per-face materials.
-
-## Sprint A3 (next)
-
-- Learning page screenshots — real Nova canvas screenshots in the 20 screenshot slots (TICK-006).
-- Learning page interactive exercises — mini-canvas inside learning overlay with real Nova nodes (TICK-007).
-- Live agent dashboard — futuristic real-time view of agent activity (TICK-008).
+1. TCK 006
+2. TCK 007
+3. TCK 008
 
 ## Backlog
 
@@ -41,8 +37,9 @@
 ## Run Session
 
 ### Planning
-- The screenshots are half-cut and not relevant to the exercise. They are not looking correctly wired as well. 
-- Mini interactive canvas looks good but the wire movement should be click hold and connect. not click only. The exercise should not be same for all them. Do a logical check for items like images and interactive examples and topics.
+- Update screenshots to be related with the topic of the learning content. 
+- Make sure that the interactive canvas i like a the Nova canvas where you can pan and move around. I need a web view there like Nova canvas. 
+- MAke sure that the interactive examples contains real nodes not representatives. 
 
 
 ### Coordinator Response
@@ -54,40 +51,41 @@
     {
       "id": "TICK-006",
       "title": "Learning page — real Nova canvas screenshots in all 20 example slots",
-      "status": "reopened — rework in progress",
-      "issue": "Screenshots are cropped/half-cut (nodes clipped at viewport edge); several slot graphs are not relevant to their chapter topic; intro-simple shows Math.Multiply with the b input visually disconnected.",
+      "status": "reopened — rework in progress (T06f, second pass)",
+      "issue": "T06e audit matrix was written without reading src/ui/learning-page.js. Several builders produce wrong graphs: intro-advanced shows a 2-node multiply (result 30) instead of the 3-input parametric tower (result 600); data-types-advanced uses wrong node types; math-simple missing Math.Sqrt; code-terminal builders do not match their step descriptions; geometry-advanced uses wrong node names.",
       "changed": [
-        "docs/tickets/TICK-006.md: AC-4 reopened; AC-6 (no-crop guarantee, 60px padding) and AC-7 (slot-topic relevance) added; Rework section and updated Run comments written; branch set to fix/tick-006-screenshot-rework.",
-        "docs/task-briefs/T06e-screenshot-crop-relevance.md: new brief covering bounding-box crop fix and full 20-slot audit matrix.",
-        "docs/tickets/INDEX.md: status row updated.",
-        "docs/agent-workboard.md: T06e row claimed by switch."
+        "docs/task-briefs/T06f-content-aligned-screenshots.md: new brief with corrected audit matrix derived directly from learning-page.js source. Supersedes T06e.",
+        "docs/tickets/TICK-006.md: second Rework section added; Task briefs section updated; Run comments updated.",
+        "docs/tickets/INDEX.md: branch updated to fix/tick-006-content-aligned-screenshots.",
+        "docs/agent-workboard.md: T06e row replaced with T06f row for switch agent."
       ],
       "how_to_test": [
-        "After T06e merges: npm run dev → open Learning page → click all 10 chapters.",
-        "Each of the 20 example slots must show a fully-framed screenshot — no node cropped or cut off at any edge, at least 60px clear margin on each side.",
-        "The intro-simple slot must show Input.Number(5) → Math.Multiply(a), Input.Number(2) → Math.Multiply(b), Multiply.result → Output.Watch displaying 10.",
-        "Every other slot's graph must match the chapter description per the audit matrix in T06e.",
+        "After T06f merges: npm run dev → open Learning page → click all 10 chapters.",
+        "intro-advanced must show 5 nodes: Input.Number(10) + Input.Number(3) → Multiply1 → Multiply2 ← Input.Number(20); Multiply2.result → Output.Watch showing 600.",
+        "Every slot's graph must match the exact steps described in the chapter text from src/ui/learning-page.js.",
+        "All 20 PNGs: no node cropped, 60px+ margin on all sides.",
         "npm run test:e2e — all learning E2E specs must still pass."
       ]
     },
     {
       "id": "TICK-007",
       "title": "Learning page — interactive mini-canvas exercises",
-      "status": "reopened — rework in progress",
-      "issue": "Wire interaction uses click-to-start + click-to-end; PM requires mousedown-drag-mouseup. All 10 exercises use the same math-only pattern regardless of chapter topic (e.g., Geometry chapter uses no geometry nodes).",
+      "status": "reopened — rework in progress (T07h, second pass)",
+      "issue": "Mini-canvas has no pan or zoom — does not feel like the real Nova canvas. Some node types used in exercises may be absent from PORT_SCHEMA in mini-canvas.js. Wire drag UX (mousedown-drag-mouseup) was added in T07f but needs verification. Exercises were redesigned in T07g but PORT_SCHEMA entries for those node types must be confirmed.",
       "changed": [
-        "docs/tickets/TICK-007.md: AC-2 and AC-10 reopened for wire drag UX; AC-11 (unique exercises) and AC-12 (logical consistency) added; Rework section and updated Run comments written; branch set to fix/tick-007-exercise-rework.",
-        "docs/task-briefs/T07f-wire-drag-ux.md: new brief for switch agent — change to mousedown/mousemove/mouseup drag, update E2E spec to use drag gestures.",
-        "docs/task-briefs/T07g-unique-chapter-exercises.md: new brief for neo agent — redesign ch02–ch08 exercises with domain-appropriate nodes and unique patterns.",
-        "docs/tickets/INDEX.md: status row updated.",
-        "docs/agent-workboard.md: T07f and T07g rows claimed."
+        "docs/task-briefs/T07h-real-canvas-embed.md: new brief covering (1) pan/zoom via CSS transform on viewport wrapper, (2) PORT_SCHEMA + NODE_META audit for all exercise node types, (3) drag wire UX verification, (4) E2E spec update with drag interactions + scroll wheel test. Supersedes T07f and T07g.",
+        "docs/tickets/TICK-007.md: second Rework section added; Task briefs section updated; Run comments updated.",
+        "docs/tickets/INDEX.md: branch updated to fix/tick-007-real-canvas-embed.",
+        "docs/agent-workboard.md: T07f + T07g rows replaced with single T07h row for switch agent."
       ],
       "how_to_test": [
-        "After T07f merges: npm run dev → Learning page → any chapter → hover over an output port dot → press and hold (mousedown) → drag across canvas → release (mouseup) on an input port — a wire must appear.",
-        "Release on empty canvas space — no partial wire must remain.",
-        "After T07g merges: open chapters 2 through 8 — exercises must use nodes from the chapter's domain (geometry nodes in ch06, list nodes in ch07, Python/CodeBlock node in ch08, etc.).",
-        "No two chapters may present the same node layout.",
-        "npm run test:e2e — all learning-interactive specs must pass using drag gestures."
+        "After T07h merges: npm run dev → Learning page → any chapter exercise.",
+        "Scroll wheel over the mini-canvas — nodes zoom in/out toward cursor.",
+        "Middle-mouse drag (or Space+drag) — all nodes pan together.",
+        "Mousedown on output port dot, drag, release on compatible input port — wire connects.",
+        "Release on empty canvas space — no partial wire remains.",
+        "Submit correctly wired exercise — green success banner; Next chapter button enabled.",
+        "npm run test:e2e — all learning-interactive specs pass."
       ]
     }
   ],
@@ -95,28 +93,23 @@
   "agents_dispatched": [
     {
       "agent": "switch",
-      "brief": "T06e",
-      "branch": "fix/tick-006-screenshot-rework",
+      "brief": "T06f",
+      "branch": "fix/tick-006-content-aligned-screenshots",
       "ticket": "TICK-006",
-      "description": "Fix cropped screenshots and audit all 20 slot builders for topic relevance and correct wiring."
+      "description": "Read learning-page.js, derive exact graph for each of the 20 slots from chapter step text, rewrite builders. Key fix: intro-advanced must show 3-input 2-multiply parametric tower (Output.Watch = 600). Supersedes T06e."
     },
     {
       "agent": "switch",
-      "brief": "T07f",
-      "branch": "fix/tick-007-wire-drag-ux",
+      "brief": "T07h",
+      "branch": "fix/tick-007-real-canvas-embed",
       "ticket": "TICK-007",
-      "description": "Replace click-click wire UX with mousedown-drag-mouseup; update E2E spec."
-    },
-    {
-      "agent": "neo",
-      "brief": "T07g",
-      "branch": "fix/tick-007-unique-exercises",
-      "ticket": "TICK-007",
-      "description": "Redesign exercises ch02–ch08 with domain-appropriate nodes; add AC-11/AC-12 consistency check."
+      "description": "Add pan/zoom to mini-canvas (CSS transform viewport wrapper). Audit PORT_SCHEMA + NODE_META for all exercise node types. Verify drag wire UX. Update E2E spec with drag gestures + scroll test. Supersedes T07f + T07g."
     }
   ],
   "blockers": [
-    "TICK-008 remains draft — no task brief written and no agents dispatched. PM should confirm whether to proceed to TICK-008 (Live agent dashboard) once the TICK-006/007 rework lands."
+    "TICK-008 remains draft — no task brief written, no agents dispatched. PM should confirm whether to proceed to TICK-008 (Live agent dashboard) once the TICK-006/007 rework lands.",
+    "T06f depends on the agent reading src/ui/learning-page.js (specifically the _attachChapterExamples() data and the LEARNING_CHAPTERS sections array) before touching any builder. The brief is explicit about this. If the agent skips this read, the audit matrix will be wrong again.",
+    "T07h: the pan/zoom feature must not break wire coordinate tracking. The _dotCenter() function and pending wire cursor math are relative to the SVG bounding rect — the SVG must be inside the same transformed viewport wrapper as the nodes for this to remain correct."
   ]
 }
 ```
