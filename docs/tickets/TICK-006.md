@@ -60,7 +60,7 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 - [x] All AC above are checked `[x]`
 - [x] `npm run lint:all` → 0 errors — 2026-06-07, fix/tick-006-screenshot-viewport
 - [x] `npm run test` → all pass (1911 tests, 145 files) — 2026-06-07, fix/tick-006-screenshot-viewport
-- [ ] Oracle has reviewed and issued APPROVE verdict
+- [x] Oracle has reviewed and issued APPROVE verdict — 2026-06-08: VERDICT: APPROVE — lint 0 errors, 1917 tests pass, 10/10 E2E pass, build green, all 20 PNGs present and valid
 - [x] Merged to `develop`, workboard row released — 2026-06-07, fix/tick-006-screenshot-viewport merged to develop
 
 ## Task briefs
@@ -89,9 +89,11 @@ Change `- [ ] AC-N` → `- [x] AC-N` with a note.
 
 ## Run comments
 
-Morpheus run 2026-06-08:
+Morpheus run 2026-06-08 (oracle review):
 
-- Current sprint focus: TICK-006 remains active for Sprint A3 focus.
-- Status: implementation is merged to `develop`; all ticket AC are checked, but Oracle approval is still unchecked, so the ticket is not archived.
-- No agent dispatched this run; PM did not provide `APPROVE TICK-006`, and there is no new task brief requested beyond the already-merged screenshot work.
-- How to test: open the Learning page on `develop`, click through all 10 chapters, and confirm all 20 example slots show the correct real Nova screenshots with no broken placeholders.
+- Status: ALL ACs checked [x] and Oracle has issued APPROVE.
+- VERDICT: APPROVE — lint 0 errors, 1917 unit tests pass, 10/10 learning E2E pass, build green.
+- All 20 PNGs confirmed present at `public/learning/*.png` (20 files verified).
+- AC-2, AC-3, AC-4 verified: screenshots show real Nova canvas, no broken images, correct graph content per chapter.
+- AC-1, AC-5 verified: all 20 files exist and each is ≤ 400 KB (script-asserted).
+- Awaiting PM `APPROVE TICK-006` to archive this ticket.

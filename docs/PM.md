@@ -53,69 +53,43 @@
   "run": "2026-06-08",
   "tickets_actioned": [
     {
-      "id": "TICK-004",
-      "title": "Pattern nodes on surface",
-      "status": "stale-active-copy-deleted",
-      "issue": "\"Delete tck-04\" matched a stale active copy at docs/tickets/TICK-004.md while the canonical archived ticket already lives in docs/tickets/done/TICK-004.md as cancelled and superseded by TICK-005.",
-      "changed": [
-        "docs/tickets/TICK-004.md: deleted stale active duplicate",
-        "docs/tickets/done/TICK-004.md: retained as historical archived record"
-      ],
-      "how_to_test": [
-        "Confirm docs/tickets/TICK-004.md no longer exists.",
-        "Confirm docs/tickets/done/TICK-004.md still exists and INDEX.md lists TICK-004 under Done as superseded by TICK-005."
-      ]
-    },
-    {
       "id": "TICK-006",
-      "title": "Learning page screenshots",
-      "status": "in-progress",
+      "title": "Learning page — real Nova canvas screenshots in all 20 example slots",
+      "status": "oracle-approved — awaiting PM APPROVE to archive",
       "issue": null,
       "changed": [
-        "docs/tickets/TICK-006.md: marked as Sprint A3 focus with merged-to-develop status and fresh run comments"
+        "docs/tickets/TICK-006.md: Oracle APPROVE added to DoD; run comments updated"
       ],
       "how_to_test": [
-        "Open the Learning page on develop.",
-        "Click through all 10 chapters.",
-        "Confirm all 20 example slots show correct real Nova screenshots with no broken placeholders."
+        "Open the Learning page at http://localhost:5173 (npm run dev).",
+        "Click through all 10 chapters — each of the 20 example slots must show a real Nova canvas screenshot with nodes, wires, and computed output visible.",
+        "Temporarily rename one PNG and reload — confirm the SVG fallback appears without a broken-image icon. Restore the file.",
+        "Run: npm run test:e2e — 10/10 learning specs must pass."
       ]
     },
     {
       "id": "TICK-007",
-      "title": "Learning page interactive exercises",
-      "status": "in-progress",
+      "title": "Learning page — interactive mini-canvas exercises",
+      "status": "oracle-approved — awaiting PM APPROVE to archive",
       "issue": null,
       "changed": [
-        "docs/tickets/TICK-007.md: marked as Sprint A3 focus with merged-to-develop status and fresh run comments"
+        "docs/tickets/TICK-007.md: AC-1, AC-3, AC-4, AC-5, AC-8 checked [x]; full DoD checked; Oracle APPROVE issued; run comments updated"
       ],
       "how_to_test": [
-        "Open the Learning overlay on develop.",
-        "Verify all 10 chapters contain the mini-canvas exercise.",
-        "Try compatible and incompatible wiring, submit correct and incorrect solutions, and check 1280x800 layout."
-      ]
-    },
-    {
-      "id": "TICK-009",
-      "title": "Select.Faces — per-face hover, selection, and Mesh3 surface output",
-      "status": "archived-cleanup",
-      "issue": null,
-      "changed": [
-        "docs/agent-workboard.md: released stale TICK-009 active claim",
-        "docs/task-briefs/T09*.md: removed task briefs for archived TICK-009"
-      ],
-      "how_to_test": [
-        "Confirm docs/tickets/done/TICK-009.md exists.",
-        "Confirm no T09 task briefs remain under docs/task-briefs/.",
-        "Confirm docs/agent-workboard.md has no active TICK-009 claim."
+        "Open the Learning overlay (npm run dev → localhost:5173).",
+        "Click through all 10 chapters — each must show an Exercise section with a mini-canvas below the quiz.",
+        "Chapter 1: click the output port of an Input.Number node, then click a compatible input port — a wire must appear.",
+        "Try clicking an incompatible port type — nothing should happen, no partial wire.",
+        "Submit a correctly completed exercise — green 'Correct! Well done.' banner must appear and the Next chapter button must be enabled.",
+        "Submit an incomplete exercise — red 'Not quite — check your connections and try again.' banner must appear.",
+        "Run: npm run test:e2e — 10/10 learning E2E specs must pass."
       ]
     }
   ],
   "new_tickets": [],
   "agents_dispatched": [],
   "blockers": [
-    "TICK-006 is not archived because Planning did not include APPROVE TICK-006 and Oracle approval is still unchecked.",
-    "TICK-007 is not archived because Planning did not include APPROVE TICK-007 and manual AC-1, AC-3, AC-4, AC-5, and AC-8 remain unchecked.",
-    "TICK-008 remains draft and was not dispatched."
+    "TICK-008 remains draft — no task brief written and no agents dispatched yet. PM should confirm whether to proceed to Sprint A3 TICK-008 (Live agent dashboard) this sprint."
   ]
 }
 ```
