@@ -25,6 +25,7 @@ root `README.md` · `docs/ARCHITECTURE.md` · `.github/workflows/ci.yml`
 
 | Branch | Agent | Task | Owned paths (globs) | Hot locks | Started | Status |
 |---|---|---|---|---|---|---|
+| fix/tick-009h-hover-orbit-fix | switch | T09i: diagnose+fix hover/face-swap via browser logs | src/geometry/geometry-lib.js, src/viewer/geo-selector.js, src/viewer/selection-mode.js | — | 2026-06-08 | active |
 
 <!--
 Example row (copy, fill in, remove this comment block when claiming):

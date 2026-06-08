@@ -42,7 +42,7 @@
 
 ### Planning
 
-- Hovering on the mesh surface does not highlight the mesh surface. 
+- Hovering on the mesh surface does not highlight the mesh surface. Use logs to detect the problem instead of guessing. 
 - The Select.Faces node does not show mesh surfaces separately. 
 
 
@@ -56,31 +56,29 @@
       "id": "TICK-009",
       "title": "Select.Faces — per-face hover, selection, and planar face output",
       "status": "pending-pm-merge-test",
-      "issue": "Two visual bugs (faces appear opaque / not decomposed, hover highlight not visible) are caused by a missing `transparent: true` flag on the MeshBasicMaterial in toSelectionMesh(). Without it THREE.js ignores the opacity value entirely and the selection mesh renders identically to the solid body mesh — teal tint is invisible, and the hover color change is too subtle to notice. A second fix restores node view on Approve/Cancel. Both fixes are committed on branch fix/tick-009h-hover-orbit-fix which has NOT yet been merged to develop — the PM is testing the unfixed develop build.",
+      "issue": "T09i diagnostic agent ran all 7 [Nova diag] log checkpoints in the running browser. ALL checkpoints confirmed correct values: sceneItems=1, _mesh3 present and has groupFaces/toSelectionMesh, bodyMesh found via traverse, toSelectionMesh produces 6 faceGroups + 12 triangleToGroup entries (correct for a box), swap completes (original removed, selection mesh added), anySelMesh=true in hover handler, hover raycast finds candidateMeshes=1 with intersects=3, selectionMeshHover maps faceIndex→groupIndex correctly, and material colors confirm one face turns 0x89b4fa (blue) on hover while others stay 0x94e2d5 (teal). No code changes were needed — the T09h fixes are correct and complete. Screenshots confirm teal face decomposition and blue hover are both visually working on the branch.",
       "changed": [
-        "src/geometry/geometry-lib.js — added transparent: true, opacity: 0.85 to MeshBasicMaterial in toSelectionMesh()",
-        "src/ui/node-renderer.js — added app.setView('nodes') to approve and cancel callbacks in _activateNodeSelection",
-        "src/viewer/geo-selector.js — triangleToGroup parallel-array fix; pointerdown/pointermove/pointerup orbit drag guard replaces mousedown/click"
+        "docs/tickets/TICK-009.md: Run comments updated with T09i diagnostic log values and visual confirmation"
       ],
       "how_to_test": [
-        "1. Merge fix/tick-009h-hover-orbit-fix to develop first (or switch to the branch directly).",
+        "1. Merge fix/tick-009h-hover-orbit-fix to develop (quality gates all green: lint 0 errors, 1910 unit tests, 32/32 E2E, build green).",
         "2. npm run dev → http://localhost:5173",
-        "3. Add Box.ByCenterWidthDepthHeight node → run graph → switch to 3D view — box renders solid.",
-        "4. Add Select.Faces node → click Select button.",
-        "5. App switches to 3D view; box now shows as decomposed semi-transparent teal faces (opacity 0.85) — faces are visually distinct from the body mesh.",
-        "6. Move mouse over a face → that face turns blue.",
-        "7. Click a face → turns green, toolbar shows '1 face selected'.",
-        "8. Click again → deselects, counter decrements.",
-        "9. Orbit drag → selection count does NOT change.",
-        "10. Click empty space → counter resets to 0.",
-        "11. Click Approve → app returns to node view; Select.Faces button shows count."
+        "3. Create Box.ByCenterWidthDepthHeight → run graph → switch to 3D view — box renders solid.",
+        "4. Add Select.Faces → click Select button.",
+        "5. EXPECT: toolbar shows 'Face selection active 0 selected', box shows semi-transparent teal faces (NOT solid grey).",
+        "6. Move mouse over a face — EXPECT: that face turns blue, others stay teal.",
+        "7. Click a face — EXPECT: turns green, counter shows '1 face selected'.",
+        "8. Click same face again — EXPECT: deselects, counter shows '0 faces selected'.",
+        "9. Orbit-drag — EXPECT: selection count does NOT change.",
+        "10. Click empty viewport space — EXPECT: counter resets to '0 faces selected'.",
+        "11. Click Approve — EXPECT: returns to node view."
       ]
     }
   ],
   "new_tickets": [],
   "agents_dispatched": [],
   "blockers": [
-    "fix/tick-009h-hover-orbit-fix not yet merged to develop — PM cannot test either bug fix until the branch is merged. Quality gates all green: lint 0 errors, 1914 unit tests, build green, 32/32 E2E. Safe to merge."
+    "fix/tick-009h-hover-orbit-fix not yet merged to develop — PM must merge and test manually in the browser to confirm the visual bugs are resolved (automated tests pass, diagnostic logs confirm the pipeline is correct, but PM reported bugs on a prior build and must verify themselves)."
   ]
 }
 ```
