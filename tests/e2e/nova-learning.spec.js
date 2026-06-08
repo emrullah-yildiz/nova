@@ -92,8 +92,20 @@ test.describe('Nova Learning Primer', () => {
     const outputPort = page.locator('[data-node-id="n2"][data-port-role="output"][data-port-name="value"]');
     const inputPort  = page.locator('[data-node-id="n3"][data-port-role="input"][data-port-name="b"]');
     await expect(outputPort).toBeVisible();
-    await outputPort.click();
-    await inputPort.click();
+    await expect(inputPort).toBeVisible();
+
+    // Use drag gesture (mousedown → move → mouseup) — the mini-canvas now uses
+    // drag-based wire drawing; click-only no longer initiates a wire.
+    const outputBox = await outputPort.boundingBox();
+    const inputBox  = await inputPort.boundingBox();
+    const fromX = outputBox.x + outputBox.width  / 2;
+    const fromY = outputBox.y + outputBox.height / 2;
+    const toX   = inputBox.x  + inputBox.width   / 2;
+    const toY   = inputBox.y  + inputBox.height  / 2;
+    await page.mouse.move(fromX, fromY);
+    await page.mouse.down();
+    await page.mouse.move(toX, toY, { steps: 10 });
+    await page.mouse.up();
 
     // Submit the exercise (sets _exerciseDone[0] = true on correct answer).
     const submitBtn = page.locator('.mini-canvas-submit');
