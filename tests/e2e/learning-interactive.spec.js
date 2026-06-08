@@ -133,4 +133,109 @@ test.describe('Learning interactive exercises', () => {
     const nextBtn = page.locator('.learn-nav-btn--next');
     await expect(nextBtn).toBeDisabled();
   });
+
+  test('drag wire: mousedown on output + drag + mouseup on input draws wire', async ({ page }) => {
+    test.slow();
+
+    await openLearning(page);
+
+    const exerciseSection = page.locator('#learn-exercise-0');
+    await exerciseSection.scrollIntoViewIfNeeded();
+
+    await expect(page.locator('.mini-canvas').first()).toBeVisible();
+
+    const outputPort = page.locator(
+      '[data-node-id="n2"][data-port-role="output"][data-port-name="value"]'
+    );
+    const inputPort = page.locator(
+      '[data-node-id="n3"][data-port-role="input"][data-port-name="b"]'
+    );
+
+    await expect(outputPort).toBeVisible();
+    await expect(inputPort).toBeVisible();
+
+    // Drag from output port to input port using Playwright drag API.
+    // dragTo performs mousedown → move → mouseup, exercising the drag-wire path.
+    const outBox = await outputPort.boundingBox();
+    const inBox  = await inputPort.boundingBox();
+
+    // Start drag on output port center.
+    await page.mouse.move(outBox.x + outBox.width / 2, outBox.y + outBox.height / 2);
+    await page.mouse.down();
+    // Move slowly towards input port so mousemove events are generated.
+    await page.mouse.move(
+      inBox.x + inBox.width / 2,
+      inBox.y + inBox.height / 2,
+      { steps: 10 }
+    );
+    await page.mouse.up();
+
+    // The drag-release mouseup handler should have completed the wire.
+    const userWireGroup = page.locator('.mini-canvas-userwires path');
+    await expect(userWireGroup).toHaveCount(1);
+
+    // Submit and assert correct.
+    const submitBtn = page.locator('.mini-canvas-submit');
+    await submitBtn.click();
+    await expect(page.locator('.mini-canvas-success')).toBeVisible();
+  });
+
+  test('scroll wheel zoom: wheel event changes viewport transform scale', async ({ page }) => {
+    test.slow();
+
+    await openLearning(page);
+
+    const exerciseSection = page.locator('#learn-exercise-0');
+    await exerciseSection.scrollIntoViewIfNeeded();
+
+    const miniCanvas = page.locator('.mini-canvas').first();
+    await expect(miniCanvas).toBeVisible();
+
+    const canvasArea = page.locator('.mini-canvas-area').first();
+    const viewport = page.locator('.mini-canvas-viewport').first();
+
+    // Capture the initial transform (should be translate(0px,0px) scale(1)).
+    const initialTransform = await viewport.evaluate((el) => el.style.transform);
+    // Initial state: scale 1 (identity or translate(0,0) scale(1)).
+    expect(initialTransform).toMatch(/scale\(1\)/);
+
+    // Scroll wheel UP (zoom in) over the canvas area.
+    const box = await canvasArea.boundingBox();
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+
+    await page.mouse.move(cx, cy);
+    // deltaY < 0 = scroll up = zoom in.
+    await page.mouse.wheel(0, -100);
+
+    // After zoom-in, the scale should be > 1.
+    const afterZoomIn = await viewport.evaluate((el) => el.style.transform);
+    // Extract scale value.
+    const scaleMatch = afterZoomIn.match(/scale\(([\d.]+)\)/);
+    expect(scaleMatch).not.toBeNull();
+    const scaleVal = parseFloat(scaleMatch[1]);
+    expect(scaleVal).toBeGreaterThan(1);
+
+    // Scroll wheel DOWN (zoom out) multiple times to go below 1.
+    for (let i = 0; i < 15; i++) {
+      await page.mouse.wheel(0, 100);
+    }
+
+    const afterZoomOut = await viewport.evaluate((el) => el.style.transform);
+    const scaleMatchOut = afterZoomOut.match(/scale\(([\d.]+)\)/);
+    expect(scaleMatchOut).not.toBeNull();
+    const scaleOut = parseFloat(scaleMatchOut[1]);
+    expect(scaleOut).toBeLessThan(1);
+
+    // Ensure zoom does not go below ZOOM_MIN (0.2).
+    // Scroll far enough to hit the floor.
+    for (let i = 0; i < 50; i++) {
+      await page.mouse.wheel(0, 100);
+    }
+    const floorTransform = await viewport.evaluate((el) => el.style.transform);
+    const floorMatch = floorTransform.match(/scale\(([\d.]+)\)/);
+    expect(floorMatch).not.toBeNull();
+    const floorScale = parseFloat(floorMatch[1]);
+    expect(floorScale).toBeGreaterThanOrEqual(0.19); // allow minor float rounding
+  });
 });
