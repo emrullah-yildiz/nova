@@ -68,10 +68,22 @@ test.describe('Learning interactive exercises', () => {
     await expect(outputPort).toBeVisible();
     await expect(inputPort).toBeVisible();
 
-    // Click the output port to start the pending wire.
-    await outputPort.click();
-    // Click the input port to complete the wire.
-    await inputPort.click();
+    // Drag from the output port to the input port to draw the wire.
+    // 1. Get bounding boxes for both port dots.
+    const outputBox = await outputPort.boundingBox();
+    const inputBox  = await inputPort.boundingBox();
+
+    // Center coordinates of each port dot.
+    const fromX = outputBox.x + outputBox.width  / 2;
+    const fromY = outputBox.y + outputBox.height / 2;
+    const toX   = inputBox.x  + inputBox.width   / 2;
+    const toY   = inputBox.y  + inputBox.height  / 2;
+
+    // 2. mousedown on the output port, move smoothly to the input port, mouseup.
+    await page.mouse.move(fromX, fromY);
+    await page.mouse.down();
+    await page.mouse.move(toX, toY, { steps: 10 });
+    await page.mouse.up();
 
     // ── Assert the user wire is present in the SVG layer ─────────────────────
     // The user wire group gets a <path> appended when a wire is drawn.

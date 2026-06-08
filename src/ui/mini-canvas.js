@@ -178,6 +178,7 @@ function _bezierPath(from, to) {
 export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
   const userWires = [];
   let pendingWire = null; // { nodeId, portId, portType, dotEl }
+  let _dragging = false;  // true while a drag gesture is in flight
 
   const nodes = exercise.nodes || [];
 
@@ -443,7 +444,7 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
   // ── Wire interaction ──────────────────────────────────────────────────────
   // Track cursor globally so the pending wire follows even outside the canvas.
   function _onDocMouseMove(e) {
-    if (!pendingWire) return;
+    if (!_dragging || !pendingWire) return;
     const fromDot = portEls.get(`${pendingWire.nodeId}:output:${pendingWire.portId}`);
     if (!fromDot) return;
     const from = _dotCenter(fromDot);
@@ -458,6 +459,7 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
       pendingWire.dotEl.classList.remove('pending');
     }
     pendingWire = null;
+    _dragging = false;
     pendingLine.style.display = 'none';
     document.removeEventListener('mousemove', _onDocMouseMove);
   }
@@ -468,6 +470,7 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
     const portId  = dotEl.dataset.portName;
     const portType = dotEl.dataset.portType;
     pendingWire = { nodeId, portId, portType, dotEl };
+    _dragging = true;
     dotEl.classList.add('pending');
     const from = _dotCenter(dotEl);
     pendingLine.setAttribute('d', _bezierPath(from, from));
@@ -497,41 +500,41 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
     _clearFeedback();
   }
 
-  canvasEl.addEventListener('click', function (e) {
+  // ── Drag-based wire drawing ────────────────────────────────────────────────
+  // mousedown on an output port dot starts the drag; mouseup on a compatible
+  // input port dot completes it; mouseup elsewhere or Escape cancels it.
+
+  canvasEl.addEventListener('mousedown', function (e) {
     const dotEl = e.target.closest('[data-port-role]');
+    if (!dotEl) return;
 
-    if (!dotEl) {
-      _cancelPending();
-      return;
-    }
-
-    const role = dotEl.dataset.portRole;
-
-    if (role === 'output') {
-      if (pendingWire) _cancelPending();
+    if (dotEl.dataset.portRole === 'output') {
       _startPending(dotEl);
-      e.stopPropagation();
-      return;
-    }
-
-    if (role === 'input') {
-      if (pendingWire) {
-        _completeWire(dotEl);
-        e.stopPropagation();
-        return;
-      }
-      // Re-route: remove existing user wire to this port.
-      const nodeId = dotEl.dataset.nodeId;
-      const portId = dotEl.dataset.portName;
-      const idx = userWires.findIndex((w) => w.toNode === nodeId && w.toPort === portId);
-      if (idx >= 0) {
-        userWires.splice(idx, 1);
-        _redrawWires();
-        _clearFeedback();
-      }
+      e.preventDefault();
       e.stopPropagation();
     }
   });
+
+  // Document-level mouseup: complete or cancel the drag.
+  function _onDocMouseUp(e) {
+    if (!_dragging) return;
+
+    const dotEl = e.target.closest('[data-port-role]');
+    if (dotEl && dotEl.dataset.portRole === 'input') {
+      _completeWire(dotEl);
+    } else {
+      _cancelPending();
+    }
+  }
+  document.addEventListener('mouseup', _onDocMouseUp);
+
+  // Document-level keydown: Escape cancels an in-flight drag.
+  function _onDocKeyDown(e) {
+    if (e.key === 'Escape' && _dragging) {
+      _cancelPending();
+    }
+  }
+  document.addEventListener('keydown', _onDocKeyDown);
 
   // ── Feedback banner ───────────────────────────────────────────────────────
   let bannerEl = null;
