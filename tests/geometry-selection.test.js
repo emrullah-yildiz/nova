@@ -210,7 +210,7 @@ describe('_itemMatchesMode', () => {
 
 // ── Select.Faces / Select.Edges / Select.Points node execute() ────────────────
 //
-// Select.Faces outputs a list of per-surface Face objects via _selectedFaces.
+// Select.Faces outputs a list of per-surface Mesh3 objects via _selectedMeshes.
 // Select.Edges/Points still return { selection: geoData[] } via _selectedGeo.
 
 describe('Select.* node execute()', () => {
@@ -235,27 +235,49 @@ describe('Select.* node execute()', () => {
     });
   });
 
-  // Select.Faces — separate planar face output via _selectedFaces
+  function meshPatchData() {
+    return {
+      _type: 'Mesh3',
+      vertices: [
+        { x: 0, y: 0, z: 0, _type: 'Point3' },
+        { x: 1, y: 0, z: 0, _type: 'Point3' },
+        { x: 1, y: 1, z: 0, _type: 'Point3' },
+        { x: 0, y: 1, z: 0, _type: 'Point3' }
+      ],
+      faces: [[0, 1, 2], [0, 2, 3]],
+      color: 0x89b4fa
+    };
+  }
+
+  // Select.Faces - separate surface mesh output via _selectedMeshes
 
   it('Select.Faces execute() returns an empty list when nothing selected', () => {
     const def = registry.getNode('Select.Faces');
-    const result = def.execute({}, {}, { _selectedLabels: '', _selectedGeo: '', _selectedFaces: '', _selectedMesh: '' });
+    const result = def.execute({}, {}, { _selectedLabels: '', _selectedGeo: '', _selectedFaces: '', _selectedMeshes: '', _selectedMesh: '' });
     expect(Array.isArray(result.faces)).toBe(true);
     expect(result.faces.length).toBe(0);
   });
 
-  it('Select.Faces execute() with valid _selectedFaces returns separate Face objects', () => {
+  it('Select.Faces execute() with valid _selectedMeshes returns separate Mesh3 objects', () => {
     const def = registry.getNode('Select.Faces');
-    const faceData = [
-      { _type: 'Face', vertices: [[0, 0, 0], [1, 0, 0], [1, 1, 0]], normal: [0, 0, 1], area: 0.5 },
-      { _type: 'Face', vertices: [[0, 0, 1], [1, 0, 1], [1, 1, 1]], normal: [0, 0, 1], area: 0.5 }
-    ];
-    const result = def.execute({}, {}, { _selectedFaces: JSON.stringify(faceData), _selectedMesh: '' });
+    const result = def.execute({}, {}, { _selectedMeshes: JSON.stringify([meshPatchData(), meshPatchData()]), _selectedMesh: '' });
     expect(Array.isArray(result.faces)).toBe(true);
     expect(result.faces.length).toBe(2);
-    expect(result.faces[0]._type).toBe('Face');
+    expect(result.faces[0]._type).toBe('Mesh3');
     expect(Array.isArray(result.faces[0].vertices)).toBe(true);
-    expect(result.faces[0].area).toBeCloseTo(0.5);
+    expect(result.faces[0].vertices.length).toBe(4);
+    expect(Array.isArray(result.faces[0].faces)).toBe(true);
+    expect(result.faces[0].faces.length).toBe(2);
+  });
+
+  it('Select.Faces Mesh3 output can feed Surface.Isolines', () => {
+    const selectDef = registry.getNode('Select.Faces');
+    const isolinesDef = registry.getNode('Surface.Isolines');
+    const selected = selectDef.execute({}, {}, { _selectedMeshes: JSON.stringify([meshPatchData()]), _selectedMesh: '' });
+    const result = isolinesDef.execute({}, { mesh: selected.faces[0], count: 2 }, { dir: 'U' });
+    expect(Array.isArray(result.curves)).toBe(true);
+    expect(result.curves.length).toBeGreaterThan(0);
+    expect(result.curves[0]._type).toBe('Polyline3');
   });
 
   it('Select.Faces execute() keeps _selectedMesh as a legacy one-item fallback', () => {

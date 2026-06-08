@@ -477,7 +477,7 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         var hitMesh = hit ? hit.object : null;
         var hitFaceIndex = hit && hit.faceIndex !== undefined ? hit.faceIndex : null;
 
-        if (hitMesh === self._hoveredSelectionMesh && hitFaceIndex === self._hoveredSelectionFaceIndex) return; // nothing changed
+        if (!anySelMesh && hitMesh === self._hoveredSelectionMesh && hitFaceIndex === self._hoveredSelectionFaceIndex) return; // nothing changed
         self._hoveredSelectionMesh = hitMesh;
         self._hoveredSelectionFaceIndex = hitFaceIndex;
         // Expose for E2E assertions (AC-8)

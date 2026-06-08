@@ -833,75 +833,52 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
           if (!nd.controlValues) nd.controlValues = {};
 
           if (mode === 'faces') {
-            // T09d: use getSelectedFaces() from selection-mode.js to extract
-            // per-face-group geometry (vertices, normal, area) from the Mesh3
-            // kernel object. This data is what Select.Faces.execute() reads via
-            // controlValues._selectedFaces (set up in T09c geometry.js).
+            // Use getSelectedFaces() from selection-mode.js to extract each
+            // per-face-group Mesh3 patch. Select.Faces.execute() returns this
+            // as a list so the inspector shows separate surfaces, while each
+            // item remains a real mesh for downstream nodes such as Surface.Isolines.
             var selMod2 = (typeof window !== 'undefined' && window.__selectionModeModule) || null;
             if (selMod2 && typeof selMod2.getSelectedFaces === 'function') {
               var facesRaw = selMod2.getSelectedFaces();
               // facesRaw: [{ itemId, groupIndex, faceGroups, mesh3 }, ...]
-              var faceArray = facesRaw.map(function(f) {
+              var meshArray = facesRaw.map(function(f) {
                 var groupIndex = f.groupIndex;
                 var faceGroups = f.faceGroups;
                 var mesh3 = f.mesh3;
                 if (!mesh3 || typeof mesh3.getFaceVertices !== 'function') return null;
                 var vertices = mesh3.getFaceVertices(groupIndex, faceGroups);
-                var group = faceGroups && faceGroups[groupIndex];
-                var normal = group ? group.normal : [0, 0, 1];
-
-                // Compute area: sum of triangle areas in this group
-                var area = 0;
-                if (group && group.triangleIndices && mesh3.faces && mesh3.vertices) {
-                  group.triangleIndices.forEach(function(triIdx) {
-                    var face = mesh3.faces[triIdx];
-                    var i0, i1, i2;
-                    if (Array.isArray(face)) { i0 = face[0]; i1 = face[1]; i2 = face[2]; }
-                    else { i0 = face.a; i1 = face.b; i2 = face.c; }
-                    var v0 = mesh3.vertices[i0], v1 = mesh3.vertices[i1], v2 = mesh3.vertices[i2];
-                    if (!v0 || !v1 || !v2) return;
-                    var ax = v1.x - v0.x, ay = v1.y - v0.y, az = v1.z - v0.z;
-                    var bx = v2.x - v0.x, by = v2.y - v0.y, bz = v2.z - v0.z;
-                    area += 0.5 * Math.sqrt(
-                      Math.pow(ay * bz - az * by, 2) +
-                      Math.pow(az * bx - ax * bz, 2) +
-                      Math.pow(ax * by - ay * bx, 2)
-                    );
-                  });
-                }
-
-                return { _type: 'Face', vertices: vertices, normal: normal, area: area };
+                if (!Array.isArray(vertices) || vertices.length < 3) return null;
+                var meshFaces = [];
+                for (var vi = 1; vi < vertices.length - 1; vi++) meshFaces.push([0, vi, vi + 1]);
+                return {
+                  _type: 'Mesh3',
+                  vertices: vertices.map(function(v) {
+                    return { x: v[0], y: v[1], z: v[2], _type: 'Point3' };
+                  }),
+                  faces: meshFaces,
+                  color: mesh3.color || 0x89b4fa
+                };
               }).filter(Boolean);
 
               // Store as JSON so it survives save/load round-trips.
-              nd.controlValues._selectedFaces = JSON.stringify(faceArray);
+              nd.controlValues._selectedMeshes = JSON.stringify(meshArray);
+              nd.controlValues._selectedFaces = '';
 
-              // Build a Mesh3 from the selected triangles so Select.Faces can output
-              // real geometry compatible with mesh-input ports (same as Surface nodes).
+              // Keep a merged legacy Mesh3 too, so older save/load paths and
+              // any direct debug tooling that reads _selectedMesh still have a
+              // mesh-shaped value.
               var meshVerts = [];
               var meshFaces = [];
               var meshColor = 0x89b4fa;
-              facesRaw.forEach(function(f) {
-                var gi = f.groupIndex;
-                var fg = f.faceGroups;
-                var m3 = f.mesh3;
-                if (!m3 || !m3.faces || !m3.vertices) return;
-                meshColor = m3.color || meshColor;
-                var grp = fg && fg[gi];
-                if (!grp || !grp.triangleIndices) return;
-                grp.triangleIndices.forEach(function(triIdx) {
-                  var face = m3.faces[triIdx];
-                  var i0, i1, i2;
-                  if (Array.isArray(face)) { i0 = face[0]; i1 = face[1]; i2 = face[2]; }
-                  else { i0 = face.a; i1 = face.b; i2 = face.c; }
-                  var v0 = m3.vertices[i0], v1 = m3.vertices[i1], v2 = m3.vertices[i2];
-                  if (!v0 || !v1 || !v2) return;
+              meshArray.forEach(function(m) {
+                if (!m || !Array.isArray(m.vertices) || !Array.isArray(m.faces)) return;
+                meshColor = m.color || meshColor;
+                m.faces.forEach(function(face) {
                   var base = meshVerts.length;
-                  meshVerts.push(
-                    { x: v0.x, y: v0.y, z: v0.z, _type: 'Point3' },
-                    { x: v1.x, y: v1.y, z: v1.z, _type: 'Point3' },
-                    { x: v2.x, y: v2.y, z: v2.z, _type: 'Point3' }
-                  );
+                  face.forEach(function(idx) {
+                    var v = m.vertices[idx];
+                    if (v) meshVerts.push({ x: v.x, y: v.y, z: v.z, _type: 'Point3' });
+                  });
                   meshFaces.push([base, base + 1, base + 2]);
                 });
               });
@@ -984,6 +961,9 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
     if (!nd.controlValues) nd.controlValues = {};
     nd.controlValues._selectedLabels = '';
     nd.controlValues._selectedGeo = [];
+    nd.controlValues._selectedFaces = '';
+    nd.controlValues._selectedMeshes = '';
+    nd.controlValues._selectedMesh = '';
     this.renderNode(nd);
     this.runGraph();
   };
