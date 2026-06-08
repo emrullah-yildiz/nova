@@ -305,14 +305,28 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
     this._raycaster = new THREE.Raycaster();
 
     var self = this;
-    this.renderer.domElement.addEventListener('click', function(e) {
+
+    // ── Pointer-event drag guard ───────────────────────────────────────────
+    // Use pointerdown/pointermove/pointerup instead of mousedown/mousemove/click.
+    // OrbitControls captures the pointer on pointerdown internally, so the
+    // browser's synthetic click event fires even after an orbit drag because
+    // OrbitControls already handled the pointer and the click's clientX/Y may
+    // equal the pointerdown position regardless of how far the user dragged.
+    // Listening on pointer events guarantees we see the real displacement.
+    this.renderer.domElement.addEventListener('pointerdown', function(e) {
+      self._lastPointerDown = { x: e.clientX, y: e.clientY };
+      self._isDragging = false;
+    });
+
+    // ── pointerup — fires selection when no drag occurred ─────────────────
+    this.renderer.domElement.addEventListener('pointerup', function(e) {
       if (!self.isVisible) return;
-      // Ignore if user was orbiting (mouse moved significantly).
-      // Use the _isDragging flag set by the mousemove handler rather than
-      // comparing click-event coordinates: some browsers/OrbitControls
-      // configurations report the pointerdown position in the click event's
-      // clientX/Y, making a position-delta check always return 0.
-      if (self._isDragging) return;
+      // If the pointer moved > 3px since pointerdown, the user was orbiting —
+      // clear the drag flag and skip selection.
+      if (self._isDragging) {
+        self._isDragging = false;
+        return;
+      }
 
       var rect = self.renderer.domElement.getBoundingClientRect();
       self._mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -380,16 +394,6 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       }
     });
 
-    // Track mousedown position and reset drag flag to distinguish click from orbit.
-    // _isDragging is set to true by the mousemove handler when displacement > 3px.
-    // Using a flag rather than comparing click-event coordinates is more reliable
-    // because OrbitControls uses pointer events; the click event's clientX/Y may
-    // report the pointerdown position regardless of how far the user dragged.
-    this.renderer.domElement.addEventListener('mousedown', function(e) {
-      self._lastMouseDown = { x: e.clientX, y: e.clientY };
-      self._isDragging = false;
-    });
-
     // ── Per-panel hover highlight (AC-4) ──
     // When the cursor moves over a panel mesh (userData.isPanelMesh), apply
     // the accent-green highlight (#a6e3a1) to that panel only and restore all
@@ -400,12 +404,12 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
     // and apply blue (#89b4fa) to the hovered face, teal (#94e2d5) to other
     // candidates, green (#a6e3a1) to already-selected items. This lets the user
     // see which face they are about to pick before clicking.
-    this.renderer.domElement.addEventListener('mousemove', function(e) {
-      // Set drag flag when mouse moves > 3px after mousedown — used by the click
-      // handler to distinguish orbit drags from genuine point clicks.
-      if (self._lastMouseDown &&
-          (Math.abs(e.clientX - self._lastMouseDown.x) > 3 ||
-           Math.abs(e.clientY - self._lastMouseDown.y) > 3)) {
+    this.renderer.domElement.addEventListener('pointermove', function(e) {
+      // Set drag flag when pointer moves > 3px after pointerdown — used by
+      // pointerup to distinguish orbit drags from genuine point clicks.
+      if (self._lastPointerDown &&
+          (Math.abs(e.clientX - self._lastPointerDown.x) > 3 ||
+           Math.abs(e.clientY - self._lastPointerDown.y) > 3)) {
         self._isDragging = true;
       }
       if (!self.isVisible) return;
