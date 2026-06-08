@@ -7,7 +7,8 @@
 //   1. Spawns the Vite dev server on http://localhost:5173 (kills on exit).
 //   2. For each of the 20 slots, navigates the Nova workspace, builds a
 //      representative node graph via page.evaluate(), waits for computation,
-//      calls app.fitAll() to centre the graph, and screenshots #canvas-area.
+//      calls app.fitAll() to centre the graph, and screenshots with a
+//      bounding-box crop (all .node elements + 60px padding) so no node is cut.
 //   3. Saves each PNG to public/learning/<slot-id>.png.
 //   4. Asserts each file is <= 400 KB and logs a warning if exceeded.
 //
@@ -32,8 +33,9 @@ const fs = require('node:fs');
 
 const SHOTS_DIR = path.join(__dirname, '..', 'public', 'learning');
 const BASE_URL = 'http://localhost:5173';
-// FIX A: 1280×720 (laptop-friendly) per T06d spec.
-const VIEWPORT = { width: 1280, height: 720 };
+// Use 1600×900 so wider graphs are not clipped.
+const VIEWPORT = { width: 1600, height: 900 };
+const PADDING = 60; // px padding on every side of the node bounding box
 const MAX_BYTES = 409600; // 400 KB
 
 // Ensure output directory exists before any screenshot is taken.
@@ -142,7 +144,8 @@ process.on('SIGTERM', () => { stopDevServer(); process.exit(143); });
  *   1. Invalidates compute so the engine runs.
  *   2. Waits 1200 ms for auto-compute to settle.
  *   3. Calls app.fitAll() so all nodes are centred and visible in the viewport.
- *   4. Screenshots #canvas-area only (no browser chrome).
+ *   4. Computes the union bounding box of all .node elements + 60px padding,
+ *      then screenshots #canvas-area with {clip: boundingBox}.
  */
 
 async function buildGraph(page, fn) {
@@ -167,27 +170,86 @@ async function buildGraph(page, fn) {
   });
   await page.waitForTimeout(1200);
 
-  // FIX A: fit-to-view — centre all nodes so nothing is clipped by the viewport.
+  // Fit-to-view — centre all nodes so nothing is clipped by the viewport.
   await page.evaluate(() => {
     if (typeof app !== 'undefined' && typeof app.fitAll === 'function') app.fitAll();
   });
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(300);
 }
 
-// ── 1. intro-simple: Input.Number(5) → Math.Multiply(b=2) → Output.Watch ──────
+/**
+ * Compute the bounding-box clip rectangle from all rendered .node elements,
+ * adding PADDING on every side.  Returns null when no nodes are found (so the
+ * caller can fall back to a full #canvas-area screenshot).
+ *
+ * @param {import('playwright').Page} page
+ * @param {number} padding
+ * @returns {Promise<{x:number,y:number,width:number,height:number}|null>}
+ */
+async function getNodeClipRect(page, padding) {
+  const canvasBox = await page.evaluate(() => {
+    const el = document.querySelector('#canvas-area');
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { left: r.left, top: r.top, width: r.width, height: r.height };
+  });
+  if (!canvasBox) return null;
+
+  const nodeBox = await page.evaluate(() => {
+    const nodes = Array.from(document.querySelectorAll('.node, .node-wrapper'));
+    if (!nodes.length) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const n of nodes) {
+      const r = n.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue; // skip invisible elements
+      if (r.left < minX) minX = r.left;
+      if (r.top  < minY) minY = r.top;
+      if (r.right  > maxX) maxX = r.right;
+      if (r.bottom > maxY) maxY = r.bottom;
+    }
+    if (!isFinite(minX)) return null;
+    return { minX, minY, maxX, maxY };
+  });
+
+  if (!nodeBox) return null;
+
+  // Convert viewport coords → coords relative to the canvas element
+  const relX = nodeBox.minX - canvasBox.left;
+  const relY = nodeBox.minY - canvasBox.top;
+  const relMaxX = nodeBox.maxX - canvasBox.left;
+  const relMaxY = nodeBox.maxY - canvasBox.top;
+
+  // Add padding and clamp to canvas bounds
+  const x      = Math.max(0, relX - padding);
+  const y      = Math.max(0, relY - padding);
+  const right  = Math.min(canvasBox.width,  relMaxX + padding);
+  const bottom = Math.min(canvasBox.height, relMaxY + padding);
+  const width  = Math.max(10, right - x);
+  const height = Math.max(10, bottom - y);
+
+  return { x, y, width, height };
+}
+
+// ── 1. intro-simple: Input.Number(5) → Math.Multiply(a);
+//                    Input.Number(2) → Math.Multiply(b);
+//                    Multiply.result → Output.Watch showing 10 ──────────────────
+// FIX: Replace onCtrl(n2,'b',2) with a wired second Input.Number(2) → Multiply(b)
+// so the wire is visually drawn and the graph unambiguously matches the chapter.
 
 async function buildIntroSimple(page) {
   await page.evaluate(() => {
-    const n1 = app.addNodeToCanvas('Input.Number', 80, 200);
-    const n2 = app.addNodeToCanvas('Math.Multiply', 320, 200);
-    const n3 = app.addNodeToCanvas('Output.Watch', 560, 200);
-    if (!n1 || !n2 || !n3) return;
+    const n1 = app.addNodeToCanvas('Input.Number', 80, 140);
+    const n2 = app.addNodeToCanvas('Input.Number', 80, 280);
+    const mul = app.addNodeToCanvas('Math.Multiply', 340, 210);
+    const n3 = app.addNodeToCanvas('Output.Watch', 580, 210);
+    if (!n1 || !n2 || !mul || !n3) return;
     if (app.onCtrl) {
       app.onCtrl(n1.id, 'val', 5);
-      app.onCtrl(n2.id, 'b', 2);
+      app.onCtrl(n2.id, 'val', 2);
     }
-    app.addWire(n1.id, 'value', n2.id, 'a');
-    app.addWire(n2.id, 'result', n3.id, 'value');
+    app.addWire(n1.id, 'value', mul.id, 'a');
+    app.addWire(n2.id, 'value', mul.id, 'b');
+    app.addWire(mul.id, 'result', n3.id, 'value');
   });
 }
 
@@ -297,22 +359,26 @@ async function buildDataTypesSimple(page) {
   });
 }
 
-// ── 8. data-types-advanced: List.Create → Logic.Compare(>=2) → FilterByBoolean → Watch ─
-// FIX B: Use op='>=' so that items [1,2] produce inList=[2] (non-empty result).
+// ── 8. data-types-advanced: List.Create(1,2,3,4,5) → Logic.Compare(>=3)
+//                            → List.FilterByBoolean → Output.Watch ─────────────
+// Use 5 items (1-5) and compare >=3 so inList=[3,4,5] (matching the audit matrix).
 
 async function buildDataTypesAdvanced(page) {
   await page.evaluate(() => {
     const create = app.addNodeToCanvas('List.Create', 80, 200);
-    const cmp = app.addNodeToCanvas('Logic.Compare', 300, 200);
-    const filter = app.addNodeToCanvas('List.FilterByBoolean', 520, 200);
-    const watch = app.addNodeToCanvas('Output.Watch', 740, 200);
+    const cmp = app.addNodeToCanvas('Logic.Compare', 320, 200);
+    const filter = app.addNodeToCanvas('List.FilterByBoolean', 540, 200);
+    const watch = app.addNodeToCanvas('Output.Watch', 760, 200);
     if (!create || !cmp || !filter || !watch) return;
     if (app.onCtrl) {
-      // Two list items: 1 and 2
+      // Five list items: 1, 2, 3, 4, 5
       app.onCtrl(create.id, 'item0', 1);
       app.onCtrl(create.id, 'item1', 2);
-      // Compare >= 2 so item 2 passes, giving inList=[2]
-      app.onCtrl(cmp.id, 'b', 2);
+      app.onCtrl(create.id, 'item2', 3);
+      app.onCtrl(create.id, 'item3', 4);
+      app.onCtrl(create.id, 'item4', 5);
+      // Compare >= 3 so items 3,4,5 pass → inList=[3,4,5]
+      app.onCtrl(cmp.id, 'b', 3);
       app.onCtrl(cmp.id, 'op', '>=');
     }
     // list → compare.a (lacing applies comparison to each item)
@@ -320,7 +386,7 @@ async function buildDataTypesAdvanced(page) {
     // compare.result → filter.mask; create.list → filter.list
     app.addWire(cmp.id, 'result', filter.id, 'mask');
     app.addWire(create.id, 'list', filter.id, 'list');
-    // filter.inList → watch (shows [2])
+    // filter.inList → watch (shows [3,4,5])
     app.addWire(filter.id, 'inList', watch.id, 'value');
   });
 }
@@ -452,6 +518,7 @@ async function buildGeometryAdvanced(page) {
 }
 
 // ── 13. lists-simple: List.Create(10,20,30) → List.Reverse → Output.Watch ────
+// FIX: Add item2=30 so the list has all three items [10,20,30] as in the matrix.
 
 async function buildListsSimple(page) {
   await page.evaluate(() => {
@@ -462,6 +529,7 @@ async function buildListsSimple(page) {
     if (app.onCtrl) {
       app.onCtrl(create.id, 'item0', 10);
       app.onCtrl(create.id, 'item1', 20);
+      app.onCtrl(create.id, 'item2', 30);
     }
     app.addWire(create.id, 'list', rev.id, 'list');
     // List.Reverse output port is 'result'
@@ -564,8 +632,7 @@ async function buildCodeTerminalSimple(page) {
 }
 
 // ── 18. code-terminal-advanced: Input.Number(10) → Math.Multiply(b=5) → Math.Add(b=3) → Watch ─
-// FIX B: Replace the broken "5 disconnected Math.Add nodes" graph with a
-// proper connected pipeline: producer → two transforms → Output.Watch,
+// Connected pipeline: producer → two transforms → Output.Watch,
 // then open the terminal overlay so the chapter context is visible.
 
 async function buildCodeTerminalAdvanced(page) {
@@ -703,7 +770,7 @@ async function main() {
 
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
-  // FIX A: Set 1280×720 viewport as spec requires.
+  // Use 1600×900 viewport so wider graphs are not clipped.
   await page.setViewportSize(VIEWPORT);
 
   // Load the app and wait for it to initialise.
@@ -727,12 +794,21 @@ async function main() {
     try {
       await buildGraph(page, buildFn);
 
-      // FIX A: Screenshot only the canvas area element (no browser chrome).
+      // Compute bounding-box clip so all nodes are fully visible (60px padding).
+      const clip = await getNodeClipRect(page, PADDING);
+
       const canvasEl = await page.$('#canvas-area');
       if (canvasEl) {
-        await canvasEl.screenshot({ path: outPath, type: 'png' });
+        if (clip) {
+          // Preferred path: crop to node bounding box + padding.
+          await canvasEl.screenshot({ path: outPath, type: 'png', clip });
+        } else {
+          // Fallback: no nodes found via DOM query — screenshot the full canvas.
+          console.warn(`[shots] WARNING: no .node elements found for ${slotId} — using full canvas`);
+          await canvasEl.screenshot({ path: outPath, type: 'png' });
+        }
       } else {
-        // Fallback: full page screenshot when canvas element not found.
+        // Ultimate fallback: full page screenshot when canvas element not found.
         console.warn(`[shots] WARNING: #canvas-area not found for ${slotId} — falling back to full-page`);
         await page.screenshot({ path: outPath, type: 'png' });
       }
