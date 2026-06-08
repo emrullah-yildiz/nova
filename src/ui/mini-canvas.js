@@ -6,6 +6,16 @@
 // math), and the pending wire tracks the cursor via a document-level
 // mousemove listener so it follows the cursor even outside the canvas.
 //
+// Pan/zoom: scroll-wheel zooms toward cursor (range 0.2–3.0).
+//   Middle-mouse drag or Space+drag pans the viewport.
+//   All node positions and SVG wire paths live inside .mini-canvas-viewport
+//   so they transform together; _dotCenter() computes coords relative to
+//   the SVG (which is also inside the viewport), so bezier endpoints are
+//   always correct after any pan/zoom.
+//
+// Wire interaction: both click-to-connect (click output, click input) and
+//   drag-to-connect (mousedown on output dot, drag, mouseup on input dot).
+//
 // Public API:
 //   createMiniCanvas(containerEl, exercise, { onSolve })
 //
@@ -27,11 +37,20 @@ const CONTROL_SCHEMA = {
 
 // ---------------------------------------------------------------------------
 // Static port schema for the node types used in exercises.
+// Source-of-truth: src/nodes/categories/*.js (read, not guessed).
 // ---------------------------------------------------------------------------
 const PORT_SCHEMA = {
   'Input.Number': {
     inputs: [],
     outputs: [{ id: 'value', name: 'value', type: 'number' }]
+  },
+  'Input.Integer': {
+    inputs: [],
+    outputs: [{ id: 'value', name: 'value', type: 'number' }]
+  },
+  'Input.Text': {
+    inputs: [],
+    outputs: [{ id: 'value', name: 'value', type: 'string' }]
   },
   'Output.Watch': {
     inputs: [{ id: 'value', name: 'value', type: 'any' }],
@@ -91,6 +110,14 @@ const PORT_SCHEMA = {
     inputs: [{ id: 'point', name: 'point', type: 'point' }],
     outputs: [{ id: 'x', name: 'x', type: 'number' }]
   },
+  'Point.Y': {
+    inputs: [{ id: 'point', name: 'point', type: 'point' }],
+    outputs: [{ id: 'y', name: 'y', type: 'number' }]
+  },
+  'Point.Z': {
+    inputs: [{ id: 'point', name: 'point', type: 'point' }],
+    outputs: [{ id: 'z', name: 'z', type: 'number' }]
+  },
   'List.Range': {
     inputs: [
       { id: 'start', name: 'start', type: 'number' },
@@ -114,25 +141,47 @@ const PORT_SCHEMA = {
   'List.Sum': {
     inputs: [{ id: 'list', name: 'list', type: 'list' }],
     outputs: [{ id: 'result', name: 'result', type: 'number' }]
+  },
+  'List.Create': {
+    inputs: [
+      { id: 'item0', name: 'item 0', type: 'any' },
+      { id: 'item1', name: 'item 1', type: 'any' }
+    ],
+    outputs: [{ id: 'list', name: 'list', type: 'list' }]
+  },
+  'List.First': {
+    inputs: [{ id: 'list', name: 'list', type: 'list' }],
+    outputs: [{ id: 'item', name: 'item', type: 'any' }]
+  },
+  'List.Last': {
+    inputs: [{ id: 'list', name: 'list', type: 'list' }],
+    outputs: [{ id: 'item', name: 'item', type: 'any' }]
   }
 };
 
 // Visual meta: icon + accent color per node type (matches Nova's categories).
 const NODE_META = {
-  'Input.Number':       { icon: '#',  color: '#89b4fa' },
-  'Output.Watch':       { icon: '◉',  color: '#cba6f7' },
-  'Math.Add':           { icon: '+',  color: '#a6e3a1' },
-  'Math.Subtract':      { icon: '−',  color: '#a6e3a1' },
-  'Math.Multiply':      { icon: '×',  color: '#a6e3a1' },
-  'Math.Divide':        { icon: '÷',  color: '#a6e3a1' },
-  'Math.Power':         { icon: 'xⁿ', color: '#a6e3a1' },
-  'Math.Round':         { icon: '≈',  color: '#a6e3a1' },
-  'Point.ByCoordinates':{ icon: '·',  color: '#89b4fa' },
-  'Point.X':            { icon: 'X',  color: '#89b4fa' },
-  'List.Range':         { icon: '…',  color: '#fab387' },
-  'List.Count':         { icon: 'n',  color: '#fab387' },
-  'List.Sequence':      { icon: '⋮',  color: '#fab387' },
-  'List.Sum':           { icon: 'Σ',  color: '#fab387' }
+  'Input.Number':        { icon: '#',  color: '#89b4fa' },
+  'Input.Integer':       { icon: '#',  color: '#89b4fa' },
+  'Input.Text':          { icon: '"',  color: '#89b4fa' },
+  'Output.Watch':        { icon: '◉',  color: '#cba6f7' },
+  'Math.Add':            { icon: '+',  color: '#a6e3a1' },
+  'Math.Subtract':       { icon: '−',  color: '#a6e3a1' },
+  'Math.Multiply':       { icon: '×',  color: '#a6e3a1' },
+  'Math.Divide':         { icon: '÷',  color: '#a6e3a1' },
+  'Math.Power':          { icon: 'xⁿ', color: '#a6e3a1' },
+  'Math.Round':          { icon: '≈',  color: '#a6e3a1' },
+  'Point.ByCoordinates': { icon: '·',  color: '#89b4fa' },
+  'Point.X':             { icon: '→',  color: '#89b4fa' },
+  'Point.Y':             { icon: '↑',  color: '#89b4fa' },
+  'Point.Z':             { icon: '↗',  color: '#89b4fa' },
+  'List.Range':          { icon: '…',  color: '#fab387' },
+  'List.Count':          { icon: '#',  color: '#fab387' },
+  'List.Sequence':       { icon: '⋮',  color: '#fab387' },
+  'List.Sum':            { icon: 'Σ',  color: '#fab387' },
+  'List.Create':         { icon: '⊞',  color: '#fab387' },
+  'List.First':          { icon: '⊢',  color: '#fab387' },
+  'List.Last':           { icon: '⊣',  color: '#fab387' }
 };
 
 function _getSchema(nodeType) {
@@ -179,16 +228,55 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
   const userWires = [];
   let pendingWire = null; // { nodeId, portId, portType, dotEl }
 
+  // ── Pan/zoom state ────────────────────────────────────────────────────────
+  let panX = 0;
+  let panY = 0;
+  let zoom = 1;
+  const ZOOM_MIN = 0.2;
+  const ZOOM_MAX = 3.0;
+
+  // Space-key pan state
+  let spaceDown = false;
+  let isPanning = false;
+  let panStartX = 0;
+  let panStartY = 0;
+  let panStartPanX = 0;
+  let panStartPanY = 0;
+
+  // Drag-wire: track whether the mouse moved enough to be a drag (vs click).
+  // A drag is detected when the cursor moves > DRAG_THRESHOLD px from mousedown.
+  const DRAG_THRESHOLD = 4;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let isDragWire = false;
+
   const nodes = exercise.nodes || [];
 
   // ── Wrapper ──────────────────────────────────────────────────────────────
   const wrapper = document.createElement('div');
   wrapper.className = 'mini-canvas';
 
-  // ── SVG overlay for wires ─────────────────────────────────────────────────
+  // Canvas area: relative container so absolute nodes sit within it.
+  const canvasEl = document.createElement('div');
+  canvasEl.className = 'mini-canvas-area';
+  wrapper.appendChild(canvasEl);
+
+  // ── Viewport wrapper — all nodes + SVG live inside so pan/zoom transforms
+  //    them together. transform-origin 0,0 so we can do cursor-based zoom.
+  const viewport = document.createElement('div');
+  viewport.className = 'mini-canvas-viewport';
+  viewport.style.cssText = 'position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;';
+  canvasEl.appendChild(viewport);
+
+  function _applyTransform() {
+    viewport.style.transform = `translate(${panX}px,${panY}px) scale(${zoom})`;
+  }
+
+  // ── SVG overlay for wires — inside the viewport so coords are in viewport space ─
   const svgNS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(svgNS, 'svg');
   svg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:1';
+  viewport.appendChild(svg);
 
   const preWireGroup = document.createElementNS(svgNS, 'g');
   preWireGroup.classList.add('mini-canvas-prewires');
@@ -206,12 +294,6 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
   pendingLine.setAttribute('stroke-dasharray', '6,3');
   pendingLine.style.display = 'none';
   svg.appendChild(pendingLine);
-
-  // Canvas area: relative container so absolute nodes sit within it.
-  const canvasEl = document.createElement('div');
-  canvasEl.className = 'mini-canvas-area';
-  canvasEl.appendChild(svg);
-  wrapper.appendChild(canvasEl);
 
   // ── Port element registry ─────────────────────────────────────────────────
   // key: `${nodeId}:${role}:${portId}` → port dot element
@@ -373,14 +455,13 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
     }
 
     box.appendChild(body);
-    canvasEl.appendChild(box);
+    viewport.appendChild(box);
   });
 
   // ── Port position (from live DOM rects, SVG-relative) ────────────────────
-  // All coordinates are measured relative to the SVG element's bounding box so
-  // that wire endpoints and cursor position share the same coordinate space as
-  // the SVG <path> d-attribute values — regardless of scroll or transforms on
-  // ancestor elements (e.g., the learning overlay's fixed/transformed container).
+  // Both the SVG and the port dots are inside the viewport, so their bounding
+  // rects share the same scale. We still use the SVG rect as the origin so
+  // SVG <path> d-attribute values map correctly to screen coordinates.
   function _dotCenter(dotEl) {
     const dr = dotEl.getBoundingClientRect();
     const sr = svg.getBoundingClientRect();
@@ -442,6 +523,7 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
 
   // ── Wire interaction ──────────────────────────────────────────────────────
   // Track cursor globally so the pending wire follows even outside the canvas.
+  // Used for both click-to-connect (cursor tracking) and drag-to-connect (visual).
   function _onDocMouseMove(e) {
     if (!pendingWire) return;
     const fromDot = portEls.get(`${pendingWire.nodeId}:output:${pendingWire.portId}`);
@@ -458,6 +540,7 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
       pendingWire.dotEl.classList.remove('pending');
     }
     pendingWire = null;
+    isDragWire = false;
     pendingLine.style.display = 'none';
     document.removeEventListener('mousemove', _onDocMouseMove);
   }
@@ -497,17 +580,97 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
     _clearFeedback();
   }
 
+  // ── Port mousedown — initiates drag-wire tracking ────────────────────────
+  // Records the start position. If the cursor moves beyond DRAG_THRESHOLD
+  // before mouseup, it is treated as a drag-to-connect gesture.
+  // Simple click-to-connect is handled entirely by the click handler below.
+  canvasEl.addEventListener('mousedown', function (e) {
+    // Ignore middle-mouse (pan) and right-click.
+    if (e.button !== 0) return;
+    // Ignore space-pan drag.
+    if (spaceDown) return;
+
+    const dotEl = e.target.closest('[data-port-role]');
+    if (!dotEl || dotEl.dataset.portRole !== 'output') return;
+
+    // Record drag origin. The pending wire will be started by the click handler
+    // for ordinary clicks; for drags we start it from the first mousemove that
+    // crosses the threshold (see _onDocMouseMove).
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    isDragWire = false;
+
+    // Attach a temporary mousemove/mouseup pair to track the drag.
+    // We do NOT call _startPending here — the click handler does it for clicks.
+    // If the mouse moves beyond DRAG_THRESHOLD before mouseup, we treat it as
+    // a drag gesture, suppress the click handler, and handle wire completion here.
+    const dotRef = dotEl;
+    let dragStarted = false;
+    let dragCancelled = false; // set to true when click fires (no real drag)
+
+    function onDragMove(ev) {
+      if (dragCancelled) return;
+      const dx = ev.clientX - dragStartX;
+      const dy = ev.clientY - dragStartY;
+      if (!dragStarted && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+        dragStarted = true;
+        isDragWire = true;
+        // Cancel any click-initiated pending wire before starting drag.
+        _cancelPending();
+        _startPending(dotRef);
+      }
+      // _onDocMouseMove (attached by _startPending) handles the visual update.
+    }
+
+    function onDragUp(ev) {
+      document.removeEventListener('mousemove', onDragMove);
+      document.removeEventListener('mouseup', onDragUp);
+      if (!dragStarted || !pendingWire) return;
+      // Drag completed: check if released over an input dot.
+      const target = document.elementFromPoint(ev.clientX, ev.clientY);
+      const targetDot = target && target.closest('[data-port-role]');
+      if (targetDot && targetDot.dataset.portRole === 'input') {
+        _completeWire(targetDot);
+      } else {
+        _cancelPending();
+      }
+    }
+
+    // Cancel the drag tracker once a real click has been registered for this
+    // mousedown (i.e. mousedown+mouseup without significant movement). We use
+    // a one-shot 'click' listener on the same dot to detect this.
+    function onClickCancel() {
+      dragCancelled = true;
+      document.removeEventListener('mousemove', onDragMove);
+      document.removeEventListener('mouseup', onDragUp);
+    }
+    dotRef.addEventListener('click', onClickCancel, { once: true });
+
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup', onDragUp);
+  });
+
   canvasEl.addEventListener('click', function (e) {
     const dotEl = e.target.closest('[data-port-role]');
 
     if (!dotEl) {
-      _cancelPending();
+      // Clicked on blank canvas — cancel any pending wire.
+      if (!isDragWire) _cancelPending();
+      return;
+    }
+
+    // If this click fired as the tail-end of a drag (isDragWire), ignore it.
+    // The drag path already completed or cancelled the wire.
+    if (isDragWire) {
+      isDragWire = false;
+      e.stopPropagation();
       return;
     }
 
     const role = dotEl.dataset.portRole;
 
     if (role === 'output') {
+      // Click-to-connect: start or restart the pending wire.
       if (pendingWire) _cancelPending();
       _startPending(dotEl);
       e.stopPropagation();
@@ -532,6 +695,75 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
       e.stopPropagation();
     }
   });
+
+  // ── Pan: middle-mouse drag or Space+left-drag ─────────────────────────────
+  canvasEl.addEventListener('mousedown', function (e) {
+    const isMiddle = e.button === 1;
+    const isSpaceDrag = e.button === 0 && spaceDown;
+    if (!isMiddle && !isSpaceDrag) return;
+    e.preventDefault();
+    isPanning = true;
+    panStartX = e.clientX;
+    panStartY = e.clientY;
+    panStartPanX = panX;
+    panStartPanY = panY;
+    canvasEl.style.cursor = 'grabbing';
+
+    function onMove(ev) {
+      if (!isPanning) return;
+      panX = panStartPanX + (ev.clientX - panStartX);
+      panY = panStartPanY + (ev.clientY - panStartY);
+      _applyTransform();
+    }
+    function onUp() {
+      isPanning = false;
+      canvasEl.style.cursor = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  // Space key enables pan-drag mode.
+  function _onKeyDown(e) {
+    if (e.code === 'Space' && e.target === document.body) {
+      spaceDown = true;
+      canvasEl.style.cursor = 'grab';
+      e.preventDefault();
+    }
+  }
+  function _onKeyUp(e) {
+    if (e.code === 'Space') {
+      spaceDown = false;
+      if (!isPanning) canvasEl.style.cursor = '';
+    }
+  }
+  document.addEventListener('keydown', _onKeyDown);
+  document.addEventListener('keyup', _onKeyUp);
+
+  // ── Zoom: scroll wheel zooms toward cursor ─────────────────────────────────
+  canvasEl.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoom + delta));
+    if (newZoom === zoom) return;
+
+    // Cursor position relative to canvasEl (the fixed container).
+    const rect = canvasEl.getBoundingClientRect();
+    const cursorX = e.clientX - rect.left;
+    const cursorY = e.clientY - rect.top;
+
+    // Keep the point under the cursor fixed: adjust pan so the viewport
+    // content under the cursor doesn't appear to shift.
+    panX = cursorX - (cursorX - panX) * (newZoom / zoom);
+    panY = cursorY - (cursorY - panY) * (newZoom / zoom);
+    zoom = newZoom;
+    _applyTransform();
+    // Redraw wires: dotCenter uses live getBoundingClientRect which is already
+    // updated after transform, so a plain redraw keeps wires correct.
+    _redrawWires();
+  }, { passive: false });
 
   // ── Feedback banner ───────────────────────────────────────────────────────
   let bannerEl = null;
@@ -569,8 +801,21 @@ export function createMiniCanvas(containerEl, exercise, { onSolve } = {}) {
   // ── Mount and initial draw ────────────────────────────────────────────────
   containerEl.appendChild(wrapper);
 
-  // Wait one frame for layout to settle before computing wire positions.
+  // Apply initial transform and wait one frame for layout to settle before
+  // computing wire positions.
+  _applyTransform();
   requestAnimationFrame(() => _redrawWires());
+
+  // ── Cleanup: remove document-level listeners when the component is removed ─
+  // (Uses a MutationObserver on the wrapper so cleanup is automatic.)
+  const _cleanup = new MutationObserver(() => {
+    if (!document.contains(wrapper)) {
+      document.removeEventListener('keydown', _onKeyDown);
+      document.removeEventListener('keyup', _onKeyUp);
+      _cleanup.disconnect();
+    }
+  });
+  _cleanup.observe(document.body, { childList: true, subtree: true });
 
   return {
     refresh() { _redrawWires(); },
