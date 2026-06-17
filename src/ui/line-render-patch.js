@@ -45,30 +45,15 @@ export function installLineRenderPatch(geo = getRuntimeGeo(), three = getRuntime
     return group;
   };
 
-  // ── Polyline3: straight tube segments (LineCurve3 per edge, no smoothing) ──
+  // ── Polyline3: flat 2D line (LineLoop for closed, Line for open) ──
   Geo.Polyline3.prototype.toMesh = function(color) {
     var c = color || 0x94e2d5;
     var pts = this.points;
     if (!pts || pts.length < 2) return new THREE.Group();
-    var totalLen = 0;
-    for (var i = 1; i < pts.length; i++) totalLen += pts[i-1].distanceTo(pts[i]);
-    if (totalLen < 0.001) totalLen = 1;
-    var r = Math.max(0.03, totalLen * 0.005);
-    var mat = new THREE.MeshPhongMaterial({ color: c, emissive: c, emissiveIntensity: 0.1 });
-    var group = new THREE.Group();
     var threePoints = pts.map(function(p) { return p.toThree(); });
-    var count = threePoints.length;
-    var edgeCount = this.closed ? count : count - 1;
-    for (var j = 0; j < edgeCount; j++) {
-      var a = threePoints[j];
-      var b = threePoints[(j + 1) % count];
-      var edgeLen = a.distanceTo(b);
-      if (edgeLen < 0.0001) continue;
-      var seg = new THREE.LineCurve3(a, b);
-      var tubeGeo = new THREE.TubeGeometry(seg, 1, r, 6, false);
-      group.add(new THREE.Mesh(tubeGeo, mat));
-    }
-    return group;
+    var geom = new THREE.BufferGeometry().setFromPoints(threePoints);
+    var mat = new THREE.LineBasicMaterial({ color: c });
+    return this.closed ? new THREE.LineLoop(geom, mat) : new THREE.Line(geom, mat);
   };
 
   // ── Arc3: tube along arc path ──
