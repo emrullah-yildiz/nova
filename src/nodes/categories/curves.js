@@ -926,7 +926,7 @@ export const curvesNodes = [
       { id: 'depth', name: 'Depth', type: 'number', description: 'Total span along the plane Y axis' },
       { id: 'plane', name: 'Plane', type: 'plane', optional: true, description: 'Orientation plane (default: world XY). The rectangle is constructed in the plane\'s local frame.' }
     ],
-    outputs: [{ id: 'profile', name: 'Profile', type: 'list', description: 'List of 4 corner points (CCW from lower-left in the plane)' }],
+    outputs: [{ id: 'profile', name: 'Profile', type: 'curve', description: 'Closed rectangle curve (CCW from lower-left in the plane)' }],
     controls: [],
     execute(context, inputs) {
       const c = toPoint(inputs.center);
@@ -965,12 +965,12 @@ export const curvesNodes = [
         c.z + sx * w * xAxis.z + sy * d * yAxis.z
       );
       return {
-        profile: [
+        profile: new Geo.Polyline3([
           corner(-1, -1),
           corner(+1, -1),
           corner(+1, +1),
           corner(-1, +1)
-        ]
+        ], true)
       };
     },
     codegen: {
@@ -984,25 +984,23 @@ export const curvesNodes = [
         { name: 'Depth', description: 'Span along plane Y axis' },
         { name: 'Plane', description: 'Orientation plane (optional; default: world XY)' }
       ],
-      outputs: [{ name: 'Profile', description: 'Corner point list' }],
+      outputs: [{ name: 'Profile', description: 'Closed rectangle curve' }],
       example: {
-        title: '4 corners of a 10×6 rectangle on the XY plane',
+        title: 'Rectangle curve on a plane, displayed in viewport',
         nodes: [
           { type: 'Point.Origin', x: 0, y: 0 },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 10 } },
           { type: 'Input.Number', x: 0, y: 150, controls: { val: 6 } },
           { type: 'Plane.XY', x: 0, y: 220 },
           { type: 'Rectangle.ByCenterWidthDepth', x: 240, y: 70 },
-          { type: 'List.Count', x: 480, y: 70 },
-          { type: 'Output.Watch', x: 680, y: 70 }
+          { type: 'Output.Watch', x: 480, y: 70 }
         ],
         wires: [
           [0, 'point', 4, 'center'],
           [1, 'value', 4, 'width'],
           [2, 'value', 4, 'depth'],
           [3, 'plane', 4, 'plane'],
-          [4, 'profile', 5, 'list'],
-          [5, 'count', 6, 'value']
+          [4, 'profile', 5, 'value']
         ]
       },
       sampleCode: '{{profile}} = [Geo.Point3({{center}}.x - {{width}}/2, {{center}}.y - {{depth}}/2, {{center}}.z), ...]'
