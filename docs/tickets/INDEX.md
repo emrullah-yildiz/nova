@@ -17,8 +17,8 @@
 
 | ID | Title | Status | Priority | Sprint | Lane(s) | Branch |
 |---|---|---|---|---|---|---|
-| TICK-006 | Learning page screenshots | 🟡 in-progress | high | A3 | ui | fix/tick-006-content-aligned-screenshots — T06f: read source, build exact graphs per chapter text (supersedes T06e) |
-| TICK-007 | Learning page interactive exercises | 🟡 in-progress | high | A3 | ui | fix/tick-007-real-canvas-embed — T07h: pan/zoom + node schema parity + drag wire UX (supersedes T07f + T07g) |
+| TICK-006 | Learning page screenshots | 🔴 paused | high | backlog | ui | — |
+| TICK-007 | Learning page interactive exercises | 🔴 paused | high | backlog | ui | — |
 | TICK-008 | Live agent dashboard — futuristic real-time view of agent activity | ⬜ draft | high | A3 | ui, platform | feat/agent-dashboard |
 
 ## Done (last 30 days)

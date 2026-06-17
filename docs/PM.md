@@ -18,6 +18,8 @@
 
 ## Backlog
 
+- TICK-006 — Learning page screenshots (content-aligned, all 20 slots match chapter text).
+- TICK-007 — Learning page interactive exercises (pan/zoom mini-canvas, drag-wire UX, real nodes).
 - Accounts & collaboration Phase 0 — platform port (Node → workerd, Neon crypto).
 - R2 storage for large mesh artifacts.
 - Mobile layout — out of scope until collab ships.
