@@ -4,24 +4,24 @@
  * Cuts a surface mesh with an intersecting geometry mesh and returns the
  * portion of the surface that lies OUTSIDE the cutting body.
  *
- * Algorithm (triangle-level filtering):
- *   1. For each triangle in the Surface mesh, test whether it intersects
- *      the cutting body:
- *      - Sphere cutter: exact test — remove the triangle if the minimum
- *        distance from the sphere centre to the triangle is ≤ radius.
- *        This correctly handles fan-triangulated surfaces (e.g. Surface.ByPatch)
- *        where the centroid-only test would miss triangles whose vertex lies
- *        inside the sphere.
- *      - General mesh cutter: centroid-in-AABB test as a conservative
- *        approximation (works well for convex, axis-aligned cutters).
- *   2. Keep triangles that do NOT intersect the cutting body.
- *   3. Rebuild the mesh with only the surviving triangles, compacting
+ * Algorithm:
+ *   1. Subdivide the surface mesh once (each triangle → 4) so that inner
+ *      and outer regions have small enough triangles for centroid testing.
+ *      Without subdivision, fan-triangulated surfaces (Surface.ByPatch) have
+ *      every centroid at ~2/3 of the patch radius — outside any small sphere.
+ *   2. For each sub-triangle, test whether its centroid lies inside the
+ *      cutting body:
+ *      - Sphere cutter (_solidType==='Sphere'): exact squared-distance test.
+ *      - General mesh cutter: centroid-in-AABB approximation (works well for
+ *        convex, axis-aligned cutters).
+ *   3. Keep sub-triangles whose centroid is OUTSIDE the cutting body.
+ *   4. Rebuild the mesh with only the surviving sub-triangles, compacting
  *      the vertex list so no orphaned vertices remain.
  *
  * Edge cases:
- *   - No intersection (AC-3): no triangles removed → return a copy of the
- *     original mesh (same vertex/face arrays, new object).
- *   - Full enclosure (AC-4): all triangles removed → return an empty mesh
+ *   - No intersection (AC-3): no sub-triangles removed → return a copy of
+ *     the ORIGINAL (non-subdivided) mesh.
+ *   - Full enclosure (AC-4): all sub-triangles removed → return an empty mesh
  *     with empty arrays — never null/undefined/throw.
  *
  * Owned file: src/geometry/nodes/Surface.Trim.js
@@ -53,90 +53,57 @@ function meshAABB(mesh) {
 }
 
 /**
- * Squared minimum distance from point P to triangle (A, B, C).
- * Uses the Ericson "Real-Time Collision Detection" closest-point algorithm.
+ * Subdivide each triangle of `mesh` into 4 by inserting edge midpoints.
+ * Returns a new Mesh3 with 4× the face count and shared midpoint vertices.
+ * Original vertex indices are preserved; midpoints are appended after them.
  */
-function pointTriDistSq(
-  px, py, pz,
-  ax, ay, az,
-  bx, by, bz,
-  cx, cy, cz
-) {
-  const abx = bx - ax, aby = by - ay, abz = bz - az;
-  const acx = cx - ax, acy = cy - ay, acz = cz - az;
-  const apx = px - ax, apy = py - ay, apz = pz - az;
+function subdivideOnce(mesh) {
+  const verts = mesh.vertices.slice(); // extend with midpoints below
+  const faces = [];
+  const edgeMap = new Map();
 
-  const d1 = abx * apx + aby * apy + abz * apz;
-  const d2 = acx * apx + acy * apy + acz * apz;
-  if (d1 <= 0 && d2 <= 0) {
-    return apx * apx + apy * apy + apz * apz; // closest = A
+  const getMid = (a, b) => {
+    const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+    if (edgeMap.has(key)) return edgeMap.get(key);
+    const va = verts[a], vb = verts[b];
+    const idx = verts.length;
+    verts.push(new Geo.Point3(
+      (va.x + vb.x) / 2,
+      (va.y + vb.y) / 2,
+      (va.z + vb.z) / 2
+    ));
+    edgeMap.set(key, idx);
+    return idx;
+  };
+
+  for (const face of mesh.faces) {
+    const [i0, i1, i2] = face;
+    if (!verts[i0] || !verts[i1] || !verts[i2]) continue;
+    const m01 = getMid(i0, i1);
+    const m12 = getMid(i1, i2);
+    const m02 = getMid(i0, i2);
+    faces.push([i0, m01, m02]);
+    faces.push([m01, i1, m12]);
+    faces.push([m02, m12, i2]);
+    faces.push([m01, m12, m02]);
   }
 
-  const bpx = px - bx, bpy = py - by, bpz = pz - bz;
-  const d3 = abx * bpx + aby * bpy + abz * bpz;
-  const d4 = acx * bpx + acy * bpy + acz * bpz;
-  if (d3 >= 0 && d4 <= d3) {
-    return bpx * bpx + bpy * bpy + bpz * bpz; // closest = B
-  }
-
-  const cpx = px - cx, cpy = py - cy, cpz = pz - cz;
-  const d5 = abx * cpx + aby * cpy + abz * cpz;
-  const d6 = acx * cpx + acy * cpy + acz * cpz;
-  if (d6 >= 0 && d5 <= d6) {
-    return cpx * cpx + cpy * cpy + cpz * cpz; // closest = C
-  }
-
-  const vc = d1 * d4 - d3 * d2;
-  if (vc <= 0 && d1 >= 0 && d3 <= 0) { // closest on edge AB
-    const v = d1 / (d1 - d3);
-    const qx = ax + v * abx, qy = ay + v * aby, qz = az + v * abz;
-    const dx = px - qx, dy = py - qy, dz = pz - qz;
-    return dx * dx + dy * dy + dz * dz;
-  }
-
-  const vb = d5 * d2 - d1 * d6;
-  if (vb <= 0 && d2 >= 0 && d6 <= 0) { // closest on edge AC
-    const w = d2 / (d2 - d6);
-    const qx = ax + w * acx, qy = ay + w * acy, qz = az + w * acz;
-    const dx = px - qx, dy = py - qy, dz = pz - qz;
-    return dx * dx + dy * dy + dz * dz;
-  }
-
-  const va = d3 * d6 - d5 * d4;
-  if (va <= 0 && (d4 - d3) >= 0 && (d5 - d6) >= 0) { // closest on edge BC
-    const w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
-    const qx = bx + w * (cx - bx), qy = by + w * (cy - by), qz = bz + w * (cz - bz);
-    const dx = px - qx, dy = py - qy, dz = pz - qz;
-    return dx * dx + dy * dy + dz * dz;
-  }
-
-  // Closest point is inside the triangle (project onto plane)
-  const denom = 1 / (va + vb + vc);
-  const v2 = vb * denom, w2 = vc * denom;
-  const qx = ax + v2 * abx + w2 * acx;
-  const qy = ay + v2 * aby + w2 * acy;
-  const qz = az + v2 * abz + w2 * acz;
-  const dx = px - qx, dy = py - qy, dz = pz - qz;
-  return dx * dx + dy * dy + dz * dz;
+  return new Geo.Mesh3(verts, faces, mesh.color);
 }
 
 /**
- * Build a per-face "should this triangle be removed?" function.
+ * Build a centroid-based "inside the cutting body?" tester.
  *
- * Returns a function (v0, v1, v2) → boolean: true means REMOVE this face.
+ * Returns a function (px, py, pz) → boolean: true means the centroid is
+ * inside the cutting body and the triangle should be removed.
  *
  * Priority:
- *  1. Sphere metadata (_solidType + _params) → exact triangle-sphere intersection.
- *     A triangle is removed if the sphere's centre is within `radius` of any
- *     point on the triangle (not just the centroid), so fan-triangulated meshes
- *     (Surface.ByPatch) trim correctly even with small cutting spheres.
- *  2. General mesh → centroid-in-AABB test (conservative approximation for
- *     convex, axis-aligned cutters).
+ *  1. Sphere metadata (_solidType + _params) → exact squared-distance test.
+ *  2. General mesh → centroid-in-AABB approximation.
  */
-function buildFaceTest(cuttingMesh) {
+function buildContainmentTest(cuttingMesh) {
   if (!cuttingMesh) return () => false;
 
-  // Exact sphere test using metadata written by Geo.createSphere
   if (
     cuttingMesh._solidType === 'Sphere' &&
     cuttingMesh._params &&
@@ -144,32 +111,22 @@ function buildFaceTest(cuttingMesh) {
     cuttingMesh._params.radius != null
   ) {
     const { center, radius } = cuttingMesh._params;
-    const scx = center.x ?? 0;
-    const scy = center.y ?? 0;
-    const scz = center.z ?? 0;
+    const cx = center.x ?? 0;
+    const cy = center.y ?? 0;
+    const cz = center.z ?? 0;
     const r2 = radius * radius;
-    return (v0, v1, v2) =>
-      pointTriDistSq(
-        scx, scy, scz,
-        v0.x, v0.y, v0.z,
-        v1.x, v1.y, v1.z,
-        v2.x, v2.y, v2.z
-      ) <= r2;
+    return (px, py, pz) => {
+      const dx = px - cx, dy = py - cy, dz = pz - cz;
+      return dx * dx + dy * dy + dz * dz <= r2;
+    };
   }
 
-  // General mesh — centroid-in-AABB approximation
   const aabb = meshAABB(cuttingMesh);
   if (!aabb) return () => false;
-  return (v0, v1, v2) => {
-    const cx = (v0.x + v1.x + v2.x) / 3;
-    const cy = (v0.y + v1.y + v2.y) / 3;
-    const cz = (v0.z + v1.z + v2.z) / 3;
-    return (
-      cx >= aabb.minX && cx <= aabb.maxX &&
-      cy >= aabb.minY && cy <= aabb.maxY &&
-      cz >= aabb.minZ && cz <= aabb.maxZ
-    );
-  };
+  return (px, py, pz) =>
+    px >= aabb.minX && px <= aabb.maxX &&
+    py >= aabb.minY && py <= aabb.maxY &&
+    pz >= aabb.minZ && pz <= aabb.maxZ;
 }
 
 /**
@@ -195,44 +152,48 @@ export function trimSurface(surfaceMesh, cuttingMesh) {
     );
   }
 
-  const verts = surfaceMesh.vertices;
-  const faces = surfaceMesh.faces;
-  const shouldRemove = buildFaceTest(cuttingMesh);
+  // Subdivide the surface once so inner sub-triangles have small enough
+  // centroids for the sphere/AABB test to distinguish inside from outside.
+  const fine = subdivideOnce(surfaceMesh);
+  const verts = fine.vertices;
+  const faces = fine.faces;
+  const isInside = buildContainmentTest(cuttingMesh);
 
-  // Filter faces: keep those that do NOT intersect the cutting body.
-  // Track whether the cutter actually removed anything so the AC-3 path
-  // fires correctly even when some degenerate faces were skipped.
+  // Filter sub-faces: keep those whose centroid is OUTSIDE the cutting body.
+  // Track whether the cutter actually removed anything (for the AC-3 path).
   let cutterRemovedAny = false;
   const survivingFaces = [];
   for (const face of faces) {
     const [i0, i1, i2] = face;
-    const v0 = verts[i0];
-    const v1 = verts[i1];
-    const v2 = verts[i2];
-    if (!v0 || !v1 || !v2) continue; // skip degenerate face references
-    if (shouldRemove(v0, v1, v2)) {
+    const v0 = verts[i0], v1 = verts[i1], v2 = verts[i2];
+    if (!v0 || !v1 || !v2) continue;
+    const cx = (v0.x + v1.x + v2.x) / 3;
+    const cy = (v0.y + v1.y + v2.y) / 3;
+    const cz = (v0.z + v1.z + v2.z) / 3;
+    if (isInside(cx, cy, cz)) {
       cutterRemovedAny = true;
     } else {
       survivingFaces.push(face);
     }
   }
 
-  // AC-3: cutter did not overlap any triangle — return a copy of the original mesh
+  // AC-3: cutter did not overlap any sub-triangle — return a copy of the
+  // original (non-subdivided) mesh so the output geometry is unchanged.
   if (!cutterRemovedAny) {
     return new Geo.Mesh3(
-      verts.slice(),
-      faces.map(f => f.slice()),
+      surfaceMesh.vertices.slice(),
+      surfaceMesh.faces.map(f => f.slice()),
       0x94e2d5
     );
   }
 
-  // AC-4: all triangles removed — return empty mesh
+  // AC-4: all sub-triangles removed — return empty mesh
   if (survivingFaces.length === 0) {
     return new Geo.Mesh3([], [], 0x94e2d5);
   }
 
   // General case: compact vertex list — only include vertices referenced by
-  // surviving faces; rebuild face indices into the compacted list.
+  // surviving sub-faces; rebuild face indices into the compacted list.
   const oldToNew = new Map();
   const newVerts = [];
   const newFaces = [];
@@ -261,7 +222,7 @@ export const surfaceTrimNode = {
   subGroup: 'Operations',
   icon: '✂',
   aliases: ['surf-trim', 'surface-cut'],
-  description: 'Cuts a surface mesh with an intersecting geometry and returns the portion that lies outside the cutting body. For sphere cutters, uses exact triangle-sphere intersection. For other cutters, uses a centroid-in-AABB approximation (works well for convex, axis-aligned shapes). Non-intersecting cutters return the original surface unchanged; a fully-enclosing cutter returns an empty mesh.',
+  description: 'Cuts a surface mesh with an intersecting geometry and returns the portion that lies outside the cutting body. The surface is subdivided once before testing so that coarse fan-triangulated meshes (e.g. from Surface.ByPatch) trim correctly. Sphere cutters use an exact distance test; other cutters use a centroid-in-AABB approximation. Non-intersecting cutters return the original surface unchanged; a fully-enclosing cutter returns an empty mesh.',
   inputs: [
     { id: 'surface', name: 'Surface', type: 'mesh', description: 'Surface mesh to trim' },
     { id: 'geometry', name: 'Geometry', type: 'mesh', description: 'Cutting geometry — the region it encloses is removed from the surface' }
@@ -274,7 +235,6 @@ export const surfaceTrimNode = {
     const surface = inputs.surface;
     const geometry = inputs.geometry;
 
-    // Null surface → empty mesh (never throw)
     if (surface == null) {
       return { result: new Geo.Mesh3([], [], 0x94e2d5) };
     }

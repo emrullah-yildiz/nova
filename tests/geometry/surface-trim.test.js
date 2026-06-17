@@ -81,9 +81,11 @@ describe('Surface.Trim — trimSurface()', () => {
     expect(result.vertices).toBeDefined();
     expect(result.faces).toBeDefined();
 
-    // Fewer triangles than the input (sphere removed some)
+    // trimSurface subdivides the mesh once (4× faces) before testing, so the
+    // result face count is from the subdivided mesh with some removed.
+    // It must be > 0 (not fully enclosed) and < 4*inputFaceCount (some removed).
     expect(result.faces.length).toBeGreaterThan(0);
-    expect(result.faces.length).toBeLessThan(inputFaceCount);
+    expect(result.faces.length).toBeLessThan(inputFaceCount * 4);
   });
 
   // ─── AC-3 ─────────────────────────────────────────────────────────────────
