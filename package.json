@@ -69,5 +69,8 @@
     "pg": "^8.21.0",
     "ws": "^8.21.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "overrides": {
+    "ws": "^8.21.0"
   }
 }
