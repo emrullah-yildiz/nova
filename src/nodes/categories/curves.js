@@ -947,7 +947,7 @@ export const curvesNodes = [
         } else {
           // Stock Geo.Plane: derive frame from origin + normal; prefer world +X
           // as the in-plane X direction so XY/XZ planes align with world axes.
-          const normal = p.normal instanceof Geo.Vector3 ? p.normal : new Geo.Vector3(p.normal.x || 0, p.normal.y || 0, p.normal.z || 1);
+          const normal = p.normal instanceof Geo.Vector3 ? p.normal : new Geo.Vector3(p.normal.x ?? 0, p.normal.y ?? 0, p.normal.z ?? 0);
           const origin = p.origin || c;
           const frame = frameAt(origin, normal, new Geo.Vector3(1, 0, 0));
           xAxis = frame.xaxis;
