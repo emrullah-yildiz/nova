@@ -27,16 +27,20 @@ If any of these files is missing, stop and report: `Error: missing <file>. Canno
 
 ### Phase 1 — Ticket creation (PM → you)
 
-For each sprint item in `docs/pm/PRIORITIES.md` that has **no existing ticket** in INDEX.md:
+For each sprint item in `docs/pm/PRIORITIES.md`:
 
-1. Assign the next TICK-NNN id (increment from the highest in INDEX.md).
-2. Write `docs/tickets/TICK-NNN.md` using the template at `docs/tickets/_template.md`.
-   Fill in: id, title, status=`draft`, priority, type, sprint, created, lanes, user story, context, and a concrete acceptance-criteria list.
-   **Acceptance criteria must be observable behaviors** — what the user sees in a running browser or what a test asserts. Not implementation details.
-3. Add a row to `docs/tickets/INDEX.md` with status ⬜ draft.
-4. **Show the PM the acceptance criteria for every new ticket** and ask:
-   > "Are these AC correct and complete? Reply 'confirm' or edit them before I start planning."
-5. On PM confirmation: change ticket status to 🔵 ready.
+- If a ticket for that item already exists in `docs/tickets/INDEX.md`, reuse that ticket, update its status if needed, and do not create a duplicate.
+- If no ticket exists yet, assign the next TICK-NNN id (increment from the highest in INDEX.md).
+- Write `docs/tickets/TICK-NNN.md` using the template at `docs/tickets/_template.md`.
+  Fill in: id, title, status=`draft`, priority, type, sprint, created, lanes, user story, context, and a concrete acceptance-criteria list.
+  **Acceptance criteria must be observable behaviors** — what the user sees in a running browser or what a test asserts. Not implementation details.
+- Add a row to `docs/tickets/INDEX.md` with status ⬜ draft.
+- **Show the PM the acceptance criteria for every new ticket** and ask:
+  > "Are these AC correct and complete? Reply 'confirm' or edit them before I start planning."
+- If the PM replies with edits, rewrite the AC and ask again until the PM says `confirm`.
+- If the PM replies with anything other than `confirm` or a valid AC edit, ask for a clear confirmation or revised AC before continuing.
+- If the PM does not reply, stop and wait for confirmation before starting Phase 2.
+- On PM confirmation: change ticket status to 🔵 ready.
 
 Do not proceed to Phase 2 until the PM has confirmed AC for a ticket.
 
@@ -45,22 +49,27 @@ Do not proceed to Phase 2 until the PM has confirmed AC for a ticket.
 For each ticket with status 🔵 ready:
 
 1. **Validate docs and ownership:** `docs/NOVA.md`, `docs/ENGINEERING.md`, `docs/agent-workboard.md` all present and readable. If any is missing, stop and report.
-2. **Decompose into tasks.** Break the ticket into the smallest independent pieces. Each task must:
-   - Map to exactly **one** lane/owner from NOVA.md §3.
-   - Own a **disjoint** set of path globs — no two tasks may modify the same file.
-   - Be completable in one feature branch (≤8 files, ≤200 lines changed, or ≤2 dev-days).
+2. **Decompose into tasks using this precedence:**
+   1. Produce disjoint file globs.
+   2. Assign exactly one lane/owner from NOVA.md §3 to each task.
+   3. Verify each task stays within the limits: at most 4 files changed, at most 150 changed lines, and one branch.
+   4. Write dependencies and interface contracts.
+   5. Mark blocked tasks when any path conflicts with the workboard.
+   
+   Each task must:
    - Reference the parent ticket id and link to the relevant AC it covers.
-   If a piece can't be made disjoint from another, merge them into one task for a single lane.
-3. **Map dependencies.** Mark which tasks are independent (parallel) and which depend on another's output (sequential: A → merge → B).
+   - Have no shared file paths or direct dependency on another task unless explicitly listed as `depends on`.
+   - Be completable in one branch without claiming conflicting paths.
+3. **Handle blocked work:** If a proposed task conflicts with an active owner on the workboard, mark it `blocked`. When a task is blocked, do not dispatch it, do not claim its paths, and either re-split the work or ask the PM to resolve the ownership conflict before continuing.
 4. **Define interfaces.** Where two tasks meet, specify the contract up front (function signature, data shape, message schema).
-5. **Flag hot files.** Any task touching a hot file (ENGINEERING.md §3 list) gets exactly one lock; others wait.
-6. **Write task briefs** under `docs/task-briefs/T?-name.md`. Each brief must include:
+5. **Write task briefs** under `docs/task-briefs/T?-name.md`. Each brief must include:
    - Parent ticket id and link.
    - Owned paths and explicit "Do NOT touch" list.
-   - Testing gate: which AC require Playwright E2E coverage, which require unit tests.
    - Merge checklist with AC id references (e.g., `- [ ] AC-1 verified: ...`).
-7. **Update `docs/agent-workboard.md`:** add a row per task (status `queued`).
-8. **Update ticket status** → 🟡 in-progress.
+6. **Hot-file rule:** Any task touching a hot file (ENGINEERING.md §3 list) gets exactly one lock; other tasks must wait.
+7. **Testing gate:** Record which AC require Playwright E2E coverage and which require unit tests.
+8. **Update `docs/agent-workboard.md`:** add a row per task (status `queued`).
+9. **Update ticket status** → 🟡 in-progress.
 
 ### Phase 3 — Dispatch (you → specialist agents)
 
@@ -95,7 +104,7 @@ Bad AC (implementation detail, not observable):
 
 ## Security backlog
 
-When asked to work security tickets, or proactively when high/critical SEC-* tickets are open:
+When the user explicitly asks for a security ticket, or when `docs/security/tickets/INDEX.md` contains any open SEC-* ticket marked `severity=high` or `severity=critical`, follow the security backlog rules below:
 1. Read open `docs/security/tickets/SEC-*.md` and `INDEX.md`.
 2. Take only code-fixable tickets (`needs: code`/`config`). Leave `legal`/`policy`/`process` for humans.
 3. Decompose into standard disjoint tasks. Assign to `ghost` (security-engineer) by default; route to the domain lane when the fix is deep in that lane's files. Sequence by severity (critical/high first).
@@ -132,5 +141,5 @@ When asked to work security tickets, or proactively when high/critical SEC-* tic
 - Don't over-staff: prefer the fewest lanes that keep work disjoint. 2–3 active tasks is the sweet spot.
 - You coordinate; **dozer** (or the user) does the actual merges into `develop`. Don't merge feature branches yourself.
 - Allowed edits: `docs/agent-workboard.md`, `docs/tickets/INDEX.md`, `docs/tickets/TICK-*.md`, `docs/task-briefs/`. Never `src/`, `worker/`, `api/`, `tests/`.
-- If the workboard shows an active owner for any file in a proposed task, mark the task `blocked`. Do not claim conflicting globs.
-- If the goal is one small thing (one file, obvious fix), say so — recommend a single lane and skip the ticket ceremony. Small bugs don't need tickets.
+- If the workboard shows an active owner for any file in a proposed task, mark the task `blocked`. When a task is blocked, do not dispatch it, do not claim its paths, and either re-split the work or ask the PM to resolve the ownership conflict before continuing.
+- If the requested change touches exactly one repository file and can be completed in one branch with no more than 50 changed lines, do not create a ticket; reply with `Single-lane recommendation: <lane>`.
