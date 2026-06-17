@@ -27,6 +27,7 @@ root `README.md` · `docs/ARCHITECTURE.md` · `.github/workflows/ci.yml`
 |---|---|---|---|---|---|---|
 | fix/tick-006-content-aligned-screenshots | switch | T06f: content-aligned screenshots (supersedes T06e) | scripts/take-learning-shots.js, public/learning/*.png | — | 2026-06-08 | queued |
 | fix/tick-007-real-canvas-embed | switch | T07h: pan/zoom + node schema + drag wire (supersedes T07f + T07g) | src/ui/mini-canvas.js, tests/e2e/learning-interactive.spec.js | — | 2026-06-08 | queued |
+| feat/tick-010-codeblock-series | core-runtime | TICK-010: Code Block series shorthand start..step..#count | src/runtime/codeblock-syntax.js, src/nodes/categories/custom.js, tests/codeblock-series.test.js | — | 2026-06-17 | active |
 
 <!--
 Example row (copy, fill in, remove this comment block when claiming):
