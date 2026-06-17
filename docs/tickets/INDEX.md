@@ -20,6 +20,7 @@
 | TICK-006 | Learning page screenshots | 🔴 paused | high | backlog | ui | — |
 | TICK-007 | Learning page interactive exercises | 🔴 paused | high | backlog | ui | — |
 | TICK-008 | Live agent dashboard — futuristic real-time view of agent activity | ⬜ draft | high | backlog | ui, platform | — |
+| TICK-011 | Installer — Cosign/Sigstore keyless code signature for open-source release | ⬜ draft | high | A2 | platform | — |
 
 ## Done (last 30 days)
 
