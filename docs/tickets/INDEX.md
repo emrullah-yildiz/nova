@@ -20,7 +20,7 @@
 | TICK-006 | Learning page screenshots | 🔴 paused | high | backlog | ui | — |
 | TICK-007 | Learning page interactive exercises | 🔴 paused | high | backlog | ui | — |
 | TICK-008 | Live agent dashboard — futuristic real-time view of agent activity | ⬜ draft | high | backlog | ui, platform | — |
-| TICK-010 | Code Block — series shorthand syntax for creating number ranges | ⬜ draft | high | A2 | core | feat/tick-010-codeblock-series |
+| TICK-010 | Code Block — series shorthand syntax for creating number ranges | 🟡 in-progress | high | A2 | core | feat/tick-010-codeblock-series |
 
 ## Done (last 30 days)
 

@@ -11,17 +11,20 @@
 // Series forms (end is INCLUSIVE — the owner decision; this is the intentional
 // divergence from `List.Range`'s exclusive end, documented in the node plan):
 //
-//   0..10        start..end, step = 1            → [0,1,…,10]
-//   0..10..2     start..end..STEP                → [0,2,4,6,8,10]
-//   0..10..#5    start..end..#COUNT              → 5 evenly spaced incl. ends
-//                                                   → [0,2.5,5,7.5,10]
-//   0..#5..2     start..#COUNT..end              → 5 evenly spaced from 0 to 2
-//                                                   → [0,0.5,1,1.5,2]
+//   0..10          start..end, step = 1              → [0,1,…,10]
+//   0..10..2       start..end..step                  → [0,2,4,6,8,10]
+//   0..10..#2      start..step..#count               → count+1 values:
+//                                                       start + i*step, i in 0..count
+//                                                       → [0,10,20]
+//   0..#5..10      start..#amount..end               → amount evenly-spaced values
+//                                                       from start to end (inclusive)
+//                                                       → [0,2.5,5,7.5,10]
 //
-// Rule: `#` prefixes a COUNT token; a plain number is end-or-step by POSITION
-// (2nd token = end, 3rd token = step — unless `#` flips the 2nd into a count).
-// When mark2='#': A..#N..B means N evenly-spaced values from A to B (B is end,
-// not step). This matches the symmetric pattern of A..B..#N (B is end, #N count).
+// Rule: `#` prefixes a special token.
+//   `#` on the MIDDLE token (2nd of 3): start..#amount..end — amount evenly-spaced
+//     values from start to end (inclusive).
+//   `#` on the LAST token (3rd of 3): start..step..#count — count+1 values
+//     starting at start, incrementing by step, for i in 0..count.
 //
 // Only `..` expressions whose operands are numeric literals (optionally signed,
 // optionally `#`-prefixed) are transformed; everything else in the code is left
@@ -42,11 +45,27 @@ const SERIES_RE = new RegExp(
   'g'
 );
 
-// Builds the inclusive list for a given start/end/step. `count` (when provided)
-// overrides step: evenly spaced incl. both ends.
+// Builds the list for a given start + one of three strategies:
+//
+//   { end, step }        step-driven, end inclusive (0..10..2 → [0,2,4,6,8,10])
+//   { end, count }       amount evenly-spaced incl. both ends (0..#5..10 → 5 values)
+//   { step, stepCount }  start..step..#count: count+1 values — start + i*step for
+//                        i in 0..count (0..10..#2 → [0,10,20])
 function buildList(start, opts) {
   const values = [];
+
+  if (opts.stepCount != null) {
+    // start..step..#count form: emit count+1 values stepping by `step`.
+    const n = Math.round(opts.stepCount);
+    const step = opts.step != null ? opts.step : 1;
+    for (let i = 0; i <= n; i++) {
+      values.push(round(start + step * i));
+    }
+    return values;
+  }
+
   if (opts.count != null) {
+    // start..#amount..end form: `count` evenly-spaced values incl. both ends.
     const n = Math.round(opts.count);
     if (n <= 0) return [];
     if (n === 1) return [start];
@@ -57,6 +76,7 @@ function buildList(start, opts) {
     }
     return values;
   }
+
   // step-driven, end inclusive
   const step = opts.step != null ? opts.step : 1;
   const end = opts.end;
@@ -81,9 +101,10 @@ function num(s) {
   return s.indexOf('.') >= 0 ? parseFloat(s) : parseInt(s, 10);
 }
 
-// Rewrites every series expression in `code` to a Python list literal. Forms with
-// a count marker (`#`) on the 2nd token are count-by-start-end; `#` on the 3rd
-// token is step-with-count; bare numbers are end/step by position.
+// Rewrites every series expression in `code` to a Python list literal.
+//   `#` on the 2nd token: start..#amount..end — amount evenly-spaced values.
+//   `#` on the 3rd token: start..step..#count — count+1 step-driven values.
+//   No `#`: start..end or start..end..step (bare step-driven forms).
 export function desugarSeries(code) {
   if (typeof code !== 'string' || !code) return code;
   // Leave string-literal contents untouched: split on string spans, desugar only
@@ -110,8 +131,11 @@ export function desugarSeries(code) {
       return toLiteral(buildList(start, { end: num(v3), count: num(v2) }));
     }
     if (mark3 === '#') {
-      // start..end..#count → count values evenly spaced incl. ends.
-      return toLiteral(buildList(start, { end: num(v2), count: num(v3) }));
+      // start..step..#count → count+1 values: start + i*step for i in 0..count.
+      // The second token (v2) is the STEP, the third (#v3) is the COUNT.
+      // e.g. 0..10..#2 → [0, 10, 20]  (step=10, count=2 → 3 values)
+      // e.g. 0..5..#3  → [0, 5, 10, 15] (step=5, count=3 → 4 values)
+      return toLiteral(buildList(start, { step: num(v2), stepCount: num(v3) }));
     }
     // start..end..step → step-driven, inclusive.
     return toLiteral(buildList(start, { end: num(v2), step: num(v3) }));
