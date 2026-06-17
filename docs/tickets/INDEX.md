@@ -20,12 +20,12 @@
 | TICK-006 | Learning page screenshots | 🔴 paused | high | backlog | ui | — |
 | TICK-007 | Learning page interactive exercises | 🔴 paused | high | backlog | ui | — |
 | TICK-008 | Live agent dashboard — futuristic real-time view of agent activity | ⬜ draft | high | backlog | ui, platform | — |
-| TICK-010 | Code Block — series shorthand syntax for creating number ranges | 🟡 in-progress | high | A2 | core | feat/tick-010-codeblock-series |
 
 ## Done (last 30 days)
 
 | ID | Title | Completed | Notes |
 |---|---|---|---|
+| TICK-010 | Code Block — series shorthand syntax for creating number ranges | 2026-06-17 | Oracle APPROVE; merged to develop; done/ |
 | TICK-009 | Select.Faces — per-face hover, selection, and planar face output | 2026-06-08 | PM approved; merged to develop; done/ |
 | TICK-002 | Select Faces/Edges/Points — E2E verification | 2026-06-07 | Superseded by TICK-009; done/ |
 | TICK-005 | Remove Pattern nodes category | 2026-06-06 | All 8 ACs verified; done/ |
