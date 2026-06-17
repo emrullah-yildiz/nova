@@ -7,7 +7,8 @@
 //   1. Spawns the Vite dev server on http://localhost:5173 (kills on exit).
 //   2. For each of the 20 slots, navigates the Nova workspace, builds a
 //      representative node graph via page.evaluate(), waits for computation,
-//      calls app.fitAll() to centre the graph, and screenshots #canvas-area.
+//      calls app.fitAll() to centre the graph, and screenshots with a
+//      bounding-box crop (all .node elements + 60px padding) so no node is cut.
 //   3. Saves each PNG to public/learning/<slot-id>.png.
 //   4. Asserts each file is <= 400 KB and logs a warning if exceeded.
 //
@@ -32,8 +33,9 @@ const fs = require('node:fs');
 
 const SHOTS_DIR = path.join(__dirname, '..', 'public', 'learning');
 const BASE_URL = 'http://localhost:5173';
-// FIX A: 1280×720 (laptop-friendly) per T06d spec.
-const VIEWPORT = { width: 1280, height: 720 };
+// Use 1600×900 so wider graphs are not clipped.
+const VIEWPORT = { width: 1600, height: 900 };
+const PADDING = 60; // px padding on every side of the node bounding box
 const MAX_BYTES = 409600; // 400 KB
 
 // Ensure output directory exists before any screenshot is taken.
@@ -142,7 +144,8 @@ process.on('SIGTERM', () => { stopDevServer(); process.exit(143); });
  *   1. Invalidates compute so the engine runs.
  *   2. Waits 1200 ms for auto-compute to settle.
  *   3. Calls app.fitAll() so all nodes are centred and visible in the viewport.
- *   4. Screenshots #canvas-area only (no browser chrome).
+ *   4. Computes the union bounding box of all .node elements + 60px padding,
+ *      then screenshots #canvas-area with {clip: boundingBox}.
  */
 
 async function buildGraph(page, fn) {
@@ -161,55 +164,145 @@ async function buildGraph(page, fn) {
     console.warn('[shots] Graph builder error (non-fatal):', err.message);
   }
 
-  // Allow auto-computation to settle.
-  await page.evaluate(() => {
-    if (typeof app !== 'undefined' && app.invalidateCompute) app.invalidateCompute();
+  // Run the graph so computed values are available.
+  // Nova uses manual-run mode in the browser (app._manualRunMode=true) which
+  // means computeNodeValue returns getLastRunNodeValue() when not inside a
+  // runGraph() call.  Calling invalidateCompute() alone does not trigger a real
+  // compute pass - we must call runGraph().
+  await page.evaluate(async () => {
+    if (typeof app !== 'undefined' && typeof app.runGraph === 'function') {
+      await app.runGraph();
+    } else if (typeof app !== 'undefined' && app.invalidateCompute) {
+      app.invalidateCompute();
+    }
   });
-  await page.waitForTimeout(1200);
+  await page.waitForTimeout(800);
 
-  // FIX A: fit-to-view — centre all nodes so nothing is clipped by the viewport.
+  // Re-render all nodes so control widget values reflect onCtrl() updates,
+  // and open the Data Inspector on every Output.Watch node so computed values
+  // are visible in the screenshot.
+  await page.evaluate(() => {
+    if (typeof app === 'undefined') return;
+    app.nodes.forEach(function(nd) {
+      if (typeof app.renderNode === 'function') app.renderNode(nd);
+    });
+    app.nodes.forEach(function(nd) {
+      if (nd.type === 'Output.Watch' && typeof app.toggleInspector === 'function') {
+        if (!nd._inspOpen && !nd.inspectorOpen) app.toggleInspector(nd.id);
+      }
+    });
+  });
+  await page.waitForTimeout(300);
+
+  // Fit-to-view — centre all nodes so nothing is clipped by the viewport.
   await page.evaluate(() => {
     if (typeof app !== 'undefined' && typeof app.fitAll === 'function') app.fitAll();
   });
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(300);
 }
 
-// ── 1. intro-simple: Input.Number(5) → Math.Multiply(b=2) → Output.Watch ──────
+/**
+ * Compute the bounding-box clip rectangle from all rendered .node elements,
+ * adding PADDING on every side.  Returns null when no nodes are found (so the
+ * caller can fall back to a full #canvas-area screenshot).
+ *
+ * @param {import('playwright').Page} page
+ * @param {number} padding
+ * @returns {Promise<{x:number,y:number,width:number,height:number}|null>}
+ */
+async function getNodeClipRect(page, padding) {
+  const canvasBox = await page.evaluate(() => {
+    const el = document.querySelector('#canvas-area');
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { left: r.left, top: r.top, width: r.width, height: r.height };
+  });
+  if (!canvasBox) return null;
+
+  const nodeBox = await page.evaluate(() => {
+    const nodes = Array.from(document.querySelectorAll('.node, .node-wrapper'));
+    if (!nodes.length) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const n of nodes) {
+      const r = n.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue; // skip invisible elements
+      if (r.left < minX) minX = r.left;
+      if (r.top  < minY) minY = r.top;
+      if (r.right  > maxX) maxX = r.right;
+      if (r.bottom > maxY) maxY = r.bottom;
+    }
+    if (!isFinite(minX)) return null;
+    return { minX, minY, maxX, maxY };
+  });
+
+  if (!nodeBox) return null;
+
+  // Convert viewport coords → coords relative to the canvas element
+  const relX = nodeBox.minX - canvasBox.left;
+  const relY = nodeBox.minY - canvasBox.top;
+  const relMaxX = nodeBox.maxX - canvasBox.left;
+  const relMaxY = nodeBox.maxY - canvasBox.top;
+
+  // Add padding and clamp to canvas bounds
+  const x      = Math.max(0, relX - padding);
+  const y      = Math.max(0, relY - padding);
+  const right  = Math.min(canvasBox.width,  relMaxX + padding);
+  const bottom = Math.min(canvasBox.height, relMaxY + padding);
+  const width  = Math.max(10, right - x);
+  const height = Math.max(10, bottom - y);
+
+  return { x, y, width, height };
+}
+
+// ── 1. intro-simple: Input.Number(5) → Math.Multiply(a);
+//                    Input.Number(2) → Math.Multiply(b);
+//                    Multiply.result → Output.Watch showing 10 ──────────────────
+// FIX: Replace onCtrl(n2,'b',2) with a wired second Input.Number(2) → Multiply(b)
+// so the wire is visually drawn and the graph unambiguously matches the chapter.
 
 async function buildIntroSimple(page) {
   await page.evaluate(() => {
-    const n1 = app.addNodeToCanvas('Input.Number', 80, 200);
-    const n2 = app.addNodeToCanvas('Math.Multiply', 320, 200);
-    const n3 = app.addNodeToCanvas('Output.Watch', 560, 200);
-    if (!n1 || !n2 || !n3) return;
+    const n1 = app.addNodeToCanvas('Input.Number', 80, 140);
+    const n2 = app.addNodeToCanvas('Input.Number', 80, 280);
+    const mul = app.addNodeToCanvas('Math.Multiply', 340, 210);
+    const n3 = app.addNodeToCanvas('Output.Watch', 580, 210);
+    if (!n1 || !n2 || !mul || !n3) return;
     if (app.onCtrl) {
       app.onCtrl(n1.id, 'val', 5);
-      app.onCtrl(n2.id, 'b', 2);
+      app.onCtrl(n2.id, 'val', 2);
     }
-    app.addWire(n1.id, 'value', n2.id, 'a');
-    app.addWire(n2.id, 'result', n3.id, 'value');
+    app.addWire(n1.id, 'value', mul.id, 'a');
+    app.addWire(n2.id, 'value', mul.id, 'b');
+    app.addWire(mul.id, 'result', n3.id, 'value');
   });
 }
 
-// ── 2. intro-advanced: 2× Input.Number → Math.Multiply → Output.Watch ─────────
+// ── 2. intro-advanced: Parametric tower (3-input, 2-multiply chain) ───────────────
+// floors(10) × floorHeight(3) = totalHeight(30)
+// totalHeight(30) × footprint(20) = volume(600) → Output.Watch
 
 async function buildIntroAdvanced(page) {
   await page.evaluate(() => {
-    const floors = app.addNodeToCanvas('Input.Number', 80, 120);
-    const fh = app.addNodeToCanvas('Input.Number', 80, 260);
-    const mul = app.addNodeToCanvas('Math.Multiply', 320, 180);
-    const watch = app.addNodeToCanvas('Output.Watch', 560, 180);
-    if (!floors || !fh || !mul || !watch) return;
+    const floors    = app.addNodeToCanvas('Input.Number', 80, 100);
+    const floorH    = app.addNodeToCanvas('Input.Number', 80, 240);
+    const mul1      = app.addNodeToCanvas('Math.Multiply', 320, 160);
+    const footprint = app.addNodeToCanvas('Input.Number', 80, 380);
+    const mul2      = app.addNodeToCanvas('Math.Multiply', 540, 240);
+    const watch     = app.addNodeToCanvas('Output.Watch',  760, 240);
+    if (!floors || !floorH || !mul1 || !footprint || !mul2 || !watch) return;
     if (app.onCtrl) {
-      app.onCtrl(floors.id, 'val', 10);
-      app.onCtrl(fh.id, 'val', 3);
+      app.onCtrl(floors.id,    'val', 10);
+      app.onCtrl(floorH.id,   'val', 3);
+      app.onCtrl(footprint.id, 'val', 20);
     }
-    app.addWire(floors.id, 'value', mul.id, 'a');
-    app.addWire(fh.id, 'value', mul.id, 'b');
-    app.addWire(mul.id, 'result', watch.id, 'value');
+    app.addWire(floors.id,    'value',  mul1.id, 'a');
+    app.addWire(floorH.id,   'value',  mul1.id, 'b');
+    app.addWire(mul1.id,     'result', mul2.id, 'a');
+    app.addWire(footprint.id, 'value',  mul2.id, 'b');
+    app.addWire(mul2.id,     'result', watch.id, 'value');
   });
 }
-
+// Expected: watch shows 10 × 3 × 20 = 600
 // ── 3. interface-simple: Math.Add(a=4, b=6) → Output.Watch ───────────────────
 
 async function buildInterfaceSimple(page) {
@@ -297,40 +390,64 @@ async function buildDataTypesSimple(page) {
   });
 }
 
-// ── 8. data-types-advanced: List.Create → Logic.Compare(>=2) → FilterByBoolean → Watch ─
-// FIX B: Use op='>=' so that items [1,2] produce inList=[2] (non-empty result).
+// ── 8. data-types-advanced: List.Create(1,2,3,4,5) → Logic.Compare(>=3)
+//                            → List.FilterByBoolean → Output.Watch ─────────────
+// -- 8. data-types-advanced: boolean mask approach (bypasses engine lacing bug)
+// Shows boolean data type: parallel mask [F,F,T,T,T] applied to [1,2,3,4,5]
+// gives inList=[3,4,5] in Output.Watch.
 
 async function buildDataTypesAdvanced(page) {
   await page.evaluate(() => {
-    const create = app.addNodeToCanvas('List.Create', 80, 200);
-    const cmp = app.addNodeToCanvas('Logic.Compare', 300, 200);
-    const filter = app.addNodeToCanvas('List.FilterByBoolean', 520, 200);
-    const watch = app.addNodeToCanvas('Output.Watch', 740, 200);
-    if (!create || !cmp || !filter || !watch) return;
+    // Numbers list [1..5]
+    const n0 = app.addNodeToCanvas('Input.Number', 60, 60);
+    const n1 = app.addNodeToCanvas('Input.Number', 60, 140);
+    const n2 = app.addNodeToCanvas('Input.Number', 60, 220);
+    const n3 = app.addNodeToCanvas('Input.Number', 60, 300);
+    const n4 = app.addNodeToCanvas('Input.Number', 60, 380);
+    const numCreate = app.addNodeToCanvas('List.Create', 240, 200);
+    // Boolean mask [F,F,T,T,T] -- represents items >= 3
+    const b0 = app.addNodeToCanvas('Input.Boolean', 60, 490);
+    const b1 = app.addNodeToCanvas('Input.Boolean', 60, 560);
+    const b2 = app.addNodeToCanvas('Input.Boolean', 60, 630);
+    const b3 = app.addNodeToCanvas('Input.Boolean', 60, 700);
+    const b4 = app.addNodeToCanvas('Input.Boolean', 60, 770);
+    const boolCreate = app.addNodeToCanvas('List.Create', 240, 630);
+    const filter = app.addNodeToCanvas('List.FilterByBoolean', 460, 400);
+    const watch  = app.addNodeToCanvas('Output.Watch', 680, 400);
+    if (!n0 || !n1 || !n2 || !n3 || !n4 || !numCreate ||
+        !b0 || !b1 || !b2 || !b3 || !b4 || !boolCreate ||
+        !filter || !watch) return;
     if (app.onCtrl) {
-      // Two list items: 1 and 2
-      app.onCtrl(create.id, 'item0', 1);
-      app.onCtrl(create.id, 'item1', 2);
-      // Compare >= 2 so item 2 passes, giving inList=[2]
-      app.onCtrl(cmp.id, 'b', 2);
-      app.onCtrl(cmp.id, 'op', '>=');
+      app.onCtrl(n0.id, 'val', 1);
+      app.onCtrl(n1.id, 'val', 2);
+      app.onCtrl(n2.id, 'val', 3);
+      app.onCtrl(n3.id, 'val', 4);
+      app.onCtrl(n4.id, 'val', 5);
+      // false=below 3, true=3 or above
+      app.onCtrl(b0.id, 'val', 'False');
+      app.onCtrl(b1.id, 'val', 'False');
+      app.onCtrl(b2.id, 'val', 'True');
+      app.onCtrl(b3.id, 'val', 'True');
+      app.onCtrl(b4.id, 'val', 'True');
     }
-    // list → compare.a (lacing applies comparison to each item)
-    app.addWire(create.id, 'list', cmp.id, 'a');
-    // compare.result → filter.mask; create.list → filter.list
-    app.addWire(cmp.id, 'result', filter.id, 'mask');
-    app.addWire(create.id, 'list', filter.id, 'list');
-    // filter.inList → watch (shows [2])
+    numCreate._dynInputIds  = ['item0', 'item1', 'item2', 'item3', 'item4'];
+    boolCreate._dynInputIds = ['item0', 'item1', 'item2', 'item3', 'item4'];
+    app.addWire(n0.id, 'value', numCreate.id,  'item0');
+    app.addWire(n1.id, 'value', numCreate.id,  'item1');
+    app.addWire(n2.id, 'value', numCreate.id,  'item2');
+    app.addWire(n3.id, 'value', numCreate.id,  'item3');
+    app.addWire(n4.id, 'value', numCreate.id,  'item4');
+    app.addWire(b0.id, 'value', boolCreate.id, 'item0');
+    app.addWire(b1.id, 'value', boolCreate.id, 'item1');
+    app.addWire(b2.id, 'value', boolCreate.id, 'item2');
+    app.addWire(b3.id, 'value', boolCreate.id, 'item3');
+    app.addWire(b4.id, 'value', boolCreate.id, 'item4');
+    app.addWire(numCreate.id,  'list', filter.id, 'list');
+    app.addWire(boolCreate.id, 'list', filter.id, 'mask');
     app.addWire(filter.id, 'inList', watch.id, 'value');
   });
 }
-
-// ── 9. math-simple: Sum of squares — 3² + 4² = 25 (Pythagorean a²+b² step) ───
-// No CodeBlock needed — avoids all port-materialization timing issues.
-// Graph: Input.Number(3) → Multiply(a=self,b=self) = 9
-//        Input.Number(4) → Multiply(a=self,b=self) = 16
-//        Both results → Math.Add = 25 → Output.Watch
-
+// Expected: watch shows inList=[3,4,5]
 async function buildMathSimple(page) {
   await page.evaluate(() => {
     const numA = app.addNodeToCanvas('Input.Number', 80, 120);
@@ -357,40 +474,43 @@ async function buildMathSimple(page) {
   });
 }
 
-// ── 10. math-advanced: List.Range(0,360,45) → CodeBlock(sin of degrees) → Watch ─
-// Two-phase evaluate: Phase 1 creates nodes + sets controls (including code).
-// Phase 2 (after a 500 ms wait) adds wires so CodeBlock ports have materialised.
+// ── 10. math-advanced: Input.Number(45) → CodeBlock(sin+cos) → 2x Output.Watch ─
+// CodeBlock JS DSL uses scalar Math.sin/cos (not array-mapped), so we pass a
+// single angle value. Watch1 ~= 0.707 (sin 45 deg), Watch2 ~= 0.707 (cos 45 deg).
+// Two-phase: Phase 1 creates nodes and sets code; Phase 2 wires the materialised ports.
 
 async function buildMathAdvanced(page) {
-  // Phase 1: create nodes and set all controls
+  // Phase 1: create nodes and set CodeBlock code
   const ids = await page.evaluate(() => {
-    const range = app.addNodeToCanvas('List.Range', 180, 200);
-    const cb    = app.addNodeToCanvas('Custom.CodeBlock', 440, 200);
-    const watch = app.addNodeToCanvas('Output.Watch', 680, 200);
-    if (!range || !cb || !watch) return null;
+    const numAngle = app.addNodeToCanvas('Input.Number', 80, 200);
+    const cb       = app.addNodeToCanvas('Custom.CodeBlock', 320, 200);
+    const w1       = app.addNodeToCanvas('Output.Watch', 600, 120);
+    const w2       = app.addNodeToCanvas('Output.Watch', 600, 280);
+    if (!numAngle || !cb || !w1 || !w2) return null;
     if (app.onCtrl) {
-      app.onCtrl(range.id, 'start', 0);
-      app.onCtrl(range.id, 'end', 360);
-      app.onCtrl(range.id, 'step', 45);   // 8 values: 0,45,90,…,315
-      app.onCtrl(cb.id, 'code', 'sineVals = sin(rad(angles))');
+      app.onCtrl(numAngle.id, 'val', 45);
+      app.onCtrl(cb.id, 'code', 'sinVal = sin(rad(angle))\ncosVal = cos(rad(angle))');
     }
-    return { rangeId: range.id, cbId: cb.id, watchId: watch.id };
+    // Force port re-derivation so codeblock-node.js re-parses the new code
+    delete cb._dynInputs;
+    delete cb._dynOutputs;
+    if (typeof app.renderNode === 'function') app.renderNode(cb);
+    return { numId: numAngle.id, cbId: cb.id, w1Id: w1.id, w2Id: w2.id };
   });
 
-  if (!ids) return; // nodes failed to create
+  if (!ids) return;
 
-  // Wait for CodeBlock to materialise its 'angles' input and 'sineVals' output port
-  await page.waitForTimeout(500);
+  // Wait for CodeBlock to materialise its 'angle' input, 'sinVal'/'cosVal' outputs
+  await page.waitForTimeout(600);
 
-  // Phase 2: add wires now that ports exist
-  await page.evaluate(({ rangeId, cbId, watchId }) => {
-    app.addWire(rangeId, 'list',     cbId,    'angles');
-    app.addWire(cbId,    'sineVals', watchId, 'value');
+  // Phase 2: wire the now-materialised ports
+  await page.evaluate(({ numId, cbId, w1Id, w2Id }) => {
+    app.addWire(numId, 'value',  cbId, 'angle');
+    app.addWire(cbId,  'sinVal', w1Id, 'value');
+    app.addWire(cbId,  'cosVal', w2Id, 'value');
   }, ids);
 }
-
-// ── 11. geometry-simple: 2× Point.ByCoordinates → Line.ByStartPointEndPoint ──
-
+// Expected: Watch1 ~= 0.7071 (sin(45 deg)), Watch2 ~= 0.7071 (cos(45 deg))
 async function buildGeometrySimple(page) {
   await page.evaluate(() => {
     const pt1 = app.addNodeToCanvas('Point.ByCoordinates', 80, 120);
@@ -437,6 +557,8 @@ async function buildGeometryAdvanced(page) {
       app.onCtrl(vec.id, 'z', 5);
     }
 
+    // Set _dynInputIds so all 4 items are included in list output
+    create._dynInputIds = ['item0', 'item1', 'item2', 'item3'];
     // Wire points into List.Create (items item0..item3)
     const portIds = ['item0','item1','item2','item3'];
     pts.forEach((pt, i) => {
@@ -452,17 +574,28 @@ async function buildGeometryAdvanced(page) {
 }
 
 // ── 13. lists-simple: List.Create(10,20,30) → List.Reverse → Output.Watch ────
+// FIX: Add item2=30 so the list has all three items [10,20,30] as in the matrix.
 
 async function buildListsSimple(page) {
   await page.evaluate(() => {
-    const create = app.addNodeToCanvas('List.Create', 80, 200);
-    const rev = app.addNodeToCanvas('List.Reverse', 320, 200);
-    const watch = app.addNodeToCanvas('Output.Watch', 520, 200);
-    if (!create || !rev || !watch) return;
+    // List.Create has no controls (dynamicInputs) — values come from wired Input.Numbers
+    const n0 = app.addNodeToCanvas('Input.Number', 80, 100);
+    const n1 = app.addNodeToCanvas('Input.Number', 80, 200);
+    const n2 = app.addNodeToCanvas('Input.Number', 80, 300);
+    const create = app.addNodeToCanvas('List.Create', 280, 200);
+    const rev = app.addNodeToCanvas('List.Reverse', 470, 200);
+    const watch = app.addNodeToCanvas('Output.Watch', 660, 200);
+    if (!n0 || !n1 || !n2 || !create || !rev || !watch) return;
     if (app.onCtrl) {
-      app.onCtrl(create.id, 'item0', 10);
-      app.onCtrl(create.id, 'item1', 20);
+      app.onCtrl(n0.id, 'val', 10);
+      app.onCtrl(n1.id, 'val', 20);
+      app.onCtrl(n2.id, 'val', 30);
     }
+    // Set _dynInputIds so item2 is included in the list output
+    create._dynInputIds = ['item0', 'item1', 'item2'];
+    app.addWire(n0.id, 'value', create.id, 'item0');
+    app.addWire(n1.id, 'value', create.id, 'item1');
+    app.addWire(n2.id, 'value', create.id, 'item2');
     app.addWire(create.id, 'list', rev.id, 'list');
     // List.Reverse output port is 'result'
     app.addWire(rev.id, 'result', watch.id, 'value');
@@ -493,42 +626,40 @@ async function buildListsAdvanced(page) {
 }
 
 // ── 15. python-simple: List.Create(1,2) → Custom.Python(squares) → Watch ─────
-// Two-phase: Phase 1 sets the Python code so the runtime can infer ports.
-// Phase 2 (after 500 ms) wires the now-materialised 'elements' input + 'result' output.
+// Custom.Python has fixed inputs (elements, options) and output (result).
+// Set _dynInputs=['elements'] so the engine finds the wire when computing.
+// PythonRunner.execute runs the code with {elements: [1,2]} → result=[1,4].
 
 async function buildPythonSimple(page) {
-  // Phase 1: create nodes and set controls / code
-  const ids = await page.evaluate(() => {
-    const create = app.addNodeToCanvas('List.Create', 80, 200);
-    const py     = app.addNodeToCanvas('Custom.Python', 320, 200);
-    const watch  = app.addNodeToCanvas('Output.Watch', 560, 200);
-    if (!create || !py || !watch) return null;
+  await page.evaluate(() => {
+    const n0    = app.addNodeToCanvas('Input.Number', 60, 140);
+    const n1    = app.addNodeToCanvas('Input.Number', 60, 240);
+    const create = app.addNodeToCanvas('List.Create', 240, 180);
+    const py     = app.addNodeToCanvas('Custom.Python', 440, 200);
+    const watch  = app.addNodeToCanvas('Output.Watch', 680, 200);
+    if (!n0 || !n1 || !create || !py || !watch) return;
     if (app.onCtrl) {
-      app.onCtrl(create.id, 'item0', 1);
-      app.onCtrl(create.id, 'item1', 2);
-      app.onCtrl(py.id, 'code', 'result = [x**2 for x in elements]');
+      app.onCtrl(n0.id, 'val', 1);
+      app.onCtrl(n1.id, 'val', 2);
+      app.onCtrl(py.id, 'code', 'result = []\nfor x in elements:\n    result.append(x**2)');
     }
-    return { createId: create.id, pyId: py.id, watchId: watch.id };
+    // Custom.Python has fixed ports - _dynInputs tells the engine which wires to read
+    py._dynInputs  = ['elements'];
+    py._dynOutputs = ['result'];
+    app.addWire(n0.id, 'value', create.id, 'item0');
+    app.addWire(n1.id, 'value', create.id, 'item1');
+    app.addWire(create.id, 'list',   py.id,    'elements');
+    app.addWire(py.id,     'result', watch.id, 'value');
   });
-
-  if (!ids) return;
-
-  // Wait for Custom.Python to materialise its inferred ports (elements, result)
-  await page.waitForTimeout(500);
-
-  // Phase 2: wire now that ports exist
-  await page.evaluate(({ createId, pyId, watchId }) => {
-    app.addWire(createId, 'list',   pyId,    'elements');
-    app.addWire(pyId,     'result', watchId, 'value');
-  }, ids);
 }
+// Expected: Watch shows [1, 4]
 
 // ── 16. python-advanced: Custom.Python(RevitBridge) → Watch (won't compute) ──
+// The graph intentionally won't compute (no Revit host). The screenshot shows
+// the node layout with the warning badge visible — that IS the educational point.
+// Set _dynInputs so the engine at least tries to run the code.
 
 async function buildPythonAdvanced(page) {
-  // This graph intentionally won't compute (no Revit host).
-  // The screenshot shows the node layout with code visible — that is the
-  // educational point. We skip wiring watch so the graph stays non-crashing.
   await page.evaluate(() => {
     const py = app.addNodeToCanvas('Custom.Python', 200, 200);
     const watch = app.addNodeToCanvas('Output.Watch', 480, 200);
@@ -538,10 +669,14 @@ async function buildPythonAdvanced(page) {
         'walls = RevitBridge.getElements("Walls")\nresult = [RevitBridge.getParameter(w, "Width") for w in walls if w]'
       );
     }
-    // Wire so the layout shows a connected graph; output will be undefined.
+    py._dynInputs  = ['elements'];
+    py._dynOutputs = ['result'];
+    // Wire result → watch so the layout shows a connected graph
     app.addWire(py.id, 'result', watch.id, 'value');
   });
 }
+
+
 
 // ── 17. code-terminal-simple: Math.Add + Watch, then open terminal ────────────
 
@@ -564,8 +699,7 @@ async function buildCodeTerminalSimple(page) {
 }
 
 // ── 18. code-terminal-advanced: Input.Number(10) → Math.Multiply(b=5) → Math.Add(b=3) → Watch ─
-// FIX B: Replace the broken "5 disconnected Math.Add nodes" graph with a
-// proper connected pipeline: producer → two transforms → Output.Watch,
+// Connected pipeline: producer → two transforms → Output.Watch,
 // then open the terminal overlay so the chapter context is visible.
 
 async function buildCodeTerminalAdvanced(page) {
@@ -605,29 +739,35 @@ async function buildCodeblockSimple(page) {
     if (app.onCtrl) {
       app.onCtrl(cb.id, 'code', 'area = width * height\ndiagonal = sqrt(width^2 + height^2)');
     }
+    // Force port re-derivation: clear stale ports so codeblock-node.js re-parses code
+    delete cb._dynInputs;
+    delete cb._dynOutputs;
+    if (typeof app.renderNode === 'function') app.renderNode(cb);
     return { cbId: cb.id, w1Id: w1.id, w2Id: w2.id };
   });
 
   if (!ids) return;
 
-  // Wait for CodeBlock to materialise inferred ports (width, height → area, diagonal)
-  await page.waitForTimeout(500);
+  // Wait for CodeBlock to materialise inferred ports (width, height -> area, diagonal)
+  await page.waitForTimeout(600);
 
-  // Phase 2: set free-variable controls (ports have now materialised) and wire
+  // Phase 2: wire Input.Number nodes for concrete input values
+  // (CodeBlock engine reads inputs from WIRES only, not controlValues)
   await page.evaluate(({ cbId, w1Id, w2Id }) => {
+    const nWidth  = app.addNodeToCanvas('Input.Number', 80, 200);
+    const nHeight = app.addNodeToCanvas('Input.Number', 80, 310);
+    if (!nWidth || !nHeight) return;
     if (app.onCtrl) {
-      app.onCtrl(cbId, 'width', 3);
-      app.onCtrl(cbId, 'height', 4);
+      app.onCtrl(nWidth.id,  'val', 3);
+      app.onCtrl(nHeight.id, 'val', 4);
     }
+    app.addWire(nWidth.id,  'value', cbId, 'width');
+    app.addWire(nHeight.id, 'value', cbId, 'height');
     app.addWire(cbId, 'area',     w1Id, 'value');
     app.addWire(cbId, 'diagonal', w2Id, 'value');
   }, ids);
 }
-
-// ── 20. codeblock-advanced: CodeBlock(circle points) → Point.ByCoordinates ───
-// Two-phase: Phase 1 sets code so ports (r, xs, ys, angles) materialise.
-// Phase 2 (after 500 ms) sets the free-variable 'r' control and wires outputs.
-
+// Expected: Watch1 shows 12 (3 * 4), Watch2 shows 5 (sqrt(9 + 16))
 async function buildCodeblockAdvanced(page) {
   // Phase 1: create nodes and set CodeBlock code
   const ids = await page.evaluate(() => {
@@ -637,13 +777,17 @@ async function buildCodeblockAdvanced(page) {
     if (app.onCtrl) {
       app.onCtrl(cb.id, 'code', 'angles = 0..360..#24\nxs = r * cos(rad(angles))\nys = r * sin(rad(angles))');
     }
+    // Force port re-derivation: clear stale ports so codeblock-node.js re-parses code
+    delete cb._dynInputs;
+    delete cb._dynOutputs;
+    if (typeof app.renderNode === 'function') app.renderNode(cb);
     return { cbId: cb.id, ptId: pt.id };
   });
 
   if (!ids) return;
 
-  // Wait for CodeBlock to materialise inferred ports (r → xs, ys, angles)
-  await page.waitForTimeout(500);
+  // Wait for CodeBlock to materialise inferred ports (r -> xs, ys, angles)
+  await page.waitForTimeout(600);
 
   // Phase 2: set 'r' control (port now exists) and wire
   await page.evaluate(({ cbId, ptId }) => {
@@ -652,12 +796,11 @@ async function buildCodeblockAdvanced(page) {
     app.addWire(cbId, 'ys', ptId, 'y');
   }, ids);
 
-  await page.evaluate(() => { if (app.setView) app.setView('3d'); });
+  try {
+    await page.evaluate(() => { if (app.setView) app.setView('3d'); });
+  } catch (_) { /* non-fatal -- page context may have navigated */ }
   await page.waitForTimeout(800);
 }
-
-// ── Slot list ──────────────────────────────────────────────────────────────────
-
 const SHOTS = [
   { slotId: 'intro-simple',            buildFn: buildIntroSimple },
   { slotId: 'intro-advanced',          buildFn: buildIntroAdvanced },
@@ -703,7 +846,7 @@ async function main() {
 
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
-  // FIX A: Set 1280×720 viewport as spec requires.
+  // Use 1600×900 viewport so wider graphs are not clipped.
   await page.setViewportSize(VIEWPORT);
 
   // Load the app and wait for it to initialise.
@@ -727,12 +870,21 @@ async function main() {
     try {
       await buildGraph(page, buildFn);
 
-      // FIX A: Screenshot only the canvas area element (no browser chrome).
+      // Compute bounding-box clip so all nodes are fully visible (60px padding).
+      const clip = await getNodeClipRect(page, PADDING);
+
       const canvasEl = await page.$('#canvas-area');
       if (canvasEl) {
-        await canvasEl.screenshot({ path: outPath, type: 'png' });
+        if (clip) {
+          // Preferred path: crop to node bounding box + padding.
+          await canvasEl.screenshot({ path: outPath, type: 'png', clip });
+        } else {
+          // Fallback: no nodes found via DOM query — screenshot the full canvas.
+          console.warn(`[shots] WARNING: no .node elements found for ${slotId} — using full canvas`);
+          await canvasEl.screenshot({ path: outPath, type: 'png' });
+        }
       } else {
-        // Fallback: full page screenshot when canvas element not found.
+        // Ultimate fallback: full page screenshot when canvas element not found.
         console.warn(`[shots] WARNING: #canvas-area not found for ${slotId} — falling back to full-page`);
         await page.screenshot({ path: outPath, type: 'png' });
       }

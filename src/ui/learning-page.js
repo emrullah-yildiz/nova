@@ -5,46 +5,14 @@
 // correctly before advancing. Mirrors the Dynamo Primer model.
 //
 // Public API:
-//   buildLearningHtml()       → pure string; the modal container HTML
-//   initLearning(overlay)     → sets up chapter rendering + quiz handlers
-//   attachLearningShots(doc)  → wires data-shot-src PNGs into learn-shot imgs
-//   LEARNING_CHAPTERS         → the chapter data array (for tests)
-//
-// Screenshot slots — PNG filenames that go in public/learning/:
-//   intro-simple.png          Introduction › Simple example
-//   intro-advanced.png        Introduction › Advanced example
-//   interface-simple.png      Interface › Simple example
-//   interface-advanced.png    Interface › Advanced example
-//   node-layout-simple.png    Node Anatomy › Simple example
-//   node-layout-advanced.png  Node Anatomy › Advanced example
-//   data-types-simple.png     Data Types › Simple example
-//   data-types-advanced.png   Data Types › Advanced example
-//   math-simple.png           Math Operations › Simple example
-//   math-advanced.png         Math Operations › Advanced example
-//   geometry-simple.png       Geometry Operations › Simple example
-//   geometry-advanced.png     Geometry Operations › Advanced example
-//   lists-simple.png          List Operations › Simple example
-//   lists-advanced.png        List Operations › Advanced example
-//   python-simple.png         Python Node › Simple example
-//   python-advanced.png       Python Node › Advanced example
-//   code-terminal-simple.png  Code Terminal › Simple example
-//   code-terminal-advanced.png Code Terminal › Advanced example
-//   codeblock-simple.png      Code Block › Simple example
-//   codeblock-advanced.png    Code Block › Advanced example
-
-import { createMiniCanvas } from './mini-canvas.js';
-import { exercises } from './learning-exercises.js';
+//   buildLearningHtml()   → pure string; the modal container HTML
+//   initLearning(overlay) → sets up chapter rendering + quiz handlers
+//   LEARNING_CHAPTERS     → the chapter data array (for tests)
 
 // ── Module state ──────────────────────────────────────────────────────────────
 let _learnChapter = 0;
 // _learnDone[chIdx][qIdx] = true once that quiz question is answered correctly
 let _learnDone = {};
-// _exerciseDone[chIdx] = true once the exercise for that chapter is solved
-let _exerciseDone = {};
-// _miniCanvasInited[chIdx] = true once createMiniCanvas has been called for that chapter
-let _miniCanvasInited = {};
-// Reference to the active overlay (set in initLearning, used by onSolve callbacks)
-let _activeOverlay = null;
 
 // ── Chapter data ──────────────────────────────────────────────────────────────
 export const LEARNING_CHAPTERS = [
@@ -864,39 +832,6 @@ function _attachChapterExamples() {
   });
 }
 
-// ── Example figure helper ─────────────────────────────────────────────────────
-
-/**
- * Build the screenshot-slot figure HTML for one example.
- * When a PNG is available at public/learning/<slotId>.png the real image is
- * shown (wired by attachLearningShots). Until then a clean placeholder SVG
- * renders: a dark canvas outline with the chapter icon centred.
- *
- * @param {string} slotId   e.g. "intro-simple"
- * @param {string} icon     Chapter icon glyph (e.g. "⬡")
- * @returns {string} HTML string
- */
-function _screenshotFigureHtml(slotId, icon) {
-  const placeholder = '<svg xmlns="http://www.w3.org/2000/svg" width="560" height="180"'
-    + ' viewBox="0 0 560 180" role="img" aria-label="Nova canvas screenshot placeholder">'
-    + '<rect width="560" height="180" rx="8" fill="#11111b" stroke="#313244" stroke-width="1.5"/>'
-    + '<rect x="1" y="1" width="558" height="28" rx="8" fill="#181825"/>'
-    + '<rect x="1" y="17" width="558" height="12" fill="#181825"/>'
-    + '<circle cx="18" cy="15" r="5" fill="#45475a"/>'
-    + '<circle cx="36" cy="15" r="5" fill="#45475a"/>'
-    + '<circle cx="54" cy="15" r="5" fill="#45475a"/>'
-    + '<text x="280" y="106" text-anchor="middle" font-size="40" fill="#313244">'
-    + esc(icon)
-    + '</text>'
-    + '<text x="280" y="150" text-anchor="middle" font-size="11" fill="#45475a" font-family="system-ui,sans-serif">Screenshot coming soon</text>'
-    + '</svg>';
-
-  return '<figure class="learn-example-fig learn-figure" data-learn-shot="' + esc(slotId) + '">'
-    + '<div class="learn-illus" aria-hidden="true">' + placeholder + '</div>'
-    + '<img class="learn-shot" alt="" data-shot-src="learning/' + esc(slotId) + '.png" hidden>'
-    + '</figure>';
-}
-
 // Attach examples at module init.
 _attachChapterExamples();
 
@@ -969,11 +904,6 @@ function buildChapterHtml(ch, chIdx) {
         + '<span class="learn-example-label">' + levelLabel + '</span>'
         + '<p class="learn-example-title">' + esc(ex.title) + '</p>';
 
-      // Screenshot figure slot — real PNG loaded by attachLearningShots()
-      if (ex.slotId) {
-        html += _screenshotFigureHtml(ex.slotId, ch.icon);
-      }
-
       if (ex.steps && ex.steps.length > 0) {
         html += '<ol class="learn-example-steps">';
         ex.steps.forEach(function (step) {
@@ -1020,15 +950,6 @@ function buildChapterHtml(ch, chIdx) {
     html += '</div>';
   }
 
-  // ── Exercise section (mini-canvas) ──────────────────────────────────────────
-  if (exercises[chIdx]) {
-    html += '<div class="learn-exercise-section" id="learn-exercise-' + chIdx + '">'
-      + '<h2 class="learn-section-title">Exercise</h2>'
-      + '<p class="learn-section-body">Wire the missing connection to complete the graph, then click Submit to check your answer.</p>'
-      + '<div class="learn-exercise-canvas" id="learn-exercise-canvas-' + chIdx + '"></div>'
-      + '</div>';
-  }
-
   // Navigation buttons
   const allDone = _isChapterDone(chIdx);
   const isFirst = chIdx === 0;
@@ -1067,10 +988,6 @@ function _isChapterDone(chIdx) {
     const quizDone = ch.quiz.every(function (_, qi) { return done[qi] === true; });
     if (!quizDone) return false;
   }
-  // Exercise must be solved (if one exists for this chapter).
-  if (exercises[chIdx]) {
-    if (!_exerciseDone[chIdx]) return false;
-  }
   return true;
 }
 
@@ -1102,10 +1019,6 @@ export function initLearning(overlay) {
   // Reset state for fresh open
   _learnChapter = 0;
   _learnDone = {};
-  _exerciseDone = {};
-  _miniCanvasInited = {};
-  _activeOverlay = overlay;
-
   // Expose global handler functions that onclick attributes reference.
   window.__learnGo = function (idx) {
     _learnChapter = Math.max(0, Math.min(idx, LEARNING_CHAPTERS.length - 1));
@@ -1151,78 +1064,12 @@ function _render(overlay) {
   const content = overlay.querySelector('#learn-chapter-content');
   if (nav) nav.innerHTML = buildNavHtml(_learnChapter);
   if (content) {
-    // Clear the inited flag so the mini-canvas is re-created after the innerHTML
-    // wipe. Without this, a quiz-answer re-render would leave the exercise canvas
-    // empty (the old wrapper was removed with the old innerHTML).
-    _miniCanvasInited[_learnChapter] = false;
     content.innerHTML = buildChapterHtml(LEARNING_CHAPTERS[_learnChapter], _learnChapter);
-    _initExerciseForChapter(_learnChapter, overlay);
   }
 }
 
-/**
- * Lazy-initialize the mini-canvas exercise for a chapter if not already done.
- * Called after the chapter HTML has been inserted into the DOM.
- * @param {number}  chIdx
- * @param {Element} overlay
- */
-function _initExerciseForChapter(chIdx, overlay) {
-  if (_miniCanvasInited[chIdx]) return;
-  const exercise = exercises[chIdx];
-  if (!exercise) return;
-
-  const canvasContainer = overlay.querySelector('#learn-exercise-canvas-' + chIdx);
-  if (!canvasContainer) return;
-
-  _miniCanvasInited[chIdx] = true;
-
-  createMiniCanvas(canvasContainer, exercise, {
-    onSolve(passed) {
-      if (passed) {
-        _exerciseDone[chIdx] = true;
-        // Enable the Next chapter button by re-rendering the nav section.
-        const ov = _activeOverlay || overlay;
-        const nextBtn = ov.querySelector('.learn-nav-btn--next');
-        if (nextBtn && _isChapterDone(chIdx)) {
-          nextBtn.removeAttribute('disabled');
-          nextBtn.removeAttribute('title');
-        }
-        // Also refresh the nav sidebar done-state.
-        const navEl = ov.querySelector('#learn-nav');
-        if (navEl) navEl.innerHTML = buildNavHtml(chIdx);
-      }
-    }
-  });
-}
-
-/**
- * Wire up real PNG screenshots into the learn-figure slots inside `doc`.
- * For every <figure data-learn-shot="SLOT_ID"> the companion
- * <img data-shot-src="learning/SLOT_ID.png"> is shown (hidden attribute removed)
- * when the image loads successfully; the placeholder SVG is hidden instead.
- * If the PNG is absent or fails to load the placeholder remains visible.
- *
- * Called by app.js after showLearning() has inserted the overlay into the DOM.
- * @param {Document} doc
- */
-export function attachLearningShots(doc) {
-  const figures = (doc || document).querySelectorAll('.learn-figure[data-learn-shot]');
-  figures.forEach(function (fig) {
-    const img = fig.querySelector('.learn-shot[data-shot-src]');
-    const illus = fig.querySelector('.learn-illus');
-    if (!img) return;
-    const src = img.getAttribute('data-shot-src');
-    if (!src) return;
-    img.onload = function () {
-      img.removeAttribute('hidden');
-      if (illus) illus.setAttribute('hidden', '');
-    };
-    img.onerror = function () {
-      // Leave placeholder visible — PNG not yet available.
-    };
-    img.src = src;
-  });
-}
+// No-op stub kept so existing app.js import doesn't break.
+export function attachLearningShots() {}
 
 // Keep LEARNING_STEPS as a backward-compat alias so any remaining import
 // that hasn't been updated yet doesn't hard-crash. Points at the chapters.

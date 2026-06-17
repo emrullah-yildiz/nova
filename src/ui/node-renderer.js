@@ -829,76 +829,121 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
       if (typeof app.setView === 'function') app.setView('3d');
       activate(nodeId, mode,
         function (items) {
-          // Approve: items is an array of full scene-item objects
-          // (id, nodeId, varName, label, group, visible, selected).
-          // AC-9: extract real THREE.Mesh geometry data (vertexCount, vertices,
-          // faceCount) so Output.Watch shows spatial data, not a bare string.
+          // Approve: items is an array of accumulated scene-item objects.
           if (!nd.controlValues) nd.controlValues = {};
-          var geoData = items.map(function(item) {
-            // Find the first actual mesh child inside the THREE.Group.
-            var mesh = item.mesh || null;
-            if (item.group && typeof item.group.traverse === 'function') {
-              item.group.traverse(function(child) { if (!mesh && child.isMesh) mesh = child; });
-            }
-            var label = item.label || item.id || '';
-            if (!mesh || !mesh.geometry) {
-              // No mesh found — return a minimal descriptor so AC-9 still passes
-              return { _type: 'Mesh', label: label, nodeId: item.nodeId || '', varName: item.varName || '', vertexCount: 0, vertices: [], faceCount: 0 };
-            }
-            var geo = mesh.geometry;
-            var posAttr = geo.attributes && geo.attributes.position;
-            if (item.faceIndex !== undefined && item.faceIndex !== null && posAttr) {
-              var indices = [];
-              if (geo.index) {
-                indices = [
-                  geo.index.getX(item.faceIndex * 3),
-                  geo.index.getX(item.faceIndex * 3 + 1),
-                  geo.index.getX(item.faceIndex * 3 + 2)
-                ];
-              } else {
-                indices = [item.faceIndex * 3, item.faceIndex * 3 + 1, item.faceIndex * 3 + 2];
-              }
-              var faceVertices = [];
-              indices.forEach(function(vertexIndex) {
-                var v = new window.THREE.Vector3(posAttr.getX(vertexIndex), posAttr.getY(vertexIndex), posAttr.getZ(vertexIndex));
-                if (typeof mesh.localToWorld === 'function') mesh.localToWorld(v);
-                faceVertices.push(v.x, v.z, v.y);
+
+          if (mode === 'faces') {
+            // Use getSelectedFaces() from selection-mode.js to extract each
+            // per-face-group Mesh3 patch. Select.Faces.execute() returns this
+            // as a list so the inspector shows separate surfaces, while each
+            // item remains a real mesh for downstream nodes such as Surface.Isolines.
+            var selMod2 = (typeof window !== 'undefined' && window.__selectionModeModule) || null;
+            if (selMod2 && typeof selMod2.getSelectedFaces === 'function') {
+              var facesRaw = selMod2.getSelectedFaces();
+              // facesRaw: [{ itemId, groupIndex, faceGroups, mesh3 }, ...]
+              var meshArray = facesRaw.map(function(f) {
+                var groupIndex = f.groupIndex;
+                var faceGroups = f.faceGroups;
+                var mesh3 = f.mesh3;
+                if (!mesh3 || typeof mesh3.getFaceVertices !== 'function') return null;
+                var vertices = mesh3.getFaceVertices(groupIndex, faceGroups);
+                if (!Array.isArray(vertices) || vertices.length < 3) return null;
+                var meshFaces = [];
+                for (var vi = 1; vi < vertices.length - 1; vi++) meshFaces.push([0, vi, vi + 1]);
+                return {
+                  _type: 'Mesh3',
+                  vertices: vertices.map(function(v) {
+                    return { x: v[0], y: v[1], z: v[2], _type: 'Point3' };
+                  }),
+                  faces: meshFaces,
+                  color: mesh3.color || 0x89b4fa
+                };
+              }).filter(Boolean);
+
+              // Store as JSON so it survives save/load round-trips.
+              nd.controlValues._selectedMeshes = JSON.stringify(meshArray);
+              nd.controlValues._selectedFaces = '';
+
+              // Keep a merged legacy Mesh3 too, so older save/load paths and
+              // any direct debug tooling that reads _selectedMesh still have a
+              // mesh-shaped value.
+              var meshVerts = [];
+              var meshFaces = [];
+              var meshColor = 0x89b4fa;
+              meshArray.forEach(function(m) {
+                if (!m || !Array.isArray(m.vertices) || !Array.isArray(m.faces)) return;
+                meshColor = m.color || meshColor;
+                m.faces.forEach(function(face) {
+                  var base = meshVerts.length;
+                  face.forEach(function(idx) {
+                    var v = m.vertices[idx];
+                    if (v) meshVerts.push({ x: v.x, y: v.y, z: v.z, _type: 'Point3' });
+                  });
+                  meshFaces.push([base, base + 1, base + 2]);
+                });
               });
-              return {
-                _type: 'Mesh',
-                label: label,
-                nodeId: item.nodeId || '',
-                varName: item.varName || '',
-                sourceItemId: item.id || '',
-                faceIndex: item.faceIndex,
-                vertexCount: indices.length,
-                vertices: faceVertices,
-                faceCount: 1
-              };
+              nd.controlValues._selectedMesh = JSON.stringify({
+                _type: 'Mesh3', vertices: meshVerts, faces: meshFaces, color: meshColor
+              });
             }
-            var vertexCount = posAttr ? posAttr.count : 0;
-            // Capture first 30 floats (≤10 vertices × xyz) as a plain Array
-            var vertices = posAttr ? Array.from(posAttr.array).slice(0, 30) : [];
-            var faceCount = geo.index ? Math.floor(geo.index.count / 3) : Math.floor(vertexCount / 3);
-            return {
-              _type: 'Mesh',
-              label: label,
-              nodeId: item.nodeId || '',
-              varName: item.varName || '',
-              vertexCount: vertexCount,
-              vertices: vertices,
-              faceCount: faceCount
-            };
-          });
-          // Store as a JSON string so it survives project save/load round-trips.
-          nd.controlValues._selectedGeo = JSON.stringify(geoData);
-          // Keep _selectedLabels in sync for the "N faces selected" button display.
-          nd.controlValues._selectedLabels = items.map(function(it) { return it.label || it.id || ''; }).join('||');
+            // Keep _selectedLabels in sync for the "N faces selected" button display.
+            nd.controlValues._selectedLabels = items.map(function(it) { return it.label || it.id || ''; }).join('||');
+          } else {
+            // Edges / Points: extract THREE.js mesh geometry data into _selectedGeo
+            // (the existing format read by Select.Edges / Select.Points execute()).
+            var geoData = items.map(function(item) {
+              // Find the first actual mesh child inside the THREE.Group.
+              var mesh = item.mesh || null;
+              if (item.group && typeof item.group.traverse === 'function') {
+                item.group.traverse(function(child) { if (!mesh && child.isMesh) mesh = child; });
+              }
+              var label = item.label || item.id || '';
+              if (!mesh || !mesh.geometry) {
+                return { _type: 'Mesh', label: label, nodeId: item.nodeId || '', varName: item.varName || '', vertexCount: 0, vertices: [], faceCount: 0 };
+              }
+              var geo = mesh.geometry;
+              var posAttr = geo.attributes && geo.attributes.position;
+              if (item.faceIndex !== undefined && item.faceIndex !== null && posAttr) {
+                var indices = [];
+                if (geo.index) {
+                  indices = [
+                    geo.index.getX(item.faceIndex * 3),
+                    geo.index.getX(item.faceIndex * 3 + 1),
+                    geo.index.getX(item.faceIndex * 3 + 2)
+                  ];
+                } else {
+                  indices = [item.faceIndex * 3, item.faceIndex * 3 + 1, item.faceIndex * 3 + 2];
+                }
+                var faceVertices = [];
+                indices.forEach(function(vertexIndex) {
+                  var v = new window.THREE.Vector3(posAttr.getX(vertexIndex), posAttr.getY(vertexIndex), posAttr.getZ(vertexIndex));
+                  if (typeof mesh.localToWorld === 'function') mesh.localToWorld(v);
+                  faceVertices.push(v.x, v.z, v.y);
+                });
+                return {
+                  _type: 'Mesh', label: label,
+                  nodeId: item.nodeId || '', varName: item.varName || '',
+                  sourceItemId: item.id || '', faceIndex: item.faceIndex,
+                  vertexCount: indices.length, vertices: faceVertices, faceCount: 1
+                };
+              }
+              var vertexCount = posAttr ? posAttr.count : 0;
+              var vertices = posAttr ? Array.from(posAttr.array).slice(0, 30) : [];
+              var faceCount = geo.index ? Math.floor(geo.index.count / 3) : Math.floor(vertexCount / 3);
+              return { _type: 'Mesh', label: label, nodeId: item.nodeId || '', varName: item.varName || '', vertexCount: vertexCount, vertices: vertices, faceCount: faceCount };
+            });
+            nd.controlValues._selectedGeo = JSON.stringify(geoData);
+            nd.controlValues._selectedLabels = items.map(function(it) { return it.label || it.id || ''; }).join('||');
+          }
+
           self.renderNode(nd);
           self.runGraph();
+          // Return to node view so the user sees the updated Select.Faces node.
+          if (typeof app.setView === 'function') app.setView('nodes');
         },
         function () {
-          // Cancel: nothing to do
+          // Cancel: return to node view.
+          if (typeof app.setView === 'function') app.setView('nodes');
         }
       );
     } else {
@@ -916,6 +961,9 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
     if (!nd.controlValues) nd.controlValues = {};
     nd.controlValues._selectedLabels = '';
     nd.controlValues._selectedGeo = [];
+    nd.controlValues._selectedFaces = '';
+    nd.controlValues._selectedMeshes = '';
+    nd.controlValues._selectedMesh = '';
     this.renderNode(nd);
     this.runGraph();
   };

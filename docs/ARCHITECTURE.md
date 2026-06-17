@@ -1,4 +1,4 @@
-# NOVA — Source of Truth
+# Nova — Architecture
 
 > **This is the living, always-current big-picture file for Nova.** It is the one
 > place that answers: *what is Nova, how is it built, where is it going, and does
@@ -7,10 +7,10 @@
 > module map, or the roadmap.** A change that contradicts this file is wrong until
 > either the change or this file is fixed.
 >
-> Companion: [`ENGINEERING.md`](ENGINEERING.md) — *how* we work (rules, branching,
-> testing, multi-agent). This file is *what & why & where*; that one is *how*.
+> Companion: [`RULES.md`](RULES.md) — *how* we work (operating rules, branching,
+> testing, multi-agent, structured output contract). This file is *what & why & where*; that one is *how*.
 >
-> Last updated: **2026-06-03**.
+> Last updated: **2026-06-07**.
 
 ---
 
@@ -76,7 +76,7 @@ Subsystems (each links to its detailed Tier-2 spec):
 ## 3. Source layout & module ownership
 
 This map is also the **ownership partition** for parallel agents
-([`ENGINEERING.md`](ENGINEERING.md) §3): each agent owns a disjoint slice.
+([`RULES.md`](RULES.md) §4): each agent owns a disjoint slice.
 
 | Path | Role | Default owner (agent) |
 |---|---|---|
@@ -95,7 +95,7 @@ This map is also the **ownership partition** for parallel agents
 | `integrations/revit-addin/` | C# Revit add-in | Connect/Revit |
 | `installer/nova-connect/` | WiX MSI installer (Connect add-in) | Connect/Revit |
 | `tests/` | Vitest + Playwright | QA (or each owner for their slice) |
-| `docs/` | documentation | Orchestrator (NOVA.md) / any (their spec) |
+| `docs/` | documentation | Orchestrator (ARCHITECTURE.md) / any (their spec) |
 
 Worker routes are authoritative for **deployed** behavior; `api/` helpers exist
 for local dev + tests (see decision *Keep AI Provider Helpers Shared*).
@@ -196,6 +196,17 @@ like the code around it. (Each links to the decision that owns the detail.)
   (Python = imports/bridge/typed headers/terminal; CodeBlock = expressions/series/
   literals/inline). Codegen tracks *live* ports, not the static def. `Custom.Formula`
   was folded into CodeBlock (`Result = <expr>`) and retired.
+- **Geometry selection uses a temporary mesh swap, not permanent splitting.**
+  `Select.Faces` / `Select.Edges` / `Select.Points` nodes operate in two display
+  modes. **Normal mode:** the geometry renders as a single unified `THREE.Mesh`
+  (one material, one draw call). **Selection mode (active):** the mesh is swapped
+  for a `BufferGeometry` with `groups` — one group per logical face (coplanar
+  triangle set, grouped by shared normal within tolerance). Each group gets its own
+  `MeshPhongMaterial` so face colors can be set independently. `Raycaster` returns
+  `faceIndex`; a lookup table maps triangle index → group index → logical face.
+  On Approve/Cancel the multi-group mesh is disposed and the normal mesh is
+  restored. Output is face polygon geometry — the face's vertex positions extracted
+  from the group's index range — not the whole mesh object.
 - **Graph run modes are app-level policy over the engine mechanism.** The graph
   recomputes per `app.runMode`: **Automatic** (default — recompute on every edit,
   the legacy behavior) or **Manual** (defer to an explicit Run). The *mechanism*
@@ -237,6 +248,15 @@ like the code around it. (Each links to the decision that owns the detail.)
   no checkout, no separate hub exe — so a clean install can Connect.
 
 **In-flight / not started:**
+- **Select.Faces per-face selection (Sprint A2, TICK-009)** — individual face hover
+  + click selection on any `Geo.Mesh3` solid. Architecture: when selection mode
+  activates, the scene item's single `THREE.Mesh` is swapped for a multi-group
+  `BufferGeometry` with one material per logical face (coplanar-triangle groups).
+  `Raycaster.faceIndex` identifies the hit group; the per-group material color
+  updates for hover (blue) / selected (green) / candidate (teal). Approve/Cancel
+  swaps back to the normal unified mesh. Output is the selected face(s) as planar
+  polygon geometry (`Geo.Plane` or face-vertex array). The mesh renders as a
+  unified whole in all other contexts — no permanent geometry splitting.
 - **Accounts & collaboration: Phase 0 not started** — the `src/enterprise/` domain
   logic exists but is frontend-dormant and Node-bound; the Worker port is pending.
 - AI prompt Phase 3 (library hardening: real boolean CSG, paneling, Voronoi) and
@@ -270,8 +290,8 @@ Consolidated forward view. Detail lives in the linked specs — don't duplicate 
 
 | Doc | Tier | Purpose |
 |---|---|---|
-| [`NOVA.md`](NOVA.md) | 1 | This file — living source of truth |
-| [`ENGINEERING.md`](ENGINEERING.md) | 1 | Coding + multi-agent operating rules |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | 1 | This file — living source of truth |
+| [`RULES.md`](RULES.md) | 1 | Agent operating rules, checklist, structured output contract |
 | [`README.md`](README.md) | index | Doc map + maintenance policy |
 | [`agent-workboard.md`](agent-workboard.md) | live | Concurrency claim board (who owns what *right now*) |
 | [`agent-handoff.md`](agent-handoff.md) | live | Short-lived task handoffs between agents |
@@ -287,22 +307,8 @@ Consolidated forward view. Detail lives in the linked specs — don't duplicate 
 
 ## Maintenance contract
 
-- **NOVA.md (this file)** — update when architecture, a design pattern, the module
-  map, current status, or the roadmap changes. Keep it distilled; push detail down
-  into the Tier-2 spec and link to it.
-- **`architecture/decisions.md`** — append a dated entry (newest first) for any
-  durable decision; mark superseded entries rather than deleting them.
-- **`agent-handoff.md`** — add an entry when a task leaves context the next agent
-  needs but that isn't a permanent decision.
+- **ARCHITECTURE.md (this file)** — update when architecture, a design pattern, the module map, current status, or the roadmap changes. Keep it distilled; push detail down into the Tier-2 spec and link to it.
+- **`architecture/decisions.md`** — append a dated entry (newest first) for any durable decision; mark superseded entries rather than deleting them.
 - **`agent-workboard.md`** — claim/release your owned paths as you start/finish.
 
-If two of these ever disagree, NOVA.md + decisions.md win; fix the others.
-
-
-## Rules for Agents
-
-- Before every merge, make sure that tests are passing
-- Think that multiple agents are working together and everything should be documented so that another agent can continue to the work from where it is left. 
-- Every new node is tested like a real user, meaningful results and usable actions.
-- The learning system must be as detailed and interactive as Dynamo Primer (https://primer2.dynamobim.org): each lesson has concept explanation, step-by-step exercises, and at least one interactive question the user must answer correctly before advancing.
-- Every sample file of nodes will be checked carefully. The agents will check not only if there is an output but also if the output is usable for another nodes input and if the output appears correctly when the sampel file is run. 
+If two of these ever disagree, ARCHITECTURE.md + decisions.md win; fix the others.

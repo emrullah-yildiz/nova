@@ -1374,6 +1374,12 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
   app._renderFromCompute = function() {
 
+    // Do not clear and rebuild the scene while face-selection mode is active.
+    // The swap meshes live in the scene items; destroying them would orphan
+    // the selection-mode state and lose the user's in-progress face picks.
+    var _selMod = typeof window !== 'undefined' ? window.__selectionModeModule : null;
+    if (_selMod && typeof _selMod.isSelectionModeActive === 'function' && _selMod.isSelectionModeActive()) return;
+
     if (!Viewer3D.isInitialized) {
 
       var vp = document.getElementById('viewport-3d');

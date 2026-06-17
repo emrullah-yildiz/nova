@@ -1,7 +1,7 @@
 import { Geo } from '../geometry/index.js';
 import { setNodePreviewState, setPreviewItemVisibility, showAllPreviews } from './preview-sync.js';
 import { Viewer3D as RuntimeViewer3D } from './viewer3d.js';
-import { isSelectionModeActive, selectionModeClick, selectionModeHover, getSelectedItems, clearSelection } from './selection-mode.js';
+import { isSelectionModeActive, selectionModeClick, selectionModeHover, selectionMeshClick, selectionMeshHover, getSelectedItems, clearSelection } from './selection-mode.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -112,6 +112,16 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
 
     var itemId = nodeId + (varName ? ':' + varName : '');
     var item = { id: itemId, nodeId: nodeId, varName: varName || '', label: label || varName || '', group: group, visible: true, selected: false };
+
+    // Store the raw Mesh3 geometry value so that selection-mode.js can call
+    // mesh3.groupFaces() + toSelectionMesh() for per-face selection (T09b).
+    // The _Mesh3 instance carries _type === 'Mesh3' directly on the object.
+    if (geoVal && geoVal._type === 'Mesh3') {
+      item._mesh3 = geoVal;
+    } else if (Array.isArray(geoVal) && geoVal.length === 1 && geoVal[0] && geoVal[0]._type === 'Mesh3') {
+      item._mesh3 = geoVal[0];
+    }
+
     this._sceneItems.push(item);
     return item;
   };
@@ -164,6 +174,11 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
   // ══════════════════════════════════════
 
   Viewer3D.buildFromGraph = function(nodes, wires, computeFn) {
+    // Do not clear and rebuild the scene while face-selection mode is active.
+    // The swap meshes live in the scene items; destroying them would orphan the
+    // selection-mode state and lose the user's in-progress face picks.
+    if (isSelectionModeActive()) return;
+
     // Save previous visibility state so we can restore after rebuild
     var prevVisibility = {};
     if (this._sceneItems && this._sceneItems.length > 0) {
@@ -290,10 +305,28 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
     this._raycaster = new THREE.Raycaster();
 
     var self = this;
-    this.renderer.domElement.addEventListener('click', function(e) {
+
+    // ── Pointer-event drag guard ───────────────────────────────────────────
+    // Use pointerdown/pointermove/pointerup instead of mousedown/mousemove/click.
+    // OrbitControls captures the pointer on pointerdown internally, so the
+    // browser's synthetic click event fires even after an orbit drag because
+    // OrbitControls already handled the pointer and the click's clientX/Y may
+    // equal the pointerdown position regardless of how far the user dragged.
+    // Listening on pointer events guarantees we see the real displacement.
+    this.renderer.domElement.addEventListener('pointerdown', function(e) {
+      self._lastPointerDown = { x: e.clientX, y: e.clientY };
+      self._isDragging = false;
+    });
+
+    // ── pointerup — fires selection when no drag occurred ─────────────────
+    this.renderer.domElement.addEventListener('pointerup', function(e) {
       if (!self.isVisible) return;
-      // Ignore if user was orbiting (mouse moved significantly)
-      if (self._lastMouseDown && (Math.abs(e.clientX - self._lastMouseDown.x) > 5 || Math.abs(e.clientY - self._lastMouseDown.y) > 5)) return;
+      // If the pointer moved > 3px since pointerdown, the user was orbiting —
+      // clear the drag flag and skip selection.
+      if (self._isDragging) {
+        self._isDragging = false;
+        return;
+      }
 
       var rect = self.renderer.domElement.getBoundingClientRect();
       self._mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -306,14 +339,39 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       // intersect routine doesn't check object.visible — so a hidden mesh
       // would still be clickable and select its panel row. traverseVisible
       // skips any subtree rooted at an invisible Object3D.
+      //
+      // When face-selection meshes are active, restrict raycasting to those
+      // meshes only. LineSegments (edge wires) have a default THREE.js
+      // raycaster threshold of 1 world-unit — large enough to intercept every
+      // hit on a default 1×1×1 box and prevent face selection from working.
+      var _anyFaceSelMesh = self._sceneItems && self._sceneItems.some(function(it) { return !!it._selectionSwappedMesh; });
       var allMeshes = [];
       self.geometryGroup.traverseVisible(function(obj) {
-        if (obj.isMesh || obj.isLine || obj.isLineSegments) allMeshes.push(obj);
+        if (_anyFaceSelMesh) {
+          if (obj.isMesh && obj.userData && obj.userData.isSelectionMesh) allMeshes.push(obj);
+        } else {
+          if (obj.isMesh || obj.isLine || obj.isLineSegments) allMeshes.push(obj);
+        }
       });
 
       var intersects = self._raycaster.intersectObjects(allMeshes, false);
       if (intersects.length > 0) {
         var hit = intersects[0];
+
+        // ── Per-face-group selection mesh click (T09b) ──────────────────────
+        // When the hit is on a selection mesh (swapped in by _swapToFaceMeshes),
+        // route to the face-group click handler rather than the whole-item path.
+        if (isSelectionModeActive() && hit.object && hit.object.userData && hit.object.userData.isSelectionMesh) {
+          var selMeshItem = null;
+          for (var si = 0; si < self._sceneItems.length; si++) {
+            if (self._sceneItems[si]._selectionSwappedMesh === hit.object) { selMeshItem = self._sceneItems[si]; break; }
+          }
+          if (selMeshItem) {
+            selectionMeshClick(hit, selMeshItem);
+            return;
+          }
+        }
+
         var item = findSceneItemForHit(hit);
         if (item) {
           // When selection mode is active, route to the selection accumulator
@@ -336,11 +394,6 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       }
     });
 
-    // Track mousedown position to distinguish click from orbit
-    this.renderer.domElement.addEventListener('mousedown', function(e) {
-      self._lastMouseDown = { x: e.clientX, y: e.clientY };
-    });
-
     // ── Per-panel hover highlight (AC-4) ──
     // When the cursor moves over a panel mesh (userData.isPanelMesh), apply
     // the accent-green highlight (#a6e3a1) to that panel only and restore all
@@ -351,7 +404,14 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
     // and apply blue (#89b4fa) to the hovered face, teal (#94e2d5) to other
     // candidates, green (#a6e3a1) to already-selected items. This lets the user
     // see which face they are about to pick before clicking.
-    this.renderer.domElement.addEventListener('mousemove', function(e) {
+    this.renderer.domElement.addEventListener('pointermove', function(e) {
+      // Set drag flag when pointer moves > 3px after pointerdown — used by
+      // pointerup to distinguish orbit drags from genuine point clicks.
+      if (self._lastPointerDown &&
+          (Math.abs(e.clientX - self._lastPointerDown.x) > 3 ||
+           Math.abs(e.clientY - self._lastPointerDown.y) > 3)) {
+        self._isDragging = true;
+      }
       if (!self.isVisible) return;
       var rect = self.renderer.domElement.getBoundingClientRect();
       self._mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -365,21 +425,93 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       // selected items stay green. Exit early so the panel-hover path below
       // does not conflict.
       if (isSelectionModeActive()) {
+        // T09f debug trace — record that selection mode is active this frame
+        if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+          window.__novaHoverDebug.lastHoverTrace.selectionModeActive = true;
+          // Reset per-frame fields so stale values don't mislead
+          window.__novaHoverDebug.lastHoverTrace.anySelMesh = false;
+          window.__novaHoverDebug.lastHoverTrace.candidateCount = 0;
+          window.__novaHoverDebug.lastHoverTrace.hitFound = false;
+          window.__novaHoverDebug.lastHoverTrace.hitOnSelMesh = false;
+          window.__novaHoverDebug.lastHoverTrace.sceneItemFound = false;
+          window.__novaHoverDebug.lastHoverTrace.selectionMeshHoverCalled = false;
+          window.__novaHoverDebug.lastHoverTrace.materialSet = false;
+          window.__novaHoverDebug.lastHoverTrace.renderRequested = false;
+        }
+
+        // Determine whether face-selection meshes are active before building
+        // the candidate list. When they are, restrict raycasting to those
+        // meshes only. LineSegments (edge wires) have a default THREE.js
+        // raycaster threshold of 1 world-unit — on a default 1×1×1 box that
+        // threshold covers every face-interior point, so edge lines would
+        // always win the raycast and prevent any face from being highlighted.
+        var anySelMesh = self._sceneItems && self._sceneItems.some(function(it) { return !!it._selectionSwappedMesh; });
+
+        // T09f debug trace — record whether any selection mesh is swapped in
+        if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+          window.__novaHoverDebug.lastHoverTrace.anySelMesh = !!anySelMesh;
+        }
+
         var candidateMeshes = [];
         self.geometryGroup.traverseVisible(function(obj) {
-          if (obj.isMesh || obj.isLine || obj.isLineSegments) candidateMeshes.push(obj);
+          if (anySelMesh) {
+            if (obj.isMesh && obj.userData && obj.userData.isSelectionMesh) candidateMeshes.push(obj);
+          } else {
+            if (obj.isMesh || obj.isLine || obj.isLineSegments) candidateMeshes.push(obj);
+          }
         });
+
+        // T09f debug trace — record candidate mesh count for the raycast
+        if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+          window.__novaHoverDebug.lastHoverTrace.candidateCount = candidateMeshes.length;
+        }
 
         var intersects = self._raycaster.intersectObjects(candidateMeshes, false);
         var hit = intersects.length > 0 ? intersects[0] : null;
+
+        // T09f debug trace — record whether raycast produced a hit
+        if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+          window.__novaHoverDebug.lastHoverTrace.hitFound = hit !== null;
+        }
+
         var hitMesh = hit ? hit.object : null;
         var hitFaceIndex = hit && hit.faceIndex !== undefined ? hit.faceIndex : null;
 
-        if (hitMesh === self._hoveredSelectionMesh && hitFaceIndex === self._hoveredSelectionFaceIndex) return; // nothing changed
+        if (!anySelMesh && hitMesh === self._hoveredSelectionMesh && hitFaceIndex === self._hoveredSelectionFaceIndex) return; // nothing changed
         self._hoveredSelectionMesh = hitMesh;
         self._hoveredSelectionFaceIndex = hitFaceIndex;
         // Expose for E2E assertions (AC-8)
         if (typeof window !== 'undefined') window.__geoSelectorHoveredFaceMesh = hitMesh || null;
+
+        // ── Per-face-group hover (T09b) ─────────────────────────────────────
+        // When the hit is on a selection mesh (swapped in by _swapToFaceMeshes),
+        // call selectionMeshHover for group-level hover coloring instead of the
+        // whole-item hover path below. Also call it (with null) when the cursor
+        // leaves a selection mesh, so the previously hovered group is restored.
+        if (anySelMesh) {
+          var selMeshHoverItem = null;
+          if (hit && hit.object && hit.object.userData && hit.object.userData.isSelectionMesh) {
+            // T09f debug trace — record whether the hit was on a selection mesh
+            if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+              window.__novaHoverDebug.lastHoverTrace.hitOnSelMesh = true;
+            }
+            for (var smi = 0; smi < self._sceneItems.length; smi++) {
+              if (self._sceneItems[smi]._selectionSwappedMesh === hit.object) { selMeshHoverItem = self._sceneItems[smi]; break; }
+            }
+          }
+          // T09f debug trace — record whether the scene item was found
+          if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+            window.__novaHoverDebug.lastHoverTrace.sceneItemFound = selMeshHoverItem !== null;
+          }
+          // Pass hit only when it is on a selection mesh (selMeshHoverItem found),
+          // otherwise null so selectionMeshHover clears the previously hovered group.
+          // T09f debug trace — record that selectionMeshHover is about to be called
+          if (typeof window !== 'undefined' && window.__novaHoverDebug) {
+            window.__novaHoverDebug.lastHoverTrace.selectionMeshHoverCalled = true;
+          }
+          selectionMeshHover(selMeshHoverItem ? hit : null, selMeshHoverItem);
+          return;
+        }
 
         selectionModeHover(findSceneItemForHit(hit), hit);
         if (typeof window !== 'undefined') return; // don't run the panel-hover path below in selection mode

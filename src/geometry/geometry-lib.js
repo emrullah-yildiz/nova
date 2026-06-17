@@ -575,6 +575,148 @@ class _Mesh3 {
 
   }
 
+  // ── groupFaces ──────────────────────────────────────────────────────────
+  // Groups triangles into coplanar face-groups by comparing normals.
+  // Two triangles merge when dot(nA, nB) > 0.999 (same direction) OR when
+  // they lie on the same supporting plane with antiparallel normals (checked by
+  // also testing abs-dot AND verifying that a vertex from the new triangle lies
+  // on the existing group's plane within a small tolerance). This way a Box
+  // produces 6 groups (one per face square), not 3 (collapsed axis pairs) and
+  // not 12 (one per triangle).
+  // Returns Array<{ triangleIndices: number[], normal: [nx,ny,nz], d: number }>.
+  groupFaces() {
+    const groups = [];
+    for (let ti = 0; ti < this.faces.length; ti++) {
+      const f = this.faces[ti];
+      const v0 = this.vertices[f[0]], v1 = this.vertices[f[1]], v2 = this.vertices[f[2]];
+      // Edge vectors in Geo space
+      const e1x = v1.x - v0.x, e1y = v1.y - v0.y, e1z = v1.z - v0.z;
+      const e2x = v2.x - v0.x, e2y = v2.y - v0.y, e2z = v2.z - v0.z;
+      // Cross product → triangle normal
+      let nx = e1y * e2z - e1z * e2y;
+      let ny = e1z * e2x - e1x * e2z;
+      let nz = e1x * e2y - e1y * e2x;
+      const nl = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+      nx /= nl; ny /= nl; nz /= nl;
+      // Plane offset (signed distance from origin along normal)
+      const d = nx * v0.x + ny * v0.y + nz * v0.z;
+      // Find an existing group whose supporting plane is the same:
+      // normals must be nearly parallel (dot > 0.999) AND same plane offset.
+      // Using same-plane-offset check (|d - gd| < 1e-4) means that two parallel
+      // but spatially distinct faces (e.g. top vs bottom of a box) stay in
+      // separate groups even when normals are exactly antiparallel.
+      let matched = false;
+      for (let gi = 0; gi < groups.length; gi++) {
+        const gn = groups[gi].normal;
+        const gd = groups[gi].d;
+        const dot = nx * gn[0] + ny * gn[1] + nz * gn[2];
+        // Same-direction normals on the same plane: standard case (2 triangles per quad).
+        if (dot > 0.999 && Math.abs(d - gd) < 1e-4) {
+          groups[gi].triangleIndices.push(ti);
+          matched = true;
+          break;
+        }
+        // Opposite-winding normals on the same plane (e.g. boolean-result faces):
+        // dot ≈ -1 AND the plane offsets are equal-magnitude-but-opposite-sign.
+        if (dot < -0.999 && Math.abs(d + gd) < 1e-4) {
+          groups[gi].triangleIndices.push(ti);
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        groups.push({ triangleIndices: [ti], normal: [nx, ny, nz], d });
+      }
+    }
+    return groups;
+  }
+
+  // ── toSelectionMesh ────────────────────────────────────────────────────
+  // Builds a THREE.Mesh with one BufferGeometry group per face-group so
+  // individual faces can be highlighted by switching material color/opacity.
+  // Applies the same Y/Z coordinate swap as toThreeGeometry().
+  // Returns { mesh, materials, faceGroups, triangleToGroup }.
+  toSelectionMesh(faceGroups) {
+    if (!faceGroups) faceGroups = this.groupFaces();
+
+    // Flat position array (Y/Z swap to match toThreeGeometry)
+    const verts = new Float32Array(this.vertices.length * 3);
+    this.vertices.forEach((v, i) => {
+      verts[i * 3]     = v.x;
+      verts[i * 3 + 1] = v.z; // Y-up swap
+      verts[i * 3 + 2] = v.y;
+    });
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+
+    // Build triangle index array ordered by group; track each group's slice.
+    // triangleToGroup is built as a parallel array so its indices match
+    // hit.faceIndex (the triangle's position in the reordered buffer), not
+    // the original face indices. Each push to indexArr is accompanied by a
+    // push of the owning group index so the two arrays stay in sync.
+    const indexArr = [];
+    const triangleToGroup = [];
+    for (let gi = 0; gi < faceGroups.length; gi++) {
+      const startOffset = indexArr.length;
+      const tris = faceGroups[gi].triangleIndices;
+      for (let k = 0; k < tris.length; k++) {
+        const f = this.faces[tris[k]];
+        indexArr.push(f[0], f[1], f[2]);
+        triangleToGroup.push(gi);
+      }
+      const count = indexArr.length - startOffset;
+      geometry.addGroup(startOffset, count, gi);
+    }
+    geometry.setIndex(indexArr);
+    geometry.computeVertexNormals();
+
+    // One independent material per group (teal base color, polygon-offset so it
+    // renders just above the underlying solid without z-fighting).
+    // MeshBasicMaterial is used instead of MeshPhongMaterial so face colors are
+    // completely unaffected by scene lighting — no shadows or specular highlights,
+    // just flat solid teal/blue/green as the PM requires.
+    const baseMat = new THREE.MeshBasicMaterial({
+      color: 0x94e2d5,
+      transparent: true,
+      opacity: 0.85,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1
+    });
+    const materials = faceGroups.map(() => baseMat.clone());
+
+    const mesh = new THREE.Mesh(geometry, materials);
+    mesh.userData.isSelectionMesh = true;
+
+    return { mesh, materials, faceGroups, triangleToGroup };
+  }
+
+  // ── getFaceVertices ────────────────────────────────────────────────────
+  // Returns unique vertex positions for the face-group at faceGroupIndex.
+  // Deduplicates by stringified coordinate (tolerance 1e-6 via toFixed(6)).
+  // Returns raw Geo coordinates — NO Y/Z swap.
+  getFaceVertices(faceGroupIndex, faceGroups) {
+    if (!faceGroups) faceGroups = this.groupFaces();
+    const group = faceGroups[faceGroupIndex];
+    if (!group) return [];
+    const seen = new Set();
+    const result = [];
+    for (let k = 0; k < group.triangleIndices.length; k++) {
+      const f = this.faces[group.triangleIndices[k]];
+      for (let vi = 0; vi < 3; vi++) {
+        const v = this.vertices[f[vi]];
+        const key = v.x.toFixed(6) + ',' + v.y.toFixed(6) + ',' + v.z.toFixed(6);
+        if (!seen.has(key)) {
+          seen.add(key);
+          result.push([v.x, v.y, v.z]);
+        }
+      }
+    }
+    return result;
+  }
+
   toString() { return `Mesh3(${this.vertices.length} verts, ${this.faces.length} faces)`; }
 
 }

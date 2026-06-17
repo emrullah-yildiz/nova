@@ -8,7 +8,7 @@
 // Full DOM/viewer integration (toolbar rendering, 3D click routing) is verified
 // manually in the browser; here we test the pure-logic surface.
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import {
   activateSelectionMode,
   deactivateSelectionMode,
@@ -210,9 +210,8 @@ describe('_itemMatchesMode', () => {
 
 // ── Select.Faces / Select.Edges / Select.Points node execute() ────────────────
 //
-// AC-9: _selectedGeo is now a JSON string produced by node-renderer.js on Approve.
-// It contains Array<{ _type:'Mesh', label, nodeId, varName, vertexCount, vertices, faceCount }>.
-// Select.Faces returns { faces: geoData }; Select.Edges/Points return { selection: geoData }.
+// Select.Faces outputs a list of per-surface Mesh3 objects via _selectedMeshes.
+// Select.Edges/Points still return { selection: geoData[] } via _selectedGeo.
 
 describe('Select.* node execute()', () => {
   let registry;
@@ -234,52 +233,142 @@ describe('Select.* node execute()', () => {
       expect(typeof def.metadata.selectionMode).toBe('string');
       expect(def.metadata.selectionMode.length).toBeGreaterThan(0);
     });
-
-    it(type + ' execute() returns empty list when _selectedGeo is empty', () => {
-      const def = registry.getNode(type);
-      const result = def.execute({}, {}, { _selectedLabels: '', _selectedGeo: '' });
-      // Select.Faces uses 'faces' key; others use 'selection'
-      const out = result.faces !== undefined ? result.faces : result.selection;
-      expect(Array.isArray(out)).toBe(true);
-      expect(out.length).toBe(0);
-    });
-
-    it(type + ' execute() returns empty list for invalid JSON in _selectedGeo', () => {
-      const def = registry.getNode(type);
-      const result = def.execute({}, {}, { _selectedGeo: 'not-json' });
-      const out = result.faces !== undefined ? result.faces : result.selection;
-      expect(Array.isArray(out)).toBe(true);
-      expect(out.length).toBe(0);
-    });
   });
 
-  // AC-9 specific: Select.Faces reads _selectedGeo JSON and returns { faces: [...] }
-  // with real mesh geometry data (vertexCount > 0, vertices array, _type:'Mesh').
+  function meshPatchData() {
+    return {
+      _type: 'Mesh3',
+      vertices: [
+        { x: 0, y: 0, z: 0, _type: 'Point3' },
+        { x: 1, y: 0, z: 0, _type: 'Point3' },
+        { x: 1, y: 1, z: 0, _type: 'Point3' },
+        { x: 0, y: 1, z: 0, _type: 'Point3' }
+      ],
+      faces: [[0, 1, 2], [0, 2, 3]],
+      color: 0x89b4fa
+    };
+  }
 
-  it('Select.Faces execute() with _selectedGeo JSON returns { faces: [{ _type:"Mesh", vertexCount > 0 }] }', () => {
+  // Select.Faces - separate surface mesh output via _selectedMeshes
+
+  it('Select.Faces execute() returns an empty list when nothing selected', () => {
     const def = registry.getNode('Select.Faces');
-    const geoData = [
-      { _type: 'Mesh', label: 'Box (node-1)', nodeId: 'node-1', varName: '', vertexCount: 24, vertices: [0.5, -0.5, 0.5, -0.5, -0.5, 0.5], faceCount: 12 }
+    const result = def.execute({}, {}, { _selectedLabels: '', _selectedGeo: '', _selectedFaces: '', _selectedMeshes: '', _selectedMesh: '' });
+    expect(Array.isArray(result.faces)).toBe(true);
+    expect(result.faces.length).toBe(0);
+  });
+
+  it('Select.Faces execute() with valid _selectedMeshes returns separate Mesh3 objects', () => {
+    const def = registry.getNode('Select.Faces');
+    const result = def.execute({}, {}, { _selectedMeshes: JSON.stringify([meshPatchData(), meshPatchData()]), _selectedMesh: '' });
+    expect(Array.isArray(result.faces)).toBe(true);
+    expect(result.faces.length).toBe(2);
+    expect(result.faces[0]._type).toBe('Mesh3');
+    expect(Array.isArray(result.faces[0].vertices)).toBe(true);
+    expect(result.faces[0].vertices.length).toBe(4);
+    expect(Array.isArray(result.faces[0].faces)).toBe(true);
+    expect(result.faces[0].faces.length).toBe(2);
+  });
+
+  it('Select.Faces Mesh3 output can feed Surface.Isolines', () => {
+    const selectDef = registry.getNode('Select.Faces');
+    const isolinesDef = registry.getNode('Surface.Isolines');
+    const selected = selectDef.execute({}, {}, { _selectedMeshes: JSON.stringify([meshPatchData()]), _selectedMesh: '' });
+    const result = isolinesDef.execute({}, { mesh: selected.faces[0], count: 2 }, { dir: 'U' });
+    expect(Array.isArray(result.curves)).toBe(true);
+    expect(result.curves.length).toBeGreaterThan(0);
+    expect(result.curves[0]._type).toBe('Polyline3');
+  });
+
+  it('Select.Faces converts legacy _selectedFaces descriptors to Mesh3 patches', () => {
+    const def = registry.getNode('Select.Faces');
+    const legacyFaces = [
+      {
+        _type: 'Face',
+        vertices: [[-0.5, -0.5, 0.5], [0.5, -0.5, 0.5], [0.5, 0.5, 0.5], [-0.5, 0.5, 0.5]],
+        normal: [0, 0, 1],
+        area: 1
+      }
     ];
-    const result = def.execute({}, {}, { _selectedGeo: JSON.stringify(geoData) });
+    const result = def.execute({}, {}, { _selectedFaces: JSON.stringify(legacyFaces), _selectedMeshes: '', _selectedMesh: '' });
     expect(Array.isArray(result.faces)).toBe(true);
     expect(result.faces.length).toBe(1);
-    expect(result.faces[0]._type).toBe('Mesh');
-    expect(result.faces[0].vertexCount).toBeGreaterThan(0);
-    expect(Array.isArray(result.faces[0].vertices)).toBe(true);
-    expect(result.faces[0].vertices.length).toBeGreaterThan(0);
+    expect(result.faces[0]._type).toBe('Mesh3');
+    expect(result.faces[0].vertices.length).toBe(4);
+    expect(result.faces[0].faces).toEqual([[0, 1, 2], [0, 2, 3]]);
   });
 
-  it('Select.Faces execute() with multi-item _selectedGeo returns all items', () => {
+  it('Select.Faces execute() keeps _selectedMesh as a legacy one-item fallback', () => {
     const def = registry.getNode('Select.Faces');
-    const geoData = [
-      { _type: 'Mesh', label: 'Box A', nodeId: 'n1', varName: '', vertexCount: 24, vertices: [0.5], faceCount: 12 },
-      { _type: 'Mesh', label: 'Box B', nodeId: 'n2', varName: '', vertexCount: 8, vertices: [0.1], faceCount: 4 }
-    ];
-    const result = def.execute({}, {}, { _selectedGeo: JSON.stringify(geoData) });
-    expect(result.faces.length).toBe(2);
-    expect(result.faces[0].label).toBe('Box A');
-    expect(result.faces[1].label).toBe('Box B');
+    const meshData = {
+      _type: 'Mesh3',
+      vertices: [
+        { x: 0, y: 0, z: 0, _type: 'Point3' },
+        { x: 1, y: 0, z: 0, _type: 'Point3' },
+        { x: 1, y: 1, z: 0, _type: 'Point3' }
+      ],
+      faces: [[0, 1, 2]],
+      color: 0x89b4fa
+    };
+    const result = def.execute({}, {}, { _selectedMesh: JSON.stringify(meshData) });
+    expect(Array.isArray(result.faces)).toBe(true);
+    expect(result.faces.length).toBe(1);
+    expect(result.faces[0]._type).toBe('Mesh3');
+    expect(Array.isArray(result.faces[0].vertices)).toBe(true);
+    expect(result.faces[0].vertices.length).toBe(3);
+    expect(Array.isArray(result.faces[0].faces)).toBe(true);
+    expect(result.faces[0].faces.length).toBe(1);
+  });
+
+  it('Select.Faces execute() with invalid _selectedMesh JSON returns an empty list', () => {
+    const def = registry.getNode('Select.Faces');
+    const result = def.execute({}, {}, { _selectedMesh: 'not-json' });
+    expect(Array.isArray(result.faces)).toBe(true);
+    expect(result.faces.length).toBe(0);
+  });
+
+  it('Select.Faces execute() with empty vertices in _selectedMesh returns an empty list', () => {
+    const def = registry.getNode('Select.Faces');
+    const meshData = { _type: 'Mesh3', vertices: [], faces: [], color: 0x89b4fa };
+    const result = def.execute({}, {}, { _selectedMesh: JSON.stringify(meshData) });
+    expect(Array.isArray(result.faces)).toBe(true);
+    expect(result.faces.length).toBe(0);
+  });
+
+  it('Select.Faces execute() legacy Mesh3 fallback vertices are Point3 instances with x/y/z', () => {
+    const def = registry.getNode('Select.Faces');
+    const meshData = {
+      _type: 'Mesh3',
+      vertices: [
+        { x: 0.5, y: -0.5, z: -0.5, _type: 'Point3' },
+        { x: 0.5, y: 0.5, z: -0.5, _type: 'Point3' },
+        { x: 0.5, y: 0.5, z: 0.5, _type: 'Point3' }
+      ],
+      faces: [[0, 1, 2]],
+      color: 0x89b4fa
+    };
+    const result = def.execute({}, {}, { _selectedMesh: JSON.stringify(meshData) });
+    const v0 = result.faces[0].vertices[0];
+    expect(typeof v0.x).toBe('number');
+    expect(typeof v0.y).toBe('number');
+    expect(typeof v0.z).toBe('number');
+    expect(v0.x).toBeCloseTo(0.5);
+  });
+
+  // Select.Edges / Select.Points — still use _selectedGeo list format
+
+  it('Select.Edges execute() returns empty list when _selectedGeo is empty', () => {
+    const def = registry.getNode('Select.Edges');
+    const result = def.execute({}, {}, { _selectedLabels: '', _selectedGeo: '' });
+    expect(Array.isArray(result.selection)).toBe(true);
+    expect(result.selection.length).toBe(0);
+  });
+
+  it('Select.Points execute() returns empty list when _selectedGeo is empty', () => {
+    const def = registry.getNode('Select.Points');
+    const result = def.execute({}, {}, { _selectedLabels: '', _selectedGeo: '' });
+    expect(Array.isArray(result.selection)).toBe(true);
+    expect(result.selection.length).toBe(0);
   });
 
   it('Select.Edges execute() with _selectedGeo JSON returns { selection: [...] }', () => {
@@ -309,5 +398,85 @@ describe('Select.* node execute()', () => {
 
   it('Select.Points selectionMode is "points"', () => {
     expect(registry.getNode('Select.Points').metadata.selectionMode).toBe('points');
+  });
+});
+
+// ── Geo.Mesh3 face grouping (T09a) ──────────────────────────────────────────
+//
+// These tests exercise the three new _Mesh3 methods added in T09a:
+//   groupFaces()        — groups triangles by coplanar normal
+//   getFaceVertices()   — returns unique vertex positions for one group
+//   toSelectionMesh()   — builds THREE.Mesh with per-group BufferGeometry groups
+//
+// THREE is not available in the Node test environment; a minimal mock is
+// installed on globalThis before the import so geometry-lib.js resolves it.
+
+describe('Geo.Mesh3 face grouping', () => {
+  let Geo;
+
+  beforeAll(async () => {
+    // Minimal THREE mock — only the surface that toSelectionMesh() calls.
+    const makeAttr = (arr, itemSize) => ({ array: arr, itemSize, isBufferAttribute: true });
+    const mockGeometry = () => {
+      const geo = {
+        _attrs: {},
+        _index: null,
+        _groups: [],
+        setAttribute(name, attr) { this._attrs[name] = attr; },
+        setIndex(arr) { this._index = arr; },
+        addGroup(start, count, gi) { this._groups.push({ start, count, gi }); },
+        computeVertexNormals() {},
+        get groups() { return this._groups; }
+      };
+      return geo;
+    };
+    const mockMat = () => {
+      const m = { color: 0x94e2d5, side: 2, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, _cloned: false };
+      m.clone = () => { const c = mockMat(); c._cloned = true; return c; };
+      return m;
+    };
+    globalThis.THREE = {
+      BufferGeometry: function() { return mockGeometry(); },
+      BufferAttribute: function(arr, n) { return makeAttr(arr, n); },
+      MeshPhongMaterial: function(opts) { const m = mockMat(); Object.assign(m, opts || {}); m.clone = () => { const c = mockMat(); Object.assign(c, opts || {}); c.clone = m.clone; return c; }; return m; },
+      // MeshBasicMaterial: same mock shape as MeshPhongMaterial (flat/unlit in real Three.js;
+      // in unit tests both are just objects with color/opacity/needsUpdate).
+      MeshBasicMaterial: function(opts) { const m = mockMat(); Object.assign(m, opts || {}); m.clone = () => { const c = mockMat(); Object.assign(c, opts || {}); c.clone = m.clone; return c; }; return m; },
+      Mesh: function(geo, mats) { return { geometry: geo, material: mats, userData: {} }; },
+      DoubleSide: 2
+    };
+
+    // Import Geo after the mock is in place so geometry-lib.js sees globalThis.THREE.
+    const mod = await import('../src/geometry/index.js');
+    Geo = mod.Geo;
+  });
+
+  it('groups 12 box triangles into 6 coplanar face groups', () => {
+    const box = Geo.createBox(new Geo.Point3(0, 0, 0), 2, 2, 2);
+    const groups = box.groupFaces();
+    expect(groups.length).toBe(6);
+    groups.forEach(g => {
+      expect(g.triangleIndices.length).toBe(2);
+      const [nx, ny, nz] = g.normal;
+      expect(Math.abs(nx * nx + ny * ny + nz * nz - 1)).toBeLessThan(1e-5);
+    });
+  });
+
+  it('getFaceVertices returns 4 unique vertices for group 0', () => {
+    const box = Geo.createBox(new Geo.Point3(0, 0, 0), 2, 2, 2);
+    const groups = box.groupFaces();
+    const verts = box.getFaceVertices(0, groups);
+    expect(verts.length).toBe(4);
+    verts.forEach(v => expect(v.length).toBe(3));
+  });
+
+  it('toSelectionMesh returns mesh with N groups matching faceGroups', () => {
+    const box = Geo.createBox(new Geo.Point3(0, 0, 0), 2, 2, 2);
+    const groups = box.groupFaces();
+    const { mesh, materials, triangleToGroup } = box.toSelectionMesh(groups);
+    expect(mesh).toBeTruthy();
+    expect(materials.length).toBe(groups.length);
+    expect(triangleToGroup.length).toBe(12);
+    expect(mesh.geometry.groups.length).toBe(groups.length);
   });
 });

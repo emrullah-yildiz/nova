@@ -536,14 +536,17 @@ export const geometryNodes = [
     subGroup: 'Selection',
     icon: '⬡',
     aliases: ['select-faces'],
-    description: 'Activates interactive face-selection mode in the 3D viewport. Click the Select button, then click surface or solid mesh geometry in the 3D view to build a selection set. Press Approve (green ✓) to confirm or Cancel (red ✗) to discard. Outputs an array of selected mesh geometry objects with vertex and face data.',
+    description: 'Activates interactive face-selection mode in the 3D viewport. Click the Select button, then click surface or solid mesh geometry in the 3D view to build a selection set. Press Approve (green ✓) to confirm or Cancel (red ✗) to discard. Outputs selected surface patches as Mesh3 objects.',
     inputs: [],
     outputs: [
-      { id: 'faces', name: 'Faces', type: 'list', description: 'Array of selected mesh geometry objects ({ _type:"Mesh", label, vertexCount, vertices, faceCount })' }
+      { id: 'faces', name: 'Faces', type: 'list', description: 'Selected surfaces as separate Mesh3 objects' }
     ],
     controls: [
       { id: '_selectedLabels', type: 'hidden', default: '' },
-      { id: '_selectedGeo', type: 'hidden', default: '' }
+      { id: '_selectedGeo', type: 'hidden', default: '' },
+      { id: '_selectedFaces', type: 'hidden', default: '' },
+      { id: '_selectedMeshes', type: 'hidden', default: '' },
+      { id: '_selectedMesh', type: 'hidden', default: '' }
     ],
     metadata: { selectionMode: 'faces' },
     codegen: {
@@ -551,25 +554,63 @@ export const geometryNodes = [
       csharp: 'var {{faces}} = SelectFaces();'
     },
     execute(context, inputs, controlValues) {
-      // AC-9: _selectedGeo is a JSON string written by node-renderer.js on Approve.
-      // It contains Array<{ _type:'Mesh', label, nodeId, varName, vertexCount, vertices, faceCount }>.
-      // Fall back to empty list for old saved graphs or when no selection has been made.
-      var raw = controlValues._selectedGeo;
-      if (raw && typeof raw === 'string') {
+      function meshFromData(meshData) {
+        if (!meshData || meshData._type !== 'Mesh3' || !Array.isArray(meshData.vertices) || meshData.vertices.length === 0) return null;
+        var verts = meshData.vertices.map(function(v) { return new Geo.Point3(v.x, v.y, v.z); });
+        return new Geo.Mesh3(verts, meshData.faces || [], meshData.color || 0x89b4fa);
+      }
+
+      function meshFromLegacyFace(faceData) {
+        if (!faceData || faceData._type !== 'Face' || !Array.isArray(faceData.vertices) || faceData.vertices.length < 3) return null;
+        var verts = faceData.vertices.map(function(v) {
+          return new Geo.Point3(v[0], v[1], v[2]);
+        });
+        var faces = [];
+        for (var i = 1; i < verts.length - 1; i++) faces.push([0, i, i + 1]);
+        return new Geo.Mesh3(verts, faces, 0x89b4fa);
+      }
+
+      // _selectedMeshes is written by node-renderer.js on Approve. Return a
+      // list so the Data Inspector shows one mesh surface per selected face,
+      // while each item remains compatible with mesh-input nodes.
+      var meshesRaw = controlValues._selectedMeshes;
+      if (meshesRaw) {
         try {
-          var geoData = JSON.parse(raw);
-          if (Array.isArray(geoData)) return { faces: geoData };
-        } catch (_) { /* fall through */ }
+          var meshList = JSON.parse(meshesRaw);
+          if (Array.isArray(meshList)) return { faces: meshList.map(meshFromData).filter(Boolean) };
+        } catch (_) { return { faces: [] }; }
+      }
+
+      // Compatibility with selections approved by the previous Face-descriptor
+      // implementation. Convert each saved planar Face object into a Mesh3
+      // patch so downstream mesh nodes still receive usable geometry.
+      var legacyFacesRaw = controlValues._selectedFaces;
+      if (legacyFacesRaw) {
+        try {
+          var legacyFaces = JSON.parse(legacyFacesRaw);
+          if (Array.isArray(legacyFaces)) return { faces: legacyFaces.map(meshFromLegacyFace).filter(Boolean) };
+        } catch (_) { return { faces: [] }; }
+      }
+
+      // Backward compatibility: older saved graphs may only have _selectedMesh.
+      var meshRaw = controlValues._selectedMesh;
+      if (meshRaw) {
+        var meshData;
+        try { meshData = JSON.parse(meshRaw); } catch (_) { return { faces: [] }; }
+        var mesh = meshFromData(meshData);
+        if (mesh) return { faces: [mesh] };
       }
       return { faces: [] };
     },
     help: {
       inputs: [],
-      outputs: [{ name: 'Faces', description: 'Array of selected mesh geometry objects with vertex and face data' }],
+      outputs: [{ name: 'Faces', description: 'Selected surfaces as separate Mesh3 objects' }],
       example: {
         title: 'Select faces and inspect them',
         nodes: [
-          { type: 'Select.Faces', x: 0, y: 0 },
+          { type: 'Select.Faces', x: 0, y: 0, controls: {
+            _selectedMeshes: '[{"_type":"Mesh3","vertices":[{"x":0.5,"y":-0.5,"z":-0.5,"_type":"Point3"},{"x":0.5,"y":0.5,"z":-0.5,"_type":"Point3"},{"x":0.5,"y":0.5,"z":0.5,"_type":"Point3"},{"x":0.5,"y":-0.5,"z":0.5,"_type":"Point3"}],"faces":[[0,1,2],[0,2,3]],"color":5878266}]'
+          } },
           { type: 'Output.Watch', x: 240, y: 0 }
         ],
         wires: [
