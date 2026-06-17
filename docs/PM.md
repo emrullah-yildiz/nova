@@ -12,9 +12,9 @@
 
 ## Sprint A2
 
-1. TCK 006
-2. TCK 007
-3. TCK 008
+1. Make sure that Code Block can run series shorthands to create series: shorthands to be used: 
+   - startnumber..endnumber..#step -> Starts from startnumber and uses step to increase the number until the last number
+   - startnumber..#amount..endnumber -> Creates number between the start and end number according to the given amount with same step between each number. 
 
 ## Backlog
 
