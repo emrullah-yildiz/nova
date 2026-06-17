@@ -75,4 +75,27 @@ test.describe('Custom.CodeBlock on-node editor', () => {
     });
     expect(code).toBe('nums = 0..10');
   });
+
+  test('editing series value refreshes result on next run', async ({ page }) => {
+    await waitForApp(page);
+
+    const result = await page.evaluate(async () => {
+      window.app.newProject();
+      const nd = window.app.addNodeToCanvas('Custom.CodeBlock', 200, 200);
+      if (!nd) return { error: 'no node' };
+
+      window.app.codeBlockCommit(nd.id, 'nums = 0..2');
+      await window.app.runGraph();
+      const first = window.app.computeNodeValue(nd);
+
+      window.app.codeBlockCommit(nd.id, 'nums = 0..4');
+      await window.app.runGraph();
+      const second = window.app.computeNodeValue(nd);
+
+      return { first, second };
+    });
+
+    expect(result.first).toEqual([0, 1, 2]);
+    expect(result.second).toEqual([0, 1, 2, 3, 4]);
+  });
 });

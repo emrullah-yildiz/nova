@@ -250,6 +250,7 @@ export function installCodeBlockNode(targetApp) {
     const nd = this.nodes.find(n => n.id === nodeId);
     if (!nd) return false;
     nd.controlValues.code = code;
+    delete nd._pyResults;
     const changed = applyPortsFromCode(nd, code, { dropWires: true });
     if (this.invalidateCompute) this.invalidateCompute();
     if (changed) {
