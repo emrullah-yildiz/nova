@@ -17,9 +17,6 @@
 
 | ID | Title | Status | Priority | Sprint | Lane(s) | Branch |
 |---|---|---|---|---|---|---|
-| TICK-006 | Learning page screenshots | 🔴 paused | high | backlog | ui | — |
-| TICK-007 | Learning page interactive exercises | 🔴 paused | high | backlog | ui | — |
-| TICK-008 | Live agent dashboard — futuristic real-time view of agent activity | ⬜ draft | high | backlog | ui, platform | — |
 | TICK-011 | Installer — Cosign/Sigstore keyless code signature for open-source release | ⬜ draft | high | A2 | platform | — |
 | TICK-012 | Rectangle.ByCenterWidthDepth — add Plane input (default XY) | 🟡 in-progress | high | A2 | geometry | feat/tick-012-rectangle-plane-input |
 | TICK-013 | Surface.Trim — cut a surface with intersecting geometry | 🟡 in-progress | high | A2 | geometry | feat/tick-013-surface-trim-impl |
