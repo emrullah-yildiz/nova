@@ -93,4 +93,13 @@ _T14b (ui / switch) — commit `36991ee` on `worktree-agent-a578288b1269a925c`:_
 - Validation: lint 0 errors; tests 1915 pass / 1 skip; build green; e2e 36 pass, 4 skipped, 0 fail.
 - Playwright: true — 36 pass, 0 fail (4 skipped = AC-4/AC-6/AC-7, deferred until T14a's nodes are on the same branch).
 
-**Status: 🟡 in-progress.** Both contributions are committed on separate isolated worktree branches and both pass their own gates. Because the two agents branched in separate worktrees, T14b's E2E could not see T14a's nodes, so its 3 AC tests currently `test.skip`. **Next step for the integrator (dozer):** merge `worktree-agent-a66a3a089c3a1e195` (T14a) and `worktree-agent-a578288b1269a925c` (T14b) together onto `feat/tick-014-surface-paneling`, re-run `npm run test:e2e`, confirm the 4 skipped tests pass, then check off AC-4/AC-6/AC-7. Not merged yet (integrator owns merges).
+**Status: 🔴 BLOCKED (dozer, 2026-06-18).** T14a (`7fef110`) + T14b (`36991ee`) were cherry-picked onto develop in dependency order (after the `accb60e` ByPatch UV prerequisite). lint:all (0), the full unit suite (1966 pass / 0 fail incl. surface-panelize.test.js 12/12), and build are all GREEN. **However, once both nodes share the develop branch the previously-skipped E2E AC tests now RUN for real and 2 FAIL** — this is the bug the isolated-worktree skip was masking:
+
+- `tests/e2e/surface-paneling.spec.js:101` **AC-4** — expected >1 panel, got **1**. The kernel unit test (`surface-panelize.test.js`) builds 16 panels correctly via `panelizeSurface()`, but the full node-graph path (`computeNodeValue(pan,'panels')` → render) returns a single non-array value, so `panelCount===1`. The multi-output (`{panels,corners,center}`) is not being unwrapped to the `panels` array on the engine/node path.
+- `tests/e2e/surface-paneling.spec.js:196` **AC-6** — `result.small.count===0`: the `Corners` output reads back 0 corner points through the same node-graph path.
+
+**Root cause is in product/test code I (the integrator) may not edit** — fixing the Surface.Panelize multi-output unwrap is T14a (mouse) feature work; adjusting the E2E's output-reading is T14b (switch) test work. **Bounced to owners.** AC-4 / AC-6 / AC-7 remain UNCHECKED. AC-7's help-example E2E (`:299`) did pass, but AC-4/AC-6 gate the ticket.
+
+The commits are physically on local develop (interleaved with the green TICK-015 commits); **develop is therefore RED on E2E and must NOT be pushed** until the panelize multi-output bug is fixed. dozer did NOT push and did NOT touch main.
+
+**Action for owners (mouse + switch):** branch off the current develop, fix `Surface.Panelize.execute`/`panelizeSurface` so the node-graph `Panels`/`Corners` outputs resolve to the per-panel arrays (the kernel function is already correct — the gap is in how the node returns/exposes the multi-output through `computeNodeValue`), confirm `npm run test:e2e tests/e2e/surface-paneling.spec.js` goes green, then re-request integration.

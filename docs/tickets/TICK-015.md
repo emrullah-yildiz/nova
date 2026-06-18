@@ -112,9 +112,9 @@ instances to the new type. **Follow that exact pattern** — no new migration me
 - [x] E2E spec covers AC-5 (point renders in 3D)
 - [x] Backward compatibility for old `Surface.PointAtUV` saved graphs verified (alias + migrate)
 - [x] No functional duplicate node shipped (exactly one node)
-- [ ] Oracle has reviewed and issued APPROVE verdict
-- [ ] dozer has reconciled `src/nodes/categories/surfaces.js` between TICK-014 and TICK-015 at merge
-- [ ] Merged to `develop`, branch deleted, workboard row released, INDEX.md updated
+- [x] Oracle has reviewed and issued APPROVE verdict (after F-015-1 alias + F-015-2 search-alias fixes, commit 1e0a6be)
+- [x] dozer has reconciled `src/nodes/categories/surfaces.js` between TICK-014 and TICK-015 at merge (2026-06-18 — clean 3-way auto-merge, both the panelize import+append and the PointAtParameter rename+stub preserved)
+- [x] Merged to `develop` (cherry-picked f4304a2+1e0a6be+f2ce9ab → develop, local), workboard row released, INDEX.md updated. Branch deletion + push held pending PM confirmation (no push this run).
 
 ## Task briefs
 
@@ -127,15 +127,24 @@ instances to the new type. **Follow that exact pattern** — no new migration me
 
 <!-- Agents write here. REPLACED every run — old content deleted, not appended. -->
 
-**Run 2026-06-18**
-- Issue: prior draft flagged Surface.PointAtUV as a duplicate; PM resolved it as a RENAME.
-- Changed: ticket rewritten — draft "duplication flag" ACs replaced with final approved ACs
-  (rename Surface.PointAtUV → Surface.PointAtParameter, backward-compat alias + migrateTo,
-  3D-viewport visibility). Status draft → in-progress. Decomposed into T15a (mouse) + T15b (switch);
-  agents dispatched in parallel on branch feat/tick-015-surface-pointatparameter.
-- How to test: see "How to test" above (search both names, wire ByPatch → node → Watch + viewport,
-  load an old PointAtUV graph).
-- Playwright: new spec tests/e2e/surface-pointatparameter.spec.js (AC-5) — see agent results.
-- Conflict note: TICK-014 (feat/tick-014-surface-paneling) also edits src/nodes/categories/surfaces.js
-  and is awaiting dozer merge. dozer must reconcile surfaces.js between the two branches at merge time.
-- Status: in-progress — see docs/PM.md Coordinator Response for agent outcomes.
+**Run 2026-06-18 — dozer consolidation onto develop**
+- Issue: null — this run is the integration of the TICK-015 rename + Oracle fixes onto develop.
+- Changed: cherry-picked f4304a2 (T15a rename + alias + migrateTo stub + unit tests), 1e0a6be
+  (Oracle F-015-1 alias + F-015-2 search-alias fixes), f2ce9ab (T15b 3D-visibility E2E) onto develop.
+  Reconciled src/nodes/categories/surfaces.js against TICK-014 (clean 3-way auto-merge): final file
+  carries BOTH the Surface.Panelize import+append AND the canonical Surface.PointAtParameter def
+  (slug-only aliases, the full 'Surface.PointAtUV' type-string intentionally NOT aliased) + the
+  deprecated Surface.PointAtUV stub with metadata.migrateTo.
+- Validation (full gate on the consolidated develop):
+  - lint:all → 0 errors
+  - npm run test → 1966 pass / 1 skip / 0 fail (the earlier 'vitest runner broken' blocker was a
+    misdiagnosis — the suite runs clean; the jsdom canvas stderr is benign noise)
+  - npm run build → green
+  - test:e2e (TICK-015 spec) → 6 pass / 0 fail (kernel path + node-graph path + the formerly
+    skip-guarded node-graph test now runs and passes since the rename is on the shared branch)
+- AC: AC-1..AC-6 all [x], now confirmed on the shared develop branch by green unit + e2e.
+- Known gap (handed to orchestrator): the F-015-2 search-alias change in src/ui/node-search-popup.js
+  does not yet have its own Playwright assertion that searching 'PointAtUV' surfaces the node in the
+  library UI. Orchestrator will add that assertion post-merge.
+- Status: in-progress — code merged to develop locally, gate green; awaiting PM APPROVE to archive.
+  Nothing pushed this run.
