@@ -531,3 +531,61 @@ test.describe('Surface.PointAtParameter — library search (alias discoverabilit
   });
 
 });
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section D — Point grid (Point3[][]) renders in the viewer
+// Surface.PointAtParameter with crossProduct lacing over a u-list × v-list emits
+// a NESTED list of points (Point3[][]). The viewer's geometry detection used to
+// only look one level deep, so the whole grid was dropped — not rendered and not
+// listed in the Geometry panel. This asserts the nested grid both renders every
+// point and registers the node as a selectable scene item.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test.describe('Surface.PointAtParameter — point grid renders in the 3D viewer', () => {
+
+  test('a Point3[][] grid renders every point and lists the node in the Geometry panel', async ({ page }) => {
+    await waitForApp(page);
+
+    const result = await page.evaluate(() => {
+      const Geo = window.Geo;
+      const V = window.Viewer3D;
+      if (!V || typeof V.buildFromGraph !== 'function') return { err: 'NO_VIEWER' };
+
+      // The 3D viewer's WebGL context is not initialized in headless, so
+      // geometryGroup is null and addTaggedGeo would early-return. Give it a
+      // throwaway group so the real isGeo → addTaggedGeo → _sceneItems pipeline
+      // runs (this is the exact code path the live viewer uses).
+      if (!V.geometryGroup) V.geometryGroup = new window.THREE.Group();
+      V._sceneItems = [];
+
+      // 5×5 grid of distinct points — the exact shape Surface.PointAtParameter
+      // emits under crossProduct lacing over a 5-value u-list × 5-value v-list.
+      const grid = [];
+      for (let i = 0; i < 5; i++) {
+        const row = [];
+        for (let j = 0; j < 5; j++) row.push(new Geo.Point3(i, j, 0));
+        grid.push(row);
+      }
+
+      const nd = {
+        id: 'node-grid',
+        type: 'Surface.PointAtParameter',
+        def: { name: 'Surface.PointAtParameter', outputs: [{ id: 'point', name: 'Point', type: 'point' }] }
+      };
+
+      // Drive the real viewer rebuild path with the node's computed value.
+      V.buildFromGraph([nd], [], () => grid);
+
+      const item = (V._sceneItems || []).find((it) => it.nodeId === 'node-grid');
+      let meshes = 0;
+      if (item && item.group) item.group.traverse((o) => { if (o.isMesh) meshes++; });
+      return { err: null, listed: !!item, meshes };
+    });
+
+    expect(result.err).toBeNull();
+    expect(result.listed, 'a node whose output is a Point3[][] grid must appear in the Geometry panel').toBe(true);
+    expect(result.meshes, 'every one of the 25 grid points must render as its own sphere mesh').toBe(25);
+  });
+
+});

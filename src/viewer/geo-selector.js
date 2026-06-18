@@ -103,6 +103,11 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
           mesh.position.set(p[0] || 0, p[2] || 0, p[1] || 0);
           group.add(mesh);
         });
+      } else if (Array.isArray(geoVal[0])) {
+        // Nested list (e.g. Point3[][] from crossProduct lacing). Geo.addToScene
+        // walks nested arrays and renders each leaf Point3/geometry as a sphere/
+        // mesh, so defer the whole grid to it rather than flattening here.
+        Geo.addToScene(group, geoVal, color);
       }
     }
 
@@ -244,7 +249,15 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         }
 
         var isGeo = (val && val._type) ||
-                    (Array.isArray(val) && val.length > 0 && val[0] && (val[0]._type || val[0] instanceof Geo.Point3));
+                    (Array.isArray(val) && val.length > 0 && val[0] && (val[0]._type || val[0] instanceof Geo.Point3)) ||
+                    // Nested geometry list — e.g. Point3[][] from a node with
+                    // crossProduct lacing (Surface.PointAtParameter over a u-list ×
+                    // v-list). Here val[0] is itself a list, so the one-level check
+                    // above misses it. addTaggedGeo → Geo.addToScene recurses fully,
+                    // so route the whole grid through the same tagged-geo path
+                    // (which also registers it in the Geometry panel).
+                    (Array.isArray(val) && val.length > 0 && Array.isArray(val[0]) &&
+                     val[0].length > 0 && val[0][0] && (val[0][0]._type || val[0][0] instanceof Geo.Point3));
         if (isGeo) {
           var label = nd.def.name + (nd.id ? ' (' + nd.id + ')' : '');
           Viewer3D.addTaggedGeo(val, nd.id, '', label);

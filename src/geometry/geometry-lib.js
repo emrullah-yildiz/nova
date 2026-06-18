@@ -1351,6 +1351,10 @@ const Geo = {
 
         else if (item instanceof Geo.Point3) Geo.addToScene(group, item, color);
 
+        // Recurse into nested geometry lists (e.g. Point3[][] from crossProduct
+        // lacing) so every leaf point/mesh renders, not just the first level.
+        else if (Array.isArray(item)) Geo.addToScene(group, item, color);
+
       });
 
     }
