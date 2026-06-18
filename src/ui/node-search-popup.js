@@ -58,7 +58,7 @@ export function installNodeSearchPopup(targetApp = getRuntimeApp()) {
     visibleCategories().forEach(function(cat) {
       cat.nodes.forEach(function(node) {
         if (node.metadata && node.metadata.deprecated) return;
-        results.push({ type: node.type, name: node.name, icon: node.icon, catName: cat.name, catColor: cat.color });
+        results.push({ type: node.type, name: node.name, icon: node.icon, catName: cat.name, catColor: cat.color, aliases: node.aliases || [] });
       });
     });
     return results;
@@ -79,6 +79,13 @@ export function installNodeSearchPopup(targetApp = getRuntimeApp()) {
         var words = name.split(/[.\s]/);
         for (var i = 0; i < words.length; i++) {
           if (words[i].toLowerCase().indexOf(q) === 0) { score = 60; break; }
+        }
+      }
+      // Fall back to aliases (old names / slugs) so a renamed node stays discoverable
+      // under its former name — e.g. "PointAtUV" finds Surface.PointAtParameter.
+      if (score === 0 && n.aliases) {
+        for (var a = 0; a < n.aliases.length; a++) {
+          if (n.aliases[a].toLowerCase().replace(/[-_.]/g, '').indexOf(q.replace(/[-_.]/g, '')) >= 0) { score = 50; break; }
         }
       }
       if (score > 0) scored.push({ node: n, score: score });

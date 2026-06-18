@@ -1051,8 +1051,11 @@ export const surfacesNodes = [
     category: 'surfaces',
     subGroup: 'Evaluate',
     icon: '•',
-    // Old type + slug aliases so saved graphs and search ("PointAtUV") resolve here.
-    aliases: ['surface-pointatuv', 'surface-pointat', 'Surface.PointAtUV', 'surface-pointatparameter'],
+    // Slug aliases so saved graphs and search ("PointAtUV") resolve here. The old *type string*
+    // 'Surface.PointAtUV' is intentionally NOT listed — that key is owned by the deprecated stub
+    // below (which the load-time hook needs to fire migration). Adding it here would make the
+    // alias resolve to the stub, breaking the node-author-contract alias→canonical invariant.
+    aliases: ['surface-pointatuv', 'surface-pointat', 'surface-pointatparameter'],
     description: 'Evaluates the point on a surface at a normalized parameter pair (u, v) ∈ [0,1]². Handles parametric surfaces, NURBS surfaces and grid/mesh surfaces; the parameters are normalized so (0,0) is one corner and (1,1) the opposite.',
     inputs: [
       { id: 'surface', name: 'Surface', type: 'mesh', description: 'Surface to evaluate' },
