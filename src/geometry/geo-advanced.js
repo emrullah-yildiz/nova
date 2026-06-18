@@ -737,6 +737,37 @@ import { Geo } from './geometry-lib.js';
 
     const m = new G.Mesh3(verts, faces, 0x94e2d5);
     m._solidType = 'Patch';
+
+    // Make the patch UV-evaluable. A fan/centroid mesh has no square vertex
+    // grid, so the generic grid sampler (evaluateSurface) produces clustered,
+    // meaningless points. Instead give the patch a polar parametrization over
+    // [0,1]²: v is radial (0 = centroid, 1 = boundary) and u is angular (around
+    // the boundary ring), so a UV grid spreads points evenly across the interior.
+    // resolveSurface (surface-eval.js) routes patches here via _isPatch.
+    const boundary = pts;
+    const bN = boundary.length;
+    m._isPatch = true;
+    m._patchCenter = center;
+    m._patchBoundary = boundary;
+    m.evaluate = function(u, v) {
+      const cu = u < 0 ? 0 : (u > 1 ? 1 : u);
+      const cv = v < 0 ? 0 : (v > 1 ? 1 : v);
+      // Angular: map u∈[0,1] around the closed ring (u=0 and u=1 both → first pt).
+      const fu = cu * bN;
+      const i0 = Math.floor(fu) % bN;
+      const i1 = (i0 + 1) % bN;
+      const fr = fu - Math.floor(fu);
+      const b0 = boundary[i0], b1 = boundary[i1];
+      const bx = b0.x + (b1.x - b0.x) * fr;
+      const by = b0.y + (b1.y - b0.y) * fr;
+      const bz = b0.z + (b1.z - b0.z) * fr;
+      // Radial: lerp centroid → boundary point by v.
+      return P(
+        center.x + (bx - center.x) * cv,
+        center.y + (by - center.y) * cv,
+        center.z + (bz - center.z) * cv
+      );
+    };
     return m;
   };
 

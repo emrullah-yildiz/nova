@@ -75,6 +75,17 @@ function resolveSurface(surface) {
     };
   }
 
+  // Patch mesh (Geo.surfaceByPatch): a fan/centroid mesh with no square vertex
+  // grid. It carries its own polar evaluate(u,v) (v radial, u angular) so points
+  // spread across the interior — the grid sampler below would cluster them.
+  if (type === 'Mesh3' && surface._isPatch && typeof surface.evaluate === 'function') {
+    return {
+      eval: (u, v) => asPoint(surface.evaluate(clamp01(u), clamp01(v))),
+      uMax: 1,
+      vMax: 1
+    };
+  }
+
   // Grid / mesh surface (Geo.Mesh3): bilinear sampling over the square vertex
   // grid via Geo.evaluateSurface, native domain [0,1].
   if (type === 'Mesh3' && typeof Geo.evaluateSurface === 'function') {
