@@ -1424,6 +1424,18 @@ export function installEngine(targetApp = getRuntimeApp()) {
       return item;
     }
 
+    function leafIsGeo(a) { return a && (a._type || a instanceof Geo.Point3); }
+
+    // True for a flat geometry array OR a NESTED one — e.g. Point3[][], the
+    // per-panel corner groups Surface.Panelize emits on its `corners` output.
+    // addTaggedGeo → Geo.addToScene recurse into the nesting, so a nested
+    // corner grid renders every point (it was silently dropped before).
+    function isGeoArray(v) {
+      if (!Array.isArray(v) || v.length === 0) return false;
+      if (leafIsGeo(v[0])) return true;
+      return Array.isArray(v[0]) && v[0].length > 0 && leafIsGeo(v[0][0]);
+    }
+
 
 
     this.nodes.forEach(function(nd) {
@@ -1454,20 +1466,17 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       // Array of geometry
 
-      else if (Array.isArray(val) && val.length > 0 && val[0] && (val[0]._type || val[0] instanceof Geo.Point3)) {
+      else if (isGeoArray(val)) {
 
         if (canTag) {
           pushTagged(val, nd, '');
         } else {
           var startIdx = Viewer3D.geometryGroup.children.length;
-          val.forEach(function(v) {
-            if (v && (v._type || v instanceof Geo.Point3)) {
-              Geo.addToScene(Viewer3D.geometryGroup, v);
-              rendered++;
-            }
-          });
-          if (Viewer3D.geometryGroup.children.length > startIdx) {
-            app._sceneItems.push({ varName: nd.def.name, nodeId: nd.id, type: 'Array[' + (Viewer3D.geometryGroup.children.length - startIdx) + ']', visible: true, idxStart: startIdx, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
+          Geo.addToScene(Viewer3D.geometryGroup, val);
+          var added = Viewer3D.geometryGroup.children.length - startIdx;
+          if (added > 0) {
+            rendered += added;
+            app._sceneItems.push({ varName: nd.def.name, nodeId: nd.id, type: 'Array[' + added + ']', visible: true, idxStart: startIdx, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
           }
         }
 
@@ -1497,20 +1506,17 @@ export function installEngine(targetApp = getRuntimeApp()) {
               rendered++;
             }
 
-          } else if (Array.isArray(pv) && pv.length > 0 && pv[0] && (pv[0]._type || pv[0] instanceof Geo.Point3)) {
+          } else if (isGeoArray(pv)) {
 
             if (canTag) {
               pushTagged(pv, nd, key);
             } else {
               var arrStart = Viewer3D.geometryGroup.children.length;
-              pv.forEach(function(v) {
-                if (v && (v._type || v instanceof Geo.Point3)) {
-                  Geo.addToScene(Viewer3D.geometryGroup, v);
-                  rendered++;
-                }
-              });
-              if (Viewer3D.geometryGroup.children.length > arrStart) {
-                app._sceneItems.push({ varName: nd.def.name + '.' + key, nodeId: nd.id, type: 'Array[' + (Viewer3D.geometryGroup.children.length - arrStart) + ']', visible: true, idxStart: arrStart, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
+              Geo.addToScene(Viewer3D.geometryGroup, pv);
+              var arrAdded = Viewer3D.geometryGroup.children.length - arrStart;
+              if (arrAdded > 0) {
+                rendered += arrAdded;
+                app._sceneItems.push({ varName: nd.def.name + '.' + key, nodeId: nd.id, type: 'Array[' + arrAdded + ']', visible: true, idxStart: arrStart, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
               }
             }
 

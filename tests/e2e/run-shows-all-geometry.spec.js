@@ -91,4 +91,34 @@ test.describe('Run shows all geometry (no intermediate auto-hide)', () => {
     expect(r.patchVisible, 'explicitly hidden surface must stay hidden').toBe(false);
   });
 
+  test('Surface.Panelize renders ALL outputs — panels, corners, AND center', async ({ page }) => {
+    await waitForApp(page);
+    const labels = await page.evaluate(() => {
+      const app = window.app, V = window.Viewer3D;
+      app.newProject();
+      const origin = app.addNodeToCanvas('Point.Origin', 0, 0);
+      const circle = app.addNodeToCanvas('Circle.ByCenterRadius', 200, 0);
+      if (circle) circle.controlValues.radius = '5';
+      const patch = app.addNodeToCanvas('Surface.ByPatch', 400, 0);
+      const pan = app.addNodeToCanvas('Surface.Panelize', 600, 0);
+      const watch = app.addNodeToCanvas('Output.Watch', 800, 0);
+      app.addWire(origin.id, 'point', circle.id, 'center');
+      app.addWire(circle.id, 'circle', patch.id, 'boundary');
+      app.addWire(patch.id, 'surface', pan.id, 'surface');
+      app.addWire(pan.id, 'panels', watch.id, 'value');
+      if (!V.geometryGroup) V.geometryGroup = new window.THREE.Group();
+      V.isInitialized = true; V._sceneItems = [];
+      V.fitAll = function () {}; V._renderGeoList = function () {};
+      app._isRunningGraph = true;
+      app._renderFromCompute();
+      app._isRunningGraph = false;
+      return (V._sceneItems || []).map((it) => it.label).filter((l) => l && l.indexOf('Panelize') >= 0);
+    });
+    // The corners output is a NESTED Point3[][] (per-panel groups) — it used to be
+    // silently dropped by the render loop. All three outputs must now render.
+    expect(labels.some((l) => /panels/i.test(l)), 'panels output must render').toBe(true);
+    expect(labels.some((l) => /corners/i.test(l)), 'corners (nested point grid) output must render').toBe(true);
+    expect(labels.some((l) => /center/i.test(l)), 'center output must render').toBe(true);
+  });
+
 });
