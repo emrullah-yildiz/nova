@@ -13,17 +13,18 @@
 //
 //   0..10          start..end, step = 1              → [0,1,…,10]
 //   0..10..2       start..end..step                  → [0,2,4,6,8,10]
-//   0..10..#2      start..step..#count               → count+1 values:
-//                                                       start + i*step, i in 0..count
-//                                                       → [0,10,20]
-//   0..#5..10      start..#amount..end               → amount evenly-spaced values
+//   0..1..#5       start..end..#count                → count evenly-spaced values
 //                                                       from start to end (inclusive)
-//                                                       → [0,2.5,5,7.5,10]
+//                                                       → [0,0.25,0.5,0.75,1]
+//   0..#5..1       start..#count..step               → count+1 values:
+//                                                       start + i*step, i in 0..count
+//                                                       → [0,1,2,3,4,5]
 //
-// Rule: `#` prefixes a special token.
-//   `#` on the MIDDLE token (2nd of 3): start..#amount..end — amount evenly-spaced
-//     values from start to end (inclusive).
-//   `#` on the LAST token (3rd of 3): start..step..#count — count+1 values
+// Rule: `#` prefixes the COUNT token; the other non-start number's role depends on
+// its position (matching Dynamo's convention):
+//   `#` on the LAST token (3rd of 3): start..end..#count — `count` values evenly
+//     spaced from start to end (inclusive).
+//   `#` on the MIDDLE token (2nd of 3): start..#count..step — count+1 values
 //     starting at start, incrementing by step, for i in 0..count.
 //
 // Only `..` expressions whose operands are numeric literals (optionally signed,
@@ -48,9 +49,9 @@ const SERIES_RE = new RegExp(
 // Builds the list for a given start + one of three strategies:
 //
 //   { end, step }        step-driven, end inclusive (0..10..2 → [0,2,4,6,8,10])
-//   { end, count }       amount evenly-spaced incl. both ends (0..#5..10 → 5 values)
-//   { step, stepCount }  start..step..#count: count+1 values — start + i*step for
-//                        i in 0..count (0..10..#2 → [0,10,20])
+//   { end, count }       count evenly-spaced incl. both ends (0..1..#5 → 5 values)
+//   { step, stepCount }  start..#count..step: count+1 values — start + i*step for
+//                        i in 0..count (0..#5..1 → [0,1,2,3,4,5])
 function buildList(start, opts) {
   const values = [];
 
@@ -102,8 +103,8 @@ function num(s) {
 }
 
 // Rewrites every series expression in `code` to a Python list literal.
-//   `#` on the 2nd token: start..#amount..end — amount evenly-spaced values.
-//   `#` on the 3rd token: start..step..#count — count+1 step-driven values.
+//   `#` on the 3rd token: start..end..#count — count evenly-spaced values.
+//   `#` on the 2nd token: start..#count..step — count+1 step-driven values.
 //   No `#`: start..end or start..end..step (bare step-driven forms).
 export function desugarSeries(code) {
   if (typeof code !== 'string' || !code) return code;
@@ -122,20 +123,20 @@ export function desugarSeries(code) {
       // start..end, step 1, inclusive.
       return toLiteral(buildList(start, { end: num(v2), step: 1 }));
     }
-    // Three-token form: A..B..C
-    if (mark2 === '#') {
-      // start..#count..end → count values evenly spaced from start to end (inclusive).
-      // Symmetric with start..end..#count: in both cases the non-# numbers are
-      // start and end, and #count controls how many steps. A user writing
-      // 1..#2..10 expects [1, 10] — two values from 1 to 10 — not [1, 11].
-      return toLiteral(buildList(start, { end: num(v3), count: num(v2) }));
-    }
+    // Three-token form: A..B..C. The `#` marks the COUNT; the other non-start
+    // token's role depends on its position (this matches Dynamo's convention):
+    //   `#` on the LAST token  → start..end..#count   (middle = END,  evenly spaced)
+    //   `#` on the MIDDLE token → start..#count..step (last   = STEP, step-driven)
     if (mark3 === '#') {
-      // start..step..#count → count+1 values: start + i*step for i in 0..count.
-      // The second token (v2) is the STEP, the third (#v3) is the COUNT.
-      // e.g. 0..10..#2 → [0, 10, 20]  (step=10, count=2 → 3 values)
-      // e.g. 0..5..#3  → [0, 5, 10, 15] (step=5, count=3 → 4 values)
-      return toLiteral(buildList(start, { step: num(v2), stepCount: num(v3) }));
+      // start..end..#count → `count` values evenly spaced from start to end
+      // (inclusive). e.g. 0..1..#5 → [0, 0.25, 0.5, 0.75, 1]; 0..10..#2 → [0, 10].
+      return toLiteral(buildList(start, { end: num(v2), count: num(v3) }));
+    }
+    if (mark2 === '#') {
+      // start..#count..step → step-driven: count+1 values, start + i*step for
+      // i in 0..count. The second token (#v2) is the COUNT, the third (v3) the STEP.
+      // e.g. 0..#5..1 → [0, 1, 2, 3, 4, 5]; 0..#2..10 → [0, 10, 20].
+      return toLiteral(buildList(start, { step: num(v3), stepCount: num(v2) }));
     }
     // start..end..step → step-driven, inclusive.
     return toLiteral(buildList(start, { end: num(v2), step: num(v3) }));
