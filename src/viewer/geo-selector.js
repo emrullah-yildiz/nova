@@ -238,6 +238,34 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         var val = computeFn(nd);
         if (val === undefined || val === null) return;
 
+        // ── Multi-output node (e.g. Surface.Panelize → panels/corners/center):
+        // computeFn returns the combined value (or, in manual-run mode, the
+        // last-run value), NOT a single renderable geometry. Render each
+        // geometry PORT, mirroring the Run-path (_renderFromCompute). In manual
+        // mode _portValues isn't repopulated, so fall back to the last-run
+        // port snapshot. addTaggedGeo recurses into nested arrays (corners).
+        var leafGeo = function(a) { return a && (a._type || a instanceof Geo.Point3); };
+        var portIsGeo = function(pv) {
+          if (leafGeo(pv)) return true;
+          if (!Array.isArray(pv) || pv.length === 0) return false;
+          if (leafGeo(pv[0])) return true;
+          return Array.isArray(pv[0]) && pv[0].length > 0 && leafGeo(pv[0][0]);
+        };
+        var portVals = nd._portValues || nd._lastRunPortValues;
+        if (portVals && typeof portVals === 'object' && !Array.isArray(portVals) &&
+            nd.def && nd.def.outputs && nd.def.outputs.length > 1) {
+          var renderedPort = false;
+          Object.keys(portVals).forEach(function(key) {
+            if (key === 'count' || key === 'length' || key === 'index') return;
+            var pv = portVals[key];
+            if (portIsGeo(pv)) {
+              Viewer3D.addTaggedGeo(pv, nd.id, key, nd.def.name + '.' + key);
+              renderedPort = true;
+            }
+          });
+          if (renderedPort) return;
+        }
+
         // ── Panel-object list: { points: Point[], frame: Plane }[] ──
         // Detected before the generic isGeo path so each panel becomes its own
         // independently-selectable scene item rather than a merged group.

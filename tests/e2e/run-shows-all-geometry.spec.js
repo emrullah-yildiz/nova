@@ -121,4 +121,43 @@ test.describe('Run shows all geometry (no intermediate auto-hide)', () => {
     expect(labels.some((l) => /center/i.test(l)), 'center output must render').toBe(true);
   });
 
+  test('split-mode watcher (buildFromGraph) also renders multi-output Panelize outputs', async ({ page }) => {
+    await waitForApp(page);
+    const labels = await page.evaluate(() => {
+      const app = window.app, V = window.Viewer3D;
+      app.newProject();
+      const origin = app.addNodeToCanvas('Point.Origin', 0, 0);
+      const circle = app.addNodeToCanvas('Circle.ByCenterRadius', 200, 0);
+      if (circle) circle.controlValues.radius = '5';
+      const patch = app.addNodeToCanvas('Surface.ByPatch', 400, 0);
+      const pan = app.addNodeToCanvas('Surface.Panelize', 600, 0);
+      const watch = app.addNodeToCanvas('Output.Watch', 800, 0);
+      app.addWire(origin.id, 'point', circle.id, 'center');
+      app.addWire(circle.id, 'circle', patch.id, 'boundary');
+      app.addWire(patch.id, 'surface', pan.id, 'surface');
+      app.addWire(pan.id, 'panels', watch.id, 'value');
+      if (!V.geometryGroup) V.geometryGroup = new window.THREE.Group();
+      V.isInitialized = true; V._sceneItems = [];
+      V.fitAll = function () {}; V._renderGeoList = function () {};
+      // Simulate a Run: fresh compute populates _portValues + last-run snapshot.
+      app._isRunningGraph = true;
+      if (app.beginCompute) app.beginCompute();
+      app.nodes.forEach(function (nd) {
+        nd._lastComputedValue = app.computeNodeValue(nd);
+        if (nd._portValues) nd._lastRunPortValues = Object.assign({}, nd._portValues);
+        nd._lastRunValue = nd._lastComputedValue;
+      });
+      if (app.endCompute) app.endCompute();
+      app._isRunningGraph = false;
+      // The split-mode watcher rebuilds via buildFromGraph — it must NOT wipe the
+      // multi-output geometry the Run path drew.
+      V._sceneItems = [];
+      V.buildFromGraph(app.nodes, app.wires, function (nd) { return app.computeNodeValue(nd); });
+      return (V._sceneItems || []).map((it) => it.label).filter((l) => l && l.indexOf('Panelize') >= 0);
+    });
+    expect(labels.some((l) => /panels/i.test(l)), 'watcher must render panels').toBe(true);
+    expect(labels.some((l) => /corners/i.test(l)), 'watcher must render corners').toBe(true);
+    expect(labels.some((l) => /center/i.test(l)), 'watcher must render center').toBe(true);
+  });
+
 });
