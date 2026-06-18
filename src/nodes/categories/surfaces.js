@@ -6,6 +6,7 @@ import {
   divideSurface
 } from '../../geometry/surface-eval.js';
 import { surfaceTrimNode } from '../../geometry/nodes/Surface.Trim.js';
+import { surfacePanelizeNode } from '../../geometry/nodes/Surface.Panelize.js';
 
 export const surfacesCategory = {
   id: 'surfaces',
@@ -1278,5 +1279,6 @@ export const surfacesNodes = [
       sampleCode: "_d = Geo.divideSurface({{surface}}, int({{uCount}}), int({{vCount}}))\n{{points}} = _d['points']\n{{frames}} = _d['frames']"
     }
   },
-  surfaceTrimNode
+  surfaceTrimNode,
+  surfacePanelizeNode
 ];
