@@ -18,7 +18,7 @@
 | ID | Title | Status | Priority | Sprint | Lane(s) | Branch |
 |---|---|---|---|---|---|---|
 | TICK-011 | Installer — Cosign/Sigstore keyless code signature for open-source release | ⬜ draft | high | A2 | platform | — |
-| TICK-014 | Surface paneling — Surface.Panelize + Input.PanelShapes | 🔴 blocked | high | A3 | geometry, ui | feat/tick-014-surface-paneling |
+| TICK-014 | Surface paneling — Surface.Panelize + Input.PanelShapes | 🟡 in-progress (merged to develop, gate green — awaiting Oracle/PM APPROVE) | high | A3 | geometry, ui | feat/tick-014-surface-paneling |
 | TICK-015 | Surface.PointAtParameter — rename of Surface.PointAtUV (points on a surface at U,V) | 🟡 in-progress (merged to develop, gate green — awaiting Oracle/PM APPROVE) | medium | A3 | geometry, ui | feat/tick-015-surface-pointatparameter |
 
 ## Done (last 30 days)

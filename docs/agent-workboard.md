@@ -27,7 +27,6 @@ root `README.md` · `docs/ARCHITECTURE.md` · `.github/workflows/ci.yml`
 |---|---|---|---|---|---|---|
 | fix/tick-006-content-aligned-screenshots | switch | T06f: content-aligned screenshots (supersedes T06e) | scripts/take-learning-shots.js, public/learning/*.png | — | 2026-06-08 | queued |
 | fix/tick-007-real-canvas-embed | switch | T07h: pan/zoom + node schema + drag wire (supersedes T07f + T07g) | src/ui/mini-canvas.js, tests/e2e/learning-interactive.spec.js | — | 2026-06-08 | queued |
-| feat/tick-014-surface-paneling | mouse + switch | T14a/T14b: fix Surface.Panelize multi-output (Panels/Corners arrays not unwrapped on the node-graph path) + un-skipped E2E | src/geometry/nodes/Surface.Panelize.js, tests/e2e/surface-paneling.spec.js | — | 2026-06-18 | blocked (dozer bounce: cherry-picked onto develop, lint/unit/build green, but E2E AC-4/AC-6 FAIL once un-skipped — node-graph path yields 1 panel / 0 corners; kernel unit test is correct. develop must NOT be pushed until fixed) |
 
 <!--
 Example row (copy, fill in, remove this comment block when claiming):
