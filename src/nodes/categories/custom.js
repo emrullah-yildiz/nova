@@ -80,7 +80,10 @@ const CUSTOM_CODEBLOCK_V1 = {
 // Custom.CodeBlock (v2) — a lightweight expression block with a pure-JavaScript
 // DSL (not Python). Each line is an expression or assignment:
 //   result = x + y      → named output, inputs x and y
-//   0..10               → list [0..10] (series shorthand)
+//   0..10               → list [0,1,...,10] (series shorthand, step=1)
+//   0..10..2            → list [0,2,4,6,8,10] (start..end..step)
+//   0..10..#2           → list [0,10,20] (start..step..#count → count+1 values)
+//   0..#5..10           → list [0,2.5,5,7.5,10] (start..#amount..end)
 //   1                   → number 1 + companion bool port (true)
 //   0                   → number 0 + companion bool port (false)
 //   "hello"             → string
@@ -96,7 +99,7 @@ const CUSTOM_CODEBLOCK_DEF = {
   version: 2,
   aliases: ['custom-codeblock', 'custom-code', 'Custom.Code'],
   priorVersions: [CUSTOM_CODEBLOCK_V1],
-  description: 'An expression block. Each line is a formula or assignment: free variables become input ports, assignments become output ports. Supports number/bool/string literals, series shorthand (0..10, 0..2..10, 0..1..#5), math functions (sin, cos, sqrt…), and dual boolean output for 0/1 values.',
+  description: 'An expression block. Each line is a formula or assignment: free variables become input ports, assignments become output ports. Supports number/bool/string literals, series shorthand (0..10 | 0..10..2 | 0..10..#count | 0..#amount..10), math functions (sin, cos, sqrt…), and dual boolean output for 0/1 values.',
   inputs: [
     { id: 'x', name: 'x', type: 'any', description: 'Free variable → input port' },
     { id: 'y', name: 'y', type: 'any', description: 'Free variable → input port' }

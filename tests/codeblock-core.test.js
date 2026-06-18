@@ -94,8 +94,10 @@ describe('desugarSeries — four forms, end inclusive', () => {
     expect(desugarSeries('n = 0..10..2')).toBe('n = [0, 2, 4, 6, 8, 10]');
   });
 
-  it('0..10..#5 → count, evenly spaced incl. both ends', () => {
-    expect(desugarSeries('n = 0..10..#5')).toBe('n = [0, 2.5, 5, 7.5, 10]');
+  it('0..10..#5 → start..step..#count: 6 values stepping by 10', () => {
+    // TICK-010: # on LAST token means start..step..#count → count+1 values.
+    // step=10, count=5 → [0, 10, 20, 30, 40, 50]
+    expect(desugarSeries('n = 0..10..#5')).toBe('n = [0, 10, 20, 30, 40, 50]');
   });
 
   it('0..#5..2 → start, count, end: 5 evenly spaced from 0 to 2', () => {
@@ -112,8 +114,10 @@ describe('desugarSeries — four forms, end inclusive', () => {
     expect(desugarSeries('n = 5..5')).toBe('n = [5]');
   });
 
-  it('float count form rounds cleanly (no FP noise)', () => {
-    expect(desugarSeries('n = 0..1..#5')).toBe('n = [0, 0.25, 0.5, 0.75, 1]');
+  it('float step form rounds cleanly (no FP noise)', () => {
+    // TICK-010: 0..1..#5 means start=0, step=1, count=5 → 6 values stepping by 1.
+    // (Evenly-spaced form is 0..#5..1 → [0,0.25,0.5,0.75,1])
+    expect(desugarSeries('n = 0..1..#5')).toBe('n = [0, 1, 2, 3, 4, 5]');
   });
 
   it('leaves non-series code byte-for-byte intact', () => {
@@ -125,8 +129,9 @@ describe('desugarSeries — four forms, end inclusive', () => {
     expect(desugarSeries("s = '0..10..2'")).toBe("s = '0..10..2'");
   });
 
-  it('count of 1 yields just the start', () => {
-    expect(desugarSeries('n = 3..10..#1')).toBe('n = [3]');
+  it('count of 1 yields start and one step (count+1 = 2 values)', () => {
+    // TICK-010: 3..10..#1 → start=3, step=10, count=1 → [3, 13]
+    expect(desugarSeries('n = 3..10..#1')).toBe('n = [3, 13]');
   });
 
   it('handles multiple series on one line', () => {
@@ -306,8 +311,9 @@ describe('F-002: desugarSeries leaves Python comments untouched', () => {
   });
 
   it('still desugars the `..#count` series marker (the # there is NOT a comment)', () => {
-    expect(desugarSeries('0..10..#5')).toBe('[0, 2.5, 5, 7.5, 10]');
-    // After fix: 0..#5..2 means "5 evenly spaced from 0 to 2" (2 is END, not step)
+    // TICK-010: 0..10..#5 means start..step..#count → step=10, count=5 → 6 values.
+    expect(desugarSeries('0..10..#5')).toBe('[0, 10, 20, 30, 40, 50]');
+    // 0..#5..2 means start..#amount..end → 5 evenly spaced from 0 to 2 (unchanged).
     expect(desugarSeries('0..#5..2')).toBe('[0, 0.5, 1, 1.5, 2]');
   });
 });

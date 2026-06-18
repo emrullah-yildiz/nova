@@ -1,8 +1,11 @@
 // ═══════════════════════════════════════════════════
-// LINE RENDER PATCH — Replace thin THREE.Line with visible tubes
-// WebGL ignores linewidth on most GPUs, so lines render as 1px.
-// This patches Line3, Polyline3, Arc3, Circle3 toMesh() methods
-// to use TubeGeometry for thick, visible lines.
+// LINE RENDER PATCH — Render curves as flat, visible "fat lines"
+// Plain THREE.Line renders as a 1px hairline (WebGL ignores linewidth on most
+// GPUs), so the old code faked thickness with 3D TubeGeometry — but tubes look
+// like swept solids, not curves. This patch renders Line3, Polyline3, Arc3 and
+// Circle3 with THREE.Line2 / LineMaterial: flat lines whose width is measured
+// in screen pixels, so they look crisp and 2D like Rhino while staying visible.
+// Falls back to a plain THREE.Line if the Line2 example modules aren't loaded.
 // ═══════════════════════════════════════════════════
 
 function getRuntimeGeo() {
@@ -23,66 +26,72 @@ export function installLineRenderPatch(geo = getRuntimeGeo(), three = getRuntime
   geo.__lineRenderPatchInstalled = true;
   var Geo = geo;
   var THREE = three;
+  var hasFatLines = !!(THREE.Line2 && THREE.LineGeometry && THREE.LineMaterial);
 
-  // ── Line3: tube with endpoint spheres ──
+  // Default line width in screen pixels (Rhino draws curves ~2px).
+  var LINE_WIDTH = 2;
+  var _size = new THREE.Vector2();
+
+  // Build a flat, screen-space-width line through `threePoints`.
+  // `threePoints` is an array of THREE.Vector3 already in viewer (Y-up) space.
+  function makeLine(threePoints, color, closed) {
+    var c = color;
+    if (closed && threePoints.length > 2) {
+      threePoints = threePoints.slice();
+      threePoints.push(threePoints[0].clone());
+    }
+    if (!hasFatLines) {
+      // Fallback: thin flat line (still 2D, just hairline thin).
+      var g = new THREE.BufferGeometry().setFromPoints(threePoints);
+      return new THREE.Line(g, new THREE.LineBasicMaterial({ color: c }));
+    }
+    var positions = [];
+    for (var i = 0; i < threePoints.length; i++) {
+      positions.push(threePoints[i].x, threePoints[i].y, threePoints[i].z);
+    }
+    var geom = new THREE.LineGeometry();
+    geom.setPositions(positions);
+    var mat = new THREE.LineMaterial({
+      color: c,
+      linewidth: LINE_WIDTH,        // measured in screen pixels in this three build
+      dashed: false,
+      alphaToCoverage: true
+    });
+    var line = new THREE.Line2(geom, mat);
+    line.computeLineDistances();
+    // Keep the material's resolution synced to the canvas every frame so the
+    // pixel width stays correct across resizes without touching the renderer.
+    line.onBeforeRender = function(renderer) {
+      renderer.getSize(_size);
+      mat.resolution.set(_size.x, _size.y);
+    };
+    return line;
+  }
+
+  // ── Line3: a single flat segment ──
   Geo.Line3.prototype.toMesh = function(color) {
-    var s = this.start.toThree(), e = this.end.toThree();
-    var c = color || 0xa6e3a1;
-    var len = s.distanceTo(e);
-    if (len < 0.001) len = 0.1;
-    var r = Math.max(0.04, len * 0.01);
-    var path = new THREE.LineCurve3(s, e);
-    var tubeGeo = new THREE.TubeGeometry(path, 1, r, 6, false);
-    var mat = new THREE.MeshPhongMaterial({ color: c, emissive: c, emissiveIntensity: 0.15 });
-    var group = new THREE.Group();
-    group.add(new THREE.Mesh(tubeGeo, mat));
-    // Endpoint dots
-    var dotGeo = new THREE.SphereGeometry(r * 2, 6, 6);
-    var dotMat = new THREE.MeshPhongMaterial({ color: c });
-    var d1 = new THREE.Mesh(dotGeo, dotMat); d1.position.copy(s);
-    var d2 = new THREE.Mesh(dotGeo, dotMat); d2.position.copy(e);
-    group.add(d1); group.add(d2);
-    return group;
+    return makeLine([this.start.toThree(), this.end.toThree()], color || 0xa6e3a1, false);
   };
 
-  // ── Polyline3: tube segments ──
+  // ── Polyline3: flat 2D line (closed loops back to the first point) ──
   Geo.Polyline3.prototype.toMesh = function(color) {
-    var c = color || 0x94e2d5;
     var pts = this.points;
     if (!pts || pts.length < 2) return new THREE.Group();
-    // Calculate total length for radius
-    var totalLen = 0;
-    for (var i = 1; i < pts.length; i++) totalLen += pts[i-1].distanceTo(pts[i]);
-    if (totalLen < 0.001) totalLen = 1;
-    var r = Math.max(0.03, totalLen * 0.005);
-    var mat = new THREE.MeshPhongMaterial({ color: c, emissive: c, emissiveIntensity: 0.1 });
-    var group = new THREE.Group();
-    // Build a CatmullRomCurve3 through all points for a smooth tube
     var threePoints = pts.map(function(p) { return p.toThree(); });
-    if (this.closed && threePoints.length > 2) threePoints.push(threePoints[0].clone());
-    var curve = new THREE.CatmullRomCurve3(threePoints, false);
-    var segments = Math.max(pts.length * 4, 16);
-    var tubeGeo = new THREE.TubeGeometry(curve, segments, r, 6, this.closed);
-    group.add(new THREE.Mesh(tubeGeo, mat));
-    return group;
+    return makeLine(threePoints, color || 0x94e2d5, !!this.closed);
   };
 
-  // ── Arc3: tube along arc path ──
+  // ── Arc3: flat polyline sampled along the arc ──
   Geo.Arc3.prototype.toMesh = function(color) {
-    var c = color || 0xf9e2af;
     var pts = this.toPoints(64);
     if (!pts || pts.length < 2) return new THREE.Group();
-    var r = Math.max(0.03, this.radius * 0.008);
     var threePoints = pts.map(function(p) { return p.toThree(); });
-    var curve = new THREE.CatmullRomCurve3(threePoints, false);
-    var mat = new THREE.MeshPhongMaterial({ color: c, emissive: c, emissiveIntensity: 0.1 });
-    var tubeGeo = new THREE.TubeGeometry(curve, 64, r, 6, false);
-    return new THREE.Mesh(tubeGeo, mat);
+    return makeLine(threePoints, color || 0xf9e2af, false);
   };
 
   // Circle3 delegates to Arc3, so it inherits the fix automatically
 
-  console.log('[NodeFlow] Line render patch loaded — tubes replace thin lines');
+  console.log('[NodeFlow] Line render patch loaded — flat fat lines' + (hasFatLines ? '' : ' (thin fallback: Line2 modules missing)'));
   return true;
 }
 

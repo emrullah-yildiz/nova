@@ -5,6 +5,7 @@ import {
   frameAtT,
   divideCurve
 } from '../../geometry/curve-eval.js';
+import { frameAt } from '../../geometry/frames.js';
 
 export const curvesCategory = {
   id: 'curves',
@@ -918,25 +919,58 @@ export const curvesNodes = [
     subGroup: 'Rectangle',
     icon: '▭',
     aliases: ['prof-rect'],
-    description: 'Returns the 4 corner points of a rectangle centred on the given point, spanning Width along X and Depth along Y. Useful as input for Loft, Sweep, or Extrude.',
+    description: 'Returns the 4 corner points of a rectangle centred on the given point, spanning Width along the plane\'s X axis and Depth along its Y axis. Supply an optional Plane to orient the rectangle in 3D space (default: world XY). Useful as input for Loft, Sweep, or Extrude.',
     inputs: [
       { id: 'center', name: 'Center', type: 'point', description: 'Center point of the rectangle' },
-      { id: 'width', name: 'Width', type: 'number', description: 'Total span along X' },
-      { id: 'depth', name: 'Depth', type: 'number', description: 'Total span along Y' }
+      { id: 'width', name: 'Width', type: 'number', description: 'Total span along the plane X axis' },
+      { id: 'depth', name: 'Depth', type: 'number', description: 'Total span along the plane Y axis' },
+      { id: 'plane', name: 'Plane', type: 'plane', optional: true, description: 'Orientation plane (default: world XY). The rectangle is constructed in the plane\'s local frame.' }
     ],
-    outputs: [{ id: 'profile', name: 'Profile', type: 'list', description: 'List of 4 corner points (CCW from lower-left)' }],
+    outputs: [{ id: 'profile', name: 'Profile', type: 'curve', description: 'Closed rectangle curve (CCW from lower-left in the plane)' }],
     controls: [],
     execute(context, inputs) {
       const c = toPoint(inputs.center);
       const w = toNumber(inputs.width, 10) / 2;
       const d = toNumber(inputs.depth, 6) / 2;
+      // Resolve plane axes. For full-frame planes (carrying explicit xaxis/yaxis
+      // own-properties set by frameFromAxes / planeFromOriginXY) we read them
+      // directly; for stock Geo.Plane objects we use frameAt() with a world-X
+      // reference so that XY (normal=+Z) → xAxis=+X, yAxis=+Y and XZ (normal=+Y)
+      // → xAxis=+X, yAxis=-Z. When nothing is wired we also use the world XY frame.
+      const p = inputs.plane;
+      let xAxis, yAxis;
+      if (p && (p._type === 'Plane' || (p.origin && p.normal))) {
+        if (p.xaxis && p.yaxis) {
+          // Full-frame plane: stored axes are already orthonormal.
+          xAxis = p.xaxis instanceof Geo.Vector3 ? p.xaxis : new Geo.Vector3(p.xaxis.x, p.xaxis.y, p.xaxis.z);
+          yAxis = p.yaxis instanceof Geo.Vector3 ? p.yaxis : new Geo.Vector3(p.yaxis.x, p.yaxis.y, p.yaxis.z);
+        } else {
+          // Stock Geo.Plane: derive frame from origin + normal; prefer world +X
+          // as the in-plane X direction so XY/XZ planes align with world axes.
+          const normal = p.normal instanceof Geo.Vector3 ? p.normal : new Geo.Vector3(p.normal.x ?? 0, p.normal.y ?? 0, p.normal.z ?? 0);
+          const origin = p.origin || c;
+          const frame = frameAt(origin, normal, new Geo.Vector3(1, 0, 0));
+          xAxis = frame.xaxis;
+          yAxis = frame.yaxis;
+        }
+      } else {
+        // Default: world XY — xAxis = (1,0,0), yAxis = (0,1,0)
+        xAxis = new Geo.Vector3(1, 0, 0);
+        yAxis = new Geo.Vector3(0, 1, 0);
+      }
+      // Four corners: center ± w*xAxis ± d*yAxis
+      const corner = (sx, sy) => new Geo.Point3(
+        c.x + sx * w * xAxis.x + sy * d * yAxis.x,
+        c.y + sx * w * xAxis.y + sy * d * yAxis.y,
+        c.z + sx * w * xAxis.z + sy * d * yAxis.z
+      );
       return {
-        profile: [
-          new Geo.Point3(c.x - w, c.y - d, c.z),
-          new Geo.Point3(c.x + w, c.y - d, c.z),
-          new Geo.Point3(c.x + w, c.y + d, c.z),
-          new Geo.Point3(c.x - w, c.y + d, c.z)
-        ]
+        profile: new Geo.Polyline3([
+          corner(-1, -1),
+          corner(+1, -1),
+          corner(+1, +1),
+          corner(-1, +1)
+        ], true)
       };
     },
     codegen: {
@@ -946,26 +980,27 @@ export const curvesNodes = [
     help: {
       inputs: [
         { name: 'Center', description: 'Center point' },
-        { name: 'Width', description: 'Span along X' },
-        { name: 'Depth', description: 'Span along Y' }
+        { name: 'Width', description: 'Span along plane X axis' },
+        { name: 'Depth', description: 'Span along plane Y axis' },
+        { name: 'Plane', description: 'Orientation plane (optional; default: world XY)' }
       ],
-      outputs: [{ name: 'Profile', description: 'Corner point list' }],
+      outputs: [{ name: 'Profile', description: 'Closed rectangle curve' }],
       example: {
-        title: '4 corners of a 10×6 rectangle',
+        title: 'Rectangle curve on a plane, displayed in viewport',
         nodes: [
           { type: 'Point.Origin', x: 0, y: 0 },
           { type: 'Input.Number', x: 0, y: 80, controls: { val: 10 } },
           { type: 'Input.Number', x: 0, y: 150, controls: { val: 6 } },
+          { type: 'Plane.XY', x: 0, y: 220 },
           { type: 'Rectangle.ByCenterWidthDepth', x: 240, y: 70 },
-          { type: 'List.Count', x: 480, y: 70 },
-          { type: 'Output.Watch', x: 680, y: 70 }
+          { type: 'Output.Watch', x: 480, y: 70 }
         ],
         wires: [
-          [0, 'point', 3, 'center'],
-          [1, 'value', 3, 'width'],
-          [2, 'value', 3, 'depth'],
-          [3, 'profile', 4, 'list'],
-          [4, 'count', 5, 'value']
+          [0, 'point', 4, 'center'],
+          [1, 'value', 4, 'width'],
+          [2, 'value', 4, 'depth'],
+          [3, 'plane', 4, 'plane'],
+          [4, 'profile', 5, 'value']
         ]
       },
       sampleCode: '{{profile}} = [Geo.Point3({{center}}.x - {{width}}/2, {{center}}.y - {{depth}}/2, {{center}}.z), ...]'

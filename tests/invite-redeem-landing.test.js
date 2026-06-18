@@ -95,7 +95,8 @@ beforeEach(() => {
     '<div id="landing-page" class="active"></div><div id="workspace-page"></div>';
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await new Promise(resolve => setTimeout(resolve, 0));
   vi.restoreAllMocks();
 });
 
