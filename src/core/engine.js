@@ -1393,11 +1393,10 @@ export function installEngine(targetApp = getRuntimeApp()) {
     // a stable nodeId:varName id assigned by Viewer3D.addTaggedGeo.
     var prevVisibility = {};
     if (Viewer3D && Array.isArray(Viewer3D._sceneItems)) {
-      // Snapshot only USER-driven visibility. Items auto-hidden as
-      // intermediates carry _autoHidden; we record null for them so the next
-      // render re-decides from the graph rather than treating the auto-hide
-      // as a user "hide" (which would pin them off even after a preview toggle).
-      Viewer3D._sceneItems.forEach(function(it) { prevVisibility[it.id] = it._autoHidden ? null : it.visible; });
+      // Snapshot each item's visibility so an explicit user toggle (off/on)
+      // survives the rebuild. Visibility is now purely user-driven (no
+      // automatic intermediate-hiding), so it.visible is the source of truth.
+      Viewer3D._sceneItems.forEach(function(it) { prevVisibility[it.id] = it.visible; });
     }
 
     Viewer3D.clearGeometry();
@@ -1532,42 +1531,20 @@ export function installEngine(targetApp = getRuntimeApp()) {
       var nodesById = {};
       self.nodes.forEach(function(n) { nodesById[n.id] = n; });
 
-      // Only TERMINAL geometry previews by default. A node's geometry is
-      // "intermediate" if it feeds a downstream node that consumes geometry
-      // (loft, smooth, boolean, list, …) — those are scaffolding (e.g. the
-      // profile rings that loft into a tower) and previewing them clutters
-      // the view (the infamous "coil"). Output/sink nodes don't count as
-      // consumers, so a node wired only to Output.Watch stays terminal.
-      var SINK_TYPES = {
-        'output-watch': 1, 'output-display': 1, 'output-log': 1, 'output-chart': 1, 'output-export': 1,
-        'Output.Watch': 1, 'Output.Display': 1, 'Output.Log': 1, 'Output.Chart': 1, 'Output.Export': 1
-      };
-      var wires = self.wires || [];
-      function isIntermediate(node) {
-        if (!node) return false;
-        for (var i = 0; i < wires.length; i++) {
-          var w = wires[i];
-          if (w.fromNode !== node.id) continue;
-          var target = nodesById[w.toNode];
-          if (target && !SINK_TYPES[target.type]) return true; // consumed by a geometry/transform node
-        }
-        return false;
-      }
-
+      // Show ALL geometry by default. We do NOT auto-hide "intermediate"
+      // geometry (a node whose output feeds a downstream node): that surprised
+      // users by hiding surfaces they wired into Panelize/PointAtParameter/etc.,
+      // forcing a manual preview toggle to see them. Only an EXPLICIT user hide
+      // is honoured — a per-node preview toggle off (_preview3d === false) or a
+      // prior panel toggle off (prevVisibility false). This matches the
+      // buildFromGraph (preview-toggle / auto) render path.
       Viewer3D._sceneItems.forEach(function(it) {
         var owner = nodesById[it.nodeId];
         var hideFromNode = owner && owner._preview3d === false;
         var hideFromPanel = prevVisibility[it.id] === false;
-        // Default-hide intermediates, but honour an explicit user choice
-        // (a per-node preview toggle, or a prior panel toggle).
-        var userForcedShow = (owner && owner._preview3d === true) || prevVisibility[it.id] === true;
-        var hideAsIntermediate = !userForcedShow && isIntermediate(owner);
-        if (hideFromNode || hideFromPanel || hideAsIntermediate) {
+        if (hideFromNode || hideFromPanel) {
           it.visible = false;
           if (it.group) it.group.visible = false;
-          // Mark auto-hides so the panel snapshot doesn't mistake them for a
-          // user "hide" on the next render.
-          if (hideAsIntermediate && !hideFromNode && !hideFromPanel) it._autoHidden = true;
         }
       });
     }
