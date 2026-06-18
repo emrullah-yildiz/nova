@@ -1046,12 +1046,13 @@ export const surfacesNodes = [
 
   // ─── Evaluate & Divide ───────────────────────────────────
   {
-    type: 'Surface.PointAtUV',
-    name: 'Surface.PointAtUV',
+    type: 'Surface.PointAtParameter',
+    name: 'Surface.PointAtParameter',
     category: 'surfaces',
     subGroup: 'Evaluate',
     icon: '•',
-    aliases: ['surface-pointatuv', 'surface-pointat'],
+    // Old type + slug aliases so saved graphs and search ("PointAtUV") resolve here.
+    aliases: ['surface-pointatuv', 'surface-pointat', 'Surface.PointAtUV', 'surface-pointatparameter'],
     description: 'Evaluates the point on a surface at a normalized parameter pair (u, v) ∈ [0,1]². Handles parametric surfaces, NURBS surfaces and grid/mesh surfaces; the parameters are normalized so (0,0) is one corner and (1,1) the opposite.',
     inputs: [
       { id: 'surface', name: 'Surface', type: 'mesh', description: 'Surface to evaluate' },
@@ -1079,22 +1080,70 @@ export const surfacesNodes = [
       ],
       outputs: [{ name: 'Point', description: 'Point on the surface at (u, v)' }],
       example: {
-        title: 'Center point (u=0.5, v=0.5) of a Dini surface',
+        title: 'Center point (u=0.5, v=0.5) on a patch surface',
         nodes: [
-          { type: 'Surface.Dini', x: 0, y: 0, controls: { a: 1, b: 0.2 } },
-          { type: 'Input.Number', x: 0, y: 110, controls: { val: 0.5 } },
-          { type: 'Input.Number', x: 0, y: 180, controls: { val: 0.5 } },
-          { type: 'Surface.PointAtUV', x: 280, y: 60 },
-          { type: 'Output.Watch', x: 520, y: 60 }
+          { type: 'Point.Origin', x: 0, y: 0 },
+          { type: 'Input.Number', x: 0, y: 80, controls: { val: 5 } },
+          { type: 'Circle.ByCenterRadius', x: 240, y: 30 },
+          { type: 'Surface.ByPatch', x: 460, y: 30 },
+          { type: 'Input.Number', x: 460, y: 130, controls: { val: 0.5 } },
+          { type: 'Input.Number', x: 460, y: 200, controls: { val: 0.5 } },
+          { type: 'Surface.PointAtParameter', x: 680, y: 60 },
+          { type: 'Output.Watch', x: 900, y: 60 }
         ],
         wires: [
-          [0, 'surface', 3, 'surface'],
-          [1, 'value', 3, 'u'],
-          [2, 'value', 3, 'v'],
-          [3, 'point', 4, 'value']
+          [0, 'point', 2, 'center'],
+          [1, 'value', 2, 'radius'],
+          [2, 'circle', 3, 'boundary'],
+          [3, 'surface', 6, 'surface'],
+          [4, 'value', 6, 'u'],
+          [5, 'value', 6, 'v'],
+          [6, 'point', 7, 'value']
         ]
       },
       sampleCode: '{{point}} = Geo.pointAtUV({{surface}}, {{u}}, {{v}})'
+    }
+  },
+
+  // Surface.PointAtUV is REMOVED from the library — renamed to Surface.PointAtParameter.
+  // This deprecated stub is retained so graphs saved with the old type string still load
+  // and migrate automatically via the generic load-time hook (save-load.js → isDeprecatedType
+  // + migrateNodeType from core/node-versions.js). `metadata.deprecated` hides it from the
+  // library; `metadata.migrateTo` describes the type→type migration. The `execute` fallback
+  // lets an un-migrated instance still compute without crashing.
+  // NOTE: do NOT add surface-pointatuv / surface-pointat aliases here — those now live on
+  // the canonical Surface.PointAtParameter def. The stub resolves by its own type string only.
+  {
+    type: 'Surface.PointAtUV',
+    name: 'Surface.PointAtUV',
+    category: 'surfaces',
+    subGroup: 'Evaluate',
+    icon: '•',
+    description: 'Deprecated — renamed to Surface.PointAtParameter. Retained so existing graphs keep working.',
+    inputs: [
+      { id: 'surface', name: 'Surface', type: 'mesh', description: 'Surface to evaluate' },
+      { id: 'u', name: 'u', type: 'number', description: 'Normalized U parameter in [0,1]' },
+      { id: 'v', name: 'v', type: 'number', description: 'Normalized V parameter in [0,1]' }
+    ],
+    outputs: [{ id: 'point', name: 'Point', type: 'point', description: 'Point on the surface at (u, v)' }],
+    controls: [
+      { id: 'u', type: 'formula', default: '0.5', label: 'u' },
+      { id: 'v', type: 'formula', default: '0.5', label: 'v' }
+    ],
+    metadata: {
+      deprecated: true,
+      migrateTo: {
+        type: 'Surface.PointAtParameter',
+        portMap: { surface: 'surface', u: 'u', v: 'v', point: 'point' }
+      }
+    },
+    execute(context, inputs) {
+      if (inputs.surface == null) return { point: undefined };
+      return { point: pointAtUV(inputs.surface, toParam(inputs.u, 0.5), toParam(inputs.v, 0.5)) };
+    },
+    codegen: {
+      python: '{{point}} = Geo.pointAtUV({{surface}}, {{u}}, {{v}})',
+      csharp: 'var {{point}} = Geo.pointAtUV({{surface}}, {{u}}, {{v}});'
     }
   },
   {

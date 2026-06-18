@@ -11,7 +11,7 @@ import { createCoreNodeRegistry } from '../src/nodes/coreNodes.js';
 //   • Plane.ByOriginXAxisYAxis   → 'plane'
 //   • Curve.PointAtParameter / TangentAtParameter / FrameAtParameter / Divide
 //                                → 'curves'
-//   • Surface.PointAtUV / NormalAtUV / FrameAtUV / Divide
+//   • Surface.PointAtParameter (was PointAtUV) / NormalAtUV / FrameAtUV / Divide
 //                                → 'surfaces'
 // The duplicate Geometry.ArrayLinear / ArrayPolar and the whole Tree.* set were
 // deleted (Geometry.LinearArray/PolarArray and List.* remain the canonical ops).
@@ -49,7 +49,7 @@ const MOVED = [
   { type: 'Curve.TangentAtParameter', category: 'curves' },
   { type: 'Curve.FrameAtParameter', category: 'curves' },
   { type: 'Curve.Divide', category: 'curves' },
-  { type: 'Surface.PointAtUV', category: 'surfaces' },
+  { type: 'Surface.PointAtParameter', category: 'surfaces' },
   { type: 'Surface.NormalAtUV', category: 'surfaces' },
   { type: 'Surface.FrameAtUV', category: 'surfaces' },
   { type: 'Surface.Divide', category: 'surfaces' }
@@ -143,8 +143,8 @@ describe('library-reorg: moved nodes execute correctly', () => {
     expect(out.frames.every(isPlane)).toBe(true);
   });
 
-  it('Surface.PointAtUV: center of a flat [0,2]² grid → (1,1,0)', () => {
-    const { point } = registry.getNode('Surface.PointAtUV')
+  it('Surface.PointAtParameter: center of a flat [0,2]² grid → (1,1,0)', () => {
+    const { point } = registry.getNode('Surface.PointAtParameter')
       .execute({}, { surface: flatSurface(), u: 0.5, v: 0.5 });
     expect(point.x).toBeCloseTo(1, 6);
     expect(point.y).toBeCloseTo(1, 6);
