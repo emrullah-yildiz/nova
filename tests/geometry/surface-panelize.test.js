@@ -166,6 +166,143 @@ describe('Surface.Panelize — paneling kernel', () => {
   });
 });
 
+describe('Surface.Panelize — tessellation (gap-free hexagon honeycomb)', () => {
+  beforeAll(() => {
+    if (typeof window === 'undefined') globalThis.window = globalThis;
+  });
+
+  // Edge midpoints of a panel's corner loop (closed: last → first).
+  function edgeMidpoints(corners) {
+    const mids = [];
+    for (let i = 0; i < corners.length; i++) {
+      const a = corners[i];
+      const b = corners[(i + 1) % corners.length];
+      mids.push([(a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2]);
+    }
+    return mids;
+  }
+
+  // Nearest other-panel edge midpoint for every edge in the layout. Returns the
+  // sorted list of those nearest distances. A perfectly tessellated layout has
+  // every INTERIOR edge sharing a neighbour exactly (distance ≈ 0); only the
+  // outer boundary edges (no neighbour) have a large nearest distance.
+  function nearestEdgeDistances(out) {
+    const allMids = out.corners.map(edgeMidpoints);
+    const dists = [];
+    for (let p = 0; p < allMids.length; p++) {
+      for (const m of allMids[p]) {
+        let best = Infinity;
+        for (let q = 0; q < allMids.length; q++) {
+          if (q === p) continue;
+          for (const n of allMids[q]) {
+            const d = Math.hypot(m[0] - n[0], m[1] - n[1], m[2] - n[2]);
+            if (d < best) best = d;
+          }
+        }
+        dists.push(best);
+      }
+    }
+    return dists.sort((a, b) => a - b);
+  }
+
+  // Count edges whose nearest neighbour edge is coincident (< eps) — i.e. SHARED.
+  function sharedEdgeCount(out, eps = 1e-6) {
+    return nearestEdgeDistances(out).filter((d) => d < eps).length;
+  }
+
+  // Index of every panel whose centre lies strictly inside the [0,W]×[0,H] world
+  // domain (not on the outer boundary), so all its edges should be shared.
+  function interiorPanelIndices(out, w, h, margin) {
+    const idx = [];
+    out.center.forEach((c, i) => {
+      if (c.x > margin && c.x < w - margin && c.y > margin && c.y < h - margin) idx.push(i);
+    });
+    return idx;
+  }
+
+  // The flat surface spans world [0,10]² (evaluate maps native u,v → x,y). A 4×4
+  // hex lattice has ~2.5-unit world column/row pitch; the diamond row pitch ~1.25.
+  const W = 10, H = 10;
+
+  it('hexagon panels tessellate gap-free at scale 1 (every interior hex edge is shared)', () => {
+    const surface = makeFlatSurface();
+    const out = panelizeSurface(surface, panelShapeCurve('Hexagon'), 4, 4, 1.0);
+    // Honeycomb covers extra staggered centres → more panels than a 4×4 grid.
+    expect(out.panels.length).toBeGreaterThan(16);
+    // Each panel is a hexagon (6 corners).
+    for (const group of out.corners) expect(group.length).toBe(6);
+    // The defining property: every edge of a fully-interior hexagon coincides
+    // with a neighbour's edge (shared edges, no gap). Margin = half a pitch.
+    const interiorIdx = interiorPanelIndices(out, W, H, 1.3);
+    expect(interiorIdx.length).toBeGreaterThan(0);
+    for (const i of interiorIdx) {
+      for (const m of edgeMidpoints(out.corners[i])) {
+        let best = Infinity;
+        out.corners.forEach((grp, q) => {
+          if (q === i) return;
+          for (const n of edgeMidpoints(grp)) {
+            best = Math.min(best, Math.hypot(m[0] - n[0], m[1] - n[1], m[2] - n[2]));
+          }
+        });
+        expect(best).toBeLessThan(1e-6); // edge is shared → gap is zero
+      }
+    }
+    // Sanity: a large number of edges are shared overall (vs the old buggy grid,
+    // which shared NONE for hexagons — every hex sat gapped in its own cell).
+    expect(sharedEdgeCount(out)).toBeGreaterThan(30);
+  });
+
+  it('hexagon scale < 1 opens uniform reveal gaps (no edges coincide any more)', () => {
+    const surface = makeFlatSurface();
+    const full = panelizeSurface(surface, panelShapeCurve('Hexagon'), 4, 4, 1.0);
+    const shrunk = panelizeSurface(surface, panelShapeCurve('Hexagon'), 4, 4, 0.6);
+    // Same lattice → same panel count; only the per-panel size changes.
+    expect(shrunk.panels.length).toBe(full.panels.length);
+    // At scale 1 many edges coincide; at 0.6 every panel shrinks about its
+    // centre so NO edges are shared (a uniform reveal gap opens up).
+    expect(sharedEdgeCount(full)).toBeGreaterThan(30);
+    expect(sharedEdgeCount(shrunk)).toBe(0);
+  });
+
+  it('diagonal (diamond) panels tessellate gap-free at scale 1 (shared edges)', () => {
+    const surface = makeFlatSurface();
+    const out = panelizeSurface(surface, panelShapeCurve('Diagonal'), 4, 4, 1.0);
+    expect(out.panels.length).toBeGreaterThan(1);
+    for (const group of out.corners) expect(group.length).toBe(4);
+    const interiorIdx = interiorPanelIndices(out, W, H, 1.3);
+    expect(interiorIdx.length).toBeGreaterThan(0);
+    for (const i of interiorIdx) {
+      for (const m of edgeMidpoints(out.corners[i])) {
+        let best = Infinity;
+        out.corners.forEach((grp, q) => {
+          if (q === i) return;
+          for (const n of edgeMidpoints(grp)) {
+            best = Math.min(best, Math.hypot(m[0] - n[0], m[1] - n[1], m[2] - n[2]));
+          }
+        });
+        expect(best).toBeLessThan(1e-6);
+      }
+    }
+  });
+
+  it('regression: Square still tiles as an exact 4×4 grid with shared edges', () => {
+    const surface = makeFlatSurface();
+    const out = panelizeSurface(surface, panelShapeCurve('Square'), 4, 4, 1.0);
+    // Square is unchanged: a plain 4×4 grid (no stagger).
+    expect(out.panels.length).toBe(16);
+    for (const group of out.corners) expect(group.length).toBe(4);
+    // Adjacent squares share edges (interior grid lines coincide).
+    expect(sharedEdgeCount(out)).toBeGreaterThan(0);
+  });
+
+  it('Circle is unchanged: per-cell grid (round shapes inherently leave gaps)', () => {
+    const surface = makeFlatSurface();
+    const out = panelizeSurface(surface, panelShapeCurve('Circle'), 4, 4, 1.0);
+    // No staggering, no honeycomb — a plain 4×4 grid of circle approximations.
+    expect(out.panels.length).toBe(16);
+  });
+});
+
 describe('Surface.Panelize — help.example runs (AC-7)', () => {
   // Execute the node graph in the help.example by hand-wiring the same nodes,
   // verifying it produces real (non-NaN) panel geometry in the Watch consumer.

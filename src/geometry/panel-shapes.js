@@ -24,6 +24,25 @@ export const PANEL_SHAPE_OPTIONS = ['Diagonal', 'Rectangle', 'Square', 'Hexagon'
 
 export const DEFAULT_PANEL_SHAPE = 'Square';
 
+// Tiling kind per shape — the lattice Surface.Panelize must lay panel centres
+// on so panels meet edge-to-edge with NO gaps at scale 1:
+//   'rect'    — Square / Rectangle: an axis-aligned grid fills rectangles exactly.
+//   'hex'     — Hexagon: a staggered honeycomb lattice (alternate rows offset by
+//               half the column pitch) — the only way regular hexagons tessellate.
+//   'diamond' — Diagonal (diamond): a rotated-square / checkerboard lattice whose
+//               diamonds share edges (also a staggered layout).
+//   'none'    — Circle (round shapes cannot tile — gaps are inherent) and any
+//               arbitrary wired closed curve (fall back to per-cell stamping).
+export const PANEL_SHAPE_TILING = {
+  Diagonal: 'diamond',
+  Rectangle: 'rect',
+  Square: 'rect',
+  Hexagon: 'hex',
+  Circle: 'none'
+};
+
+export const DEFAULT_PANEL_TILING = 'none';
+
 // Half-extent of a unit cell. Corner coordinates live within [-H, +H].
 const H = 0.5;
 
@@ -114,12 +133,35 @@ export function panelShapeCorners(option) {
 }
 
 /**
+ * The tessellation lattice kind for a named unit shape — 'rect' | 'hex' |
+ * 'diamond' | 'none'. Surface.Panelize uses this to lay panel centres on the
+ * correct gap-free lattice. Unknown / arbitrary shapes default to 'none'.
+ *
+ * @param {string} option  one of PANEL_SHAPE_OPTIONS (case-insensitive)
+ * @returns {string}
+ */
+export function panelShapeTiling(option) {
+  const key = normalizePanelShape(option);
+  return PANEL_SHAPE_TILING[key] || DEFAULT_PANEL_TILING;
+}
+
+/**
  * The named unit shape as a CLOSED Geo.Polyline3 — the geometry the
- * Input.PanelShapes node outputs (watches/wires like any other curve).
+ * Input.PanelShapes node outputs (watches/wires like any other curve). The
+ * curve carries its tiling kind on a non-enumerable `_tilingKind` tag so
+ * Surface.Panelize can pick the correct gap-free lattice WITHOUT changing the
+ * curve's points/closed contract (it still watches/wires as a plain polyline).
  *
  * @param {string} option  one of PANEL_SHAPE_OPTIONS (case-insensitive)
  * @returns {Geo.Polyline3}  closed unit polygon centred on the origin
  */
 export function panelShapeCurve(option) {
-  return new Geo.Polyline3(panelShapeCorners(option), true);
+  const curve = new Geo.Polyline3(panelShapeCorners(option), true);
+  Object.defineProperty(curve, '_tilingKind', {
+    value: panelShapeTiling(option),
+    enumerable: false,
+    writable: true,
+    configurable: true
+  });
+  return curve;
 }

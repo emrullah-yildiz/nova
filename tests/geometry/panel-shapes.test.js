@@ -13,6 +13,7 @@ import {
   DEFAULT_PANEL_SHAPE,
   panelShapeCorners,
   panelShapeCurve,
+  panelShapeTiling,
   normalizePanelShape
 } from '../../src/geometry/panel-shapes.js';
 import { inputPanelShapesNode } from '../../src/geometry/nodes/Input.PanelShapes.js';
@@ -61,6 +62,29 @@ describe('panel-shapes — unit shape builders', () => {
         expect(Math.abs(p.y)).toBeLessThanOrEqual(0.5 + 1e-9);
       }
     }
+  });
+
+  it('exposes a gap-free tiling kind per shape (hex/diamond/rect/none)', () => {
+    expect(panelShapeTiling('Square')).toBe('rect');
+    expect(panelShapeTiling('Rectangle')).toBe('rect');
+    expect(panelShapeTiling('Hexagon')).toBe('hex');
+    expect(panelShapeTiling('Diagonal')).toBe('diamond');
+    // Round shapes can't tessellate → 'none'. An unknown OPTION STRING resolves
+    // to the default shape (Square) like the rest of the panel-shape API, so its
+    // tiling is the default shape's ('rect'), not 'none'. (Arbitrary WIRED curves
+    // — not option strings — are the ones that fall back to 'none' in Panelize.)
+    expect(panelShapeTiling('Circle')).toBe('none');
+    expect(panelShapeTiling('nonsense')).toBe('rect');
+  });
+
+  it('panelShapeCurve carries its tiling kind on a non-enumerable _tilingKind tag', () => {
+    const hex = panelShapeCurve('Hexagon');
+    expect(hex._tilingKind).toBe('hex');
+    // The tag must not change the curve's serialized/enumerable shape — it still
+    // watches/wires as a plain closed polyline.
+    expect(Object.keys(hex)).not.toContain('_tilingKind');
+    expect(panelShapeCurve('Square')._tilingKind).toBe('rect');
+    expect(panelShapeCurve('Circle')._tilingKind).toBe('none');
   });
 
   it('normalizePanelShape is case-insensitive and falls back to the default', () => {

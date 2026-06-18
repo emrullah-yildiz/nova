@@ -23,7 +23,7 @@
 import { Geo } from '../index.js';
 import { pointAtUV, frameAtUV } from '../surface-eval.js';
 import { planeBasis } from '../frames.js';
-import { panelShapeCorners } from '../panel-shapes.js';
+import { panelShapeCorners, panelShapeTiling, DEFAULT_PANEL_TILING } from '../panel-shapes.js';
 
 const PANEL_COLOR = 0x94e2d5;
 
@@ -41,18 +41,28 @@ function toScale(value, fallback = 1) {
 
 /**
  * Resolve the Shape input to a LOCAL 2D corner loop normalized into the unit
- * cell ([-0.5, 0.5]²). Three cases:
- *   1. A plain option string ('Square', 'Hexagon', …) → panel-shapes builder.
+ * cell ([-0.5, 0.5]²) PLUS its tiling kind ('rect' | 'hex' | 'diamond' |
+ * 'none'). The tiling kind selects the gap-free lattice Surface.Panelize lays
+ * panel centres on. Three cases:
+ *   1. A plain option string ('Square', 'Hexagon', …) → panel-shapes builder
+ *      + its registered tiling kind.
  *   2. A closed curve / polyline → its boundary points, recentred on their
- *      centroid and scaled so the larger of width/height spans 1.0.
- *   3. Null / unusable → default Square.
- * Returns Geo.Point3[] with z = 0 (local frame coordinates).
+ *      centroid and scaled so the larger of width/height spans 1.0. The tiling
+ *      kind is read off the curve's `_tilingKind` tag when present (premade
+ *      shapes from Input.PanelShapes carry it), else 'none' — an arbitrary
+ *      wired curve falls back to per-cell stamping (no assumed tessellation).
+ *   3. Null / unusable → default Square ('rect').
+ * Returns { loop: Geo.Point3[] (z = 0), tiling: string }.
  */
-function resolveShapeLoop(shape) {
+function resolveShape(shape) {
   // Case 1 — a premade option name.
   if (typeof shape === 'string') {
-    return panelShapeCorners(shape);
+    return { loop: panelShapeCorners(shape), tiling: panelShapeTiling(shape) };
   }
+
+  // Tiling kind tagged on the curve by Input.PanelShapes (non-enumerable).
+  const taggedTiling =
+    shape && typeof shape._tilingKind === 'string' ? shape._tilingKind : DEFAULT_PANEL_TILING;
 
   // Case 2 — an actual curve/polyline. Pull its boundary points.
   let pts = null;
@@ -65,7 +75,7 @@ function resolveShapeLoop(shape) {
 
   if (!pts) {
     // Case 3 — unusable shape → default unit square.
-    return panelShapeCorners('Square');
+    return { loop: panelShapeCorners('Square'), tiling: 'rect' };
   }
 
   // Drop a trailing duplicate (closed loops re-list the start point).
@@ -97,7 +107,8 @@ function resolveShapeLoop(shape) {
   const spanY = maxY - minY;
   const span = Math.max(spanX, spanY) || 1;
 
-  return pts.map((p) => new Geo.Point3((p.x - cx) / span, (p.y - cy) / span, 0));
+  const loop = pts.map((p) => new Geo.Point3((p.x - cx) / span, (p.y - cy) / span, 0));
+  return { loop, tiling: taggedTiling };
 }
 
 /**
@@ -129,14 +140,207 @@ function buildPanel(cornerPts) {
 }
 
 /**
+ * Map a unit-shape loop (local x,y ∈ [-0.5,0.5]) onto the surface frame at a
+ * centre parameter (uMid, vMid), scaling local-x by `worldX` and local-y by
+ * `worldY` world units (already including the Scale factor), and build the
+ * panel mesh + corners + centre. Shared by the rect and staggered layouts.
+ */
+function stampPanel(surface, loop, uMid, vMid, worldX, worldY) {
+  const frame = frameAtUV(surface, uMid, vMid);
+  const { origin, xAxis, yAxis } = planeBasis(frame);
+  const worldCorners = loop.map((c) => {
+    const sx = c.x * worldX;
+    const sy = c.y * worldY;
+    return new Geo.Point3(
+      origin.x + xAxis.x * sx + yAxis.x * sy,
+      origin.y + xAxis.y * sx + yAxis.y * sy,
+      origin.z + xAxis.z * sx + yAxis.z * sy
+    );
+  });
+  return buildPanel(worldCorners);
+}
+
+// World distance the surface travels across a U/V parameter span centred on
+// (uMid,vMid). Used to convert a UV pitch into a world size so panels follow
+// the surface's real scale/curvature.
+function worldSpanU(surface, uMid, vMid, du) {
+  const a = pointAtUV(surface, Math.max(0, uMid - du / 2), vMid);
+  const b = pointAtUV(surface, Math.min(1, uMid + du / 2), vMid);
+  return Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) || 1;
+}
+function worldSpanV(surface, uMid, vMid, dv) {
+  const a = pointAtUV(surface, uMid, Math.max(0, vMid - dv / 2));
+  const b = pointAtUV(surface, uMid, Math.min(1, vMid + dv / 2));
+  return Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) || 1;
+}
+
+// A SINGLE global world size for one UV pitch, measured at the surface centre
+// (u=0.5 / v=0.5) WITHOUT edge clamping, so every tessellated panel is sized
+// identically (a uniform global pitch). Per-panel re-measurement would clamp at
+// the domain edges (halving boundary-row panels) and break the shared-edge
+// tessellation — the honeycomb needs one uniform hex size, not per-cell sizes.
+function globalSpanU(surface, du) {
+  const a = pointAtUV(surface, clamp01(0.5 - du / 2), 0.5);
+  const b = pointAtUV(surface, clamp01(0.5 + du / 2), 0.5);
+  return Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) || 1;
+}
+function globalSpanV(surface, dv) {
+  const a = pointAtUV(surface, 0.5, clamp01(0.5 - dv / 2));
+  const b = pointAtUV(surface, 0.5, clamp01(0.5 + dv / 2));
+  return Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) || 1;
+}
+
+function clamp01(t) {
+  if (t < 0) return 0;
+  if (t > 1) return 1;
+  return t;
+}
+
+/**
+ * Original per-cell stamping: divide the surface into uCells×vCells rectangular
+ * cells and stamp one shape centred in each, sized to the cell. Tiles seamlessly
+ * for rect shapes (Square/Rectangle); used for 'none' shapes (Circle / arbitrary
+ * curves) too — round/irregular shapes cannot tessellate, so per-cell is correct.
+ */
+function panelizePerCell(surface, loop, uCells, vCells, s) {
+  const panels = [];
+  const cornersOut = [];
+  const centerOut = [];
+  for (let iu = 0; iu < uCells; iu++) {
+    const uMid = (iu + 0.5) / uCells;
+    for (let iv = 0; iv < vCells; iv++) {
+      const vMid = (iv + 0.5) / vCells;
+      // Cell size in world units (the full cell span = 1/cells in each param).
+      const cellW = worldSpanU(surface, uMid, vMid, 1 / uCells);
+      const cellH = worldSpanV(surface, uMid, vMid, 1 / vCells);
+      const panel = stampPanel(surface, loop, uMid, vMid, cellW * s, cellH * s);
+      panels.push(panel.mesh);
+      cornersOut.push(panel.corners);
+      centerOut.push(panel.center);
+    }
+  }
+  return { panels, corners: cornersOut, center: centerOut };
+}
+
+// Local-unit packing constants for the premade pointy-top hexagon
+// (hexagonLoop, circumradius R = 0.5, vertices at 30°,90°,…,330° → points at
+// top/bottom on the Y axis, flat edges left/right on the X axis):
+//   • flat-to-flat WIDTH  = √3·R  (the horizontal column pitch)
+//   • ROW pitch           = 1.5·R (¾ of the 2R vertex-to-vertex height)
+// Alternate rows are offset by half the column pitch — standard hex packing.
+const HEX_R = 0.5;
+const HEX_WIDTH = Math.sqrt(3) * HEX_R;   // ≈ 0.8660  (local flat-to-flat)
+const HEX_ROW_PITCH = 1.5 * HEX_R;        // = 0.75    (local row pitch)
+
+/**
+ * Staggered HONEYCOMB layout for hexagon panels — a gap-free tessellation.
+ *
+ * uCells = hex columns across U, vCells = hex rows across V. Centres sit on a
+ * lattice with column pitch pu = 1/uCells and row pitch pv = 1/vCells in UV,
+ * alternate rows offset by pu/2. Each panel is sized so the unit hex's local
+ * flat-to-flat width (HEX_WIDTH) maps to one full column pitch in world units
+ * and its row-pitch dimension (HEX_ROW_PITCH) maps to one full row pitch — so
+ * at scale 1 adjacent hexagon EDGES coincide (shared edges, no gaps). Scale <1
+ * shrinks every panel uniformly about its centre (uniform reveal gaps); >1
+ * overlaps. The honeycomb covers extra staggered centres at the row ends, so
+ * the panel COUNT differs from a plain uCells×vCells grid (expected & correct).
+ */
+function panelizeHex(surface, loop, uCells, vCells, s) {
+  const pu = 1 / uCells; // column pitch in U
+  const pv = 1 / vCells; // row pitch in V
+
+  // ONE global hex size for every panel: local flat-to-flat width → one column
+  // pitch (worldCol), local row-pitch dimension → one row pitch (worldRow), both
+  // measured once at the surface centre. Uniform sizing is what makes adjacent
+  // hex edges coincide everywhere — including the boundary rows.
+  const worldCol = globalSpanU(surface, pu);
+  const worldRow = globalSpanV(surface, pv);
+  const worldX = (worldCol / HEX_WIDTH) * s;
+  const worldY = (worldRow / HEX_ROW_PITCH) * s;
+
+  const panels = [];
+  const cornersOut = [];
+  const centerOut = [];
+
+  // Rows span v ∈ [0,1] inclusive; columns span u ∈ [0,1]. Include centres up to
+  // and including the far edge so the honeycomb covers the whole surface.
+  const rows = Math.round(1 / pv);
+  for (let j = 0; j <= rows; j++) {
+    const vMid = j * pv;
+    if (vMid > 1 + 1e-9) break;
+    const offset = (j % 2) * (pu / 2); // stagger alternate rows by half a column
+    const cols = Math.round(1 / pu);
+    for (let i = 0; i <= cols; i++) {
+      const uMid = i * pu + offset;
+      if (uMid > 1 + 1e-9) break;
+      const panel = stampPanel(surface, loop, clamp01(uMid), clamp01(vMid), worldX, worldY);
+      panels.push(panel.mesh);
+      cornersOut.push(panel.corners);
+      centerOut.push(panel.center);
+    }
+  }
+  return { panels, corners: cornersOut, center: centerOut };
+}
+
+/**
+ * Staggered DIAMOND layout for Diagonal panels — diamonds interlock with shared
+ * edges (a square grid rotated 45°). uCells = diamond columns, vCells controls
+ * the row density. Diamond centres sit on a checkerboard: row pitch pv = 1/vCells,
+ * column pitch pu = 1/uCells, alternate rows offset by pu/2, and rows half a
+ * column pitch apart vertically so each diamond's slanted edges coincide with
+ * its four diagonal neighbours. The unit diamond (vertices at ±0.5 on each axis,
+ * full width = full height = 1.0) is sized so width→column pitch and height→two
+ * row pitches in world units, giving shared edges at scale 1.
+ */
+function panelizeDiamond(surface, loop, uCells, vCells, s) {
+  const pu = 1 / uCells;       // column pitch in U
+  const pv = 1 / (2 * vCells); // row pitch in V — half a column so diamonds interlock
+
+  // ONE global diamond size for every panel (uniform, measured at the centre).
+  // Diamond full width (1.0) → one column pitch; full height (1.0) → two row
+  // pitches (it spans two staggered rows vertically). Uniform sizing → shared edges.
+  const worldX = globalSpanU(surface, pu) * s;
+  const worldY = globalSpanV(surface, 2 * pv) * s;
+
+  const panels = [];
+  const cornersOut = [];
+  const centerOut = [];
+
+  const rows = Math.round(1 / pv);
+  for (let j = 0; j <= rows; j++) {
+    const vMid = j * pv;
+    if (vMid > 1 + 1e-9) break;
+    const offset = (j % 2) * (pu / 2);
+    const cols = Math.round(1 / pu);
+    for (let i = 0; i <= cols; i++) {
+      const uMid = i * pu + offset;
+      if (uMid > 1 + 1e-9) break;
+      const panel = stampPanel(surface, loop, clamp01(uMid), clamp01(vMid), worldX, worldY);
+      panels.push(panel.mesh);
+      cornersOut.push(panel.corners);
+      centerOut.push(panel.center);
+    }
+  }
+  return { panels, corners: cornersOut, center: centerOut };
+}
+
+/**
  * Core paneling routine — exported so unit tests can call it without a node
  * runtime context.
  *
+ * Tessellation dispatch by the shape's tiling kind:
+ *   • 'rect'    → per-cell grid (Square/Rectangle already tile a rectangle).
+ *   • 'hex'     → staggered honeycomb (gap-free hexagons, shared edges).
+ *   • 'diamond' → staggered checkerboard (interlocking diamonds, shared edges).
+ *   • 'none'    → per-cell grid (Circle / arbitrary curves can't tessellate).
+ * In every case Scale shrinks (<1, reveal gaps) or grows (>1, overlap) panels
+ * uniformly about their centres; scale 1 = touching / gap-free for tiling shapes.
+ *
  * @param {object} surface  any kernel surface (Mesh3 / Surface / NurbsSurface)
  * @param {*}      shape    option name OR a closed curve/polyline
- * @param {number} uCount   panel cells along U (>= 1)
- * @param {number} vCount   panel cells along V (>= 1)
- * @param {number} scale    per-panel scale within its cell (1 ≈ fills cell)
+ * @param {number} uCount   panel cells/columns along U (>= 1)
+ * @param {number} vCount   panel cells/rows along V (>= 1)
+ * @param {number} scale    per-panel scale (1 ≈ touching for tiling shapes)
  * @returns {{ panels: Geo.Mesh3[], corners: Geo.Point3[][], center: Geo.Point3[] }}
  */
 export function panelizeSurface(surface, shape, uCount, vCount, scale) {
@@ -146,54 +350,18 @@ export function panelizeSurface(surface, shape, uCount, vCount, scale) {
   const uCells = toInt(uCount, 4);
   const vCells = toInt(vCount, 4);
   const s = toScale(scale, 1);
-  const loop = resolveShapeLoop(shape);
+  const { loop, tiling } = resolveShape(shape);
 
-  const panels = [];
-  const cornersOut = [];
-  const centerOut = [];
-
-  for (let iu = 0; iu < uCells; iu++) {
-    // Cell centre parameter and the cell's half-width in U parameter space.
-    const uMid = (iu + 0.5) / uCells;
-    const halfU = 0.5 / uCells;
-    for (let iv = 0; iv < vCells; iv++) {
-      const vMid = (iv + 0.5) / vCells;
-      const halfV = 0.5 / vCells;
-
-      // Frame at the cell centre — origin on the surface, X≈dU, Y≈dV, normal.
-      const frame = frameAtUV(surface, uMid, vMid);
-      const { origin, xAxis, yAxis } = planeBasis(frame);
-
-      // Real cell dimensions in world units: distance the surface travels
-      // across the cell in U and V around the centre. Measured by sampling the
-      // cell's parameter edges so panels follow surface curvature/scale.
-      const pUminus = pointAtUV(surface, Math.max(0, uMid - halfU), vMid);
-      const pUplus = pointAtUV(surface, Math.min(1, uMid + halfU), vMid);
-      const pVminus = pointAtUV(surface, uMid, Math.max(0, vMid - halfV));
-      const pVplus = pointAtUV(surface, uMid, Math.min(1, vMid + halfV));
-      const cellW = Math.hypot(pUplus.x - pUminus.x, pUplus.y - pUminus.y, pUplus.z - pUminus.z) || 1;
-      const cellH = Math.hypot(pVplus.x - pVminus.x, pVplus.y - pVminus.y, pVplus.z - pVminus.z) || 1;
-
-      // Map each unit-shape corner (local x,y ∈ [-0.5,0.5]) onto the frame.
-      // local x scales by cellW, local y by cellH, both times the Scale factor.
-      const worldCorners = loop.map((c) => {
-        const sx = c.x * cellW * s;
-        const sy = c.y * cellH * s;
-        return new Geo.Point3(
-          origin.x + xAxis.x * sx + yAxis.x * sy,
-          origin.y + xAxis.y * sx + yAxis.y * sy,
-          origin.z + xAxis.z * sx + yAxis.z * sy
-        );
-      });
-
-      const panel = buildPanel(worldCorners);
-      panels.push(panel.mesh);
-      cornersOut.push(panel.corners);
-      centerOut.push(panel.center);
-    }
+  switch (tiling) {
+    case 'hex':
+      return panelizeHex(surface, loop, uCells, vCells, s);
+    case 'diamond':
+      return panelizeDiamond(surface, loop, uCells, vCells, s);
+    case 'rect':
+    case 'none':
+    default:
+      return panelizePerCell(surface, loop, uCells, vCells, s);
   }
-
-  return { panels, corners: cornersOut, center: centerOut };
 }
 
 // ── Node definition ───────────────────────────────────────────────────────────
@@ -205,7 +373,7 @@ export const surfacePanelizeNode = {
   subGroup: 'Operations',
   icon: '▦',
   aliases: ['surf-panelize', 'surface-panel', 'paneling'],
-  description: 'Tiles a surface with a repeating panel shape across its UV domain. Divides the surface into U×V cells, orients the unit shape (from Input.PanelShapes or any closed curve) onto each cell, and returns one panel mesh per cell plus the per-panel corner points and centre points. Scale shrinks (<1, leaves gaps) or grows (>1, overlaps) each panel within its cell. Panels are meshes the viewer renders directly.',
+  description: 'Tiles a surface with a repeating panel shape across its UV domain. Square/Rectangle fill a U×V grid; Hexagon forms a gap-free honeycomb and Diagonal (diamond) interlocks on a staggered lattice (so their panel COUNT exceeds U×V); Circle and arbitrary closed curves stamp one per cell (round shapes leave inherent gaps). Returns one mesh per panel plus the per-panel corner points and centre points. Scale shrinks (<1, reveal gaps) or grows (>1, overlaps) every panel uniformly about its centre — at scale 1 tessellating shapes share edges with no gaps. Panels are meshes the viewer renders directly.',
   inputs: [
     { id: 'surface', name: 'Surface', type: 'mesh', description: 'Surface to clad (e.g. from Surface.ByPatch or Surface.ByPointGrid)' },
     { id: 'shape', name: 'Shape', type: 'curve', description: 'Unit panel shape — a closed curve from Input.PanelShapes or any closed polygon' },
