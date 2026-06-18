@@ -69,9 +69,9 @@ npm run build
 <!-- Agents write here. REPLACED every run — old content deleted, not appended. -->
 <!-- This section feeds directly into the Coordinator Response in docs/PM.md.   -->
 
-**Run 2026-06-18**
+**Run 2026-06-18 — ARCHIVED**
 - Issue: null — new feature; PM confirmed AC via Sprint A2 focus directive.
 - Changed: src/geometry/nodes/Surface.Trim.js — new node implementation (triangle-level filtering via centroid containment test; exact sphere test via _solidType metadata; AABB fallback for general meshes). src/nodes/categories/surfaces.js — imported and registered surfaceTrimNode. tests/geometry/surface-trim.test.js — new unit test file (5 tests covering AC-2, AC-3, AC-4, null surface, null cutter). docs/task-briefs/T13a-surface-trim.md — task brief.
 - How to test: npm run test -- tests/geometry/surface-trim.test.js (5 pass). Manual: npm run dev → add Surface.ByPatch + Sphere.ByCenterRadius (overlapping) → wire to Surface.Trim → confirm trimmed mesh in viewport.
 - Playwright: not applicable (geometry kernel node, no new UI component).
-- Status: all AC verified — pending Oracle review and merge.
+- Status: ✅ done — all AC [x], merged to develop (commits d7c787f, 0a3bc64, 4ec9fea), PM approved 2026-06-18, archived to done/.

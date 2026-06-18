@@ -69,9 +69,9 @@ npm run build
 <!-- Agents write here. REPLACED every run — old content deleted, not appended. -->
 <!-- This section feeds directly into the Coordinator Response in docs/PM.md.   -->
 
-**Run 2026-06-18**
+**Run 2026-06-18 — ARCHIVED**
 - Issue: null — new feature; PM confirmed AC via Sprint A2 focus directive.
 - Changed: src/nodes/categories/curves.js — added optional Plane input to Rectangle.ByCenterWidthDepth; updated help.example to include Plane.XY node; imported frameAt from geometry/frames.js. tests/geometry/rectangle-by-center.test.js — new unit test file (5 tests covering AC-1 through AC-6).
 - How to test: npm run test -- tests/geometry/rectangle-by-center.test.js (5 pass). Manual: npm run dev → add Rectangle.ByCenterWidthDepth → wire Plane.XZ → confirm Y-flat corners with Width in X and Depth in Z.
 - Playwright: not applicable (geometry kernel change, no new UI component).
-- Status: all AC verified — pending Oracle review and merge.
+- Status: ✅ done — all AC [x], merged to develop (commits 5c849aa, 4a38642, 08fe829), PM approved 2026-06-18, archived to done/.
