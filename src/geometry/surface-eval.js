@@ -76,8 +76,19 @@ function resolveSurface(surface) {
   }
 
   // Patch mesh (Geo.surfaceByPatch): a fan/centroid mesh with no square vertex
-  // grid. It carries its own polar evaluate(u,v) (v radial, u angular) so points
-  // spread across the interior — the grid sampler below would cluster them.
+  // grid. The generic grid sampler would cluster points onto its centroid+ring.
+  // Use the patch's PLANAR bilinear map (evaluatePlanar): a uniform (u,v) grid
+  // fills the patch's 2D bounding box like a Cartesian grid — (0.5,0.5) lands at
+  // the interior centroid, (0,0)/(1,1) at opposite bbox corners. (The patch's
+  // older polar `evaluate` produced radial spokes — the "cross not a grid" bug.)
+  if (type === 'Mesh3' && surface._isPatch && typeof surface.evaluatePlanar === 'function') {
+    return {
+      eval: (u, v) => asPoint(surface.evaluatePlanar(clamp01(u), clamp01(v))),
+      uMax: 1,
+      vMax: 1
+    };
+  }
+  // Backward-compat: an older patch object exposing only the polar evaluate.
   if (type === 'Mesh3' && surface._isPatch && typeof surface.evaluate === 'function') {
     return {
       eval: (u, v) => asPoint(surface.evaluate(clamp01(u), clamp01(v))),
