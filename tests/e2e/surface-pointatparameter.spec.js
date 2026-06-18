@@ -474,3 +474,60 @@ test.describe('Surface.PointAtParameter — node-graph path', () => {
   });
 
 });
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section C — Node-library search by old name (AC-2 / Oracle finding F-015-2)
+// After the rename, the canonical node is named "Surface.PointAtParameter", but
+// searching the library for the OLD name "PointAtUV" must still surface it. The
+// old slug is carried as an alias; the library-panel search (app.filterNodes)
+// matches a node's rendered name AND its data-aliases. Drives the REAL search
+// path — app.renderNodeLibrary() + app.filterNodes() over .node-lib-item.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test.describe('Surface.PointAtParameter — library search (alias discoverability)', () => {
+
+  // Returns the data-node-types of the library items VISIBLE after filtering by q.
+  async function visibleTypesFor(page, query) {
+    return page.evaluate((q) => {
+      window.app.renderNodeLibrary();
+      window.app.filterNodes(q);
+      return Array.from(document.querySelectorAll('.node-lib-item'))
+        .filter((el) => el.style.display !== 'none')
+        .map((el) => el.getAttribute('data-node-type'));
+    }, query);
+  }
+
+  test('searching "PointAtUV" (old name) surfaces the renamed Surface.PointAtParameter', async ({ page }) => {
+    await waitForApp(page);
+
+    // Skip cleanly if the rename hasn't landed in this build.
+    const registered = await page.evaluate(() => {
+      const nd = window.app.addNodeToCanvas('Surface.PointAtParameter', -9999, -9999);
+      if (!nd) return false;
+      window.app.removeNode(nd.id);
+      return true;
+    });
+    if (!registered) {
+      test.skip(true, 'Surface.PointAtParameter not registered — T15a not merged');
+      return;
+    }
+
+    const byOldName = await visibleTypesFor(page, 'PointAtUV');
+    expect(
+      byOldName,
+      'searching the old name "PointAtUV" must still find the renamed node via its alias'
+    ).toContain('Surface.PointAtParameter');
+
+    // The deprecated Surface.PointAtUV stub is hidden from the library, so it must
+    // not appear as a separate selectable entry — exactly one discoverable node.
+    expect(byOldName).not.toContain('Surface.PointAtUV');
+
+    const byNewName = await visibleTypesFor(page, 'PointAtParameter');
+    expect(
+      byNewName,
+      'searching the canonical name must also find it'
+    ).toContain('Surface.PointAtParameter');
+  });
+
+});

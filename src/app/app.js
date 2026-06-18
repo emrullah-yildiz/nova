@@ -1315,7 +1315,7 @@ const app = {
             <div class="node-subgroup-items">`;
         }
         groups[g].forEach(function(n) {
-          html += `<button class="node-lib-item" data-node-type="${n.type}" draggable="true" ondragstart="app.onLibDragStart(event,'${n.type}')" onclick="app.addNodeFromLib('${n.type}')"><span class="nli-icon" style="color:${cat.color}">${n.icon}</span>${n.name}</button>`;
+          html += `<button class="node-lib-item" data-node-type="${n.type}" data-aliases="${(n.aliases || []).join(' ')}" draggable="true" ondragstart="app.onLibDragStart(event,'${n.type}')" onclick="app.addNodeFromLib('${n.type}')"><span class="nli-icon" style="color:${cat.color}">${n.icon}</span>${n.name}</button>`;
         });
         if (renderSubgroupHeader) {
           html += `</div></div>`;
@@ -1340,7 +1340,7 @@ const app = {
 
       cat.querySelectorAll('.node-lib-item').forEach(item => {
 
-        const v=!q||item.textContent.toLowerCase().includes(q); item.style.display=v?'':'none'; if(v) any=true;
+        const aliasText=(item.dataset.aliases||'').toLowerCase(); const v=!q||item.textContent.toLowerCase().includes(q)||aliasText.includes(q); item.style.display=v?'':'none'; if(v) any=true;
 
       });
 

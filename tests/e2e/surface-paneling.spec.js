@@ -152,14 +152,13 @@ test.describe('Surface paneling — Surface.Panelize panels render in the viewpo
       const watch = window.app.addNodeToCanvas('Output.Watch', 720, 0);
       window.app.addWire(pan.id, panelsOut, watch.id, 'value');
 
-      // Compute the Panels output.
-      const panels = window.app.computeNodeValue(pan, panelsOut);
-      // computeNodeValue on a multi-output node may return the default output;
-      // re-read explicitly via the node's last computed outputs if available.
-      let panelList = panels;
-      if (panels && !Array.isArray(panels) && pan._outputs && pan._outputs[panelsOut]) {
-        panelList = pan._outputs[panelsOut];
-      }
+      // Read the Panels output the way the engine resolves a wired multi-output
+      // port: computeNodeValue() populates nd._portValues keyed by output id
+      // (see src/core/engine.js getInput → srcNd._portValues[wire.fromPort]).
+      const direct = window.app.computeNodeValue(pan);
+      const panelList = (pan._portValues && pan._portValues[panelsOut] !== undefined)
+        ? pan._portValues[panelsOut]
+        : direct;
 
       // Render the panels through the REAL viewer path into a throwaway group.
       const group = new window.THREE.Group();
@@ -265,9 +264,12 @@ test.describe('Surface paneling — Surface.Panelize panels render in the viewpo
           if (/^v$/i.test(c.id) || /^v$/i.test(c.label || '')) pan.controlValues[c.id] = 4;
         });
 
-        const corners = window.app.computeNodeValue(pan, cornersOut);
-        let cornerVal = corners;
-        if (pan._outputs && pan._outputs[cornersOut]) cornerVal = pan._outputs[cornersOut];
+        // Read the Corners output via the engine's multi-output store (_portValues),
+        // the same path a wired port resolves through.
+        const directCorners = window.app.computeNodeValue(pan);
+        const cornerVal = (pan._portValues && pan._portValues[cornersOut] !== undefined)
+          ? pan._portValues[cornersOut]
+          : directCorners;
         return cornerSpread(cornerVal);
       }
 
