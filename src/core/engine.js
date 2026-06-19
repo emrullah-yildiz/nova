@@ -1372,7 +1372,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-  app._renderFromCompute = function() {
+  app._renderFromCompute = function(opts) {
 
     // Do not clear and rebuild the scene while face-selection mode is active.
     // The swap meshes live in the scene items; destroying them would orphan
@@ -1565,7 +1565,13 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-    if (rendered > 0) Viewer3D.fitAll();
+    // Frame the model on first render, but never reframe on an incremental
+    // re-render (e.g. a preview toggle passes keepCamera so the view holds
+    // still). _didAutoFit is reset on newProject so a fresh project re-fits.
+    if (rendered > 0 && !(opts && opts.keepCamera) && !Viewer3D._didAutoFit) {
+      Viewer3D.fitAll();
+      Viewer3D._didAutoFit = true;
+    }
 
     this._updateSceneTree();
 

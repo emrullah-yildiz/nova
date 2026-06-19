@@ -160,4 +160,41 @@ test.describe('Run shows all geometry (no intermediate auto-hide)', () => {
     expect(labels.some((l) => /center/i.test(l)), 'watcher must render center').toBe(true);
   });
 
+  test('camera auto-fits once, not on every re-render (preview toggle holds the view)', async ({ page }) => {
+    await waitForApp(page);
+    const r = await page.evaluate(() => {
+      const app = window.app, V = window.Viewer3D;
+      const buildSurface = () => {
+        const o = app.addNodeToCanvas('Point.Origin', 0, 0);
+        const c = app.addNodeToCanvas('Circle.ByCenterRadius', 200, 0);
+        if (c) c.controlValues.radius = '5';
+        const p = app.addNodeToCanvas('Surface.ByPatch', 400, 0);
+        app.addWire(o.id, 'point', c.id, 'center');
+        app.addWire(c.id, 'circle', p.id, 'boundary');
+      };
+      const setupViewer = () => {
+        if (!V.geometryGroup) V.geometryGroup = new window.THREE.Group();
+        V.isInitialized = true; V._sceneItems = []; V._renderGeoList = function () {};
+      };
+      let fitCalls = 0;
+      V.fitAll = function () { fitCalls++; };
+
+      app.newProject(); setupViewer(); buildSurface();
+      app._isRunningGraph = true; app._renderFromCompute();
+      const afterFirst = fitCalls;          // first geometry → fit
+      app._renderFromCompute();             // re-render (toggle/re-run) → must NOT fit
+      const afterSecond = fitCalls;
+      app._isRunningGraph = false;
+
+      app.newProject(); setupViewer(); buildSurface();
+      app._isRunningGraph = true; app._renderFromCompute();
+      const afterNewProject = fitCalls;     // fresh project → fit again
+      app._isRunningGraph = false;
+      return { afterFirst, afterSecond, afterNewProject };
+    });
+    expect(r.afterFirst, 'first render frames the model').toBe(1);
+    expect(r.afterSecond, 're-render must NOT move the camera').toBe(1);
+    expect(r.afterNewProject, 'a new project re-frames its geometry').toBe(2);
+  });
+
 });

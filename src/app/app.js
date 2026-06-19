@@ -1178,6 +1178,9 @@ const app = {
     this.nodes=[]; this.wires=[]; this.selectedNodes=[]; this._undoStack=[]; this._redoStack=[]; this._lastHistorySnapshot=null;
     this._hasRun=false; this._isRunningGraph=false; this._lastRunVersion=0;
     this._cloudProjectId='';
+    // A new project should re-frame its first geometry — clear the one-shot
+    // auto-fit latch so fitAll runs once on the next render.
+    if(typeof Viewer3D!=='undefined') Viewer3D._didAutoFit=false;
     this._cvNodeTabs=[]; this._cvNode=null; this._cvNodeDraft=''; this._cvTab='full';
 
     this.nextNodeId=1; this.nodeZCounter=10; this.zoom=1; this.panX=0; this.panY=0;
@@ -1199,6 +1202,9 @@ const app = {
     this.nodes=[]; this.wires=[]; this.selectedNodes=[]; this._undoStack=[]; this._redoStack=[]; this._lastHistorySnapshot=null;
     this._hasRun=false; this._isRunningGraph=false; this._lastRunVersion=0;
     this._cloudProjectId='';
+    // A new project should re-frame its first geometry — clear the one-shot
+    // auto-fit latch so fitAll runs once on the next render.
+    if(typeof Viewer3D!=='undefined') Viewer3D._didAutoFit=false;
 
     this.nextNodeId=1; this.nodeZCounter=10; this.zoom=1; this.panX=0; this.panY=0;
 
