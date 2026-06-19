@@ -215,6 +215,19 @@ function fillCellLoop(loop) {
   return loop.map((p) => new Geo.Point3(p.x * sx, p.y * sy, p.z || 0));
 }
 
+// Width / height of a unit loop's bounding box. Square ≈ 1; the premade
+// Rectangle (1.0 wide × 0.5 tall) ≈ 2. Used to give Rectangle visibly wider
+// panels than Square while still tiling gap-free.
+function loopAspect(loop) {
+  let mx = 0, my = 0;
+  for (const p of loop) {
+    if (Math.abs(p.x) > mx) mx = Math.abs(p.x);
+    if (Math.abs(p.y) > my) my = Math.abs(p.y);
+  }
+  if (mx < 1e-9 || my < 1e-9) return 1;
+  return mx / my;
+}
+
 /**
  * Original per-cell stamping: divide the surface into uCells×vCells rectangular
  * cells and stamp one shape centred in each, sized to the cell. Tiles seamlessly
@@ -376,10 +389,18 @@ export function panelizeSurface(surface, shape, uCount, vCount, scale) {
       return panelizeHex(surface, loop, uCells, vCells, s);
     case 'diamond':
       return panelizeDiamond(surface, loop, uCells, vCells, s);
-    case 'rect':
-      // Rect panels must FILL the cell to tile gap-free (the 2:1 Rectangle would
-      // otherwise leave horizontal gaps between rows).
-      return panelizePerCell(surface, fillCellLoop(loop), uCells, vCells, s);
+    case 'rect': {
+      // Rect panels FILL the cell to tile gap-free. To keep Square (1:1) and
+      // Rectangle (2:1) VISUALLY distinct, build a cell grid whose aspect matches
+      // the shape: a wide shape uses fewer/wider columns, a tall shape fewer/
+      // taller rows. Square (aspect 1) is unchanged; Rectangle (aspect 2) yields
+      // panels twice as wide as tall — and both still tessellate.
+      const aspect = loopAspect(loop);
+      let uCols = uCells, vRows = vCells;
+      if (aspect > 1.0001) uCols = Math.max(1, Math.round(uCells / aspect));
+      else if (aspect < 0.9999) vRows = Math.max(1, Math.round(vCells * aspect));
+      return panelizePerCell(surface, fillCellLoop(loop), uCols, vRows, s);
+    }
     case 'none':
     default:
       return panelizePerCell(surface, loop, uCells, vCells, s);
@@ -395,7 +416,7 @@ export const surfacePanelizeNode = {
   subGroup: 'Operations',
   icon: '▦',
   aliases: ['surf-panelize', 'surface-panel', 'paneling'],
-  description: 'Tiles a surface with a repeating panel shape across its UV domain. Square/Rectangle fill a U×V grid; Hexagon forms a gap-free honeycomb and Diagonal (diamond) interlocks on a staggered lattice (so their panel COUNT exceeds U×V); Circle and arbitrary closed curves stamp one per cell (round shapes leave inherent gaps). Returns one mesh per panel plus the per-panel corner points and centre points. Scale shrinks (<1, reveal gaps) or grows (>1, overlaps) every panel uniformly about its centre — at scale 1 tessellating shapes share edges with no gaps. Panels are meshes the viewer renders directly.',
+  description: 'Tiles a surface with a repeating panel shape across its UV domain. Square fills a U×V grid; Rectangle fills wider 2:1 cells (≈ half the columns) so its panels are visibly wider than Square while still tiling gap-free; Hexagon forms a gap-free honeycomb and Diagonal (diamond) interlocks on a staggered lattice (so their panel COUNT differs from U×V); Circle and arbitrary closed curves stamp one per cell (round shapes leave inherent gaps). Returns one mesh per panel plus the per-panel corner points and centre points. Scale shrinks (<1, reveal gaps) or grows (>1, overlaps) every panel uniformly about its centre — at scale 1 tessellating shapes share edges with no gaps. Panels are meshes the viewer renders directly.',
   inputs: [
     { id: 'surface', name: 'Surface', type: 'mesh', description: 'Surface to clad (e.g. from Surface.ByPatch or Surface.ByPointGrid)' },
     { id: 'shape', name: 'Shape', type: 'curve', description: 'Unit panel shape — a closed curve from Input.PanelShapes or any closed polygon' },
