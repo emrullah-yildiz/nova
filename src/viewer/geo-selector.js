@@ -94,19 +94,13 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       if (geoVal[0] && geoVal[0]._type) {
         geoVal.forEach(function(item) { Geo.addToScene(group, item, color); });
       } else if (geoVal[0] instanceof Geo.Point3) {
-        var pts = geoVal.map(function(p) { return [p.x, p.y, p.z]; });
-        // Use Viewer3D.addPoints into the group
-        var geo = new THREE.SphereGeometry(0.08, 16, 12);
-        var mat = new THREE.MeshPhongMaterial({ color: color || 0x94e2d5, emissive: color || 0x94e2d5, emissiveIntensity: 0.4, shininess: 60 });
-        pts.forEach(function(p) {
-          var mesh = new THREE.Mesh(geo, mat);
-          mesh.position.set(p[0] || 0, p[2] || 0, p[1] || 0);
-          group.add(mesh);
-        });
+        // Render each point as a flat camera-facing dot (Geo.addToScene → sprite),
+        // not a 3D sphere — consistent with single-point rendering.
+        geoVal.forEach(function(p) { Geo.addToScene(group, p, color); });
       } else if (Array.isArray(geoVal[0])) {
         // Nested list (e.g. Point3[][] from crossProduct lacing). Geo.addToScene
-        // walks nested arrays and renders each leaf Point3/geometry as a sphere/
-        // mesh, so defer the whole grid to it rather than flattening here.
+        // walks nested arrays and renders each leaf point as a flat dot,
+        // so defer the whole grid to it rather than flattening here.
         Geo.addToScene(group, geoVal, color);
       }
     }
@@ -302,15 +296,12 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         if (Array.isArray(val) && val.length > 0 && Array.isArray(val[0]) && val[0].length >= 2 && typeof val[0][0] === 'number') {
           var group = new THREE.Group();
           group.userData = { nodeId: nd.id, varName: '', label: nd.def.name, isGeoItem: true };
-          // Points
-          var geo = new THREE.SphereGeometry(0.15, 8, 8);
-          var mat = new THREE.MeshPhongMaterial({ color: 0x94e2d5, emissive: 0x94e2d5, emissiveIntensity: 0.3 });
+          // Points render as flat camera-facing dots (sprites), not 3D spheres.
           val.forEach(function(p) {
             var px = Number(p[0]), py = Number(p[1]), pz = Number(p[2] || 0);
             if (!isFinite(px) || !isFinite(py) || !isFinite(pz)) return;
-            var m = new THREE.Mesh(geo, mat);
-            m.position.set(px, pz, py);
-            group.add(m);
+            // numeric tuples are already in world XY with Z-up swap to THREE
+            group.add(Geo._makePointDot(new THREE.Vector3(px, pz, py), 0x94e2d5));
           });
           if (group.children.length > 0) {
             Viewer3D.geometryGroup.add(group);

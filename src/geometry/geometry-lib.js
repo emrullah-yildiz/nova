@@ -1304,6 +1304,40 @@ const Geo = {
 
   // ══════════════════════════════════════
 
+  // A point renders as a small flat camera-facing dot (THREE.Sprite), NOT a 3D
+  // sphere — visible but reading as a 2D marker. The round texture is built once
+  // and cached; each point's material tints it. In a no-canvas environment
+  // (headless tests) the texture is skipped and the dot is a plain square sprite.
+  _makePointDot(point, color) {
+    if (Geo.__dotTexture === undefined) {
+      let tex = null;
+      try {
+        if (typeof document !== 'undefined') {
+          const sz = 64;
+          const cv = document.createElement('canvas');
+          cv.width = cv.height = sz;
+          const ctx = cv.getContext('2d');
+          if (ctx) {
+            ctx.beginPath();
+            ctx.arc(sz / 2, sz / 2, sz / 2 - 2, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            tex = new THREE.CanvasTexture(cv);
+          }
+        }
+      } catch (e) { tex = null; }
+      Geo.__dotTexture = tex;
+    }
+    const mat = new THREE.SpriteMaterial({ color: color || 0x89b4fa, sizeAttenuation: true, depthWrite: false, transparent: true });
+    if (Geo.__dotTexture) mat.map = Geo.__dotTexture;
+    const sprite = new THREE.Sprite(mat);
+    sprite.position.copy(point.toThree ? point.toThree() : point);
+    const s = 0.18; // small flat dot (world units) — smaller than the old 0.24 sphere
+    sprite.scale.set(s, s, s);
+    return sprite;
+  },
+
   addToScene(group, geoObj, color) {
     if (!group || !geoObj) return;
     if (geoObj.type === 'GeometryRef' && geoObj.bounds) {
@@ -1333,15 +1367,7 @@ const Geo = {
       group.add(geoObj.toMesh(color));
     } else if (geoObj._type === 'Point3') {
 
-      const g = new THREE.SphereGeometry(0.12, 16, 12);
-
-      const m = new THREE.MeshPhongMaterial({ color: color || 0x89b4fa, emissive: color || 0x89b4fa, emissiveIntensity: 0.4, shininess: 60 });
-
-      const mesh = new THREE.Mesh(g, m);
-
-      mesh.position.copy(geoObj.toThree());
-
-      group.add(mesh);
+      group.add(Geo._makePointDot(geoObj, color));
 
     } else if (Array.isArray(geoObj)) {
 
