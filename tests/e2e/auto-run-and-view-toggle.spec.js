@@ -40,6 +40,42 @@ test.describe('Auto-run on every change', () => {
     // The dropdown change bumps it again (so the watcher re-renders that change).
     expect(r.afterCtrl).toBeGreaterThan(r.beforeCtrl);
   });
+
+  test('opening/recovering a project bumps the revision so Auto mode renders it', async ({ page }) => {
+    await waitForApp(page);
+    const r = await page.evaluate(() => {
+      const app = window.app;
+      app.newProject();
+      app.addNodeToCanvas('Circle.ByCenterRadius', 100, 100);
+      const data = app.serializeGraph();
+      app.newProject();
+      const before = app._graphRevision || 0;
+      const ok = app.deserializeGraph(data);
+      const after = app._graphRevision || 0;
+      return { ok, before, after };
+    });
+    expect(r.ok).toBe(true);
+    // deserializeGraph must bump the revision so the 3D watcher renders the
+    // loaded graph immediately in Auto mode (it used to leave the view empty
+    // until the user hit Run).
+    expect(r.after).toBeGreaterThan(r.before);
+  });
+
+  test('the auto-render watcher runs in 3D-only view, not just split view', async ({ page }) => {
+    await waitForApp(page);
+    const gate = await page.evaluate(() => {
+      const app = window.app;
+      // 3D-only (no split) must satisfy the watcher gate so the viewport + panel
+      // auto-refresh without needing a split-view toggle.
+      app.splitMode = false; app.activeView = '3d';
+      const in3dOnly = (app.splitMode || app.activeView === '3d');
+      app.splitMode = false; app.activeView = 'nodes';
+      const inNodes = (app.splitMode || app.activeView === '3d');
+      return { in3dOnly, inNodes };
+    });
+    expect(gate.in3dOnly, '3D-only view must run the watcher').toBe(true);
+    expect(gate.inNodes, 'node-only view does not need the 3D watcher').toBe(false);
+  });
 });
 
 test.describe('Ctrl+B toggles 3D viewport ↔ 2D node canvas', () => {

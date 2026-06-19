@@ -4408,7 +4408,10 @@ app._runSplitWatcher = function() {
 
     try {
 
-      if (this.splitMode && typeof Viewer3D !== 'undefined' && Viewer3D.isInitialized) {
+      // Run whenever the 3D viewport is visible — split view OR 3D-only. (It was
+      // gated to splitMode, so 3D-only view never auto-refreshed; the user had to
+      // toggle split to force a rebuild.) Mirrors _applyViewState's show3D.
+      if ((this.splitMode || this.activeView === '3d') && typeof Viewer3D !== 'undefined' && Viewer3D.isInitialized) {
 
         const ee = typeof window !== 'undefined' ? window.__executionEngineV2 : null;
 

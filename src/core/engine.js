@@ -2044,9 +2044,14 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       if (Viewer3D._needsRebuild !== false) {
 
-        try { Viewer3D.buildFromGraph(this.nodes, this.wires, function(nd) { return app.computeNodeValue(nd); }); } catch (e) { /* skip */ }
-
-        Viewer3D.fitAll();
+        // Use the comprehensive render path (same as Run / the auto watcher) so
+        // switching INTO the 3D view shows every node + the full geometry panel
+        // — the old buildFromGraph rendered a narrower set, so the panel looked
+        // incomplete until a split-view toggle forced a real rebuild.
+        try {
+          if (typeof app._renderFromCompute === 'function') app._renderFromCompute();
+          else Viewer3D.buildFromGraph(this.nodes, this.wires, function(nd) { return app.computeNodeValue(nd); });
+        } catch (e) { /* skip */ }
 
         Viewer3D._needsRebuild = false;
 
