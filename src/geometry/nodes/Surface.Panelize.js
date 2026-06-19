@@ -197,6 +197,25 @@ function clamp01(t) {
 }
 
 /**
+ * Stretch a unit loop so its bounding box exactly fills [-0.5,0.5]² in BOTH
+ * axes. A rect-kind panel must FILL its cell to tile gap-free; the premade
+ * Rectangle is 2:1 (half-height), so without this it covers the cell width but
+ * only half its height, leaving horizontal gaps between rows. Square is already
+ * [-0.5,0.5]² so it is unchanged. (Only applied to the 'rect' tiling kind —
+ * round/irregular 'none' shapes keep their aspect and gap by nature.)
+ */
+function fillCellLoop(loop) {
+  let maxX = 0, maxY = 0;
+  for (const p of loop) {
+    if (Math.abs(p.x) > maxX) maxX = Math.abs(p.x);
+    if (Math.abs(p.y) > maxY) maxY = Math.abs(p.y);
+  }
+  const sx = maxX > 1e-9 ? 0.5 / maxX : 1;
+  const sy = maxY > 1e-9 ? 0.5 / maxY : 1;
+  return loop.map((p) => new Geo.Point3(p.x * sx, p.y * sy, p.z || 0));
+}
+
+/**
  * Original per-cell stamping: divide the surface into uCells×vCells rectangular
  * cells and stamp one shape centred in each, sized to the cell. Tiles seamlessly
  * for rect shapes (Square/Rectangle); used for 'none' shapes (Circle / arbitrary
@@ -358,6 +377,9 @@ export function panelizeSurface(surface, shape, uCount, vCount, scale) {
     case 'diamond':
       return panelizeDiamond(surface, loop, uCells, vCells, s);
     case 'rect':
+      // Rect panels must FILL the cell to tile gap-free (the 2:1 Rectangle would
+      // otherwise leave horizontal gaps between rows).
+      return panelizePerCell(surface, fillCellLoop(loop), uCells, vCells, s);
     case 'none':
     default:
       return panelizePerCell(surface, loop, uCells, vCells, s);

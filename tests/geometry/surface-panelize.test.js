@@ -97,6 +97,20 @@ describe('Surface.Panelize — paneling kernel', () => {
     }
   });
 
+  it('Rectangle fills its cell (no row gaps) — panel height == width at scale 1', () => {
+    // 10×10 surface, 2×2 cells → each cell is 5×5. The premade Rectangle is 2:1
+    // (half height); it must be stretched to FILL the cell so rows tile without
+    // vertical gaps. Panel x-extent and y-extent should both equal the cell size.
+    const surface = makeFlatSurface();
+    const out = panelizeSurface(surface, panelShapeCurve('Rectangle'), 2, 2, 1.0);
+    const xs = out.corners[0].map((p) => p.x);
+    const ys = out.corners[0].map((p) => p.y);
+    const w = Math.max(...xs) - Math.min(...xs);
+    const h = Math.max(...ys) - Math.min(...ys);
+    expect(w).toBeCloseTo(5, 5);
+    expect(h).toBeCloseTo(5, 5); // filled — NOT 2.5 (the old half-height gap)
+  });
+
   it('AC-5: center.length === panels.length and corners are grouped per panel', () => {
     const surface = makeFlatSurface();
     const out = panelizeSurface(surface, panelShapeCurve('Square'), 3, 5, 0.9);
