@@ -197,4 +197,45 @@ test.describe('Run shows all geometry (no intermediate auto-hide)', () => {
     expect(r.afterNewProject, 'a new project re-frames its geometry').toBe(2);
   });
 
+  test('the auto-mode rebuild keeps the SAME geometry-panel items as Run (no drop)', async ({ page }) => {
+    await waitForApp(page);
+    const r = await page.evaluate(() => {
+      const app = window.app, V = window.Viewer3D;
+      app.newProject();
+      // Two geometry chains: a surface and a point-on-surface.
+      const rect = app.addNodeToCanvas('Rectangle.ByCenterWidthDepth', 0, 0);
+      const patchA = app.addNodeToCanvas('Surface.ByPatch', 200, 0);
+      const origin = app.addNodeToCanvas('Point.Origin', 0, 200);
+      const circle = app.addNodeToCanvas('Circle.ByCenterRadius', 200, 200);
+      if (circle) circle.controlValues.radius = '5';
+      const patchB = app.addNodeToCanvas('Surface.ByPatch', 400, 200);
+      const pap = app.addNodeToCanvas('Surface.PointAtParameter', 600, 200);
+      const watch = app.addNodeToCanvas('Output.Watch', 800, 200);
+      app.addWire(rect.id, (rect.def.outputs[0] || {}).id, patchA.id, 'boundary');
+      app.addWire(origin.id, 'point', circle.id, 'center');
+      app.addWire(circle.id, 'circle', patchB.id, 'boundary');
+      app.addWire(patchB.id, 'surface', pap.id, 'surface');
+      app.addWire(pap.id, 'point', watch.id, 'value');
+      if (!V.geometryGroup) V.geometryGroup = new window.THREE.Group();
+      V.isInitialized = true; V.fitAll = function () {}; V._renderGeoList = function () {}; V._updateSceneTree = function () {};
+      // MANUAL mode is where the old buildFromGraph watcher rendered 0 → wiped panel.
+      app._manualRunMode = true;
+      // Simulate a Run.
+      V._sceneItems = [];
+      app._isRunningGraph = true; app._renderFromCompute();
+      app.nodes.forEach(function (nd) { nd._lastComputedValue = app.computeNodeValue(nd); if (nd._portValues) nd._lastRunPortValues = Object.assign({}, nd._portValues); });
+      if (app._commitRunSnapshot) app._commitRunSnapshot();
+      app._isRunningGraph = false;
+      const afterRun = (V._sceneItems || []).length;
+      // The auto-mode watcher now uses the SAME path (_renderFromCompute).
+      V._sceneItems = [];
+      app._renderFromCompute();
+      const afterWatcher = (V._sceneItems || []).length;
+      return { afterRun, afterWatcher };
+    });
+    expect(r.afterRun, 'Run lists multiple geometry items').toBeGreaterThan(2);
+    // The watcher must NOT shrink the panel — it lists the same items as Run.
+    expect(r.afterWatcher).toBe(r.afterRun);
+  });
+
 });

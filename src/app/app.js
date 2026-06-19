@@ -4424,7 +4424,12 @@ app._runSplitWatcher = function() {
 
           try {
 
-            Viewer3D.buildFromGraph(this.nodes, this.wires, (nd) => this.computeNodeValue(nd));
+            // Use the SAME comprehensive render path as a manual Run so the
+            // auto-mode rebuild and the geometry panel stay consistent. The older
+            // buildFromGraph path rendered a narrower set (multi-output / manual
+            // last-run gaps), so the panel dropped items right after a Run.
+            if (typeof this._renderFromCompute === 'function') this._renderFromCompute();
+            else Viewer3D.buildFromGraph(this.nodes, this.wires, (nd) => this.computeNodeValue(nd));
 
           } catch (e) { /* skip rebuild errors */ }
 
