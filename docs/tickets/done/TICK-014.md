@@ -1,11 +1,12 @@
 ---
 id: TICK-014
 title: Surface paneling — Surface.Panelize + Input.PanelShapes
-status: in-progress
+status: done
 priority: high
 type: feature
 sprint: A3
 created: 2026-06-18
+completed: 2026-06-19
 lanes: geometry, ui
 branch: feat/tick-014-surface-paneling
 ---
@@ -77,28 +78,14 @@ npm run build
 <!-- Agents write here. REPLACED every run — old content deleted, not appended. -->
 <!-- This section feeds directly into the Coordinator Response in docs/PM.md.   -->
 
-**Run 2026-06-18 — PM approved (updated ticket); decomposed + dispatched in parallel.**
+**Run 2026-06-19 — ARCHIVED. PM approved ("Tck 14-15 is completed. Move them to done.").**
 
-_T14a (geometry / mouse) — commit `7fef110` on `worktree-agent-a66a3a089c3a1e195`:_
-- Issue: null — new work.
-- Changed: added `src/geometry/nodes/Input.PanelShapes.js` (dropdown shape source, icon ⬡), `src/geometry/nodes/Surface.Panelize.js` (UV tiling kernel + `panelizeSurface()`, icon ▦), `src/geometry/panel-shapes.js` (unit-shape builders), one-line registration in `src/nodes/categories/input.js` + `surfaces.js`, and unit tests `tests/geometry/panel-shapes.test.js` + `surface-panelize.test.js`. Panels emit the same Mesh3 shape as `Surface.ByPatch` (no new render path). Scale wired as both control property and input; full input set Surface/Shape/U/V/Scale.
-- AC: AC-1, AC-2, AC-3, AC-5, AC-8 verified by passing unit tests. AC-4/AC-6/AC-7 covered by unit tests at the kernel level; browser/viewport confirmation handled by T14b.
-- Validation: lint:all 0 errors; `npm run test` 1940 pass / 1 pre-existing skip; build green.
-- Playwright: n/a (geometry-only).
-- Follow-up gap: codegen templates reference `Geo.panelShape` / `Geo.panelize`, not yet exported in `src/geometry/index.js` (outside T14a's owned globs). In-app execute works; only AI Python/C# codegen would need the two one-line exports. Recommend a kernel-owner follow-up.
-
-_T14b (ui / switch) — commit `36991ee` on `worktree-agent-a578288b1269a925c`:_
-- Issue: null — new work.
-- Changed: added `tests/e2e/surface-paneling.spec.js` (full workflow: Surface.ByPatch + Input.PanelShapes Square → Surface.Panelize → Output.Watch; AC-4 panel count/visible, AC-6 Scale spread, AC-7 help examples run). Verified the existing `Geo.addToScene` path renders an array of panel Mesh3 as multiple meshes — `src/viewer/viewer3d.js` deliberately NOT modified (no new render path needed).
-- Validation: lint 0 errors; tests 1915 pass / 1 skip; build green; e2e 36 pass, 4 skipped, 0 fail.
-- Playwright: true — 36 pass, 0 fail (4 skipped = AC-4/AC-6/AC-7, deferred until T14a's nodes are on the same branch).
-
-**Status: 🟢 GREEN on local develop (2026-06-18).** T14a (`7fef110`) + T14b (`36991ee`) were cherry-picked onto develop in dependency order (after the `accb60e` ByPatch UV prerequisite). When both nodes shared the branch, the previously-skipped E2E AC tests ran for real and 2 initially failed — but on investigation **this was a TEST bug, not a product bug**:
-
-- The kernel (`panelizeSurface`, 12/12 unit pass) and the real wired node-graph path are both correct. `engine.js` `getInput` resolves a wired multi-output port via `srcNd._portValues[wire.fromPort]` — so `Output.Watch` wired to `pan.panels` genuinely receives the panels array.
-- The E2E read the output via `pan._outputs[outputId]` (a property the engine never populates) and so saw the whole `{panels,corners,center}` wrapper → `panelCount===1`, `corners===0`.
-- Fix (commit `7f45f2a`): the spec now reads `pan._portValues[outputId]`, exactly how the engine resolves a wired port. `surface-paneling.spec.js` → **5 pass / 0 fail** (AC-4/AC-6/AC-7 green).
-
-Full gate on develop after the fix: **lint:all 0, `npm run test` 1966 pass / 1 skip / 0 fail, build green, `npm run test:e2e` 47 pass / 0 fail.** AC-4 / AC-6 / AC-7 now checked.
-
-The commits are on local develop (interleaved with the green TICK-015 commits). **Not pushed; main untouched** — push held pending PM confirmation.
+- Status: ✅ done. All 8 ACs `[x]`, merged to develop, Oracle APPROVE. Moved to `docs/tickets/done/`.
+- Issue: null — feature delivered as specified.
+- Changed (truthful summary of what shipped on develop):
+  - New `Input.PanelShapes` node (Input category, dropdown shape source) with options Diagonal / Rectangle / Square / Hexagon / Circle, single `Shape` output (closed polygon/curve per selection).
+  - New `Surface.Panelize` node (Surfaces category) — inputs Surface / Shape / U / V / Scale (Scale also a control property); outputs `Panels` (panel surfaces), `Corners` (per-panel corner points), `Center` (one centre per panel). Tiles a unit shape across the surface UV domain; panels render through the existing `Geo.addToScene` mesh path (no new render path).
+  - Post-merge improvements from live PM verification (not separately ticketed): the `Surface.ByPatch` bilinear-bbox UV parametrization so a uniform u×v grid fills the patch interior instead of polar spokes (improves how panels distribute), and gap-free tessellations — hexagon honeycomb and diamond — so panels tile without gaps/overlap.
+- Validation (full gate, green on develop tip ~8300cbb): `npm run lint:all` 0 errors; `npm run test` ~1975 pass / 0 fail; `npm run build` green; `npm run test:e2e` ~53 pass / 0 fail (`surface-paneling.spec.js` covers AC-4 panel count visible, AC-6 Scale spread, AC-7 help examples run).
+- Correction to prior run notes: the earlier "repo-wide vitest runner broken" blocker was a **misdiagnosis** — the `HTMLCanvasElement.getContext()` lines were benign jsdom stderr noise, not failures. The suite runs clean. That narrative is void.
+- Note: changes live on develop locally; push/main per PM cadence (not part of this archive run).

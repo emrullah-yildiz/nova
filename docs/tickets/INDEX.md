@@ -18,13 +18,13 @@
 | ID | Title | Status | Priority | Sprint | Lane(s) | Branch |
 |---|---|---|---|---|---|---|
 | TICK-011 | Installer — Cosign/Sigstore keyless code signature for open-source release | ⬜ draft | high | A2 | platform | — |
-| TICK-014 | Surface paneling — Surface.Panelize + Input.PanelShapes | 🟡 in-progress (merged to develop, gate green — awaiting Oracle/PM APPROVE) | high | A3 | geometry, ui | feat/tick-014-surface-paneling |
-| TICK-015 | Surface.PointAtParameter — rename of Surface.PointAtUV (points on a surface at U,V) | 🟡 in-progress (merged to develop, gate green — awaiting Oracle/PM APPROVE) | medium | A3 | geometry, ui | feat/tick-015-surface-pointatparameter |
 
 ## Done (last 30 days)
 
 | ID | Title | Completed | Notes |
 |---|---|---|---|
+| TICK-014 | Surface paneling — Surface.Panelize + Input.PanelShapes | 2026-06-19 | PM approved; all 8 AC [x]; merged to develop; Oracle APPROVE; done/ |
+| TICK-015 | Surface.PointAtParameter — rename of Surface.PointAtUV | 2026-06-19 | PM approved; all 6 AC [x]; merged to develop; Oracle APPROVE; done/ |
 | TICK-012 | Rectangle.ByCenterWidthDepth — add Plane input (default XY) | 2026-06-18 | PM approved; all 6 AC [x]; merged to develop; done/ |
 | TICK-013 | Surface.Trim — cut a surface with intersecting geometry | 2026-06-18 | PM approved; all 6 AC [x]; merged to develop; done/ |
 | TICK-010 | Code Block — series shorthand syntax for creating number ranges | 2026-06-17 | Oracle APPROVE; merged to develop; done/ |
