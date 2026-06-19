@@ -2549,6 +2549,14 @@ const app = {
 
       if(this.currentPage!=='workspace') return;
 
+      // Ctrl/Cmd+B — toggle 3D viewport ↔ 2D node canvas. Handled before the
+      // input guard so it works even while a control/field is focused.
+      if((e.ctrlKey||e.metaKey) && (e.key==='b'||e.key==='B')){
+        e.preventDefault();
+        if(typeof this.toggleView2D3D==='function') this.toggleView2D3D();
+        return;
+      }
+
       if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
 
       if(e.key==='Delete'||e.key==='Backspace'){this.selectedNodes.forEach(id=>this.removeNode(id));this.selectedNodes=[];}
@@ -4404,7 +4412,11 @@ app._runSplitWatcher = function() {
 
         const ee = typeof window !== 'undefined' ? window.__executionEngineV2 : null;
 
-        const v = ee && typeof ee._version === 'number' ? ee._version : (this._graphDirty ? 1 : 0);
+        // Monotonic across BOTH the v2 engine version and the graph-mutation
+        // revision (bumped by invalidateCompute on every control/dropdown/text/
+        // wire/node change), so auto mode re-renders on EVERY change — not just
+        // the first one after a run.
+        const v = (ee && typeof ee._version === 'number' ? ee._version : 0) + (this._graphRevision || 0);
 
         if (v !== lastSeenVersion) {
 

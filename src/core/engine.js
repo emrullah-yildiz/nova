@@ -194,6 +194,12 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     this._graphDirty = true;
 
+    // Monotonic revision bumped on EVERY graph mutation (control edit, dropdown,
+    // code-block/formula text, wire, node add/remove — all route through here).
+    // The auto-render watcher keys off this so it rebuilds on every change, not
+    // just the first one after a run (the old _graphDirty boolean was sticky).
+    this._graphRevision = (this._graphRevision || 0) + 1;
+
     // Re-render wires to stop animation
 
     if (typeof app.renderWires === 'function') app.renderWires();
@@ -1992,6 +1998,15 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     this._applyViewState();
 
+  };
+
+  // Ctrl+B — flip between the 3D viewport and the 2D node canvas. If 3D is
+  // currently shown (3D-only OR split), switch to the 2D node view; otherwise
+  // switch to the 3D viewport. Either way leaves split mode off.
+  app.toggleView2D3D = function() {
+    var showing3D = this.splitMode || this.activeView === '3d';
+    this.splitMode = false;
+    this.setView(showing3D ? 'nodes' : '3d');
   };
 
   app._applyViewState = function() {
