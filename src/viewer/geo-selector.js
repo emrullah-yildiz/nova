@@ -2,6 +2,7 @@ import { Geo } from '../geometry/index.js';
 import { setNodePreviewState, setPreviewItemVisibility, showAllPreviews } from './preview-sync.js';
 import { Viewer3D as RuntimeViewer3D } from './viewer3d.js';
 import { isSelectionModeActive, selectionModeClick, selectionModeHover, selectionMeshClick, selectionMeshHover, getSelectedItems, clearSelection } from './selection-mode.js';
+import { isMesh3Array, mergeMesh3Array } from './mesh3-merge.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -117,8 +118,16 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
     // The _Mesh3 instance carries _type === 'Mesh3' directly on the object.
     if (geoVal && geoVal._type === 'Mesh3') {
       item._mesh3 = geoVal;
-    } else if (Array.isArray(geoVal) && geoVal.length === 1 && geoVal[0] && geoVal[0]._type === 'Mesh3') {
-      item._mesh3 = geoVal[0];
+    } else if (isMesh3Array(geoVal)) {
+      // Array of Mesh3 (e.g. Surface.Panelize panels). Merge into ONE combined
+      // _mesh3 so selection-mode's single-body swap path works, and precompute
+      // _faceGroups with exactly one group per SOURCE mesh — so each panel is an
+      // independently selectable unit even when all panels are coplanar (a flat
+      // surface), which mesh3.groupFaces() would otherwise collapse into one face.
+      // A 1-element array degenerates to the same single-mesh behaviour as before.
+      var merged = mergeMesh3Array(geoVal, Geo.Mesh3);
+      item._mesh3 = merged.mesh;
+      item._faceGroups = merged.faceGroups;
     }
 
     this._sceneItems.push(item);

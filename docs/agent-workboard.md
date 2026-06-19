@@ -27,6 +27,7 @@ root `README.md` · `docs/ARCHITECTURE.md` · `.github/workflows/ci.yml`
 |---|---|---|---|---|---|---|
 | fix/tick-006-content-aligned-screenshots | switch | T06f: content-aligned screenshots (supersedes T06e) | scripts/take-learning-shots.js, public/learning/*.png | — | 2026-06-08 | queued |
 | fix/tick-007-real-canvas-embed | switch | T07h: pan/zoom + node schema + drag wire (supersedes T07f + T07g) | src/ui/mini-canvas.js, tests/e2e/learning-interactive.spec.js | — | 2026-06-08 | queued |
+| feat/select-faces-mesh3-arrays | ui-viewport | Select.Faces on Mesh3 arrays (each panel selectable) | src/viewer/mesh3-merge.js, src/viewer/geo-selector.js, src/viewer/selection-mode.js, tests/mesh3-merge.test.js, tests/e2e/select-faces-panels.spec.js | — | 2026-06-19 | active |
 
 <!--
 Example row (copy, fill in, remove this comment block when claiming):

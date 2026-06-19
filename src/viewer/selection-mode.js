@@ -198,14 +198,18 @@ function _swapToFaceMeshes() {
     const mesh3 = item._mesh3;
     if (!mesh3 || typeof mesh3.groupFaces !== 'function' || typeof mesh3.toSelectionMesh !== 'function') return;
 
-    // Find the body mesh (isMeshBody) — must NOT touch LineSegments (edge lines).
-    let bodyMesh = null;
+    // Find ALL body meshes (isMeshBody) — must NOT touch LineSegments (edge lines).
+    // A single Mesh3 yields one body mesh; an array of Mesh3 (e.g. Surface.Panelize
+    // panels) renders one body mesh PER panel. We swap the whole set out for the
+    // single merged selection mesh so every panel becomes a selectable group.
+    const bodyMeshes = [];
     item.group.traverse(function (obj) {
-      if (!bodyMesh && obj.isMesh && obj.userData && obj.userData.isMeshBody) {
-        bodyMesh = obj;
+      if (obj.isMesh && obj.userData && obj.userData.isMeshBody) {
+        bodyMeshes.push(obj);
       }
     });
-    if (!bodyMesh) return;
+    if (bodyMeshes.length === 0) return;
+    const bodyMesh = bodyMeshes[0];
 
     // T09f debug trace — record visibility state before force-show
     if (typeof window !== 'undefined' && window.__novaHoverDebug) {
@@ -214,7 +218,10 @@ function _swapToFaceMeshes() {
     }
 
     try {
-      const faceGroups = mesh3.groupFaces();
+      // Prefer the item's precomputed per-source groups (one selectable unit per
+      // source mesh, set by geo-selector for Mesh3 arrays). Fall back to
+      // coplanar grouping for a single mesh with no precomputed groups.
+      const faceGroups = item._faceGroups || mesh3.groupFaces();
       const result = mesh3.toSelectionMesh(faceGroups);
       if (!result || !result.mesh) return;
 
@@ -230,13 +237,17 @@ function _swapToFaceMeshes() {
         });
       }
 
-      // Swap: remove body mesh, insert selection mesh.
+      // Swap: remove ALL body meshes (one for a single mesh, N for a panel
+      // array — they share the merged selection mesh), insert one selection mesh.
+      // Remember each body mesh's parent so restore can re-attach it exactly.
       const parent = bodyMesh.parent;
       if (!parent) return;
-      parent.remove(bodyMesh);
+      const originalBodies = bodyMeshes.map(function (bm) { return { mesh: bm, parent: bm.parent }; });
+      originalBodies.forEach(function (b) { if (b.parent) b.parent.remove(b.mesh); });
       parent.add(result.mesh);
 
       item._selectionOriginalMesh = bodyMesh;
+      item._selectionOriginalBodies = originalBodies;
       item._selectionSwappedMesh = result.mesh;
       item._selectionMeshResult = result;
       item._selectionFaceGroups = faceGroups;
@@ -265,8 +276,15 @@ function _restoreFaceMeshes() {
   viewer._sceneItems.forEach(function (item) {
     if (!item._selectionOriginalMesh || !item._selectionSwappedMesh) return;
     const parent = item._selectionSwappedMesh.parent;
-    if (parent) {
-      parent.remove(item._selectionSwappedMesh);
+    if (parent) parent.remove(item._selectionSwappedMesh);
+    // Re-attach every original body mesh to its remembered parent (one for a
+    // single mesh, N for a panel array). Fall back to the single-mesh field.
+    if (Array.isArray(item._selectionOriginalBodies) && item._selectionOriginalBodies.length) {
+      item._selectionOriginalBodies.forEach(function (b) {
+        const target = b.parent || parent;
+        if (target) target.add(b.mesh);
+      });
+    } else if (parent) {
       parent.add(item._selectionOriginalMesh);
     }
     if (item._selectionMeshResult) {
@@ -278,6 +296,7 @@ function _restoreFaceMeshes() {
       }
     }
     delete item._selectionOriginalMesh;
+    delete item._selectionOriginalBodies;
     delete item._selectionSwappedMesh;
     delete item._selectionMeshResult;
     delete item._selectionFaceGroups;
