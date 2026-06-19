@@ -220,6 +220,32 @@ test.describe('Surface.PointAtParameter — kernel path (Geo.pointAtUV)', () => 
     }
   });
 
+  test('point dot renders ON TOP (not occluded by the surface) at a constant screen size', async ({ page }) => {
+    await waitForApp(page);
+    const r = await page.evaluate(() => {
+      const Geo = window.Geo, V = window.Viewer3D;
+      const group = new window.THREE.Group();
+      Geo.addToScene(group, new Geo.Point3(0, 0, 0), 0x89b4fa);
+      const dot = group.children[0];
+      // A point on an opaque surface must not be hidden inside it → depthTest off,
+      // drawn after surfaces (renderOrder), and flagged for per-frame sizing.
+      const onTop = dot.material.depthTest === false && dot.renderOrder > 0 &&
+                    !!(dot.userData && dot.userData.isPointDot);
+      // Constant screen size: world radius scales with camera distance.
+      if (!V.geometryGroup) V.geometryGroup = new window.THREE.Group();
+      V.geometryGroup.add(dot);
+      if (!V.camera) V.camera = new window.THREE.PerspectiveCamera();
+      V.camera.position.set(0, 30, 0); V._sizePointDots(); const far = dot.scale.x;
+      V.camera.position.set(0, 10, 0); V._sizePointDots(); const near = dot.scale.x;
+      return { isMesh: dot.isMesh, onTop, far, near };
+    });
+    expect(r.isMesh).toBe(true);
+    expect(r.onTop, 'point dot must render on top (depthTest off, renderOrder, isPointDot)').toBe(true);
+    // Farther camera → larger world radius (so projected size stays constant).
+    expect(r.far).toBeGreaterThan(r.near);
+    expect(r.far / r.near).toBeCloseTo(3, 1); // 30 / 10
+  });
+
   test('Point at different UV corners are distinct (UV spread covers the full patch)', async ({ page }) => {
     await waitForApp(page);
 

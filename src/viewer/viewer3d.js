@@ -148,7 +148,24 @@ export const Viewer3D = {
     if (!this.isVisible || this.isUnavailable || !this.controls || !this.renderer) return;
     this.animFrameId = requestAnimationFrame(() => this.animate());
     this.controls.update();
+    this._sizePointDots();
     this.renderer.render(this.scene, this.camera);
+  },
+
+  // Rescale point dots each frame so they read as a constant small on-screen size
+  // (~a few px) regardless of zoom or model scale — the Dynamo-style point marker.
+  // World radius ∝ distance-to-camera keeps the projected size fixed.
+  _sizePointDots() {
+    if (!this.geometryGroup || !this.camera) return;
+    const K = 0.006; // on-screen size factor (radius ≈ distance × K)
+    const camPos = this.camera.position;
+    const tmp = this._dotTmpVec || (this._dotTmpVec = new THREE.Vector3());
+    this.geometryGroup.traverse(function (obj) {
+      if (obj.userData && obj.userData.isPointDot) {
+        const d = obj.getWorldPosition(tmp).distanceTo(camPos);
+        obj.scale.setScalar(Math.max(d * K, 1e-4));
+      }
+    });
   },
 
   clearGeometry() {

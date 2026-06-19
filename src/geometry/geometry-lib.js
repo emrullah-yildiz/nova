@@ -1304,14 +1304,19 @@ const Geo = {
 
   // ══════════════════════════════════════
 
-  // A point renders as a TINY sphere (Dynamo-style dot) — radius 0.03, a 75%
-  // diameter reduction from the old 0.12 sphere. The sphere geometry is built
-  // once and shared; each point gets its own tinted material.
+  // A point renders as a small Dynamo-style dot: a unit sphere that the viewer's
+  // render loop rescales to a CONSTANT on-screen size (so it stays a small dot at
+  // any zoom / surface scale), drawn ON TOP (depthTest off) so a point sitting on
+  // an opaque surface is never hidden inside it. Tagged isPointDot so animate()
+  // can size it; the shared unit geometry is built once.
   _makePointDot(point, color) {
-    const g = Geo.__pointGeo || (Geo.__pointGeo = new THREE.SphereGeometry(0.03, 12, 8));
-    const m = new THREE.MeshPhongMaterial({ color: color || 0x89b4fa, emissive: color || 0x89b4fa, emissiveIntensity: 0.4, shininess: 60 });
+    const g = Geo.__pointGeo || (Geo.__pointGeo = new THREE.SphereGeometry(1, 12, 8));
+    const m = new THREE.MeshBasicMaterial({ color: color || 0x89b4fa, depthTest: false, depthWrite: false });
     const mesh = new THREE.Mesh(g, m);
     mesh.position.copy(point.toThree ? point.toThree() : point);
+    mesh.scale.setScalar(0.05);     // fallback size; animate() resizes to constant screen size
+    mesh.renderOrder = 10;          // draw after surfaces so it shows on top
+    mesh.userData.isPointDot = true;
     return mesh;
   },
 
