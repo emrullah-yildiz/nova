@@ -142,7 +142,7 @@ test.describe('Surface.PointAtParameter — kernel path (Geo.pointAtUV)', () => 
     }
   });
 
-  test('Geo.addToScene renders Point3 as a visible flat dot sprite (not a sphere)', async ({ page }) => {
+  test('Geo.addToScene renders Point3 as a tiny visible sphere (Dynamo-style dot)', async ({ page }) => {
     await waitForApp(page);
 
     const result = await page.evaluate(() => {
@@ -169,16 +169,18 @@ test.describe('Surface.PointAtParameter — kernel path (Geo.pointAtUV)', () => 
         return { error: 'addToScene produced no children in the group' };
       }
 
-      // Walk children to classify what was added. A point now renders as a flat
-      // camera-facing dot (THREE.Sprite), not a 3D sphere mesh.
-      let hasDot = false;
-      let hasScale = false;
+      // Walk children to classify what was added. A point renders as a tiny
+      // sphere MESH (radius 0.03) — a Dynamo-style dot, not a flat 2D sprite.
+      let hasMesh = false;
+      let hasGeometry = false;
 
       const visit = (obj) => {
         if (!obj) return;
-        if (obj.isSprite) {
-          hasDot = true;
-          if (obj.scale && obj.scale.x > 0) hasScale = true;
+        if (obj.isMesh) {
+          hasMesh = true;
+          if (obj.geometry && obj.geometry.attributes && obj.geometry.attributes.position) {
+            hasGeometry = obj.geometry.attributes.position.count > 0;
+          }
         }
         if (obj.children) obj.children.forEach(visit);
       };
@@ -186,8 +188,8 @@ test.describe('Surface.PointAtParameter — kernel path (Geo.pointAtUV)', () => 
 
       return {
         childCount: group.children.length,
-        hasDot,
-        hasScale,
+        hasMesh,
+        hasGeometry,
         // Confirm the dot was placed at the correct 3D location
         // (THREE uses Y-up; Geo uses Y=up too after the Y/Z swap in toThree()).
         dotPosition: group.children[0] && group.children[0].position
@@ -205,10 +207,10 @@ test.describe('Surface.PointAtParameter — kernel path (Geo.pointAtUV)', () => 
     // The group must contain at least one child.
     expect(result.childCount).toBeGreaterThan(0);
 
-    // That child must be a flat dot sprite (not a sphere mesh, not a line).
-    expect(result.hasDot).toBe(true);
-    // The dot must have a real (non-zero) size so it's visible.
-    expect(result.hasScale).toBe(true);
+    // That child must be a (tiny) sphere mesh, not a line or empty group.
+    expect(result.hasMesh).toBe(true);
+    // The sphere must have real geometry (non-zero vertices).
+    expect(result.hasGeometry).toBe(true);
 
     // The dot position must be finite (not NaN — which would mean toThree() failed).
     if (result.dotPosition) {
@@ -566,13 +568,13 @@ test.describe('Surface.PointAtParameter — point grid renders in the 3D viewer'
 
       const item = (V._sceneItems || []).find((it) => it.nodeId === 'node-grid');
       let dots = 0;
-      if (item && item.group) item.group.traverse((o) => { if (o.isSprite) dots++; });
+      if (item && item.group) item.group.traverse((o) => { if (o.isMesh) dots++; });
       return { err: null, listed: !!item, dots };
     });
 
     expect(result.err).toBeNull();
     expect(result.listed, 'a node whose output is a Point3[][] grid must appear in the Geometry panel').toBe(true);
-    expect(result.dots, 'every one of the 25 grid points must render as its own flat dot sprite').toBe(25);
+    expect(result.dots, 'every one of the 25 grid points must render as its own tiny sphere dot').toBe(25);
   });
 
 });

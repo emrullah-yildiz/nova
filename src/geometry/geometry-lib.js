@@ -1304,38 +1304,15 @@ const Geo = {
 
   // ══════════════════════════════════════
 
-  // A point renders as a small flat camera-facing dot (THREE.Sprite), NOT a 3D
-  // sphere — visible but reading as a 2D marker. The round texture is built once
-  // and cached; each point's material tints it. In a no-canvas environment
-  // (headless tests) the texture is skipped and the dot is a plain square sprite.
+  // A point renders as a TINY sphere (Dynamo-style dot) — radius 0.03, a 75%
+  // diameter reduction from the old 0.12 sphere. The sphere geometry is built
+  // once and shared; each point gets its own tinted material.
   _makePointDot(point, color) {
-    if (Geo.__dotTexture === undefined) {
-      let tex = null;
-      try {
-        if (typeof document !== 'undefined') {
-          const sz = 64;
-          const cv = document.createElement('canvas');
-          cv.width = cv.height = sz;
-          const ctx = cv.getContext('2d');
-          if (ctx) {
-            ctx.beginPath();
-            ctx.arc(sz / 2, sz / 2, sz / 2 - 2, 0, Math.PI * 2);
-            ctx.closePath();
-            ctx.fillStyle = '#ffffff';
-            ctx.fill();
-            tex = new THREE.CanvasTexture(cv);
-          }
-        }
-      } catch (e) { tex = null; }
-      Geo.__dotTexture = tex;
-    }
-    const mat = new THREE.SpriteMaterial({ color: color || 0x89b4fa, sizeAttenuation: true, depthWrite: false, transparent: true });
-    if (Geo.__dotTexture) mat.map = Geo.__dotTexture;
-    const sprite = new THREE.Sprite(mat);
-    sprite.position.copy(point.toThree ? point.toThree() : point);
-    const s = 0.18; // small flat dot (world units) — smaller than the old 0.24 sphere
-    sprite.scale.set(s, s, s);
-    return sprite;
+    const g = Geo.__pointGeo || (Geo.__pointGeo = new THREE.SphereGeometry(0.03, 12, 8));
+    const m = new THREE.MeshPhongMaterial({ color: color || 0x89b4fa, emissive: color || 0x89b4fa, emissiveIntensity: 0.4, shininess: 60 });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.position.copy(point.toThree ? point.toThree() : point);
+    return mesh;
   },
 
   addToScene(group, geoObj, color) {
