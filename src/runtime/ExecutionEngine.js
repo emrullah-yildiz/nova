@@ -446,6 +446,94 @@ export class ExecutionEngine {
   }
 
   /**
+   * Run only the subgraph affected by one or more changed nodes.
+   * Used by Auto mode for wire connect/disconnect so unrelated branches keep
+   * their previous run values instead of going through a full graph run.
+   *
+   * @param {string[]} rootNodeIds
+   * @returns {Promise<{ completed: number, failed: number, errors: Map<string, Error>, dirtyNodeIds: string[] }>}
+   */
+  async runDirtyNodes(rootNodeIds = []) {
+    const app = this._app;
+    const roots = Array.from(new Set((rootNodeIds || []).filter(Boolean)));
+    if (!app || roots.length === 0) {
+      return { completed: 0, failed: 0, errors: new Map(), dirtyNodeIds: [] };
+    }
+    if (this._running) {
+      return { completed: 0, failed: 0, errors: new Map(), dirtyNodeIds: [], running: true };
+    }
+
+    this._running = true;
+    app._isRunningGraph = true;
+    this._cancelRequested = false;
+
+    if (app.nodes) {
+      for (const nd of app.nodes) nd._cancelled = false;
+    }
+
+    this._getButtons();
+    if (typeof app._showCancelButton === 'function') app._showCancelButton();
+    if (!app._showCancelButton && this._runBtn) {
+      this._runBtn.textContent = '▶ Running…';
+      this._runBtn.classList.add('disabled');
+    }
+    if (this._cancelBtn) this._cancelBtn.classList.remove('hidden');
+
+    try {
+      this._rebuildGraph();
+      this.dirtyTracker.reset();
+      this.dirtyTracker.markDirtyAll(roots);
+      const dirtySet = this.dirtyTracker.getDirty();
+      const dirtyNodeIds = Array.from(dirtySet);
+      if (dirtySet.size === 0) {
+        return { completed: 0, failed: 0, errors: new Map(), dirtyNodeIds: [] };
+      }
+
+      const topoOrder = this.depGraph.getTopologicalOrder();
+      const executeNodeFn = async (nodeId) => {
+        if (this._cancelRequested) throw new CancellationError('Execution cancelled by user');
+        const nd = app.nodes.find(n => n.id === nodeId);
+        if (!nd) return undefined;
+        if (this._cacheEnabled) this.cache.invalidateNode(nodeId);
+        const token = this.cancellation.createToken(nodeId);
+        this.dirtyTracker.startComputing(nodeId);
+        try {
+          const result = await this._computeNode(nodeId, nd, token);
+          token.throwIfCancelled();
+          if (this._cacheEnabled) this.cache.set(nodeId, result, this._version);
+          this.dirtyTracker.markClean(nodeId);
+          return result;
+        } catch (err) {
+          this.dirtyTracker.finishComputing(nodeId);
+          throw err;
+        }
+      };
+
+      const result = await this.scheduler.executeDirtySubgraph(
+        roots[0],
+        topoOrder,
+        dirtySet,
+        executeNodeFn
+      );
+
+      if (!this._cancelRequested) this.dirtyTracker.flush();
+      if (!this._cancelRequested && typeof app._commitRunSnapshot === 'function') {
+        app._commitRunSnapshot();
+      }
+      return { ...result, dirtyNodeIds };
+    } finally {
+      this._running = false;
+      app._isRunningGraph = false;
+      if (typeof app._hideCancelButton === 'function') app._hideCancelButton();
+      if (!app._hideCancelButton && this._runBtn) {
+        this._runBtn.textContent = '▶ Run';
+        this._runBtn.classList.remove('disabled');
+      }
+      if (this._cancelBtn) this._cancelBtn.classList.add('hidden');
+    }
+  }
+
+  /**
    * Incrementally recompute only the dirty subgraph starting from a changed node.
    * More efficient than full run() when only one or a few nodes change.
    *

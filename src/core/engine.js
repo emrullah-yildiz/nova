@@ -1443,6 +1443,11 @@ export function installEngine(targetApp = getRuntimeApp()) {
     }
 
 
+    var computeNodeSet = null;
+    if (opts && Array.isArray(opts.computeNodeIds)) {
+      computeNodeSet = {};
+      opts.computeNodeIds.forEach(function(id) { computeNodeSet[id] = true; });
+    }
 
     this.nodes.forEach(function(nd) {
 
@@ -1450,7 +1455,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
       // nodes flagged hidden (or panel-toggled hidden) are marked invisible
       // below; the user can toggle them back on without another Run.
 
-      var val = self.computeNodeValue(nd);
+      var shouldCompute = !computeNodeSet || computeNodeSet[nd.id] || nd._lastComputedValue === undefined;
+      var val = shouldCompute ? self.computeNodeValue(nd) : nd._lastComputedValue;
       nd._lastComputedValue = val;
 
 
@@ -1490,13 +1496,14 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       // Multi-output: check _portValues - iterate arrays of geometry objects
 
-      if (nd._portValues) {
+      var portValues = shouldCompute ? nd._portValues : (nd._portValues || nd._lastRunPortValues);
+      if (portValues) {
 
-        Object.keys(nd._portValues).forEach(function(key) {
+        Object.keys(portValues).forEach(function(key) {
 
           if (key === 'count' || key === 'length' || key === 'index') return; // skip metadata
 
-          var pv = nd._portValues[key];
+          var pv = portValues[key];
 
           // For single-output nodes, val and the port value are the same
           // reference — don't tag it twice. (Avoids duplicates like
