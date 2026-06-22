@@ -61,6 +61,43 @@ test.describe('Auto-run on every change', () => {
     expect(r.after).toBeGreaterThan(r.before);
   });
 
+  test('unwiring an input recomputes (drops stale data), it does not keep the old value', async ({ page }) => {
+    await waitForApp(page);
+    const r = await page.evaluate(() => {
+      const app = window.app, V = window.Viewer3D;
+      app.newProject();
+      const origin = app.addNodeToCanvas('Point.Origin', 0, 0);
+      const circle = app.addNodeToCanvas('Circle.ByCenterRadius', 200, 0);
+      if (circle) circle.controlValues.radius = '5';
+      const patch = app.addNodeToCanvas('Surface.ByPatch', 400, 0);
+      const watch = app.addNodeToCanvas('Output.Watch', 600, 0);
+      app.addWire(origin.id, 'point', circle.id, 'center');
+      app.addWire(circle.id, 'circle', patch.id, 'boundary');
+      app.addWire(patch.id, 'surface', watch.id, 'value');
+      if (!V.geometryGroup) V.geometryGroup = new window.THREE.Group();
+      V.isInitialized = true; V.fitAll = function () {}; V._renderGeoList = function () {}; V._updateSceneTree = function () {};
+      app._manualRunMode = false; // Auto
+      V._sceneItems = []; app._renderFromCompute();
+      const before = (V._sceneItems || []).some((it) => /ByPatch/.test(it.label));
+      const surfaceBefore = app.computeNodeValue(patch);
+      // Unwire the Boundary input (same effect as the port-handler disconnect path).
+      const rev0 = app._graphRevision || 0;
+      app.wires = app.wires.filter((w) => !(w.toNode === patch.id && w.toPort === 'boundary'));
+      app.invalidateCompute();
+      const rev1 = app._graphRevision || 0;
+      V._sceneItems = []; app._renderFromCompute();
+      const after = (V._sceneItems || []).some((it) => /ByPatch/.test(it.label));
+      const surfaceAfter = app.computeNodeValue(patch);
+      return { rev0, rev1, before, after, hadSurface: !!surfaceBefore, surfaceAfterNull: surfaceAfter == null };
+    });
+    expect(r.rev1).toBeGreaterThan(r.rev0);     // unwire bumps the revision (watcher refires)
+    expect(r.hadSurface).toBe(true);
+    expect(r.before).toBe(true);
+    // After unwiring: the surface recomputes to empty and is removed — NOT stale.
+    expect(r.surfaceAfterNull).toBe(true);
+    expect(r.after).toBe(false);
+  });
+
   test('the auto-render watcher runs in 3D-only view, not just split view', async ({ page }) => {
     await waitForApp(page);
     const gate = await page.evaluate(() => {
