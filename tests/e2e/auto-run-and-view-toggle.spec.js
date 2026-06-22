@@ -98,6 +98,39 @@ test.describe('Auto-run on every change', () => {
     expect(r.after).toBe(false);
   });
 
+  test('unwiring in Auto mode flags the node with a "produced no output" warning', async ({ page }) => {
+    await waitForApp(page);
+    const r = await page.evaluate(() => {
+      const app = window.app, V = window.Viewer3D;
+      app.newProject();
+      const origin = app.addNodeToCanvas('Point.Origin', 0, 0);
+      const circle = app.addNodeToCanvas('Circle.ByCenterRadius', 200, 0);
+      if (circle) circle.controlValues.radius = '5';
+      const patch = app.addNodeToCanvas('Surface.ByPatch', 400, 0);
+      const watch = app.addNodeToCanvas('Output.Watch', 600, 0);
+      app.addWire(origin.id, 'point', circle.id, 'center');
+      app.addWire(circle.id, 'circle', patch.id, 'boundary');
+      app.addWire(patch.id, 'surface', watch.id, 'value');
+      if (!V.geometryGroup) V.geometryGroup = new window.THREE.Group();
+      V.isInitialized = true; V.fitAll = function () {}; V._renderGeoList = function () {}; V._updateSceneTree = function () {};
+      app._manualRunMode = false; // Auto
+      // The auto-mode watcher tick: render + commit snapshot (so warnings update).
+      const tick = () => { app._renderFromCompute(); if (app._commitRunSnapshot) app._commitRunSnapshot(); };
+      tick();
+      const before = (app._collectInspectorWarnings(patch) || []).map((w) => w.message);
+      // Unwire the Boundary input.
+      app.wires = app.wires.filter((w) => !(w.toNode === patch.id && w.toPort === 'boundary'));
+      app.invalidateCompute();
+      tick();
+      const after = (app._collectInspectorWarnings(patch) || []).map((w) => w.message);
+      return { before, after };
+    });
+    // Wired: no warnings. Unwired in Auto mode: the node flags "produced no output"
+    // (without needing a manual Run).
+    expect(r.before).toEqual([]);
+    expect(r.after.some((m) => /produced no output/i.test(m))).toBe(true);
+  });
+
   test('the auto-render watcher runs in 3D-only view, not just split view', async ({ page }) => {
     await waitForApp(page);
     const gate = await page.evaluate(() => {

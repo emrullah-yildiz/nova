@@ -4431,8 +4431,20 @@ app._runSplitWatcher = function() {
             // auto-mode rebuild and the geometry panel stay consistent. The older
             // buildFromGraph path rendered a narrower set (multi-output / manual
             // last-run gaps), so the panel dropped items right after a Run.
-            if (typeof this._renderFromCompute === 'function') this._renderFromCompute();
-            else Viewer3D.buildFromGraph(this.nodes, this.wires, (nd) => this.computeNodeValue(nd));
+            if (typeof this._renderFromCompute === 'function') {
+              this._renderFromCompute();
+              // In Auto mode the rebuild IS a run — snapshot the results and
+              // refresh the node warning badges so "produced no output" / input
+              // warnings reflect the live graph (e.g. after unwiring an input),
+              // not only after a manual Run. (Manual mode keeps showing the last
+              // Run's state until the user runs again.)
+              if (!this._manualRunMode) {
+                if (this._commitRunSnapshot) this._commitRunSnapshot();
+                if (this.refreshNodeWarningBadges) this.refreshNodeWarningBadges();
+              }
+            } else {
+              Viewer3D.buildFromGraph(this.nodes, this.wires, (nd) => this.computeNodeValue(nd));
+            }
 
           } catch (e) { /* skip rebuild errors */ }
 
