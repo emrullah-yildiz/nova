@@ -80,6 +80,31 @@ export function installRunMode(targetApp = getRuntimeApp()) {
     return app.setRunMode(app._runMode === 'manual' ? 'auto' : 'manual');
   };
 
+  function wireSignature() {
+    return (app.wires || []).map(function (w) {
+      return [w.fromNode, w.fromPort, w.toNode, w.toPort].join(':');
+    }).join('|');
+  }
+
+  app._runModeLastWireSignature = wireSignature();
+  app._autoRunTimer = null;
+
+  app._scheduleAutoRun = function () {
+    if (app._runMode !== 'auto') return false;
+    if (app._isRunningGraph) return false;
+    if (typeof app.runGraph !== 'function') return false;
+    if (app._autoRunTimer) clearTimeout(app._autoRunTimer);
+    app._autoRunTimer = setTimeout(function () {
+      app._autoRunTimer = null;
+      if (app._runMode !== 'auto' || app._isRunningGraph || typeof app.runGraph !== 'function') return;
+      try {
+        var r = app.runGraph();
+        if (r && typeof r.then === 'function') r.then(function () {}, function () {});
+      } catch (e) { /* auto-run must never break graph editing */ }
+    }, 0);
+    return true;
+  };
+
   // ── Run button + mode toggle UI ─────────────────────────────────────────
   // The toggle lives next to the existing Run button in the canvas toolbar.
   // The Run button itself is the engine's `#toolbar-run`; we add the mode
@@ -142,6 +167,11 @@ export function installRunMode(targetApp = getRuntimeApp()) {
     var _origInvalidate = app.invalidateCompute.bind(app);
     app.invalidateCompute = function () {
       var r = _origInvalidate();
+      var nextWireSignature = wireSignature();
+      if (!app._runModeDeserializing && nextWireSignature !== app._runModeLastWireSignature) {
+        app._runModeLastWireSignature = nextWireSignature;
+        app._scheduleAutoRun();
+      }
       app._refreshRunModeUI();
       return r;
     };
@@ -175,8 +205,18 @@ export function installRunMode(targetApp = getRuntimeApp()) {
   if (typeof app.deserializeGraph === 'function') {
     var _origDeserialize = app.deserializeGraph.bind(app);
     app.deserializeGraph = function (data) {
-      var ok = _origDeserialize(data);
-      if (ok) app._applyRunMode(data && data.runMode === 'manual' ? 'manual' : 'auto');
+      app._runModeDeserializing = true;
+      var ok;
+      try {
+        ok = _origDeserialize(data);
+      } finally {
+        app._runModeDeserializing = false;
+      }
+      if (ok) {
+        app._applyRunMode(data && data.runMode === 'manual' ? 'manual' : 'auto');
+        app._runModeLastWireSignature = wireSignature();
+        app._scheduleAutoRun();
+      }
       return ok;
     };
   }
