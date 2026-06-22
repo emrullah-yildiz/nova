@@ -14,7 +14,9 @@ import {
   deactivateSelectionMode,
   isSelectionModeActive,
   getSelectedItems,
+  getSelectedEdges,
   selectionModeClick,
+  selectionEdgeClick,
   approveSelection,
   cancelSelection,
   _internals,
@@ -151,6 +153,31 @@ describe('selection-mode state machine', () => {
       selectionModeClick({ id: 'item-' + i, label: 'Edge ' + i, group, visible: true });
     });
     expect(getSelectedItems().length).toBe(3);
+  });
+
+  it('selectionEdgeClick toggles individual mesh edges', () => {
+    activateSelectionMode('node-1', 'edges', () => {}, () => {});
+    const group = { traverse: (fn) => fn({ isLineSegments: true, material: { opacity: 1 } }) };
+    const item = {
+      id: 'mesh-item',
+      label: 'Rectangle',
+      group,
+      visible: true,
+      _selectionEdgeResult: {
+        edges: [
+          { start: [0, 0, 0], end: [1, 0, 0] },
+          { start: [1, 0, 0], end: [1, 1, 0] }
+        ]
+      }
+    };
+
+    selectionEdgeClick({ index: 2 }, item);
+    expect(getSelectedItems().length).toBe(1);
+    expect(getSelectedItems()[0].selectionKey).toBe('mesh-item:edge:1');
+    expect(getSelectedEdges()[0].edge.end).toEqual([1, 1, 0]);
+
+    selectionEdgeClick({ index: 2 }, item);
+    expect(getSelectedItems().length).toBe(0);
   });
 
   it('activating while already active replaces the previous session', () => {
@@ -380,6 +407,20 @@ describe('Select.* node execute()', () => {
     expect(result.selection[0]._type).toBe('Mesh');
   });
 
+  it('Select.Edges execute() hydrates mesh-edge Line3 descriptors into curves', () => {
+    const def = registry.getNode('Select.Edges');
+    const geoData = [{
+      _type: 'Line3',
+      label: 'Rectangle edge 1',
+      start: { x: 0, y: 0, z: 0, _type: 'Point3' },
+      end: { x: 2, y: 0, z: 0, _type: 'Point3' }
+    }];
+    const result = def.execute({}, {}, { _selectedGeo: JSON.stringify(geoData) });
+    expect(Array.isArray(result.selection)).toBe(true);
+    expect(result.selection[0]._type).toBe('Line3');
+    expect(result.selection[0].length()).toBeCloseTo(2);
+  });
+
   it('Select.Points execute() with _selectedGeo JSON returns { selection: [...] }', () => {
     const def = registry.getNode('Select.Points');
     const geoData = [{ _type: 'Mesh', label: 'Point A', nodeId: 'n1', varName: '', vertexCount: 1, vertices: [1, 2, 3], faceCount: 0 }];
@@ -460,6 +501,19 @@ describe('Geo.Mesh3 face grouping', () => {
       const [nx, ny, nz] = g.normal;
       expect(Math.abs(nx * nx + ny * ny + nz * nz - 1)).toBeLessThan(1e-5);
     });
+  });
+
+  it('extracts rectangle mesh boundary edges without the internal triangulation diagonal', () => {
+    const rect = new Geo.Mesh3([
+      new Geo.Point3(0, 0, 0),
+      new Geo.Point3(2, 0, 0),
+      new Geo.Point3(2, 1, 0),
+      new Geo.Point3(0, 1, 0)
+    ], [[0, 1, 2], [0, 2, 3]]);
+    const edges = rect.getSelectableEdges();
+    expect(edges.length).toBe(4);
+    const keys = edges.map(e => e.startIndex + ':' + e.endIndex).sort();
+    expect(keys).toEqual(['0:1', '0:3', '1:2', '2:3']);
   });
 
   it('getFaceVertices returns 4 unique vertices for group 0', () => {

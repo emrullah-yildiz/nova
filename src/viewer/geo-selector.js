@@ -1,7 +1,7 @@
 import { Geo } from '../geometry/index.js';
 import { setNodePreviewState, setPreviewItemVisibility, showAllPreviews } from './preview-sync.js';
 import { Viewer3D as RuntimeViewer3D } from './viewer3d.js';
-import { isSelectionModeActive, selectionModeClick, selectionModeHover, selectionMeshClick, selectionMeshHover, getSelectedItems, clearSelection } from './selection-mode.js';
+import { isSelectionModeActive, selectionModeClick, selectionModeHover, selectionMeshClick, selectionMeshHover, selectionEdgeClick, selectionEdgeHover, getSelectedItems, clearSelection } from './selection-mode.js';
 import { isMesh3Array, mergeMesh3Array } from './mesh3-merge.js';
 
 function getRuntimeApp() {
@@ -386,10 +386,13 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       // raycaster threshold of 1 world-unit — large enough to intercept every
       // hit on a default 1×1×1 box and prevent face selection from working.
       var _anyFaceSelMesh = self._sceneItems && self._sceneItems.some(function(it) { return !!it._selectionSwappedMesh; });
+      var _anyEdgeSelLine = self._sceneItems && self._sceneItems.some(function(it) { return !!it._selectionEdgeResult; });
       var allMeshes = [];
       self.geometryGroup.traverseVisible(function(obj) {
         if (_anyFaceSelMesh) {
           if (obj.isMesh && obj.userData && obj.userData.isSelectionMesh) allMeshes.push(obj);
+        } else if (_anyEdgeSelLine) {
+          if ((obj.isLine || obj.isLineSegments) && obj.userData && obj.userData.isMeshEdgeSelection) allMeshes.push(obj);
         } else {
           if (obj.isMesh || obj.isLine || obj.isLineSegments) allMeshes.push(obj);
         }
@@ -409,6 +412,20 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
           }
           if (selMeshItem) {
             selectionMeshClick(hit, selMeshItem);
+            return;
+          }
+        }
+
+        if (isSelectionModeActive() && hit.object && hit.object.userData && hit.object.userData.isMeshEdgeSelection) {
+          var selEdgeItem = null;
+          for (var ei = 0; ei < self._sceneItems.length; ei++) {
+            if (self._sceneItems[ei]._selectionEdgeResult && self._sceneItems[ei]._selectionEdgeResult.line === hit.object) {
+              selEdgeItem = self._sceneItems[ei];
+              break;
+            }
+          }
+          if (selEdgeItem) {
+            selectionEdgeClick(hit, selEdgeItem);
             return;
           }
         }
@@ -487,16 +504,19 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         // threshold covers every face-interior point, so edge lines would
         // always win the raycast and prevent any face from being highlighted.
         var anySelMesh = self._sceneItems && self._sceneItems.some(function(it) { return !!it._selectionSwappedMesh; });
+        var anyEdgeSelLine = self._sceneItems && self._sceneItems.some(function(it) { return !!it._selectionEdgeResult; });
 
         // T09f debug trace — record whether any selection mesh is swapped in
         if (typeof window !== 'undefined' && window.__novaHoverDebug) {
-          window.__novaHoverDebug.lastHoverTrace.anySelMesh = !!anySelMesh;
+          window.__novaHoverDebug.lastHoverTrace.anySelMesh = !!(anySelMesh || anyEdgeSelLine);
         }
 
         var candidateMeshes = [];
         self.geometryGroup.traverseVisible(function(obj) {
           if (anySelMesh) {
             if (obj.isMesh && obj.userData && obj.userData.isSelectionMesh) candidateMeshes.push(obj);
+          } else if (anyEdgeSelLine) {
+            if ((obj.isLine || obj.isLineSegments) && obj.userData && obj.userData.isMeshEdgeSelection) candidateMeshes.push(obj);
           } else {
             if (obj.isMesh || obj.isLine || obj.isLineSegments) candidateMeshes.push(obj);
           }
@@ -551,6 +571,21 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
             window.__novaHoverDebug.lastHoverTrace.selectionMeshHoverCalled = true;
           }
           selectionMeshHover(selMeshHoverItem ? hit : null, selMeshHoverItem);
+          return;
+        }
+
+        if (anyEdgeSelLine) {
+          var selEdgeHoverItem = null;
+          if (hit && hit.object && hit.object.userData && hit.object.userData.isMeshEdgeSelection) {
+            for (var emi = 0; emi < self._sceneItems.length; emi++) {
+              if (self._sceneItems[emi]._selectionEdgeResult && self._sceneItems[emi]._selectionEdgeResult.line === hit.object) {
+                selEdgeHoverItem = self._sceneItems[emi];
+                break;
+              }
+            }
+          }
+          selectionEdgeHover(selEdgeHoverItem ? hit : null, selEdgeHoverItem);
+          selectionModeHover(selEdgeHoverItem, hit);
           return;
         }
 

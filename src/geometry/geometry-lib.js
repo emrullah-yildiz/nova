@@ -717,6 +717,52 @@ class _Mesh3 {
     return result;
   }
 
+  getSelectableEdges(angleDeg) {
+    const threshold = Math.cos(((angleDeg === undefined ? 30 : angleDeg) * Math.PI) / 180);
+    const edgeMap = new Map();
+    const faceNormal = (face) => {
+      const a = this.vertices[face[0]], b = this.vertices[face[1]], c = this.vertices[face[2]];
+      const ab = new Geo.Vector3(b.x - a.x, b.y - a.y, b.z - a.z);
+      const ac = new Geo.Vector3(c.x - a.x, c.y - a.y, c.z - a.z);
+      return ab.cross(ac).normalize();
+    };
+    const keyFor = (a, b) => a < b ? a + ':' + b : b + ':' + a;
+
+    for (let fi = 0; fi < this.faces.length; fi++) {
+      const face = this.faces[fi];
+      const normal = faceNormal(face);
+      [[face[0], face[1]], [face[1], face[2]], [face[2], face[0]]].forEach(([a, b]) => {
+        const key = keyFor(a, b);
+        if (!edgeMap.has(key)) edgeMap.set(key, { a: Math.min(a, b), b: Math.max(a, b), faces: [] });
+        edgeMap.get(key).faces.push({ faceIndex: fi, normal });
+      });
+    }
+
+    const edges = [];
+    edgeMap.forEach((edge) => {
+      let selectable = edge.faces.length === 1;
+      if (!selectable && edge.faces.length >= 2) {
+        const n0 = edge.faces[0].normal;
+        for (let i = 1; i < edge.faces.length; i++) {
+          if (Math.abs(n0.dot(edge.faces[i].normal)) < threshold) {
+            selectable = true;
+            break;
+          }
+        }
+      }
+      if (!selectable) return;
+      const start = this.vertices[edge.a];
+      const end = this.vertices[edge.b];
+      edges.push({
+        startIndex: edge.a,
+        endIndex: edge.b,
+        start: [start.x, start.y, start.z],
+        end: [end.x, end.y, end.z]
+      });
+    });
+    return edges;
+  }
+
   toString() { return `Mesh3(${this.vertices.length} verts, ${this.faces.length} faces)`; }
 
 }

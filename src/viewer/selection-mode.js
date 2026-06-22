@@ -35,6 +35,7 @@ const _state = {
   onApprove: null,
   onCancel: null,
   hoveredGroup: null, // { item, groupIndex } — currently hovered face group
+  hoveredEdge: null,
 };
 
 const FACE_HOVER_COLOR = 0x89b4fa;
@@ -147,6 +148,10 @@ function _getSelectionKey(item) {
   if (item.faceIndex !== undefined && item.faceIndex !== null) return item.id + ':face:' + item.faceIndex;
   if (item.edgeIndex !== undefined && item.edgeIndex !== null) return item.id + ':edge:' + item.edgeIndex;
   return item.id || '';
+}
+
+function _edgeSelectionKey(item, edgeIndex) {
+  return item.id + ':edge:' + edgeIndex;
 }
 
 function _makeSelectionItem(item, hit) {
@@ -307,6 +312,70 @@ function _restoreFaceMeshes() {
   if (typeof window !== 'undefined') window.__geoSelectorHoveredFaceGroup = null;
 }
 
+function _makeEdgeLineResult(item, edges) {
+  if (typeof THREE === 'undefined' || !edges || edges.length === 0) return null;
+  const positions = new Float32Array(edges.length * 2 * 3);
+  edges.forEach(function(edge, i) {
+    const s = edge.start;
+    const e = edge.end;
+    positions[i * 6] = s[0];
+    positions[i * 6 + 1] = s[2];
+    positions[i * 6 + 2] = s[1];
+    positions[i * 6 + 3] = e[0];
+    positions[i * 6 + 4] = e[2];
+    positions[i * 6 + 5] = e[1];
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const material = new THREE.LineBasicMaterial({
+    color: CANDIDATE_COLOR,
+    transparent: true,
+    opacity: 0.95,
+    linewidth: 3
+  });
+  const line = new THREE.LineSegments(geometry, material);
+  line.userData.isMeshEdgeSelection = true;
+  line.userData.selectionItemId = item.id;
+  line.userData.edges = edges;
+  return { line: line, material: material, edges: edges };
+}
+
+function _swapToEdgeLines() {
+  const viewer = getViewer();
+  if (!viewer || !viewer._sceneItems) return;
+  viewer._sceneItems.forEach(function(item) {
+    if (!item.group || !item._mesh3 || typeof item._mesh3.getSelectableEdges !== 'function') return;
+    const edges = item._mesh3.getSelectableEdges(30);
+    if (!edges || edges.length === 0) return;
+    try {
+      const result = _makeEdgeLineResult(item, edges);
+      if (!result || !result.line) return;
+      item.group.add(result.line);
+      item._selectionEdgeResult = result;
+      item._selectionEdges = edges;
+    } catch (err) {
+      console.warn('[Nova] _swapToEdgeLines: skipping item', item.id, err && err.message);
+    }
+  });
+}
+
+function _restoreEdgeLines() {
+  const viewer = getViewer();
+  if (!viewer || !viewer._sceneItems) return;
+  viewer._sceneItems.forEach(function(item) {
+    if (!item._selectionEdgeResult) return;
+    const line = item._selectionEdgeResult.line;
+    if (line && line.parent) line.parent.remove(line);
+    if (line && line.geometry && typeof line.geometry.dispose === 'function') line.geometry.dispose();
+    const mat = item._selectionEdgeResult.material;
+    if (mat && typeof mat.dispose === 'function') mat.dispose();
+    delete item._selectionEdgeResult;
+    delete item._selectionEdges;
+  });
+  _state.hoveredEdge = null;
+  if (typeof window !== 'undefined') window.__geoSelectorHoveredMeshEdge = null;
+}
+
 /**
  * Apply visual highlighting to all scene items:
  * - matching items that are selected: bright green (#a6e3a1)
@@ -323,6 +392,19 @@ function _applySelectionHighlight() {
 
   viewer._sceneItems.forEach(function (item) {
     if (!item.visible || !item.group) return;
+
+    if (item._selectionEdgeResult && item._selectionEdgeResult.material) {
+      const hasSelectedEdge = _state.items.some(function (it) {
+        return it.id === item.id && it.edgeIndex !== undefined;
+      });
+      const isHoveredEdge = _state.hoveredEdge && _state.hoveredEdge.item === item;
+      const mat = item._selectionEdgeResult.material;
+      if (mat.color && typeof mat.color.set === 'function') {
+        mat.color.set(hasSelectedEdge ? SELECTED_COLOR : (isHoveredEdge ? FACE_HOVER_COLOR : CANDIDATE_COLOR));
+      }
+      if (mat.opacity !== undefined) mat.opacity = hasSelectedEdge || isHoveredEdge ? 1.0 : 0.95;
+      mat.needsUpdate = true;
+    }
 
     // ── Face-group selection mesh path (T09b) ──────────────────────────────
     // When a selection mesh has been swapped in, colorise per group rather than
@@ -484,6 +566,8 @@ export function activateSelectionMode(nodeId, mode, onApprove, onCancel) {
   // the existing whole-mesh path.
   if (_state.mode === 'faces') {
     _swapToFaceMeshes();
+  } else if (_state.mode === 'edges') {
+    _swapToEdgeLines();
   }
 
   if (typeof document !== 'undefined') {
@@ -499,12 +583,14 @@ export function activateSelectionMode(nodeId, mode, onApprove, onCancel) {
 export function deactivateSelectionMode() {
   // Restore original body meshes before clearing state.
   _restoreFaceMeshes();
+  _restoreEdgeLines();
 
   _state.active = false;
   _state.nodeId = null;
   _state.mode = null;
   _state.items = [];
   _state.hoveredGroup = null;
+  _state.hoveredEdge = null;
   _state.onApprove = null;
   _state.onCancel = null;
 
@@ -555,6 +641,21 @@ export function getSelectedFaces() {
         groupIndex: it.groupIndex,
         faceGroups: it.faceGroups,
         mesh3: it.mesh3,
+      };
+    });
+}
+
+export function getSelectedEdges() {
+  return _state.items
+    .filter(function (it) { return it.edgeIndex !== undefined && it.edge !== undefined; })
+    .map(function (it) {
+      return {
+        itemId: it.id,
+        edgeIndex: it.edgeIndex,
+        edge: it.edge,
+        nodeId: it.nodeId,
+        varName: it.varName || '',
+        label: it.label || ''
       };
     });
 }
@@ -708,6 +809,51 @@ export function selectionMeshHover(hit, sceneItem) {
   }
 }
 
+function _edgeIndexFromHit(hit) {
+  if (!hit || hit.index === undefined || hit.index === null) return null;
+  return Math.floor(hit.index / 2);
+}
+
+export function selectionEdgeClick(hit, sceneItem) {
+  if (!_state.active || _state.mode !== 'edges' || !hit || !sceneItem) return;
+  const result = sceneItem._selectionEdgeResult;
+  const edgeIndex = _edgeIndexFromHit(hit);
+  if (!result || !result.edges || edgeIndex === null || !result.edges[edgeIndex]) return;
+  const selKey = _edgeSelectionKey(sceneItem, edgeIndex);
+  const existingIdx = _state.items.findIndex(function (it) { return it.selectionKey === selKey; });
+  if (existingIdx >= 0) {
+    _state.items.splice(existingIdx, 1);
+  } else {
+    _state.items.push({
+      id: sceneItem.id,
+      selectionKey: selKey,
+      nodeId: sceneItem.nodeId,
+      varName: sceneItem.varName || '',
+      label: (sceneItem.label || sceneItem.id || 'Mesh') + ' edge ' + (edgeIndex + 1),
+      edgeIndex: edgeIndex,
+      edge: result.edges[edgeIndex],
+      group: sceneItem.group,
+      visible: sceneItem.visible,
+      selected: sceneItem.selected
+    });
+  }
+  _applySelectionHighlight();
+  _updateToolbarCount();
+  _requestRender();
+}
+
+export function selectionEdgeHover(hit, sceneItem) {
+  if (!_state.active || _state.mode !== 'edges') return;
+  const edgeIndex = _edgeIndexFromHit(hit);
+  _state.hoveredEdge = sceneItem && edgeIndex !== null ? { item: sceneItem, edgeIndex: edgeIndex } : null;
+  if (typeof window !== 'undefined') {
+    window.__geoSelectorHoveredMeshEdge = _state.hoveredEdge
+      ? { itemId: sceneItem.id, edgeIndex: edgeIndex }
+      : null;
+  }
+  _requestRender();
+}
+
 /**
  * Request a single render from the viewer. Covers the case where the rAF loop
  * has not yet fired this event-loop tick so material changes would sit invisible
@@ -794,6 +940,11 @@ export function clearSelection() {
   const viewer = getViewer();
   if (viewer && viewer._sceneItems) {
     viewer._sceneItems.forEach(function (item) {
+      if (item._selectionEdgeResult && item._selectionEdgeResult.material) {
+        item._selectionEdgeResult.material.color.set(CANDIDATE_COLOR);
+        item._selectionEdgeResult.material.opacity = 0.95;
+        item._selectionEdgeResult.material.needsUpdate = true;
+      }
       if (!item._selectionMeshResult || !item._selectionMeshResult.materials) return;
       item._selectionMeshResult.materials.forEach(function (mat) {
         if (!mat) return;
