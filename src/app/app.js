@@ -1178,6 +1178,9 @@ const app = {
     this.nodes=[]; this.wires=[]; this.selectedNodes=[]; this._undoStack=[]; this._redoStack=[]; this._lastHistorySnapshot=null;
     this._hasRun=false; this._isRunningGraph=false; this._lastRunVersion=0;
     this._cloudProjectId='';
+    // A new project should re-frame its first geometry — clear the one-shot
+    // auto-fit latch so fitAll runs once on the next render.
+    if(typeof Viewer3D!=='undefined') Viewer3D._didAutoFit=false;
     this._cvNodeTabs=[]; this._cvNode=null; this._cvNodeDraft=''; this._cvTab='full';
 
     this.nextNodeId=1; this.nodeZCounter=10; this.zoom=1; this.panX=0; this.panY=0;
@@ -1199,6 +1202,9 @@ const app = {
     this.nodes=[]; this.wires=[]; this.selectedNodes=[]; this._undoStack=[]; this._redoStack=[]; this._lastHistorySnapshot=null;
     this._hasRun=false; this._isRunningGraph=false; this._lastRunVersion=0;
     this._cloudProjectId='';
+    // A new project should re-frame its first geometry — clear the one-shot
+    // auto-fit latch so fitAll runs once on the next render.
+    if(typeof Viewer3D!=='undefined') Viewer3D._didAutoFit=false;
 
     this.nextNodeId=1; this.nodeZCounter=10; this.zoom=1; this.panX=0; this.panY=0;
 
@@ -1315,7 +1321,7 @@ const app = {
             <div class="node-subgroup-items">`;
         }
         groups[g].forEach(function(n) {
-          html += `<button class="node-lib-item" data-node-type="${n.type}" draggable="true" ondragstart="app.onLibDragStart(event,'${n.type}')" onclick="app.addNodeFromLib('${n.type}')"><span class="nli-icon" style="color:${cat.color}">${n.icon}</span>${n.name}</button>`;
+          html += `<button class="node-lib-item" data-node-type="${n.type}" data-aliases="${(n.aliases || []).join(' ')}" draggable="true" ondragstart="app.onLibDragStart(event,'${n.type}')" onclick="app.addNodeFromLib('${n.type}')"><span class="nli-icon" style="color:${cat.color}">${n.icon}</span>${n.name}</button>`;
         });
         if (renderSubgroupHeader) {
           html += `</div></div>`;
@@ -1340,7 +1346,7 @@ const app = {
 
       cat.querySelectorAll('.node-lib-item').forEach(item => {
 
-        const v=!q||item.textContent.toLowerCase().includes(q); item.style.display=v?'':'none'; if(v) any=true;
+        const aliasText=(item.dataset.aliases||'').toLowerCase(); const v=!q||item.textContent.toLowerCase().includes(q)||aliasText.includes(q); item.style.display=v?'':'none'; if(v) any=true;
 
       });
 
@@ -2542,6 +2548,14 @@ const app = {
     document.addEventListener('keydown',e=>{
 
       if(this.currentPage!=='workspace') return;
+
+      // Ctrl/Cmd+B — toggle 3D viewport ↔ 2D node canvas. Handled before the
+      // input guard so it works even while a control/field is focused.
+      if((e.ctrlKey||e.metaKey) && (e.key==='b'||e.key==='B')){
+        e.preventDefault();
+        if(typeof this.toggleView2D3D==='function') this.toggleView2D3D();
+        return;
+      }
 
       if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
 
@@ -4394,11 +4408,18 @@ app._runSplitWatcher = function() {
 
     try {
 
-      if (this.splitMode && typeof Viewer3D !== 'undefined' && Viewer3D.isInitialized) {
+      // Run whenever the 3D viewport is visible — split view OR 3D-only. (It was
+      // gated to splitMode, so 3D-only view never auto-refreshed; the user had to
+      // toggle split to force a rebuild.) Mirrors _applyViewState's show3D.
+      if ((this.splitMode || this.activeView === '3d') && typeof Viewer3D !== 'undefined' && Viewer3D.isInitialized) {
 
         const ee = typeof window !== 'undefined' ? window.__executionEngineV2 : null;
 
-        const v = ee && typeof ee._version === 'number' ? ee._version : (this._graphDirty ? 1 : 0);
+        // Monotonic across BOTH the v2 engine version and the graph-mutation
+        // revision (bumped by invalidateCompute on every control/dropdown/text/
+        // wire/node change), so auto mode re-renders on EVERY change — not just
+        // the first one after a run.
+        const v = (ee && typeof ee._version === 'number' ? ee._version : 0) + (this._graphRevision || 0);
 
         if (v !== lastSeenVersion) {
 
@@ -4406,7 +4427,24 @@ app._runSplitWatcher = function() {
 
           try {
 
-            Viewer3D.buildFromGraph(this.nodes, this.wires, (nd) => this.computeNodeValue(nd));
+            // Use the SAME comprehensive render path as a manual Run so the
+            // auto-mode rebuild and the geometry panel stay consistent. The older
+            // buildFromGraph path rendered a narrower set (multi-output / manual
+            // last-run gaps), so the panel dropped items right after a Run.
+            if (typeof this._renderFromCompute === 'function') {
+              this._renderFromCompute();
+              // In Auto mode the rebuild IS a run — snapshot the results and
+              // refresh the node warning badges so "produced no output" / input
+              // warnings reflect the live graph (e.g. after unwiring an input),
+              // not only after a manual Run. (Manual mode keeps showing the last
+              // Run's state until the user runs again.)
+              if (!this._manualRunMode) {
+                if (this._commitRunSnapshot) this._commitRunSnapshot();
+                if (this.refreshNodeWarningBadges) this.refreshNodeWarningBadges();
+              }
+            } else {
+              Viewer3D.buildFromGraph(this.nodes, this.wires, (nd) => this.computeNodeValue(nd));
+            }
 
           } catch (e) { /* skip rebuild errors */ }
 

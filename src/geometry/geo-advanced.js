@@ -737,6 +737,106 @@ import { Geo } from './geometry-lib.js';
 
     const m = new G.Mesh3(verts, faces, 0x94e2d5);
     m._solidType = 'Patch';
+
+    // Make the patch UV-evaluable. A fan/centroid mesh has no square vertex
+    // grid, so the generic grid sampler (evaluateSurface) produces clustered,
+    // meaningless points. resolveSurface (surface-eval.js) routes patches here
+    // via _isPatch.
+    const boundary = pts;
+    const bN = boundary.length;
+    m._isPatch = true;
+    m._patchCenter = center;
+    m._patchBoundary = boundary;
+
+    // ── Planar bilinear parametrization (primary; used by PointAtParameter /
+    //    Panelize via evaluatePlanar) ────────────────────────────────────────
+    // A uniform (u,v) grid must FILL the patch's 2D extent like a Cartesian
+    // grid, not radiate as polar spokes. We fit a plane to the boundary, build
+    // an orthonormal in-plane basis (xAxis, yAxis), project the boundary into
+    // that 2D frame to get its bounding box, and map [0,1]² bilinearly onto
+    // that box centred on the patch centroid:
+    //   evaluatePlanar(u,v) = center + (uMin+(uMax-uMin)u) xAxis
+    //                                + (vMin+(vMax-vMin)v) yAxis
+    // so (0.5,0.5) ≈ centroid (interior — preserves accb60e's win) and (0,0)/
+    // (1,1) land at opposite bbox corners. Corners may fall outside a circular
+    // trim boundary — expected, like sampling a trimmed surface over its full
+    // untrimmed domain.
+    //
+    // Plane normal via Newell's method (robust for non-convex / non-planar rings).
+    let nx = 0, ny = 0, nz = 0;
+    for (let i = 0; i < bN; i++) {
+      const a = boundary[i];
+      const b = boundary[(i + 1) % bN];
+      nx += (a.y - b.y) * (a.z + b.z);
+      ny += (a.z - b.z) * (a.x + b.x);
+      nz += (a.x - b.x) * (a.y + b.y);
+    }
+    let normal = V(nx, ny, nz);
+    if (normal.length() < 1e-12) normal = V(0, 0, 1);
+    normal = normal.normalize();
+    // In-plane X axis: project a world axis (not parallel to the normal) onto
+    // the plane; Y = normal × X. Same z<0.9 trick the kernel uses elsewhere.
+    const projectOntoPlane = (ref) => {
+      const d = normal.dot(ref);
+      return V(ref.x - normal.x * d, ref.y - normal.y * d, ref.z - normal.z * d);
+    };
+    let xAxis = projectOntoPlane(Math.abs(normal.z) < 0.9 ? V(0, 0, 1) : V(1, 0, 0));
+    if (xAxis.length() < 1e-12) {
+      xAxis = projectOntoPlane(Math.abs(normal.x) < 0.9 ? V(1, 0, 0) : V(0, 1, 0));
+    }
+    xAxis = xAxis.normalize();
+    const yAxis = normal.cross(xAxis).normalize();
+    // Project boundary onto (xAxis, yAxis) about the centroid → 2D extent.
+    let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
+    for (let i = 0; i < bN; i++) {
+      const rx = boundary[i].x - center.x;
+      const ry = boundary[i].y - center.y;
+      const rz = boundary[i].z - center.z;
+      const su = rx * xAxis.x + ry * xAxis.y + rz * xAxis.z;
+      const sv = rx * yAxis.x + ry * yAxis.y + rz * yAxis.z;
+      if (su < uMin) uMin = su; if (su > uMax) uMax = su;
+      if (sv < vMin) vMin = sv; if (sv > vMax) vMax = sv;
+    }
+    if (!isFinite(uMin)) { uMin = -1; uMax = 1; vMin = -1; vMax = 1; }
+    m._patchPlane = { origin: center, xaxis: xAxis, yaxis: yAxis, normal };
+    m._patchExtent = { uMin, uMax, vMin, vMax };
+    m.evaluatePlanar = function(u, v) {
+      const cu = u < 0 ? 0 : (u > 1 ? 1 : u);
+      const cv = v < 0 ? 0 : (v > 1 ? 1 : v);
+      const su = uMin + (uMax - uMin) * cu;
+      const sv = vMin + (vMax - vMin) * cv;
+      return P(
+        center.x + xAxis.x * su + yAxis.x * sv,
+        center.y + xAxis.y * su + yAxis.y * sv,
+        center.z + xAxis.z * su + yAxis.z * sv
+      );
+    };
+
+    // ── Polar parametrization (legacy / retained) ────────────────────────────
+    // Kept intact for any consumer that still wants radial sampling: v is radial
+    // (0 = centroid, 1 = boundary), u is angular around the boundary ring.
+    // NOTE: surface-eval.js no longer routes UV evaluation here — it uses
+    // evaluatePlanar above so a uniform grid fills the patch (a Cartesian grid)
+    // rather than collapsing onto polar spokes (the "cross not a grid" bug).
+    m.evaluate = function(u, v) {
+      const cu = u < 0 ? 0 : (u > 1 ? 1 : u);
+      const cv = v < 0 ? 0 : (v > 1 ? 1 : v);
+      // Angular: map u∈[0,1] around the closed ring (u=0 and u=1 both → first pt).
+      const fu = cu * bN;
+      const i0 = Math.floor(fu) % bN;
+      const i1 = (i0 + 1) % bN;
+      const fr = fu - Math.floor(fu);
+      const b0 = boundary[i0], b1 = boundary[i1];
+      const bx = b0.x + (b1.x - b0.x) * fr;
+      const by = b0.y + (b1.y - b0.y) * fr;
+      const bz = b0.z + (b1.z - b0.z) * fr;
+      // Radial: lerp centroid → boundary point by v.
+      return P(
+        center.x + (bx - center.x) * cv,
+        center.y + (by - center.y) * cv,
+        center.z + (bz - center.z) * cv
+      );
+    };
     return m;
   };
 

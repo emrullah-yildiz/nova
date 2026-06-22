@@ -38,6 +38,11 @@ function createAppStub() {
     _projectName: 'T',
     zoom: 1, panX: 0, panY: 0, nextNodeId: 2,
     renderWires() {},
+    addWire(fromNode, fromPort, toNode, toPort) {
+      this.wires = this.wires.filter(w => !(w.toNode === toNode && w.toPort === toPort));
+      this.wires.push({ fromNode, fromPort, toNode, toPort });
+      if (this.invalidateCompute) this.invalidateCompute();
+    },
     runGraph() {},
     approveCode() {},
     runEditedCode() {},
@@ -92,6 +97,10 @@ function numberNode(val) {
     controlValues: { val: String(val) },
     def: { inputs: [], outputs: [{ id: 'value', name: 'Value', type: 'number' }], controls: [] }
   };
+}
+
+function waitForAutoRun() {
+  return new Promise(resolve => setTimeout(resolve, 10));
 }
 
 describe('run modes — policy module', () => {
@@ -168,5 +177,89 @@ describe('run modes — policy module', () => {
     app.setRunMode('auto');
     expect(app._manualRunMode).toBe(false);
     expect(app.computeNodeValue(nd)).toBe(42);
+  });
+
+  it('Automatic: opening a project runs the graph once after load', async () => {
+    const app = await setup();
+    let runs = 0;
+    app.runGraph = function() {
+      runs++;
+      return Promise.resolve({ completed: 0, failed: 0, errors: new Map() });
+    };
+
+    app.deserializeGraph({
+      version: 2,
+      nodes: [{ id: 'n1', type: 'missing-type', controlValues: {} }],
+      wires: [],
+      runMode: 'auto'
+    });
+    await waitForAutoRun();
+
+    expect(runs).toBe(1);
+  });
+
+  it('Automatic: wire connect and disconnect trigger graph runs', async () => {
+    const app = await setup();
+    let runs = 0;
+    app.runGraph = function() {
+      runs++;
+      return Promise.resolve({ completed: 0, failed: 0, errors: new Map() });
+    };
+
+    app.addWire('source', 'value', 'target', 'input');
+    await waitForAutoRun();
+    expect(runs).toBe(1);
+
+    app.wires = [];
+    app.invalidateCompute();
+    await waitForAutoRun();
+    expect(runs).toBe(2);
+  });
+
+  it('Automatic: wire edits prefer the dirty v2 runner over a full graph run', async () => {
+    const app = await setup();
+    let fullRuns = 0;
+    const dirtyRuns = [];
+    let renderOptions = null;
+    app.runGraph = function() {
+      fullRuns++;
+      return Promise.resolve({ completed: 0, failed: 0, errors: new Map() });
+    };
+    app._executionEngineV2 = {
+      runDirtyNodes(ids) {
+        dirtyRuns.push(ids.slice());
+        return Promise.resolve({
+          completed: ids.length,
+          failed: 0,
+          errors: new Map(),
+          dirtyNodeIds: ids.concat('downstream')
+        });
+      }
+    };
+    app._renderFromCompute = function(opts) { renderOptions = opts; };
+
+    app.addWire('source', 'value', 'target', 'input');
+    await waitForAutoRun();
+
+    expect(fullRuns).toBe(0);
+    expect(dirtyRuns).toEqual([['target']]);
+    expect(renderOptions.computeNodeIds).toEqual([]);
+    expect(renderOptions.keepCamera).toBe(true);
+  });
+
+  it('Manual: project load and wire edits stay pending until Run', async () => {
+    const app = await setup();
+    let runs = 0;
+    app.runGraph = function() {
+      runs++;
+      return Promise.resolve({ completed: 0, failed: 0, errors: new Map() });
+    };
+
+    app.deserializeGraph({ version: 2, nodes: [], wires: [], runMode: 'manual' });
+    app.addWire('source', 'value', 'target', 'input');
+    await waitForAutoRun();
+
+    expect(app.runMode).toBe('manual');
+    expect(runs).toBe(0);
   });
 });

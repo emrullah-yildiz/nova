@@ -207,6 +207,12 @@ export function installSaveLoad(targetApp = getRuntimeApp()) {
     const zi = document.getElementById('zoom-indicator');
     if (zi) zi.textContent = Math.round(app.zoom * 100) + '%';
 
+    // Kick the auto-render: bump the graph revision so the 3D watcher rebuilds
+    // the viewport + geometry panel as soon as the loaded graph is on screen.
+    // In Auto mode this renders the recovered/opened project immediately; in
+    // Manual mode the watcher renders the (empty) last-run state until Run.
+    if (app.invalidateCompute) app.invalidateCompute();
+
     return true;
   };
 

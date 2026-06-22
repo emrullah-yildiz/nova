@@ -888,6 +888,49 @@ export function installNodeRenderer(targetApp = getRuntimeApp()) {
             }
             // Keep _selectedLabels in sync for the "N faces selected" button display.
             nd.controlValues._selectedLabels = items.map(function(it) { return it.label || it.id || ''; }).join('||');
+          } else if (mode === 'edges') {
+            var edgeData = null;
+            var selModEdges = (typeof window !== 'undefined' && window.__selectionModeModule) || null;
+            if (selModEdges && typeof selModEdges.getSelectedEdges === 'function') {
+              var edgesRaw = selModEdges.getSelectedEdges();
+              if (edgesRaw && edgesRaw.length) {
+                edgeData = edgesRaw.map(function(edgeSel) {
+                  var edge = edgeSel.edge || {};
+                  var s = edge.start || [0, 0, 0];
+                  var e = edge.end || [0, 0, 0];
+                  return {
+                    _type: 'Line3',
+                    label: edgeSel.label || '',
+                    nodeId: edgeSel.nodeId || '',
+                    varName: edgeSel.varName || '',
+                    sourceItemId: edgeSel.itemId || '',
+                    edgeIndex: edgeSel.edgeIndex,
+                    start: { x: s[0], y: s[1], z: s[2], _type: 'Point3' },
+                    end: { x: e[0], y: e[1], z: e[2], _type: 'Point3' }
+                  };
+                });
+              }
+            }
+
+            if (!edgeData) {
+              edgeData = items.map(function(item) {
+                var line = item.mesh || null;
+                if (item.group && typeof item.group.traverse === 'function') {
+                  item.group.traverse(function(child) { if (!line && (child.isLine || child.isLineSegments)) line = child; });
+                }
+                var label = item.label || item.id || '';
+                if (!line || !line.geometry) {
+                  return { _type: 'Mesh', label: label, nodeId: item.nodeId || '', varName: item.varName || '', vertexCount: 0, vertices: [], faceCount: 0 };
+                }
+                var geo = line.geometry;
+                var posAttr = geo.attributes && geo.attributes.position;
+                var vertexCount = posAttr ? posAttr.count : 0;
+                var vertices = posAttr ? Array.from(posAttr.array).slice(0, 30) : [];
+                return { _type: 'Mesh', label: label, nodeId: item.nodeId || '', varName: item.varName || '', vertexCount: vertexCount, vertices: vertices, faceCount: 0 };
+              });
+            }
+            nd.controlValues._selectedGeo = JSON.stringify(edgeData);
+            nd.controlValues._selectedLabels = items.map(function(it) { return it.label || it.id || ''; }).join('||');
           } else {
             // Edges / Points: extract THREE.js mesh geometry data into _selectedGeo
             // (the existing format read by Select.Edges / Select.Points execute()).

@@ -717,6 +717,52 @@ class _Mesh3 {
     return result;
   }
 
+  getSelectableEdges(angleDeg) {
+    const threshold = Math.cos(((angleDeg === undefined ? 30 : angleDeg) * Math.PI) / 180);
+    const edgeMap = new Map();
+    const faceNormal = (face) => {
+      const a = this.vertices[face[0]], b = this.vertices[face[1]], c = this.vertices[face[2]];
+      const ab = new Geo.Vector3(b.x - a.x, b.y - a.y, b.z - a.z);
+      const ac = new Geo.Vector3(c.x - a.x, c.y - a.y, c.z - a.z);
+      return ab.cross(ac).normalize();
+    };
+    const keyFor = (a, b) => a < b ? a + ':' + b : b + ':' + a;
+
+    for (let fi = 0; fi < this.faces.length; fi++) {
+      const face = this.faces[fi];
+      const normal = faceNormal(face);
+      [[face[0], face[1]], [face[1], face[2]], [face[2], face[0]]].forEach(([a, b]) => {
+        const key = keyFor(a, b);
+        if (!edgeMap.has(key)) edgeMap.set(key, { a: Math.min(a, b), b: Math.max(a, b), faces: [] });
+        edgeMap.get(key).faces.push({ faceIndex: fi, normal });
+      });
+    }
+
+    const edges = [];
+    edgeMap.forEach((edge) => {
+      let selectable = edge.faces.length === 1;
+      if (!selectable && edge.faces.length >= 2) {
+        const n0 = edge.faces[0].normal;
+        for (let i = 1; i < edge.faces.length; i++) {
+          if (Math.abs(n0.dot(edge.faces[i].normal)) < threshold) {
+            selectable = true;
+            break;
+          }
+        }
+      }
+      if (!selectable) return;
+      const start = this.vertices[edge.a];
+      const end = this.vertices[edge.b];
+      edges.push({
+        startIndex: edge.a,
+        endIndex: edge.b,
+        start: [start.x, start.y, start.z],
+        end: [end.x, end.y, end.z]
+      });
+    });
+    return edges;
+  }
+
   toString() { return `Mesh3(${this.vertices.length} verts, ${this.faces.length} faces)`; }
 
 }
@@ -1304,6 +1350,22 @@ const Geo = {
 
   // ══════════════════════════════════════
 
+  // A point renders as a small Dynamo-style dot: a unit sphere that the viewer's
+  // render loop rescales to a CONSTANT on-screen size (so it stays a small dot at
+  // any zoom / surface scale), drawn ON TOP (depthTest off) so a point sitting on
+  // an opaque surface is never hidden inside it. Tagged isPointDot so animate()
+  // can size it; the shared unit geometry is built once.
+  _makePointDot(point, color) {
+    const g = Geo.__pointGeo || (Geo.__pointGeo = new THREE.SphereGeometry(1, 12, 8));
+    const m = new THREE.MeshBasicMaterial({ color: color || 0x89b4fa, depthTest: false, depthWrite: false });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.position.copy(point.toThree ? point.toThree() : point);
+    mesh.scale.setScalar(0.05);     // fallback size; animate() resizes to constant screen size
+    mesh.renderOrder = 10;          // draw after surfaces so it shows on top
+    mesh.userData.isPointDot = true;
+    return mesh;
+  },
+
   addToScene(group, geoObj, color) {
     if (!group || !geoObj) return;
     if (geoObj.type === 'GeometryRef' && geoObj.bounds) {
@@ -1333,15 +1395,7 @@ const Geo = {
       group.add(geoObj.toMesh(color));
     } else if (geoObj._type === 'Point3') {
 
-      const g = new THREE.SphereGeometry(0.12, 16, 12);
-
-      const m = new THREE.MeshPhongMaterial({ color: color || 0x89b4fa, emissive: color || 0x89b4fa, emissiveIntensity: 0.4, shininess: 60 });
-
-      const mesh = new THREE.Mesh(g, m);
-
-      mesh.position.copy(geoObj.toThree());
-
-      group.add(mesh);
+      group.add(Geo._makePointDot(geoObj, color));
 
     } else if (Array.isArray(geoObj)) {
 
@@ -1350,6 +1404,10 @@ const Geo = {
         if (item && item._type) Geo.addToScene(group, item, color);
 
         else if (item instanceof Geo.Point3) Geo.addToScene(group, item, color);
+
+        // Recurse into nested geometry lists (e.g. Point3[][] from crossProduct
+        // lacing) so every leaf point/mesh renders, not just the first level.
+        else if (Array.isArray(item)) Geo.addToScene(group, item, color);
 
       });
 

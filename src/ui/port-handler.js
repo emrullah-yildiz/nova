@@ -128,6 +128,9 @@ export function installPortHandler(targetApp = getRuntimeApp(), runtimeGlobal = 
             };
             // Remove wire immediately
             this.wires.splice(existingIdx, 1);
+            // The graph changed — recompute so the now-empty input shows its
+            // missing-data state instead of keeping the stale previous value.
+            if (this.invalidateCompute) this.invalidateCompute();
             this.updatePortDots();
             if (this._refreshRenderedNode && this._inputHasPropertyControl && this._inputHasPropertyControl(nid, pid)) {
               this._refreshRenderedNode(nid);
@@ -195,6 +198,9 @@ export function installPortHandler(targetApp = getRuntimeApp(), runtimeGlobal = 
 
       this.connectingWire = null;
       app._dragState = null;
+      // Any drop that ended a wire drag (new/reconnect/empty) changed the graph
+      // — recompute so Auto mode reflects the new wiring (or a removed input).
+      if (this.invalidateCompute) this.invalidateCompute();
       this.renderWires();
     };
 
@@ -225,12 +231,15 @@ export function installPortHandler(targetApp = getRuntimeApp(), runtimeGlobal = 
         }
       });
       app.updatePortDots();
+      if (app.invalidateCompute) app.invalidateCompute();
     } else if (dragged) {
       // Dropped on empty — destroy affected wires (reverse order to keep indices valid)
       if (app._pushHistory) app._pushHistory();
       var sorted = ds.affectedWireIndices.slice().sort(function(a,b){return b-a;});
       sorted.forEach(function(i) { app.wires.splice(i, 1); });
       app.updatePortDots();
+      // Wires removed — recompute so downstream nodes drop their stale inputs.
+      if (app.invalidateCompute) app.invalidateCompute();
     }
     // else: just a click — do nothing, wires stay
 

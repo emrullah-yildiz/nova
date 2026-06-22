@@ -194,6 +194,12 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
     this._graphDirty = true;
 
+    // Monotonic revision bumped on EVERY graph mutation (control edit, dropdown,
+    // code-block/formula text, wire, node add/remove — all route through here).
+    // The auto-render watcher keys off this so it rebuilds on every change, not
+    // just the first one after a run (the old _graphDirty boolean was sticky).
+    this._graphRevision = (this._graphRevision || 0) + 1;
+
     // Re-render wires to stop animation
 
     if (typeof app.renderWires === 'function') app.renderWires();
@@ -1372,7 +1378,7 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-  app._renderFromCompute = function() {
+  app._renderFromCompute = function(opts) {
 
     // Do not clear and rebuild the scene while face-selection mode is active.
     // The swap meshes live in the scene items; destroying them would orphan
@@ -1393,11 +1399,10 @@ export function installEngine(targetApp = getRuntimeApp()) {
     // a stable nodeId:varName id assigned by Viewer3D.addTaggedGeo.
     var prevVisibility = {};
     if (Viewer3D && Array.isArray(Viewer3D._sceneItems)) {
-      // Snapshot only USER-driven visibility. Items auto-hidden as
-      // intermediates carry _autoHidden; we record null for them so the next
-      // render re-decides from the graph rather than treating the auto-hide
-      // as a user "hide" (which would pin them off even after a preview toggle).
-      Viewer3D._sceneItems.forEach(function(it) { prevVisibility[it.id] = it._autoHidden ? null : it.visible; });
+      // Snapshot each item's visibility so an explicit user toggle (off/on)
+      // survives the rebuild. Visibility is now purely user-driven (no
+      // automatic intermediate-hiding), so it.visible is the source of truth.
+      Viewer3D._sceneItems.forEach(function(it) { prevVisibility[it.id] = it.visible; });
     }
 
     Viewer3D.clearGeometry();
@@ -1425,7 +1430,24 @@ export function installEngine(targetApp = getRuntimeApp()) {
       return item;
     }
 
+    function leafIsGeo(a) { return a && (a._type || a instanceof Geo.Point3); }
 
+    // True for a flat geometry array OR a NESTED one — e.g. Point3[][], the
+    // per-panel corner groups Surface.Panelize emits on its `corners` output.
+    // addTaggedGeo → Geo.addToScene recurse into the nesting, so a nested
+    // corner grid renders every point (it was silently dropped before).
+    function isGeoArray(v) {
+      if (!Array.isArray(v) || v.length === 0) return false;
+      if (leafIsGeo(v[0])) return true;
+      return Array.isArray(v[0]) && v[0].length > 0 && leafIsGeo(v[0][0]);
+    }
+
+
+    var computeNodeSet = null;
+    if (opts && Array.isArray(opts.computeNodeIds)) {
+      computeNodeSet = {};
+      opts.computeNodeIds.forEach(function(id) { computeNodeSet[id] = true; });
+    }
 
     this.nodes.forEach(function(nd) {
 
@@ -1433,7 +1455,8 @@ export function installEngine(targetApp = getRuntimeApp()) {
       // nodes flagged hidden (or panel-toggled hidden) are marked invisible
       // below; the user can toggle them back on without another Run.
 
-      var val = self.computeNodeValue(nd);
+      var shouldCompute = !computeNodeSet || computeNodeSet[nd.id] || nd._lastComputedValue === undefined;
+      var val = shouldCompute ? self.computeNodeValue(nd) : nd._lastComputedValue;
       nd._lastComputedValue = val;
 
 
@@ -1455,20 +1478,17 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       // Array of geometry
 
-      else if (Array.isArray(val) && val.length > 0 && val[0] && (val[0]._type || val[0] instanceof Geo.Point3)) {
+      else if (isGeoArray(val)) {
 
         if (canTag) {
           pushTagged(val, nd, '');
         } else {
           var startIdx = Viewer3D.geometryGroup.children.length;
-          val.forEach(function(v) {
-            if (v && (v._type || v instanceof Geo.Point3)) {
-              Geo.addToScene(Viewer3D.geometryGroup, v);
-              rendered++;
-            }
-          });
-          if (Viewer3D.geometryGroup.children.length > startIdx) {
-            app._sceneItems.push({ varName: nd.def.name, nodeId: nd.id, type: 'Array[' + (Viewer3D.geometryGroup.children.length - startIdx) + ']', visible: true, idxStart: startIdx, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
+          Geo.addToScene(Viewer3D.geometryGroup, val);
+          var added = Viewer3D.geometryGroup.children.length - startIdx;
+          if (added > 0) {
+            rendered += added;
+            app._sceneItems.push({ varName: nd.def.name, nodeId: nd.id, type: 'Array[' + added + ']', visible: true, idxStart: startIdx, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
           }
         }
 
@@ -1476,13 +1496,14 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       // Multi-output: check _portValues - iterate arrays of geometry objects
 
-      if (nd._portValues) {
+      var portValues = shouldCompute ? nd._portValues : (nd._portValues || nd._lastRunPortValues);
+      if (portValues) {
 
-        Object.keys(nd._portValues).forEach(function(key) {
+        Object.keys(portValues).forEach(function(key) {
 
           if (key === 'count' || key === 'length' || key === 'index') return; // skip metadata
 
-          var pv = nd._portValues[key];
+          var pv = portValues[key];
 
           // For single-output nodes, val and the port value are the same
           // reference — don't tag it twice. (Avoids duplicates like
@@ -1498,20 +1519,17 @@ export function installEngine(targetApp = getRuntimeApp()) {
               rendered++;
             }
 
-          } else if (Array.isArray(pv) && pv.length > 0 && pv[0] && (pv[0]._type || pv[0] instanceof Geo.Point3)) {
+          } else if (isGeoArray(pv)) {
 
             if (canTag) {
               pushTagged(pv, nd, key);
             } else {
               var arrStart = Viewer3D.geometryGroup.children.length;
-              pv.forEach(function(v) {
-                if (v && (v._type || v instanceof Geo.Point3)) {
-                  Geo.addToScene(Viewer3D.geometryGroup, v);
-                  rendered++;
-                }
-              });
-              if (Viewer3D.geometryGroup.children.length > arrStart) {
-                app._sceneItems.push({ varName: nd.def.name + '.' + key, nodeId: nd.id, type: 'Array[' + (Viewer3D.geometryGroup.children.length - arrStart) + ']', visible: true, idxStart: arrStart, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
+              Geo.addToScene(Viewer3D.geometryGroup, pv);
+              var arrAdded = Viewer3D.geometryGroup.children.length - arrStart;
+              if (arrAdded > 0) {
+                rendered += arrAdded;
+                app._sceneItems.push({ varName: nd.def.name + '.' + key, nodeId: nd.id, type: 'Array[' + arrAdded + ']', visible: true, idxStart: arrStart, idxEnd: Viewer3D.geometryGroup.children.length - 1 });
               }
             }
 
@@ -1532,42 +1550,20 @@ export function installEngine(targetApp = getRuntimeApp()) {
       var nodesById = {};
       self.nodes.forEach(function(n) { nodesById[n.id] = n; });
 
-      // Only TERMINAL geometry previews by default. A node's geometry is
-      // "intermediate" if it feeds a downstream node that consumes geometry
-      // (loft, smooth, boolean, list, …) — those are scaffolding (e.g. the
-      // profile rings that loft into a tower) and previewing them clutters
-      // the view (the infamous "coil"). Output/sink nodes don't count as
-      // consumers, so a node wired only to Output.Watch stays terminal.
-      var SINK_TYPES = {
-        'output-watch': 1, 'output-display': 1, 'output-log': 1, 'output-chart': 1, 'output-export': 1,
-        'Output.Watch': 1, 'Output.Display': 1, 'Output.Log': 1, 'Output.Chart': 1, 'Output.Export': 1
-      };
-      var wires = self.wires || [];
-      function isIntermediate(node) {
-        if (!node) return false;
-        for (var i = 0; i < wires.length; i++) {
-          var w = wires[i];
-          if (w.fromNode !== node.id) continue;
-          var target = nodesById[w.toNode];
-          if (target && !SINK_TYPES[target.type]) return true; // consumed by a geometry/transform node
-        }
-        return false;
-      }
-
+      // Show ALL geometry by default. We do NOT auto-hide "intermediate"
+      // geometry (a node whose output feeds a downstream node): that surprised
+      // users by hiding surfaces they wired into Panelize/PointAtParameter/etc.,
+      // forcing a manual preview toggle to see them. Only an EXPLICIT user hide
+      // is honoured — a per-node preview toggle off (_preview3d === false) or a
+      // prior panel toggle off (prevVisibility false). This matches the
+      // buildFromGraph (preview-toggle / auto) render path.
       Viewer3D._sceneItems.forEach(function(it) {
         var owner = nodesById[it.nodeId];
         var hideFromNode = owner && owner._preview3d === false;
         var hideFromPanel = prevVisibility[it.id] === false;
-        // Default-hide intermediates, but honour an explicit user choice
-        // (a per-node preview toggle, or a prior panel toggle).
-        var userForcedShow = (owner && owner._preview3d === true) || prevVisibility[it.id] === true;
-        var hideAsIntermediate = !userForcedShow && isIntermediate(owner);
-        if (hideFromNode || hideFromPanel || hideAsIntermediate) {
+        if (hideFromNode || hideFromPanel) {
           it.visible = false;
           if (it.group) it.group.visible = false;
-          // Mark auto-hides so the panel snapshot doesn't mistake them for a
-          // user "hide" on the next render.
-          if (hideAsIntermediate && !hideFromNode && !hideFromPanel) it._autoHidden = true;
         }
       });
     }
@@ -1582,7 +1578,13 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
 
 
-    if (rendered > 0) Viewer3D.fitAll();
+    // Frame the model on first render, but never reframe on an incremental
+    // re-render (e.g. a preview toggle passes keepCamera so the view holds
+    // still). _didAutoFit is reset on newProject so a fresh project re-fits.
+    if (rendered > 0 && !(opts && opts.keepCamera) && !Viewer3D._didAutoFit) {
+      Viewer3D.fitAll();
+      Viewer3D._didAutoFit = true;
+    }
 
     this._updateSceneTree();
 
@@ -2005,6 +2007,15 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
   };
 
+  // Ctrl+B — flip between the 3D viewport and the 2D node canvas. If 3D is
+  // currently shown (3D-only OR split), switch to the 2D node view; otherwise
+  // switch to the 3D viewport. Either way leaves split mode off.
+  app.toggleView2D3D = function() {
+    var showing3D = this.splitMode || this.activeView === '3d';
+    this.splitMode = false;
+    this.setView(showing3D ? 'nodes' : '3d');
+  };
+
   app._applyViewState = function() {
 
     var canvasArea = document.getElementById('canvas-area');
@@ -2040,9 +2051,14 @@ export function installEngine(targetApp = getRuntimeApp()) {
 
       if (Viewer3D._needsRebuild !== false) {
 
-        try { Viewer3D.buildFromGraph(this.nodes, this.wires, function(nd) { return app.computeNodeValue(nd); }); } catch (e) { /* skip */ }
-
-        Viewer3D.fitAll();
+        // Use the comprehensive render path (same as Run / the auto watcher) so
+        // switching INTO the 3D view shows every node + the full geometry panel
+        // — the old buildFromGraph rendered a narrower set, so the panel looked
+        // incomplete until a split-view toggle forced a real rebuild.
+        try {
+          if (typeof app._renderFromCompute === 'function') app._renderFromCompute();
+          else Viewer3D.buildFromGraph(this.nodes, this.wires, function(nd) { return app.computeNodeValue(nd); });
+        } catch (e) { /* skip */ }
 
         Viewer3D._needsRebuild = false;
 

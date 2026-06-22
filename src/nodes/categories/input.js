@@ -1,3 +1,5 @@
+import { inputPanelShapesNode } from '../../geometry/nodes/Input.PanelShapes.js';
+
 export const inputCategory = {
   id: 'input',
   name: 'Input',
@@ -238,5 +240,6 @@ export const inputNodes = [
       },
       sampleCode: '{{value}} = "{{ctrl.val}}"'
     }
-  }
+  },
+  inputPanelShapesNode
 ];

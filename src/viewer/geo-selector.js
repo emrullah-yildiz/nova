@@ -1,7 +1,8 @@
 import { Geo } from '../geometry/index.js';
 import { setNodePreviewState, setPreviewItemVisibility, showAllPreviews } from './preview-sync.js';
 import { Viewer3D as RuntimeViewer3D } from './viewer3d.js';
-import { isSelectionModeActive, selectionModeClick, selectionModeHover, selectionMeshClick, selectionMeshHover, getSelectedItems, clearSelection } from './selection-mode.js';
+import { isSelectionModeActive, selectionModeClick, selectionModeHover, selectionMeshClick, selectionMeshHover, selectionEdgeClick, selectionEdgeHover, getSelectedItems, clearSelection } from './selection-mode.js';
+import { isMesh3Array, mergeMesh3Array } from './mesh3-merge.js';
 
 function getRuntimeApp() {
   if (typeof window !== 'undefined' && window.app) return window.app;
@@ -94,15 +95,14 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       if (geoVal[0] && geoVal[0]._type) {
         geoVal.forEach(function(item) { Geo.addToScene(group, item, color); });
       } else if (geoVal[0] instanceof Geo.Point3) {
-        var pts = geoVal.map(function(p) { return [p.x, p.y, p.z]; });
-        // Use Viewer3D.addPoints into the group
-        var geo = new THREE.SphereGeometry(0.08, 16, 12);
-        var mat = new THREE.MeshPhongMaterial({ color: color || 0x94e2d5, emissive: color || 0x94e2d5, emissiveIntensity: 0.4, shininess: 60 });
-        pts.forEach(function(p) {
-          var mesh = new THREE.Mesh(geo, mat);
-          mesh.position.set(p[0] || 0, p[2] || 0, p[1] || 0);
-          group.add(mesh);
-        });
+        // Render each point as a tiny sphere dot (Geo.addToScene), consistent
+        // with single-point rendering.
+        geoVal.forEach(function(p) { Geo.addToScene(group, p, color); });
+      } else if (Array.isArray(geoVal[0])) {
+        // Nested list (e.g. Point3[][] from crossProduct lacing). Geo.addToScene
+        // walks nested arrays and renders each leaf point as a tiny sphere dot,
+        // so defer the whole grid to it rather than flattening here.
+        Geo.addToScene(group, geoVal, color);
       }
     }
 
@@ -118,8 +118,16 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
     // The _Mesh3 instance carries _type === 'Mesh3' directly on the object.
     if (geoVal && geoVal._type === 'Mesh3') {
       item._mesh3 = geoVal;
-    } else if (Array.isArray(geoVal) && geoVal.length === 1 && geoVal[0] && geoVal[0]._type === 'Mesh3') {
-      item._mesh3 = geoVal[0];
+    } else if (isMesh3Array(geoVal)) {
+      // Array of Mesh3 (e.g. Surface.Panelize panels). Merge into ONE combined
+      // _mesh3 so selection-mode's single-body swap path works, and precompute
+      // _faceGroups with exactly one group per SOURCE mesh — so each panel is an
+      // independently selectable unit even when all panels are coplanar (a flat
+      // surface), which mesh3.groupFaces() would otherwise collapse into one face.
+      // A 1-element array degenerates to the same single-mesh behaviour as before.
+      var merged = mergeMesh3Array(geoVal, Geo.Mesh3);
+      item._mesh3 = merged.mesh;
+      item._faceGroups = merged.faceGroups;
     }
 
     this._sceneItems.push(item);
@@ -233,6 +241,34 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         var val = computeFn(nd);
         if (val === undefined || val === null) return;
 
+        // ── Multi-output node (e.g. Surface.Panelize → panels/corners/center):
+        // computeFn returns the combined value (or, in manual-run mode, the
+        // last-run value), NOT a single renderable geometry. Render each
+        // geometry PORT, mirroring the Run-path (_renderFromCompute). In manual
+        // mode _portValues isn't repopulated, so fall back to the last-run
+        // port snapshot. addTaggedGeo recurses into nested arrays (corners).
+        var leafGeo = function(a) { return a && (a._type || a instanceof Geo.Point3); };
+        var portIsGeo = function(pv) {
+          if (leafGeo(pv)) return true;
+          if (!Array.isArray(pv) || pv.length === 0) return false;
+          if (leafGeo(pv[0])) return true;
+          return Array.isArray(pv[0]) && pv[0].length > 0 && leafGeo(pv[0][0]);
+        };
+        var portVals = nd._portValues || nd._lastRunPortValues;
+        if (portVals && typeof portVals === 'object' && !Array.isArray(portVals) &&
+            nd.def && nd.def.outputs && nd.def.outputs.length > 1) {
+          var renderedPort = false;
+          Object.keys(portVals).forEach(function(key) {
+            if (key === 'count' || key === 'length' || key === 'index') return;
+            var pv = portVals[key];
+            if (portIsGeo(pv)) {
+              Viewer3D.addTaggedGeo(pv, nd.id, key, nd.def.name + '.' + key);
+              renderedPort = true;
+            }
+          });
+          if (renderedPort) return;
+        }
+
         // ── Panel-object list: { points: Point[], frame: Plane }[] ──
         // Detected before the generic isGeo path so each panel becomes its own
         // independently-selectable scene item rather than a merged group.
@@ -244,7 +280,15 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         }
 
         var isGeo = (val && val._type) ||
-                    (Array.isArray(val) && val.length > 0 && val[0] && (val[0]._type || val[0] instanceof Geo.Point3));
+                    (Array.isArray(val) && val.length > 0 && val[0] && (val[0]._type || val[0] instanceof Geo.Point3)) ||
+                    // Nested geometry list — e.g. Point3[][] from a node with
+                    // crossProduct lacing (Surface.PointAtParameter over a u-list ×
+                    // v-list). Here val[0] is itself a list, so the one-level check
+                    // above misses it. addTaggedGeo → Geo.addToScene recurses fully,
+                    // so route the whole grid through the same tagged-geo path
+                    // (which also registers it in the Geometry panel).
+                    (Array.isArray(val) && val.length > 0 && Array.isArray(val[0]) &&
+                     val[0].length > 0 && val[0][0] && (val[0][0]._type || val[0][0] instanceof Geo.Point3));
         if (isGeo) {
           var label = nd.def.name + (nd.id ? ' (' + nd.id + ')' : '');
           Viewer3D.addTaggedGeo(val, nd.id, '', label);
@@ -261,15 +305,12 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         if (Array.isArray(val) && val.length > 0 && Array.isArray(val[0]) && val[0].length >= 2 && typeof val[0][0] === 'number') {
           var group = new THREE.Group();
           group.userData = { nodeId: nd.id, varName: '', label: nd.def.name, isGeoItem: true };
-          // Points
-          var geo = new THREE.SphereGeometry(0.15, 8, 8);
-          var mat = new THREE.MeshPhongMaterial({ color: 0x94e2d5, emissive: 0x94e2d5, emissiveIntensity: 0.3 });
+          // Points render as tiny sphere dots (Geo._makePointDot).
           val.forEach(function(p) {
             var px = Number(p[0]), py = Number(p[1]), pz = Number(p[2] || 0);
             if (!isFinite(px) || !isFinite(py) || !isFinite(pz)) return;
-            var m = new THREE.Mesh(geo, mat);
-            m.position.set(px, pz, py);
-            group.add(m);
+            // numeric tuples are already in world XY with Z-up swap to THREE
+            group.add(Geo._makePointDot(new THREE.Vector3(px, pz, py), 0x94e2d5));
           });
           if (group.children.length > 0) {
             Viewer3D.geometryGroup.add(group);
@@ -345,10 +386,13 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
       // raycaster threshold of 1 world-unit — large enough to intercept every
       // hit on a default 1×1×1 box and prevent face selection from working.
       var _anyFaceSelMesh = self._sceneItems && self._sceneItems.some(function(it) { return !!it._selectionSwappedMesh; });
+      var _anyEdgeSelLine = self._sceneItems && self._sceneItems.some(function(it) { return !!it._selectionEdgeResult; });
       var allMeshes = [];
       self.geometryGroup.traverseVisible(function(obj) {
         if (_anyFaceSelMesh) {
           if (obj.isMesh && obj.userData && obj.userData.isSelectionMesh) allMeshes.push(obj);
+        } else if (_anyEdgeSelLine) {
+          if ((obj.isLine || obj.isLineSegments) && obj.userData && obj.userData.isMeshEdgeSelection) allMeshes.push(obj);
         } else {
           if (obj.isMesh || obj.isLine || obj.isLineSegments) allMeshes.push(obj);
         }
@@ -368,6 +412,20 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
           }
           if (selMeshItem) {
             selectionMeshClick(hit, selMeshItem);
+            return;
+          }
+        }
+
+        if (isSelectionModeActive() && hit.object && hit.object.userData && hit.object.userData.isMeshEdgeSelection) {
+          var selEdgeItem = null;
+          for (var ei = 0; ei < self._sceneItems.length; ei++) {
+            if (self._sceneItems[ei]._selectionEdgeResult && self._sceneItems[ei]._selectionEdgeResult.line === hit.object) {
+              selEdgeItem = self._sceneItems[ei];
+              break;
+            }
+          }
+          if (selEdgeItem) {
+            selectionEdgeClick(hit, selEdgeItem);
             return;
           }
         }
@@ -446,16 +504,19 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
         // threshold covers every face-interior point, so edge lines would
         // always win the raycast and prevent any face from being highlighted.
         var anySelMesh = self._sceneItems && self._sceneItems.some(function(it) { return !!it._selectionSwappedMesh; });
+        var anyEdgeSelLine = self._sceneItems && self._sceneItems.some(function(it) { return !!it._selectionEdgeResult; });
 
         // T09f debug trace — record whether any selection mesh is swapped in
         if (typeof window !== 'undefined' && window.__novaHoverDebug) {
-          window.__novaHoverDebug.lastHoverTrace.anySelMesh = !!anySelMesh;
+          window.__novaHoverDebug.lastHoverTrace.anySelMesh = !!(anySelMesh || anyEdgeSelLine);
         }
 
         var candidateMeshes = [];
         self.geometryGroup.traverseVisible(function(obj) {
           if (anySelMesh) {
             if (obj.isMesh && obj.userData && obj.userData.isSelectionMesh) candidateMeshes.push(obj);
+          } else if (anyEdgeSelLine) {
+            if ((obj.isLine || obj.isLineSegments) && obj.userData && obj.userData.isMeshEdgeSelection) candidateMeshes.push(obj);
           } else {
             if (obj.isMesh || obj.isLine || obj.isLineSegments) candidateMeshes.push(obj);
           }
@@ -510,6 +571,21 @@ export function installGeoSelector(targetApp = getRuntimeApp(), viewer = Runtime
             window.__novaHoverDebug.lastHoverTrace.selectionMeshHoverCalled = true;
           }
           selectionMeshHover(selMeshHoverItem ? hit : null, selMeshHoverItem);
+          return;
+        }
+
+        if (anyEdgeSelLine) {
+          var selEdgeHoverItem = null;
+          if (hit && hit.object && hit.object.userData && hit.object.userData.isMeshEdgeSelection) {
+            for (var emi = 0; emi < self._sceneItems.length; emi++) {
+              if (self._sceneItems[emi]._selectionEdgeResult && self._sceneItems[emi]._selectionEdgeResult.line === hit.object) {
+                selEdgeHoverItem = self._sceneItems[emi];
+                break;
+              }
+            }
+          }
+          selectionEdgeHover(selEdgeHoverItem ? hit : null, selEdgeHoverItem);
+          selectionModeHover(selEdgeHoverItem, hit);
           return;
         }
 

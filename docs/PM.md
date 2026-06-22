@@ -10,9 +10,10 @@
 
 ---
 
-## Sprint A2
+## Sprint A4
 
-1. The project is open source now and I need the installation file to have code signature so that when people download it Microsoft will not throw security error. Use Cosign and Sigstore
+1. Create Surface paneling nodes. Surface.Panelize -> Inputs: Surface and Panel shape. This node can divide surface into multiple panels based on the given shape. The shape can be any polygon or closed curve. The properties of this node should include scale parameter to scale the shape onto surface. there should be a supportive node with premade shapes likes diagonal, rectangle, square, hexagon, circle etc. The node should be called Input.PanelShapes. It should include a dropdown with different premade panel shapes. The output of the node should give surfaces of panels, corner points of each panel and centre point of panels. 
+2. Create Surface.PointAtParameter node to create points on the surface. The inputs are Surface, U and V values. 
    
 
 ## Backlog
@@ -39,38 +40,61 @@
 ## Run Session
 
 ### Planning
-- Update screenshots to be related with the topic of the learning content. 
-- Make sure that the interactive canvas i like a the Nova canvas where you can pan and move around. I need a web view there like Nova canvas. 
-- MAke sure that the interactive examples contains real nodes not representatives. 
+- Tck 14-15 is completed. Move them to the done.
+- Stay on hold for the next sprint. 
+  
 
 
 ### Coordinator Response
 
 ```json
 {
-  "run": "2026-06-17",
-  "tickets_actioned": [],
-  "new_tickets": [
+  "run": "2026-06-19",
+  "tickets_actioned": [
     {
-      "id": "TICK-011",
-      "title": "Installer — Cosign/Sigstore keyless code signature for open-source release",
-      "ac_preview": [
-        "AC-1  A GitHub Actions release workflow job runs cosign sign-blob (keyless, OIDC-backed) on the compiled .msi and uploads the .sig and .pem bundle alongside the .msi in the GitHub Release assets.",
-        "AC-2  The release job fails (exit non-zero) if cosign sign-blob returns a non-zero exit code, preventing an unsigned artifact from being published silently.",
-        "AC-3  A docs/architecture/codesigning.md file explains how to verify a downloaded .msi using cosign verify-blob, including the exact command a user would run.",
-        "AC-4  The existing CI jobs (lint, test, security, deploy-dev, deploy-production) are unchanged — no existing job step is removed, reordered, or given new required dependencies.",
-        "AC-5  No private key material, certificate file, or secret is committed to the repository; signing is purely OIDC-based (GitHub Actions OIDC token) with no stored credentials."
+      "id": "TICK-014",
+      "title": "Surface paneling — Surface.Panelize + Input.PanelShapes",
+      "status": "archived",
+      "issue": null,
+      "changed": [
+        "Shipped Input.PanelShapes (Input category): dropdown shape source with Diagonal/Rectangle/Square/Hexagon/Circle, single Shape output (closed polygon/curve per selection).",
+        "Shipped Surface.Panelize (Surfaces category): inputs Surface/Shape/U/V/Scale (Scale also a control property); outputs Panels (panel surfaces), Corners (per-panel corner points), Center (one centre per panel). Tiles a unit shape across the surface UV domain; panels render via the existing Geo.addToScene mesh path.",
+        "Post-merge improvements from live PM verification (not separately ticketed): Surface.ByPatch bilinear-bbox UV so a uniform u×v grid fills the patch interior instead of polar spokes (better panel distribution), plus gap-free hexagon honeycomb and diamond tessellations so panels tile without gaps/overlap."
+      ],
+      "how_to_test": [
+        "On develop (tip ~8300cbb): npm run dev, add Input.PanelShapes — confirm dropdown lists Diagonal/Rectangle/Square/Hexagon/Circle and the Shape output changes per option.",
+        "Wire Surface.ByPatch -> Surface.Panelize (Shape=Square from Input.PanelShapes) -> Output.Watch; confirm multiple panel surfaces tile the surface in the 3D viewport.",
+        "Change Scale and confirm panel size + corner-point spread change. Inspect Corners (per-panel groups) and Center (one per panel).",
+        "npm run lint:all (0) && npm run test (~1975 pass) && npm run build (green) && npm run test:e2e (~53 pass; surface-paneling.spec.js covers AC-4/AC-6/AC-7)."
+      ]
+    },
+    {
+      "id": "TICK-015",
+      "title": "Surface.PointAtParameter — rename of Surface.PointAtUV",
+      "status": "archived",
+      "issue": null,
+      "changed": [
+        "Renamed Surface.PointAtUV -> canonical Surface.PointAtParameter (Surfaces → Evaluate; Surface + u + v -> Point; kernel pointAtUV unchanged). Exactly one selectable node ships.",
+        "Backward compatibility via the proven Custom.Formula -> Custom.CodeBlock pattern: aliases on the canonical def so old node-ids and library search ('PointAtUV') resolve, plus a hidden deprecated Surface.PointAtUV stub with metadata.deprecated + metadata.migrateTo so old saved graphs migrate at load (u/v + wires preserved). Oracle fixes F-015-1 (alias) + F-015-2 (search-alias) folded in.",
+        "Viewer fixes from live PM verification (not separately ticketed) that make the output point reliably visible: show all geometry on Run (dropped intermediate auto-hide), buildFromGraph renders multi-output nodes (split-mode Run refresh), camera auto-fits once instead of every re-render, and points render as small flat dots rather than 3D spheres."
+      ],
+      "how_to_test": [
+        "On develop (tip ~8300cbb): npm run dev, search the node library for 'PointAtParameter' AND for 'PointAtUV' — both find the one node Surface.PointAtParameter.",
+        "Wire Surface.ByPatch -> Surface.PointAtParameter (u=0.5, v=0.5) -> Output.Watch; confirm a readable Point3 (real coords, not [object Object]/NaN) and a visible point sitting ON the surface in the 3D viewport.",
+        "Load a graph saved with the OLD Surface.PointAtUV node -> confirm it opens and migrates, u/v + wires preserved.",
+        "npm run lint:all (0) && npm run test (~1975 pass) && npm run build (green) && npm run test:e2e (~53 pass; surface-pointatparameter.spec.js covers AC-5 visible point in 3D)."
       ]
     }
   ],
+  "new_tickets": [],
   "agents_dispatched": [],
   "planning_notes": [
-    "Planning section mentions updating learning screenshots (TICK-006) and making the interactive canvas real (TICK-007). Both tickets are currently paused in the backlog. They can be resumed — write APPROVE TICK-006 and/or APPROVE TICK-007 in Planning (once the prior work is confirmed done) or confirm AC to move them to ready. No new ticket was created for these items as TICK-006 and TICK-007 already cover them.",
-    "TICK-011 is new (draft) — awaiting PM AC confirmation before agents are dispatched."
+    "Both A4 goals are delivered and archived: Surface paneling (Surface.Panelize + Input.PanelShapes) and Surface.PointAtParameter. All ACs [x], merged to develop (tip ~8300cbb), Oracle APPROVE, full gate green (lint 0, ~1975 unit pass, build green, ~53 e2e pass).",
+    "Holding per PM — no new tickets created and no agents dispatched this run.",
+    "CORRECTION: the prior Coordinator Response's 'repo-wide vitest runner broken' blocker was a MISDIAGNOSIS — the HTMLCanvasElement.getContext() lines are benign jsdom stderr noise, not test failures. The suite runs clean. That narrative has been removed from the ticket Run comments and is void.",
+    "Unticketed follow-up fixes landed live on develop from PM verification (FYI — these bypassed the ticket flow because they were interactive bug fixes): (1) Code Block series #count semantics corrected to Dynamo convention (0..1..#5 = 5 evenly-spaced, 0..#5..1 = step); (2) Surface.ByPatch bilinear-bbox UV grid; (3) Surface.Panelize gap-free hexagon honeycomb + diamond tessellation; (4) viewer: show-all-on-Run, multi-output/nested array rendering incl. Panelize corners, split-mode Run refresh, camera fit-once, flat point dots. RECOMMENDATION: PM to decide whether to retro-ticket these for the record.",
+    "TICK-011 (Cosign code signing) remains DRAFT, untouched — awaits APPROVE TICK-011 if the PM wants it built."
   ],
-  "blockers": [
-    "TICK-011 is draft — agents will not be dispatched until PM confirms AC by writing APPROVE TICK-011 in Planning on the next run.",
-    "TICK-006 and TICK-007 are paused. To resume either one, write their ticket id in Planning and say run."
-  ]
+  "blockers": []
 }
 ```

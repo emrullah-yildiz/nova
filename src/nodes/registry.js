@@ -123,6 +123,12 @@ export function toLegacyNodeDefinition(node) {
     inputs: cloneList(node.inputs),
     outputs: cloneList(node.outputs),
     controls: cloneList(node.controls),
+    // Carry aliases (old names / slugs) into the legacy shape so discovery
+    // surfaces — library search (app.filterNodes) and node-search-popup — can
+    // match a renamed node by its former name. Without this a rename like
+    // Surface.PointAtUV → Surface.PointAtParameter would drop the old name from
+    // search even though the alias still resolves the node from the registry.
+    aliases: Array.isArray(node.aliases) ? node.aliases.slice() : [],
     preview: node.preview,
     dynamicInputs: node.dynamicInputs,
     lacing: node.lacing ? { ...node.lacing } : undefined,

@@ -27,7 +27,6 @@ root `README.md` · `docs/ARCHITECTURE.md` · `.github/workflows/ci.yml`
 |---|---|---|---|---|---|---|
 | fix/tick-006-content-aligned-screenshots | switch | T06f: content-aligned screenshots (supersedes T06e) | scripts/take-learning-shots.js, public/learning/*.png | — | 2026-06-08 | queued |
 | fix/tick-007-real-canvas-embed | switch | T07h: pan/zoom + node schema + drag wire (supersedes T07f + T07g) | src/ui/mini-canvas.js, tests/e2e/learning-interactive.spec.js | — | 2026-06-08 | queued |
-| feat/tick-013-surface-trim-impl | mouse | T13a: new Surface.Trim node | src/geometry/nodes/Surface.Trim.js, src/nodes/categories/surfaces.js (Surface.Trim entry only), tests/geometry/surface-trim.test.js | — | 2026-06-17 | merged |
 
 <!--
 Example row (copy, fill in, remove this comment block when claiming):

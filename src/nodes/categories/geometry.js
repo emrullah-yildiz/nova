@@ -647,7 +647,19 @@ export const geometryNodes = [
       if (raw && typeof raw === 'string') {
         try {
           var geoData = JSON.parse(raw);
-          if (Array.isArray(geoData)) return { selection: geoData };
+          if (Array.isArray(geoData)) {
+            return {
+              selection: geoData.map(function(item) {
+                if (item && item._type === 'Line3' && item.start && item.end) {
+                  return new Geo.Line3(
+                    new Geo.Point3(item.start.x, item.start.y, item.start.z),
+                    new Geo.Point3(item.end.x, item.end.y, item.end.z)
+                  );
+                }
+                return item;
+              })
+            };
+          }
         } catch (_) { /* fall through */ }
       }
       return { selection: [] };

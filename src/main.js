@@ -64,8 +64,11 @@ import {
   selectionModeHover as _selectionModeHover,
   selectionMeshClick as _selectionMeshClick,
   selectionMeshHover as _selectionMeshHover,
+  selectionEdgeClick as _selectionEdgeClick,
+  selectionEdgeHover as _selectionEdgeHover,
   clearSelection as _clearSelection,
   getSelectedFaces as _getSelectedFaces,
+  getSelectedEdges as _getSelectedEdges,
 } from './viewer/selection-mode.js';
 import { RuntimeConfig, getRuntimeConfig } from './config/runtime-config.js';
 import { NovaCloudClient, createNovaCloudClient } from './enterprise/cloud-client.js';
@@ -183,8 +186,11 @@ if (typeof window !== 'undefined') {
     selectionModeHover: _selectionModeHover,
     selectionMeshClick: _selectionMeshClick,
     selectionMeshHover: _selectionMeshHover,
+    selectionEdgeClick: _selectionEdgeClick,
+    selectionEdgeHover: _selectionEdgeHover,
     clearSelection: _clearSelection,
     getSelectedFaces: _getSelectedFaces,
+    getSelectedEdges: _getSelectedEdges,
   };
 }
 

@@ -132,6 +132,9 @@ export function installLoggerPatch(targetApp = getRuntimeApp()) {
       Viewer3D.clearGeometry();
       Viewer3D._needsRebuild = true;
     }
+    // A new project should re-frame its first geometry — clear the one-shot
+    // auto-fit latch so fitAll runs once on the next render.
+    if (typeof Viewer3D !== 'undefined') Viewer3D._didAutoFit = false;
     // Switch to workspace and re-init chat
     this.switchPage('workspace');
     this.initWorkspaceChat();
