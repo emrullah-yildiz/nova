@@ -216,6 +216,37 @@ describe('run modes — policy module', () => {
     expect(runs).toBe(2);
   });
 
+  it('Automatic: wire edits prefer the dirty v2 runner over a full graph run', async () => {
+    const app = await setup();
+    let fullRuns = 0;
+    const dirtyRuns = [];
+    let renderOptions = null;
+    app.runGraph = function() {
+      fullRuns++;
+      return Promise.resolve({ completed: 0, failed: 0, errors: new Map() });
+    };
+    app._executionEngineV2 = {
+      runDirtyNodes(ids) {
+        dirtyRuns.push(ids.slice());
+        return Promise.resolve({
+          completed: ids.length,
+          failed: 0,
+          errors: new Map(),
+          dirtyNodeIds: ids.concat('downstream')
+        });
+      }
+    };
+    app._renderFromCompute = function(opts) { renderOptions = opts; };
+
+    app.addWire('source', 'value', 'target', 'input');
+    await waitForAutoRun();
+
+    expect(fullRuns).toBe(0);
+    expect(dirtyRuns).toEqual([['target']]);
+    expect(renderOptions.computeNodeIds).toEqual([]);
+    expect(renderOptions.keepCamera).toBe(true);
+  });
+
   it('Manual: project load and wire edits stay pending until Run', async () => {
     const app = await setup();
     let runs = 0;

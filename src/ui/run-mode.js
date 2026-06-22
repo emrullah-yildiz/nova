@@ -80,25 +80,103 @@ export function installRunMode(targetApp = getRuntimeApp()) {
     return app.setRunMode(app._runMode === 'manual' ? 'auto' : 'manual');
   };
 
-  function wireSignature() {
-    return (app.wires || []).map(function (w) {
-      return [w.fromNode, w.fromPort, w.toNode, w.toPort].join(':');
-    }).join('|');
+  function wireKey(w) {
+    return [w.fromNode, w.fromPort, w.toNode, w.toPort].join(':');
   }
 
-  app._runModeLastWireSignature = wireSignature();
-  app._autoRunTimer = null;
+  function wireMap() {
+    var map = {};
+    (app.wires || []).forEach(function (w) { map[wireKey(w)] = w; });
+    return map;
+  }
 
-  app._scheduleAutoRun = function () {
+  function wireChangeRoots(prevMap, nextMap) {
+    var roots = {};
+    Object.keys(nextMap).forEach(function (key) {
+      if (!prevMap[key] && nextMap[key].toNode) roots[nextMap[key].toNode] = true;
+    });
+    Object.keys(prevMap).forEach(function (key) {
+      if (!nextMap[key] && prevMap[key].toNode) roots[prevMap[key].toNode] = true;
+    });
+    return Object.keys(roots);
+  }
+
+  function uniqueNodeIds(ids) {
+    var seen = {};
+    return (ids || []).filter(function (id) {
+      if (!id || seen[id]) return false;
+      seen[id] = true;
+      return true;
+    });
+  }
+
+  app._runModeLastWireMap = wireMap();
+  app._autoRunTimer = null;
+  app._pendingAutoRun = null;
+
+  app._runAutoDirtyGraph = async function (dirtyNodeIds) {
+    var roots = uniqueNodeIds(dirtyNodeIds);
+    var engine = app._executionEngineV2 ||
+      (typeof window !== 'undefined' ? window.__executionEngineV2 : null);
+    if (!engine || typeof engine.runDirtyNodes !== 'function' || roots.length === 0) {
+      return app.runGraph();
+    }
+
+    if (Array.isArray(app.wires)) {
+      app._lastRunWires = app.wires.map(function (w) {
+        return w.fromNode + ':' + w.fromPort + '>' + w.toNode + ':' + w.toPort;
+      });
+    }
+    app._graphDirty = false;
+
+    var result = await engine.runDirtyNodes(roots);
+    if (result && (result.completed > 0 || result.failed > 0)) {
+      if (typeof app._renderFromCompute === 'function') {
+        app._renderFromCompute({ computeNodeIds: [], keepCamera: true });
+      }
+      if (typeof app.beginCompute === 'function' && typeof app.endCompute === 'function') {
+        app.beginCompute();
+        (app.nodes || []).forEach(function (nd) {
+          if (nd._inspOpen || nd.inspectorOpen) {
+            var content = document.getElementById(nd.id + '-insp-content');
+            if (content && app._universalInspector) content.innerHTML = app._universalInspector(nd);
+          } else if (nd.dataPanelOpen) {
+            var dc = document.getElementById(nd.id + '-dc');
+            if (dc) dc.innerHTML = app.nodeDataHTML(nd);
+          }
+        });
+        app.endCompute();
+      }
+      app._graphDirty = false;
+      if (typeof app.refreshNodeWarningBadges === 'function') app.refreshNodeWarningBadges();
+      if (typeof app.renderWires === 'function') app.renderWires();
+    }
+    return result;
+  };
+
+  app._scheduleAutoRun = function (options) {
     if (app._runMode !== 'auto') return false;
     if (app._isRunningGraph) return false;
     if (typeof app.runGraph !== 'function') return false;
+    var opts = options || {};
+    var dirtyNodeIds = uniqueNodeIds(opts.dirtyNodeIds);
+    if (!app._pendingAutoRun) app._pendingAutoRun = { full: false, dirtyNodeIds: [] };
+    if (opts.full || dirtyNodeIds.length === 0) {
+      app._pendingAutoRun.full = true;
+      app._pendingAutoRun.dirtyNodeIds = [];
+    } else if (!app._pendingAutoRun.full) {
+      app._pendingAutoRun.dirtyNodeIds = uniqueNodeIds(app._pendingAutoRun.dirtyNodeIds.concat(dirtyNodeIds));
+    }
     if (app._autoRunTimer) clearTimeout(app._autoRunTimer);
     app._autoRunTimer = setTimeout(function () {
+      var pending = app._pendingAutoRun || { full: true, dirtyNodeIds: [] };
       app._autoRunTimer = null;
+      app._pendingAutoRun = null;
       if (app._runMode !== 'auto' || app._isRunningGraph || typeof app.runGraph !== 'function') return;
       try {
-        var r = app.runGraph();
+        var r = pending.full
+          ? app.runGraph()
+          : app._runAutoDirtyGraph(pending.dirtyNodeIds);
         if (r && typeof r.then === 'function') r.then(function () {}, function () {});
       } catch (e) { /* auto-run must never break graph editing */ }
     }, 0);
@@ -166,11 +244,15 @@ export function installRunMode(targetApp = getRuntimeApp()) {
   if (typeof app.invalidateCompute === 'function') {
     var _origInvalidate = app.invalidateCompute.bind(app);
     app.invalidateCompute = function () {
+      var prevWireMap = app._runModeLastWireMap || {};
       var r = _origInvalidate();
-      var nextWireSignature = wireSignature();
-      if (!app._runModeDeserializing && nextWireSignature !== app._runModeLastWireSignature) {
-        app._runModeLastWireSignature = nextWireSignature;
-        app._scheduleAutoRun();
+      var nextWireMap = wireMap();
+      var changedRoots = wireChangeRoots(prevWireMap, nextWireMap);
+      if (!app._runModeDeserializing && changedRoots.length > 0) {
+        app._runModeLastWireMap = nextWireMap;
+        app._scheduleAutoRun({ dirtyNodeIds: changedRoots });
+      } else if (changedRoots.length > 0) {
+        app._runModeLastWireMap = nextWireMap;
       }
       app._refreshRunModeUI();
       return r;
@@ -214,8 +296,8 @@ export function installRunMode(targetApp = getRuntimeApp()) {
       }
       if (ok) {
         app._applyRunMode(data && data.runMode === 'manual' ? 'manual' : 'auto');
-        app._runModeLastWireSignature = wireSignature();
-        app._scheduleAutoRun();
+        app._runModeLastWireMap = wireMap();
+        app._scheduleAutoRun({ full: true });
       }
       return ok;
     };
